@@ -5827,6 +5827,7 @@ function connectSquare(){
 function disconnectSquare(){
   const prev=db.settings.square||{};
   db.settings.square={appId:prev.appId||'',accessToken:'',merchantId:'',sandbox:true};
+  localStorage.removeItem('myspark_sq_v1');
   saveData();
   renderSquareCard();
   toast('Square disconnected.','warn');
@@ -5845,6 +5846,7 @@ function handleSquareHash(){
       sandbox:p.get('sq_env')!=='production'
     };
     saveData();
+    localStorage.setItem('myspark_sq_v1',JSON.stringify({accessToken:db.settings.square.accessToken,merchantId:db.settings.square.merchantId,sandbox:db.settings.square.sandbox}));
     history.replaceState(null,'',window.location.pathname);
     toast('Square connected successfully.','success');
     if(state.panel==='settings')renderSquareCard();
@@ -5855,6 +5857,7 @@ function handleSquareHash(){
 }
 
 function renderSquareCard(){
+  try{const _sq=localStorage.getItem('myspark_sq_v1');if(_sq){const _d=JSON.parse(_sq);if(_d&&_d.accessToken){db.settings.square={...db.settings.square,..._d};}}}catch(e){}
   const sq=db.settings.square||{};
   const connected=!!(sq.accessToken);
   const cp=document.getElementById('sq-connected-panel');
