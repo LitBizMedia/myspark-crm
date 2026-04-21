@@ -1337,12 +1337,22 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
           </div>
           <div class="s-card">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Square Integration</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Connect your Square developer account for payment processing. Credentials from developer.squareup.com.</div>
-            <div class="form-group"><label>Application ID</label><input id="sq-app-id" type="text" placeholder="sq0idp-xxxx"></div>
-            <div class="form-group"><label>Access Token</label><input id="sq-token" type="password" placeholder="EAAAxxxxxx"></div>
-            <div class="form-group"><label>Location ID</label><input id="sq-loc" type="text" placeholder="LXXXXXXXXXXXX"></div>
-            <div class="form-group"><label>Environment</label><select id="sq-env"><option value="true">Sandbox (testing)</option><option value="false">Production (live)</option></select></div>
-            <button class="btn btn-purple btn-sm" onclick="saveSquare()">Save Square Settings</button>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Connect your Square account via OAuth. Your app secret stays on the server. Nothing sensitive is stored in the browser.</div>
+            <div id="sq-connected-panel" class="hidden">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <div style="width:9px;height:9px;border-radius:50%;background:#34d399;flex-shrink:0"></div>
+                <span style="font-size:13px;font-weight:600;color:#34d399">Square Connected</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px">Merchant ID: <span id="sq-merchant-display" style="color:var(--text);font-family:monospace;font-size:11px"></span></div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Environment: <span id="sq-env-display" style="color:var(--text)"></span></div>
+              <button class="btn btn-danger btn-sm" onclick="disconnectSquare()">Disconnect Square</button>
+            </div>
+            <div id="sq-connect-panel">
+              <div class="form-group"><label>Square App ID</label><input id="sq-app-id" type="text" placeholder="sq0idp-xxxx"></div>
+              <div class="form-group"><label>Environment</label><select id="sq-env"><option value="sandbox">Sandbox (testing)</option><option value="production">Production (live)</option></select></div>
+              <button class="btn btn-purple btn-sm" onclick="connectSquare()">Connect Square via OAuth</button>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:8px">You will be redirected to Square to authorize access.</div>
+            </div>
           </div>
           <div class="s-card full">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Supabase Sync</div>
@@ -1686,6 +1696,7 @@ function switchPanel(name){
   const sbProd=document.getElementById('panel-products')&&document.querySelector('[data-panel="products"]');
   if(sbProd)sbProd.style.display=(state.user&&state.user.role==='admin')?'':'none';
   renderPanel();
+  if(name==='settings')renderSquareCard();
 }
 
 // =====================================================
@@ -2760,6 +2771,7 @@ function initApp(){
   if(db.settings.supabaseUrl&&db.settings.supabaseKey)setSyncSt('synced');
   updateNotifBadge();renderPanel();
   fetchFromSupabase().then(ok=>{if(ok)renderPanel()});
+  handleSquareHash();
 }
 
 // =====================================================
@@ -5792,6 +5804,75 @@ function calSelectAllStaff(show){
   if(!show)state.calDayStaff=allUsers().slice(0,1).map(function(u){return u.id;});
   renderCalManage();
   renderCal();
+}
+
+
+// =====================================================
+// SQUARE OAUTH
+// =====================================================
+function connectSquare(){
+  const appId=(document.getElementById('sq-app-id').value||'').trim();
+  const env=(document.getElementById('sq-env')&&document.getElementById('sq-env').value)||'sandbox';
+  if(!appId){toast('Enter your Square App ID first.','error');return}
+  db.settings.square={...db.settings.square,appId:appId,sandbox:env==='sandbox'};
+  saveData();
+  const isSandbox=env==='sandbox';
+  const base=isSandbox?'https://connect.squareupsandbox.com':'https://connect.squareup.com';
+  const scopes='MERCHANT_PROFILE_READ+PAYMENTS_WRITE+PAYMENTS_READ+CUSTOMERS_WRITE+CUSTOMERS_READ';
+  const redir=encodeURIComponent('https://myspark-crm.vercel.app/api/square/callback');
+  const st=Math.random().toString(36).slice(2);
+  window.location.href=base+'/oauth2/authorize?client_id='+encodeURIComponent(appId)+'&scope='+scopes+'&redirect_uri='+redir+'&state='+st;
+}
+
+function disconnectSquare(){
+  const prev=db.settings.square||{};
+  db.settings.square={appId:prev.appId||'',accessToken:'',merchantId:'',sandbox:true};
+  saveData();
+  renderSquareCard();
+  toast('Square disconnected.','warn');
+}
+
+function handleSquareHash(){
+  const hash=window.location.hash.slice(1);
+  if(!hash)return;
+  const p=new URLSearchParams(hash);
+  if(p.get('sq_token')){
+    const prev=db.settings.square||{};
+    db.settings.square={
+      ...prev,
+      accessToken:p.get('sq_token'),
+      merchantId:p.get('sq_merchant')||'',
+      sandbox:p.get('sq_env')!=='production'
+    };
+    saveData();
+    history.replaceState(null,'',window.location.pathname);
+    toast('Square connected successfully.','success');
+    if(state.panel==='settings')renderSquareCard();
+  }else if(p.get('sq_error')){
+    history.replaceState(null,'',window.location.pathname);
+    toast('Square connection failed: '+decodeURIComponent(p.get('sq_error')),'error');
+  }
+}
+
+function renderSquareCard(){
+  const sq=db.settings.square||{};
+  const connected=!!(sq.accessToken);
+  const cp=document.getElementById('sq-connected-panel');
+  const np=document.getElementById('sq-connect-panel');
+  if(!cp||!np)return;
+  cp.classList.toggle('hidden',!connected);
+  np.classList.toggle('hidden',connected);
+  if(connected){
+    const md=document.getElementById('sq-merchant-display');
+    const ed=document.getElementById('sq-env-display');
+    if(md)md.textContent=sq.merchantId||'Unknown';
+    if(ed)ed.textContent=sq.sandbox===false?'Production':'Sandbox';
+  }else{
+    const aid=document.getElementById('sq-app-id');
+    const senv=document.getElementById('sq-env');
+    if(aid)aid.value=sq.appId||'';
+    if(senv)senv.value=sq.sandbox===false?'production':'sandbox';
+  }
 }
 
 </script>
