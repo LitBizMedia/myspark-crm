@@ -56,12 +56,12 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
   transition:all .18s;white-space:nowrap}
 .btn-primary{background:var(--orange);color:#fff}.btn-primary:hover{background:var(--orange-light)}
 .btn-purple{background:var(--purple);color:#fff}.btn-purple:hover{background:var(--purple-light)}
-.btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border)}
+.btn-ghost{background:transparent;color:rgba(237,232,255,.82);border:1px solid var(--border)}
 .btn-ghost:hover{background:var(--bg-card);color:var(--text);border-color:var(--purple-border)}
 .btn-danger{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.22)}
 .btn-danger:hover{background:rgba(239,68,68,.22)}
 .btn-sm{padding:5px 11px;font-size:12px}
-.btn-icon{padding:7px;background:transparent;border:1px solid var(--border);color:var(--text-muted)}
+.btn-icon{padding:7px;background:transparent;border:1px solid var(--border);color:rgba(237,232,255,.82)}
 .btn-icon:hover{background:var(--bg-card);color:var(--text)}
 .btn-full{width:100%;justify-content:center}
 .icon-btn-xs{background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;
@@ -237,14 +237,14 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
 .cal-timed{display:flex;background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;overflow-x:auto}
 .time-col{width:52px;flex-shrink:0;background:var(--bg-card);border-right:1px solid var(--border)}
 .time-col-head{height:34px;border-bottom:1px solid var(--border)}
-.time-slot{height:56px;padding:3px 5px;font-size:10px;color:var(--text-muted);
+.time-slot{height:68px;padding:3px 5px;font-size:10px;color:var(--text-muted);
   border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:flex-end}
 .day-col{flex:1;min-width:88px;border-right:1px solid var(--border)}
 .day-col:last-child{border-right:none}
 .day-col-head{height:34px;background:var(--bg-card);padding:4px;text-align:center;
   border-bottom:1px solid var(--border);font-size:11px;font-weight:600}
 .day-col-head.today{color:var(--orange)}
-.tgrid-row{height:56px;border-bottom:1px solid var(--border);position:relative;cursor:pointer}
+.tgrid-row{height:68px;border-bottom:1px solid var(--border);position:relative;cursor:pointer}
 .tgrid-row:hover{background:rgba(255,255,255,.012)}
 .tgrid-row.off-hours{background:rgba(0,0,0,.18)}
 .timed-ev{position:absolute;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:600;
@@ -567,6 +567,177 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
 .inv-low{background:rgba(245,158,11,.15);color:#fbbf24}
 .inv-out{background:rgba(239,68,68,.15);color:#f87171}
 .inv-track-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);margin-top:8px}
+
+/* CAL TABS */
+.cal-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 20px;flex-shrink:0}
+.cal-panel-tab{padding:13px 18px;font-size:13px;font-weight:600;color:rgba(237,232,255,.65);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.cal-panel-tab:hover{color:var(--text)}
+.cal-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
+
+/* APPTS LIST VIEW */
+.appt-list-row{background:var(--bg-panel);border:1px solid var(--border);border-left:4px solid var(--orange);border-radius:var(--radius-lg);padding:13px 16px;display:flex;align-items:flex-start;gap:14px;margin-bottom:8px;cursor:pointer;transition:border-color .18s}
+.appt-list-row:hover{border-color:var(--purple-border)}
+.appt-list-date{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);min-width:48px;text-align:center;flex-shrink:0;padding-top:2px}
+.appt-list-date .appt-day-num{font-size:22px;font-weight:800;color:var(--text);line-height:1;display:block}
+.appt-list-body{flex:1;min-width:0}
+.appt-list-title{font-size:14px;font-weight:600;margin-bottom:3px}
+.appt-list-meta{font-size:12px;color:var(--text-muted)}
+
+/* FORMS PANEL */
+.forms-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 22px;flex-shrink:0}
+.forms-panel-tab{padding:13px 18px;font-size:13px;font-weight:600;color:rgba(237,232,255,.65);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.forms-panel-tab:hover{color:var(--text)}
+.forms-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
+
+/* COMING SOON PLACEHOLDER */
+.coming-soon-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;text-align:center}
+.coming-soon-wrap svg{width:44px;height:44px;opacity:.18;margin-bottom:16px}
+.coming-soon-wrap h3{font-family:'Syne',sans-serif;font-size:17px;font-weight:700;margin-bottom:7px}
+.coming-soon-wrap p{font-size:13px;color:var(--text-muted);max-width:320px}
+.coming-soon-badge{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 10px;border-radius:20px;background:var(--purple-dim);color:var(--purple-light);border:1px solid var(--purple-border);margin-bottom:12px}
+/* ===== FORM BUILDER ===== */
+#fb-overlay{position:fixed;inset:0;background:var(--bg);z-index:150;display:flex;flex-direction:column;overflow:hidden}
+.fb-topbar{height:52px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0}
+.fb-name-inp{background:transparent;border:none;color:var(--text);font-family:'Syne',sans-serif;font-size:15px;font-weight:700;outline:none;flex:1;min-width:0;padding:4px 8px;border-radius:6px;transition:background .15s}
+.fb-name-inp:focus{background:var(--bg-input)}
+.fb-status-sel{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:5px 9px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;height:32px}
+.fb-body{display:flex;flex:1;overflow:hidden;min-height:0}
+.fb-pal{width:190px;flex-shrink:0;background:var(--bg-panel);border-right:1px solid var(--border);overflow-y:auto;padding-bottom:16px}
+.fb-pal-grp{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);padding:12px 12px 4px}
+.fb-pal-item{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:grab;transition:background .12s;font-size:12px;font-weight:500;color:var(--text-muted);user-select:none}
+.fb-pal-item:hover{background:var(--bg-card);color:var(--text)}
+.fb-pal-item svg{width:13px;height:13px;flex-shrink:0}
+.fb-canvas-area{flex:1;overflow-y:auto;padding:28px 32px;background:#000;background-image:radial-gradient(rgba(255,255,255,.045) 1px,transparent 1px);background-size:20px 20px}
+.fb-pg-tabs-row{display:flex;align-items:center;gap:5px;margin-bottom:14px;flex-wrap:wrap}
+.fb-pg-tab{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.55);background:transparent;font-family:'DM Sans',sans-serif;transition:all .14s;display:flex;align-items:center;gap:5px}
+.fb-pg-tab:hover{border-color:var(--purple-border);color:var(--text)}
+.fb-pg-tab.active{background:var(--purple-dim);color:var(--purple-light);border-color:var(--purple-border)}
+.fb-pg-add{padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1px dashed rgba(255,255,255,.18);color:rgba(255,255,255,.35);background:transparent;font-family:'DM Sans',sans-serif}
+.fb-pg-add:hover{border-color:var(--purple-border);color:var(--purple-light)}
+.fb-canvas-center{max-width:600px;margin:0 auto}
+.fb-page-canvas{background:#ffffff;border-radius:12px;padding:22px;min-height:280px;transition:background .2s;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.fb-page-canvas.dz-active{outline:2px solid var(--purple);outline-offset:2px}
+.fb-fields-wrap{position:relative}
+.fb-dropzone{height:6px;margin:0;position:relative;z-index:2;border-radius:3px;transition:height .12s,background .12s}
+.fb-dropzone.dz-over{height:24px;background:var(--purple-dim)}
+.fb-dz-line{position:absolute;top:50%;left:0;right:0;height:2px;background:var(--purple);border-radius:1px;transform:translateY(-50%);opacity:0;transition:opacity .1s}
+.fb-dropzone.dz-over .fb-dz-line{opacity:1}
+.fb-field-wrap{position:relative}
+.fb-field-wrap.half-w{display:inline-block;width:calc(50% - 5px);vertical-align:top}
+.fb-field-wrap.half-w:nth-child(odd of .half-w){margin-right:10px}
+.fb-fc{background:#f8f8f8;border:1px solid #d0d0d8;border-radius:var(--radius);padding:9px 11px;cursor:pointer;transition:border-color .14s,box-shadow .14s;display:flex;align-items:flex-start;gap:8px}
+.fb-fc:hover{border-color:#aaa}
+.fb-fc.sel{border-color:#6b21ea;box-shadow:0 0 0 2px rgba(107,33,234,.15)}
+.fb-fc.is-dragging{opacity:.3;border-style:dashed}
+.fb-fc .dh{color:#bbb;cursor:grab;flex-shrink:0;padding-top:1px}
+.fb-fc:hover .dh{color:#888}
+.fb-fc .dh:active{cursor:grabbing}
+.fb-fc .fp{flex:1;min-width:0}
+.fb-fc .ft{font-size:9px;font-weight:700;text-transform:uppercase;color:#bbb;flex-shrink:0;padding-top:2px}
+.fb-fc .fa{display:flex;gap:2px;flex-shrink:0;opacity:0;transition:opacity .12s}
+.fb-fc:hover .fa,.fb-fc.sel .fa{opacity:1}
+.fb-fc .fa .icon-btn-xs{color:#888}
+.fb-fc .fa .icon-btn-xs:hover{color:#ff4000;background:rgba(255,64,0,.08)}
+.fb-lbl{font-size:11px;font-weight:600;color:#222;margin-bottom:3px}
+.fb-lbl .req{color:#ff4000;margin-left:2px}
+.fb-mi{height:26px;background:var(--bg-input);border:1px solid var(--border);border-radius:5px}
+.fb-mita{height:48px;background:#f8f8f8;border:1px solid #d0d0d8;border-radius:5px}
+.fb-msel{height:26px;background:#f8f8f8;border:1px solid #d0d0d8;border-radius:5px;display:flex;align-items:center;padding:0 8px;font-size:10px;color:#bbb;justify-content:space-between}
+.fb-mopt{display:flex;align-items:center;gap:5px;font-size:11px;color:#666;padding:2px 0}
+.fb-mopt-dot{width:11px;height:11px;border-radius:50%;border:1.5px solid #d0d0d8;flex-shrink:0}
+.fb-mopt-box{width:11px;height:11px;border-radius:3px;border:1.5px solid #d0d0d8;flex-shrink:0}
+.fb-empty-drop{border:2px dashed rgba(255,255,255,.15);border-radius:var(--radius);padding:32px 20px;text-align:center;color:rgba(255,255,255,.25);font-size:13px}
+.fb-sp{width:256px;flex-shrink:0;background:var(--bg-panel);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.fb-sp-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.fb-sp-t{flex:1;padding:10px 6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;background:none;border:none;color:var(--text-muted);font-family:'DM Sans',sans-serif;border-bottom:2px solid transparent;transition:all .15s}
+.fb-sp-t.active{color:var(--orange);border-bottom-color:var(--orange)}
+.fb-sp-body{padding:12px;flex:1}
+.fb-sl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:10px 0 4px;display:block}
+.fb-si{width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 9px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:8px}
+.fb-si:focus{border-color:var(--purple)}
+.fb-ss{width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 9px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;margin-bottom:8px;height:36px}
+.fb-toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:2px 0}
+.fb-toggle-lbl{font-size:13px;font-weight:500}
+.fb-opt-item{display:flex;align-items:center;gap:5px;margin-bottom:4px}
+.fb-opt-item input{flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 7px;font-size:12px;outline:none;font-family:'DM Sans',sans-serif}
+.fb-cond-block{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:9px;margin-bottom:6px}
+.fb-cond-selects{display:flex;gap:4px;margin-bottom:5px;flex-wrap:wrap}
+.fb-cond-selects select{flex:1;min-width:64px;background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:4px 6px;font-size:11px;outline:none;font-family:'DM Sans',sans-serif;height:28px}
+.fb-cond-val{width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:4px 6px;font-size:11px;outline:none;font-family:'DM Sans',sans-serif}
+.fb-col-row{display:flex;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:8px}
+.fb-col-btn{flex:1;padding:6px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;border:none;color:var(--text-muted);font-family:'DM Sans',sans-serif;text-align:center;transition:all .12s}
+.fb-col-btn.active{background:var(--purple);color:#fff}
+.fb-divider{height:1px;background:var(--border);margin:10px 0}
+/* Form list */
+.fb-list-card{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+.fb-list-card:hover{border-color:var(--purple-border)}
+.fb-list-icon{width:38px;height:38px;border-radius:var(--radius);background:var(--purple-dim);border:1px solid var(--purple-border);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+/* Embed panel */
+.fb-code-block{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-family:monospace;font-size:11px;color:#a5f3a5;white-space:pre-wrap;word-break:break-all;max-height:160px;overflow-y:auto;line-height:1.6;margin-bottom:8px}
+/* Submissions */
+.fb-sub-row{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:6px;cursor:pointer;transition:border-color .14s;display:flex;align-items:flex-start;gap:12px}
+.fb-sub-row:hover{border-color:var(--purple-border)}
+/* Preview overlay */
+.fb-prev-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
+.fb-prev-card{background:#f4f4f8;border-radius:14px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.fb-prev-head{padding:22px 24px 16px;border-bottom:1px solid #e0e0e8}
+.fb-prev-head h2{font-size:18px;font-weight:700;color:#111;margin:0}
+.fb-prev-body{padding:20px 24px 28px}
+.fb-prev-field{margin-bottom:16px}
+.fb-prev-label{display:block;font-size:13px;font-weight:600;color:#222;margin-bottom:5px}
+.fb-prev-label .req{color:#ff4000}
+.fb-prev-input{width:100%;border:1px solid #d0d0d8;border-radius:7px;padding:9px 12px;font-size:14px;color:#111;background:#fff;outline:none;font-family:'DM Sans',sans-serif;transition:border-color .2s}
+.fb-prev-input:focus{border-color:#6b21ea;box-shadow:0 0 0 3px rgba(107,33,234,.1)}
+.fb-prev-select{width:100%;border:1px solid #d0d0d8;border-radius:7px;padding:9px 12px;font-size:14px;color:#111;background:#fff;outline:none;font-family:'DM Sans',sans-serif;height:42px}
+.fb-prev-opt-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px;color:#333;cursor:pointer}
+.fb-prev-opt-row input{width:16px;height:16px;cursor:pointer;accent-color:#6b21ea}
+.fb-prev-submit{display:inline-block;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:filter .15s}
+.fb-prev-submit:hover{filter:brightness(1.1)}
+.fb-prev-tnc{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#444}
+.fb-prev-tnc input{margin-top:2px;width:15px;height:15px;cursor:pointer;accent-color:#6b21ea}
+.fb-prev-sig{width:100%;height:100px;border:1px solid #d0d0d8;border-radius:7px;background:#fff;cursor:crosshair}
+.fb-pg-indicator{display:flex;align-items:center;gap:6px;margin-bottom:16px;justify-content:center}
+.fb-pg-dot{width:8px;height:8px;border-radius:50%;background:#ddd;transition:background .2s}
+.fb-pg-dot.active{background:#6b21ea;width:20px;border-radius:4px}
+
+/* RICH TEXT EDITOR */
+.fb-rte-wrap{border:1px solid #d0d0d8;border-radius:8px;overflow:hidden;margin-bottom:8px}
+.fb-rte-bar{display:flex;gap:2px;padding:5px 7px;background:#f0f0f4;border-bottom:1px solid #d0d0d8;flex-wrap:wrap}
+.fb-rte-btn{padding:3px 8px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:12px;font-weight:600;color:#444;font-family:'DM Sans',sans-serif;transition:background .12s}
+.fb-rte-btn:hover{background:#ddd}
+.fb-rte-body{min-height:80px;max-height:160px;overflow-y:auto;padding:10px 12px;font-size:13px;color:#222;line-height:1.6;outline:none;background:#fff}
+.fb-rte-body a{color:#6b21ea}
+/* FILE TYPE CHECKBOXES */
+.fb-file-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:6px}
+.fb-file-chk{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;padding:2px 0}
+.fb-file-chk input{width:13px;height:13px;cursor:pointer;accent-color:#6b21ea;flex-shrink:0}
+/* CONTENT ELEMENT PREVIEWS */
+.fb-content-el{padding:8px 10px;border-radius:var(--radius);background:#f4f4f8}
+.fb-content-header{font-weight:700;color:#111;line-height:1.3}
+.fb-content-para{font-size:13px;color:#555;line-height:1.6}
+.fb-content-divider{border:none;border-top:1.5px solid #d0d0d8;margin:4px 0}
+/* ALIGNMENT ROW */
+.fb-align-row{display:flex;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:8px}
+.fb-align-btn{flex:1;padding:6px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;border:none;color:var(--text-muted);font-family:'DM Sans',sans-serif;text-align:center;transition:all .12s}
+.fb-align-btn.active{background:var(--purple);color:#fff}
+/* CUSTOM FIELDS */
+.cf-cat-section{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:8px;overflow:hidden}
+.cf-cat-head{display:flex;align-items:center;gap:8px;padding:10px 14px;user-select:none}
+.cf-cat-name{font-size:13px;font-weight:600;flex:1}
+.cf-cat-count{font-size:11px;color:var(--text-muted)}
+.cf-cat-body{padding:10px 14px;border-top:1px solid var(--border)}
+.cf-field-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.cf-field-row:last-child{border-bottom:none}
+.cf-field-key{font-size:10px;font-family:monospace;color:var(--text-muted);background:var(--bg-card);padding:2px 6px;border-radius:4px;flex-shrink:0}
+.cf-field-type-badge{font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 5px;border-radius:3px;background:var(--purple-dim);color:var(--purple-light);flex-shrink:0}
+/* CONTACT DRAWER CUSTOM FIELDS */
+.drawer-cf-section{margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.drawer-cf-head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;background:var(--bg-card);font-size:12px;font-weight:600;user-select:none;transition:background .14s}
+.drawer-cf-head:hover{background:var(--bg-card-hover)}
+.drawer-cf-body{padding:10px 12px}
+.drawer-cf-label{font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-muted);letter-spacing:.05em;display:block;margin-bottom:3px}
+.drawer-cf-inp{width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 8px;font-size:12px;outline:none;font-family:'DM Sans',sans-serif;margin-bottom:8px}
+.drawer-cf-inp:last-child{margin-bottom:0}
 </style>
 </head>
 <body>
@@ -614,6 +785,9 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
       </button>
       <button class="sb-item" data-panel="products" onclick="switchPanel('products')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Products
+      </button>
+      <button class="sb-item" data-panel="forms" onclick="switchPanel('forms')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Forms
       </button>
       <div class="sb-section-label">Admin</div>
       <button class="sb-item" id="sb-settings" data-panel="settings" onclick="switchPanel('settings')">
@@ -697,8 +871,14 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
 
       <!-- CALENDAR -->
       <div id="panel-calendar" class="panel hidden">
-        <div class="page-header">
-          <div><div class="page-title">Calendar</div></div>
+        <div class="cal-panel-tabs">
+          <button class="cal-panel-tab active" id="cpt-calendar" onclick="switchCalTab('calendar')">Calendar</button>
+          <button class="cal-panel-tab" id="cpt-appointments" onclick="switchCalTab('appointments')">Appointments</button>
+          <button class="cal-panel-tab" id="cpt-service" onclick="switchCalTab('service')">Service Calendars</button>
+        </div>
+        <div id="cal-calendar-view">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+          <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700">Calendar</div>
           <button class="btn btn-primary" onclick="openApptModal(null,null)">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Appointment
           </button>
@@ -721,6 +901,32 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
         </div>
         <div class="cal-legend" id="cal-legend"></div>
         <div id="cal-body"></div>
+        </div><!-- end cal-calendar-view -->
+        <div id="cal-appointments-view" class="hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+            <div>
+              <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700">Appointments</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="appt-list-sub">All upcoming appointments</div>
+            </div>
+            <button class="btn btn-primary" onclick="openApptModal(null,null)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Appointment
+            </button>
+          </div>
+          <div class="toolbar" style="margin-bottom:14px">
+            <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="appt-list-search" type="text" placeholder="Search appointments..." oninput="renderApptList()"></div>
+            <select class="filter-sel" id="appt-list-user" onchange="renderApptList()"><option value="">All Staff</option></select>
+            <select class="filter-sel" id="appt-list-status" onchange="renderApptList()"><option value="scheduled">Upcoming</option><option value="">All Status</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>
+          </div>
+          <div id="appt-list-body"></div>
+        </div>
+        <div id="cal-service-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <h3>Service Calendars</h3>
+            <p>Create bookable service calendars for specific staff members or service types. Clients will be able to book directly from a public link.</p>
+          </div>
+        </div>
       </div>
 
       <!-- TASKS -->
@@ -733,7 +939,8 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
         </div>
         <div class="task-chip-row">
           <div class="search-box" style="max-width:200px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="t-search" type="text" placeholder="Search tasks..." oninput="onTSearch(this.value)"></div>
-          <button class="chip active" id="tf-all" onclick="setTF('all')">All</button>
+          <button class="chip active" id="tf-mine" onclick="setTF('mine')">My Tasks</button>
+          <button class="chip" id="tf-all" onclick="setTF('all')">All</button>
           <button class="chip" id="tf-open" onclick="setTF('open')">Open</button>
           <button class="chip" id="tf-in-progress" onclick="setTF('in-progress')">In Progress</button>
           <button class="chip" id="tf-done" onclick="setTF('done')">Done</button>
@@ -777,6 +984,11 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
         <div class="pay-panel-tabs">
           <button class="pay-panel-tab active" id="ppt-pos" onclick="switchPayTab('pos')">Point of Sale</button>
           <button class="pay-panel-tab" id="ppt-subs" onclick="switchPayTab('subs')">Subscriptions</button>
+          <button class="pay-panel-tab" id="ppt-invoices" onclick="switchPayTab('invoices')">Invoices</button>
+          <button class="pay-panel-tab" id="ppt-orders" onclick="switchPayTab('orders')">Orders</button>
+          <button class="pay-panel-tab" id="ppt-coupons" onclick="switchPayTab('coupons')">Coupons</button>
+          <button class="pay-panel-tab" id="ppt-giftcards" onclick="switchPayTab('giftcards')">Gift Cards</button>
+          <button class="pay-panel-tab" id="ppt-transactions" onclick="switchPayTab('transactions')">Transactions</button>
         </div>
         <div id="pay-pos-view">
         <div class="pos-grid">
@@ -873,6 +1085,72 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
           <div id="subs-list"></div>
           <div id="subs-pg"></div>
         </div>
+        <div id="pay-invoices-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <h3>Invoices</h3>
+            <p>Create, send, and track invoices. Connect to Square for automated payment collection and reminders.</p>
+          </div>
+        </div>
+        <div id="pay-orders-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            <h3>Orders</h3>
+            <p>View and manage all orders. Sync with Square or your e-commerce platform to track order status and fulfillment.</p>
+          </div>
+        </div>
+        <div id="pay-coupons-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M12 4v16M8 12h.01M16 12h.01"/></svg>
+            <h3>Coupons</h3>
+            <p>Create discount codes and coupons for your services. Set percentage or fixed-amount discounts with expiration dates.</p>
+          </div>
+        </div>
+        <div id="pay-giftcards-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            <h3>Gift Cards</h3>
+            <p>Issue and manage gift cards for your clients. Track balances and redemptions through Square integration.</p>
+          </div>
+        </div>
+        <div id="pay-transactions-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <h3>Transactions</h3>
+            <p>Full transaction history across all payment methods. Export reports and reconcile with your accounting software.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- FORMS -->
+      <div id="panel-forms" class="panel hidden">
+        <div class="forms-panel-tabs">
+          <button class="forms-panel-tab active" id="fpt-forms" onclick="switchFormsTab('forms')">Forms</button>
+          <button class="forms-panel-tab" id="fpt-contracts" onclick="switchFormsTab('contracts')">Contracts</button>
+          <button class="forms-panel-tab" id="fpt-documents" onclick="switchFormsTab('documents')">Documents</button>
+        </div>
+        <div id="forms-forms-view"></div>
+        <div id="forms-contracts-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <h3>Contracts</h3>
+            <p>Create, send, and collect legally binding contracts and agreements. Powered by DocuSign integration. Signed documents are stored and linked to the contact record.</p>
+          </div>
+        </div>
+        <div id="forms-documents-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <h3>Documents</h3>
+            <p>Upload and store documents, signed contracts, client files, and supporting materials. Attach documents directly to contact records for easy access.</p>
+          </div>
+        </div>
       </div>
 
       <!-- SETTINGS -->
@@ -924,6 +1202,15 @@ CREATE POLICY "allow_all" ON crm_data FOR ALL USING (true) WITH CHECK (true);</d
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:8px">All users connecting to the same Supabase project share data automatically. HIPAA-compliant plans are available on Supabase Pro.</div>
           </div>
+          <div class="s-card full">
+            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Custom Fields</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Create reusable custom fields. They appear in form builders and in expandable sections on contact records. Organize them by category.</div>
+            <div id="cf-cats-list"></div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <input id="cf-new-cat" type="text" placeholder="New category name..." style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none" onkeydown="if(event.key==='Enter')cfAddCategory()">
+              <button class="btn btn-purple btn-sm" onclick="cfAddCategory()">Add Category</button>
+            </div>
+          </div>
           <div class="s-card full" id="notif-settings-card">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Notification Settings</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:14px;max-width:600px" id="ns-type-grid"></div>
@@ -942,6 +1229,9 @@ CREATE POLICY "allow_all" ON crm_data FOR ALL USING (true) WITH CHECK (true);</d
     </div>
   </div>
 </div>
+
+<!-- FORM BUILDER OVERLAY -->
+<div id="fb-overlay" class="hidden"></div>
 
 <!-- DRAWER -->
 <div id="drawer-overlay" onclick="closeDrawer()"></div>
@@ -1003,7 +1293,8 @@ let state={
   syncTimer:null,
   selTagColor:TAG_COLORS[0],selUserColor:USER_COLORS[0],
   posItems:[],posTip:'15',posPM:'card',
-  paymentsTab:'pos',subsPage:1,subsSearch:'',subsStatusFilter:'',subsCycleFilter:''
+  paymentsTab:'pos',subsPage:1,subsSearch:'',subsStatusFilter:'',subsCycleFilter:'',
+  calTab:'calendar',formsTab:'forms',tMyTasks:true
 };
 
 // =====================================================
@@ -1021,6 +1312,10 @@ let db={
   ],
   users:[],
   subscriptions:[],
+  forms:[],
+  formSubmissions:[],
+  customFieldCategories:[],
+  customFields:[],
   productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'],
   settings:{gistToken:'',gistId:'',
     businessHours:JSON.parse(JSON.stringify(DEF_BH)),
@@ -1213,8 +1508,11 @@ function initApp(){
   setInterval(()=>{if(state.panel==='dashboard')renderDash()},30000);
 }
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',settings:'Settings'};
-function renderPanel(){({dashboard:renderDash,contacts:renderContacts,calendar:renderCal,tasks:renderTasks,payments:renderPayments,settings:renderSettings})[state.panel]?.()}
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',settings:'Settings'};
+function renderPanel(){
+  const fns={dashboard:renderDash,contacts:renderContacts,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,settings:renderSettings};
+  if(fns[state.panel])fns[state.panel]();
+}
 
 function switchPanel(name){
   state.panel=name;
@@ -1380,7 +1678,8 @@ function renderDrawer(){
       +'<div class="info-item"><label>Added</label><span>'+fmtDate((c.createdAt||'').split('T')[0])+'</span></div>'
       +'</div>'+(c.address?'<div class="info-item" style="margin-bottom:12px"><label>Address</label><span>'+esc(c.address)+'</span></div>':'')
       +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
-      +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">Book Appointment</button>';
+      +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">Book Appointment</button>'
+      +cfRenderDrawerSections(c.id);
   }else if(state.dTab==='notes'){
     const notes=[...c.notes].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Notes ('+notes.length+')</div><button class="btn btn-purple btn-sm" onclick="openNoteModal(\''+c.id+'\',null)">+ Add</button></div>'
@@ -1536,15 +1835,19 @@ function renderDayCal(){
 // TASKS
 // =====================================================
 function filteredTasks(){
-  const{tFilter:f,tSearch:q,tPri}=state,td=todayStr();
+  const{tFilter:f,tSearch:q,tPri,tMyTasks}=state,td=todayStr();
   const pri=document.getElementById('t-pri')&&document.getElementById('t-pri').value||tPri;
+  const myId=state.user&&state.user.id;
   return db.tasks.filter(t=>{
+    if(tMyTasks&&f!=='all'&&f!=='done'){if(t.assignedTo&&t.assignedTo!==myId)return false}
     if(q){const ql=q.toLowerCase();if(!(t.title||'').toLowerCase().includes(ql)&&!(t.description||'').toLowerCase().includes(ql))return false}
     if(pri&&t.priority!==pri)return false;
-    if(f==='open')return t.status==='open';
-    if(f==='in-progress')return t.status==='in-progress';
+    if(f==='mine')return!t.assignedTo||t.assignedTo===myId;
+    if(f==='all')return true;
+    if(f==='open')return t.status==='open'&&(!tMyTasks||!t.assignedTo||t.assignedTo===myId);
+    if(f==='in-progress')return t.status==='in-progress'&&(!tMyTasks||!t.assignedTo||t.assignedTo===myId);
     if(f==='done')return t.status==='done';
-    if(f==='overdue')return t.status!=='done'&&isOverdue(t.dueDate);
+    if(f==='overdue')return t.status!=='done'&&isOverdue(t.dueDate)&&(!tMyTasks||!t.assignedTo||t.assignedTo===myId);
     return true;
   }).sort((a,b)=>{const ap=a.priority==='high'?0:a.priority==='medium'?1:2,bp=b.priority==='high'?0:b.priority==='medium'?1:2;if(ap!==bp)return ap-bp;return(a.dueDate||'9').localeCompare(b.dueDate||'9')});
 }
@@ -1568,7 +1871,7 @@ function renderTasks(){
 }
 
 function onTSearch(v){state.tSearch=v;state.tPage=1;renderTasks()}
-function setTF(f){state.tFilter=f;state.tPage=1;['all','open','in-progress','done','overdue'].forEach(x=>document.getElementById('tf-'+x)&&document.getElementById('tf-'+x).classList.toggle('active',x===f));renderTasks()}
+function setTF(f){state.tFilter=f;state.tMyTasks=(f==='mine');state.tPage=1;['mine','all','open','in-progress','done','overdue'].forEach(x=>document.getElementById('tf-'+x)&&document.getElementById('tf-'+x).classList.toggle('active',x===f));renderTasks()}
 function tPg(p){state.tPage=p;renderTasks()}
 function cycleTask(id){const t=getTask(id);if(!t)return;const m={'open':'in-progress','in-progress':'done','done':'open'};t.status=m[t.status];t.updatedAt=now_();saveData();renderTasks();if(state.drawer)renderDrawer();updateNotifBadge()}
 
@@ -1581,19 +1884,18 @@ function renderPayments(){
 
 function switchPayTab(tab){
   state.paymentsTab=tab;
-  ['pos','subs'].forEach(t=>{
+  const allTabs=['pos','subs','invoices','orders','coupons','giftcards','transactions'];
+  allTabs.forEach(t=>{
     const btn=document.getElementById('ppt-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
+    const v=document.getElementById('pay-'+t+'-view');
+    if(v)v.classList.toggle('hidden',t!==tab);
   });
-  const posV=document.getElementById('pay-pos-view');
-  const subV=document.getElementById('pay-subs-view');
-  if(posV)posV.classList.toggle('hidden',tab!=='pos');
-  if(subV)subV.classList.toggle('hidden',tab!=='subs');
   if(tab==='pos'){
     const s=document.getElementById('pos-staff');
     if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
     renderPosItems();calcTotals();
-  }else{
+  }else if(tab==='subs'){
     renderSubscriptions();
   }
 }
@@ -1990,19 +2292,7 @@ function toast(msg,type){
   setTimeout(()=>el.remove(),3500);
 }
 
-// =====================================================
-// BOOT
-// =====================================================
-document.addEventListener('DOMContentLoaded',()=>{
-  loadData();
-  const sess=loadSession();
-  if(sess){
-    state.user=sess;
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    initApp();
-  }
-});
+// Boot: handled in injected block below
 
 // =====================================================
 // EFFECTIVE ADMIN (supports profile overrides)
@@ -2024,6 +2314,10 @@ function loadData(){
         users:p.users||[],payments:p.payments||[],
         products:p.products||[],readNotifs:p.readNotifs||[],
         subscriptions:p.subscriptions||[],
+        forms:p.forms||[],
+        formSubmissions:p.formSubmissions||[],
+        customFieldCategories:p.customFieldCategories||[],
+        customFields:p.customFields||[],
         productCategories:p.productCategories||['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'],
         settings:{...db.settings,...p.settings,
           businessHours:p.settings&&p.settings.businessHours||JSON.parse(JSON.stringify(DEF_BH)),
@@ -2203,7 +2497,7 @@ function renderUserList(){
 // OVERRIDE: renderSettings — include Supabase + notif
 // =====================================================
 function renderSettings(){
-  renderUserList();renderTagMgr();renderBH();renderNotifSettings();
+  renderUserList();renderTagMgr();renderBH();renderNotifSettings();cfRenderSettings();
   const s=db.settings;
   const su=document.getElementById('sb-url');if(su&&s.supabaseUrl)su.value=s.supabaseUrl;
   const sk=document.getElementById('sb-key');if(sk&&s.supabaseKey)sk.value=s.supabaseKey;
@@ -2690,7 +2984,9 @@ function openSubModal(id,preContactId){
 function renderSubItemsList(){
   if(!editSubItems.length)return'<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No items yet. Click Add Item above.</div>';
   return editSubItems.map((it,i)=>'<div class="sub-item-edit-row">'
-    +'<div style="flex:2;min-width:140px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Item Name</div><input type="text" id="si-name-'+i+'" value="'+esc(it.name||'')+'" placeholder="Service name..." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
+    +'<div style="flex:2;min-width:160px;position:relative"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Item (or search products)</div>'
+    +'<input type="text" id="si-name-'+i+'" value="'+esc(it.name||'')+'" placeholder="Type to search recurring products..." oninput="subProdSearch('+i+',this.value)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none">'
+    +'<div class="ss-drop hidden" id="sub-prod-drop-'+i+'"></div></div>'
     +'<div style="width:95px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price ($)</div><input type="number" id="si-price-'+i+'" value="'+(it.price||0)+'" min="0" step="0.01" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
     +'<div style="width:60px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Qty</div><input type="number" id="si-qty-'+i+'" value="'+(it.qty||1)+'" min="1" step="1" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
     +'<div style="flex-shrink:0;padding-top:20px"><button class="icon-btn-xs" onclick="rmSubItem('+i+')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
@@ -2772,6 +3068,1740 @@ function confirmRestartSub(id){
   s.updatedAt=now_();
   saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();toast('Subscription restarted.','success');
 }
+
+// =====================================================
+// CALENDAR TABS
+// =====================================================
+function switchCalTab(tab){
+  state.calTab=tab;
+  ['calendar','appointments','service'].forEach(t=>{
+    const btn=document.getElementById('cpt-'+t);
+    if(btn)btn.classList.toggle('active',t===tab);
+    const v=document.getElementById('cal-'+t+'-view');
+    if(v)v.classList.toggle('hidden',t!==tab);
+  });
+  if(tab==='calendar')renderCal();
+  else if(tab==='appointments')renderApptList();
+}
+
+function renderApptList(){
+  const el=document.getElementById('appt-list-body');if(!el)return;
+  const uSel=document.getElementById('appt-list-user');
+  const stSel=document.getElementById('appt-list-status');
+  const q=(document.getElementById('appt-list-search')&&document.getElementById('appt-list-search').value||'').toLowerCase();
+  const uid_f=uSel&&uSel.value||'';
+  const st_f=stSel&&stSel.value||'';
+  if(uSel&&uSel.options.length<=1){
+    uSel.innerHTML='<option value="">All Staff</option>'+allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('');
+  }
+  const td=todayStr();
+  let appts=db.appointments.filter(a=>{
+    if(st_f&&a.status!==st_f)return false;
+    if(!st_f&&a.status==='cancelled')return false;
+    if(uid_f&&a.assignedTo!==uid_f)return false;
+    if(q){const c=a.contactId?getContact(a.contactId):null;
+      const txt=(a.title+' '+(c?c.name+' '+( c.company||''):'')+' '+(a.location||'')).toLowerCase();
+      if(!txt.includes(q))return false;}
+    return true;
+  }).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+  const lbl=document.getElementById('appt-list-sub');
+  if(lbl)lbl.textContent=appts.length+' appointment'+(appts.length!==1?'s':'');
+  if(!appts.length){el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><h3>No appointments found</h3><p>Try adjusting your filters.</p></div>';return;}
+  // group by date
+  const byDate={};
+  appts.forEach(a=>{if(!byDate[a.date])byDate[a.date]=[];byDate[a.date].push(a);});
+  let html='';
+  Object.keys(byDate).sort().forEach(ds=>{
+    const d=new Date(ds+'T12:00:00');
+    const isToday=ds===td;
+    const isTom=ds===new Date(new Date().getTime()+86400000).toISOString().split('T')[0];
+    const label=isToday?'Today':isTom?'Tomorrow':DFULL[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();
+    html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:'+(isToday?'var(--orange)':'var(--text-muted)')+';padding:10px 0 7px;border-bottom:1px solid var(--border);margin-bottom:10px">'+label+'</div>';
+    byDate[ds].forEach(a=>{
+      const c=a.contactId?getContact(a.contactId):null;
+      const uc=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
+      const u=a.assignedTo?getUserById(a.assignedTo):null;
+      html+='<div class="appt-list-row" style="border-left-color:'+uc+'" onclick="openApptModal(null,\''+a.id+'\')">'
+        +'<div class="appt-list-date"><span style="font-size:11px;font-weight:700;color:var(--text-muted)">'+DSHORT[d.getDay()]+'</span></div>'
+        +'<div class="appt-list-body">'
+        +'<div class="appt-list-title">'+esc(a.title)+'</div>'
+        +'<div class="appt-list-meta">'+(a.time?fmtTime(a.time)+' \u00b7 ':'')+( a.duration||60)+' min'+(c?' \u00b7 '+esc(c.name):'')+(a.location?' \u00b7 '+esc(a.location):'')+'</div>'
+        +'</div>'
+        +(u?'<div style="font-size:11px;font-weight:600;color:'+uc+';flex-shrink:0;padding-top:2px">'+esc(u.name||u.username)+'</div>':'')
+        +'<div style="flex-shrink:0"><span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':'canc')+'">'+a.status+'</span></div>'
+        +'</div>';
+    });
+    html+='<div style="margin-bottom:16px"></div>';
+  });
+  el.innerHTML=html;
+}
+
+// =====================================================
+// FORMS PANEL
+// =====================================================
+function renderForms(){
+  switchFormsTab(state.formsTab||'forms');
+  if(state.formsTab==='forms')renderFormsList();
+}
+
+function switchFormsTab(tab){
+  state.formsTab=tab;
+  ['forms','contracts','documents'].forEach(t=>{
+    const btn=document.getElementById('fpt-'+t);
+    if(btn)btn.classList.toggle('active',t===tab);
+    const v=document.getElementById('forms-'+t+'-view');
+    if(v)v.classList.toggle('hidden',t!==tab);
+  });
+}
+
+// =====================================================
+// SUBSCRIPTION PRODUCT PICKER
+// =====================================================
+function getRecurringProducts(){
+  return db.products.filter(p=>p.active&&(p.pricingOptions||[]).some(o=>o.billingType==='recurring'));
+}
+
+function subProdSearch(i, val){
+  const dd=document.getElementById('sub-prod-drop-'+i);if(!dd)return;
+  if(!val.trim()){dd.classList.add('hidden');return;}
+  const prods=getRecurringProducts().filter(p=>(p.name||'').toLowerCase().includes(val.toLowerCase())||(p.category||'').toLowerCase().includes(val.toLowerCase()));
+  if(!prods.length){dd.innerHTML='<div class="ss-empty">No recurring products found</div>';dd.classList.remove('hidden');return;}
+  let opts='';
+  prods.forEach(p=>{
+    const recurOpts=(p.pricingOptions||[]).filter(o=>o.billingType==='recurring');
+    recurOpts.forEach(o=>{
+      opts+='<div class="ss-opt" onclick="selSubProd('+i+','+JSON.stringify({pid:p.id,name:p.name+' - '+o.name,price:o.price,optId:o.id})+')">'
+        +'<div style="font-size:13px;font-weight:600">'+esc(p.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--text-muted)">'+esc(o.name)+' &bull; '+fmt$(o.price)+'/'+( o.interval||'mo')+'</div>'
+        +'</div>';
+    });
+  });
+  dd.innerHTML=opts;dd.classList.remove('hidden');
+  setTimeout(()=>document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f)},{capture:true}),10);
+}
+
+function selSubProd(i, data){
+  const inp=document.getElementById('si-name-'+i);
+  const priceInp=document.getElementById('si-price-'+i);
+  if(inp)inp.value=data.name;
+  if(priceInp)priceInp.value=data.price;
+  editSubItems[i].name=data.name;
+  editSubItems[i].price=data.price;
+  editSubItems[i].productId=data.pid;
+  editSubItems[i].optionId=data.optId;
+  const dd=document.getElementById('sub-prod-drop-'+i);if(dd)dd.classList.add('hidden');
+}
+
+
+// =====================================================
+// FORM BUILDER - Constants & State
+// =====================================================
+const FB_FIELD_DEFS=[
+  {g:'Personal',items:[
+    {type:'name',label:'Full Name',icon:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'},
+    {type:'email',label:'Email',icon:'<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>'},
+    {type:'phone',label:'Phone',icon:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/>'},
+    {type:'dob',label:'Date of Birth',icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
+    {type:'company',label:'Business Name',icon:'<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>'},
+    {type:'address',label:'Address',icon:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'},
+  ]},
+  {g:'Input',items:[
+    {type:'text',label:'Single Line',icon:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="15" y2="18"/>'},
+    {type:'textarea',label:'Multi-Line',icon:'<line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="16" x2="15" y2="16"/>'},
+    {type:'number',label:'Number',icon:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'},
+    {type:'url',label:'URL / Website',icon:'<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'},
+    {type:'date',label:'Date Picker',icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/>'},
+    {type:'file',label:'File Upload',icon:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'},
+    {type:'signature',label:'Signature',icon:'<path d="M3 17c3.333-3 6-4.5 8-4.5 2.5 0 2.5 3 5 3 1 0 2.167-.5 3.5-1.5"/><path d="M3 11c3.333-3 6-4.5 8-4.5 2.5 0 2.5 3 5 3 1 0 2.167-.5 3.5-1.5"/>'},
+  ]},
+  {g:'Choice',items:[
+    {type:'dropdown',label:'Dropdown',icon:'<path d="M6 9l6 6 6-6"/>'},
+    {type:'radio',label:'Radio Buttons',icon:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>'},
+    {type:'checkbox',label:'Checkboxes',icon:'<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'},
+    {type:'tnc',label:'Terms & Conditions',icon:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'},
+  ]},
+  {g:'Content',items:[
+    {type:'fheader',label:'Heading',icon:'<path d="M4 6h16M4 12h8M4 18h12"/>'},
+    {type:'fparagraph',label:'Paragraph',icon:'<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="15" y2="18"/>'},
+    {type:'fdivider',label:'Divider',icon:'<line x1="3" y1="12" x2="21" y2="12"/>'},
+    {type:'fimage',label:'Image',icon:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>'},
+  ]},
+  {g:'Advanced',items:[
+    {type:'source',label:'Source Tracking',icon:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'},
+    {type:'hidden',label:'Hidden Field',icon:'<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'},
+    {type:'captcha',label:'Spam Protection',icon:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'},
+  ]},
+];
+
+function fbGetCustomFieldPalItems(){
+  return(db.customFields||[]).map(cf=>{
+    return{type:'cf_'+cf.id,label:cf.label};
+  });
+}
+
+const FB_DEF_OPTS=[{id:'o1',label:'Option 1',value:'option_1'},{id:'o2',label:'Option 2',value:'option_2'}];
+
+let fbState={
+  view:'list', // 'list','builder','submissions','embed'
+  formId:null,
+  pageIdx:0,
+  fieldId:null,
+  spTab:'field', // 'field','page','form','style'
+  dragSrc:null, // {kind:'pal',ftype} or {kind:'field',pi,fi}
+  dragOverDz:null, // {pi,insertIdx}
+  editingForm:null, // working copy
+  subsFormId:null,
+  embedFormId:null,
+  subsPage:1
+};
+
+const FB_STD_KEYS={email:'email',phone:'phone',name:'full_name',company:'company',address:'address',dob:'date_of_birth',url:'website',source:'lead_source'};
+const FB_CONTENT_TYPES=['fheader','fparagraph','fdivider','fimage'];
+
+function fbDefaultKey(type,label){
+  if(FB_STD_KEYS[type])return FB_STD_KEYS[type];
+  if(FB_CONTENT_TYPES.includes(type))return'';
+  return(label||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||type;
+}
+
+function fbNewField(type){
+  const defOpts=JSON.parse(JSON.stringify(FB_DEF_OPTS));
+  const label=fbDefaultLabel(type);
+  const isCF=type.startsWith('cf_');
+  const base={id:'f-'+uid(),type,label:FB_CONTENT_TYPES.includes(type)?'':label,field_key:FB_CONTENT_TYPES.includes(type)||isCF?'':fbDefaultKey(type,label),placeholder:'',required:false,width:'full',options:type==='dropdown'||type==='radio'||type==='checkbox'?defOpts:[],multiSelect:false,defaultValue:'',conditions:[],settings:{}};
+  if(type==='tnc')base.settings={mode:'link',link:'',linkLabel:'Terms and Conditions',termsHtml:'<p>By submitting this form you agree to our terms and conditions.</p>'};
+  if(type==='source')base.settings={sources:['Google','Facebook','Instagram','Referral','Website','Other'],visible:false};
+  if(type==='hidden')base.settings={fieldName:'utm_source',value:''};
+  if(type==='captcha')base.settings={enabled:true};
+  if(type==='file')base.settings={accept:[],multiple:false};
+  if(type==='dropdown')base.multiSelect=false;
+  if(type==='signature')base.settings={height:100};
+  if(type==='fheader')base.settings={text:'Your Heading Here',level:'h2',align:'left'};
+  if(type==='fparagraph')base.settings={text:'Add your paragraph text here.',align:'left'};
+  if(type==='fdivider')base.settings={style:'solid',color:'#d0d0d8'};
+  if(type==='fimage')base.settings={url:'',alt:'',align:'center',width:'100',linkUrl:''};
+  if(isCF){const cfId=type.replace('cf_','');const cf=(db.customFields||[]).find(x=>x.id===cfId);if(cf){base.label=cf.label;base.field_key=cf.key;base.type='cf_field';base.settings={customFieldId:cfId};if(cf.options)base.options=JSON.parse(JSON.stringify(cf.options||[]));}}
+  return base;
+}
+
+function fbDefaultLabel(type){
+  return{name:'Full Name',email:'Email Address',phone:'Phone Number',text:'Text Field',textarea:'Message',number:'Number',url:'Website URL',date:'Date',file:'File Upload',dropdown:'Dropdown',radio:'Choose One',checkbox:'Select All That Apply',address:'Address',company:'Company Name',dob:'Date of Birth',hidden:'Hidden Field',tnc:'I agree to the Terms and Conditions',source:'How did you hear about us?',signature:'Signature',captcha:'',fheader:'',fparagraph:'',fdivider:'',fimage:'',cf_field:'Custom Field'}[type]||type;
+}
+
+function fbNewForm(){
+  return{id:'form-'+uid(),name:'New Form',status:'draft',pages:[{id:'pg-'+uid(),title:'Page 1',fields:[]}],settings:{submitAction:'message',successMessage:'Thank you! We received your submission.',redirectUrl:'',createContact:true,updateContact:true,contactTags:[],notifyEmail:'',honeypot:true,workflowTrigger:null,multiStep:false,style:{primaryColor:'#6b21ea',buttonBg:'#ff4000',buttonText:'Submit',buttonTextColor:'#ffffff',bgColor:'#ffffff',fieldBg:'#f8f8f8',textColor:'#111111',labelColor:'#222222',borderColor:'#d0d0d8',borderRadius:'8',fontFamily:'DM Sans',buttonAlign:'left',buttonWidth:'auto',buttonSize:'normal'}},createdAt:now_(),updatedAt:now_()};
+}
+
+// =====================================================
+// FORM BUILDER - Render Entry & List
+// =====================================================
+function renderForms(){
+  if(fbState.view==='list')renderFormsList();
+  else if(fbState.view==='builder')fbShowBuilder();
+  else if(fbState.view==='submissions')fbShowSubmissions();
+  else if(fbState.view==='embed')fbShowEmbed();
+}
+
+function renderFormsList(){
+  fbHideOverlay();
+  const el=document.getElementById('forms-forms-view');if(!el)return;
+  const forms=db.forms||[];
+  let h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">';
+  h+='<div><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Forms</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+forms.length+' form'+(forms.length!==1?'s':'')+'</div></div>';
+  h+='<button class="btn btn-primary" onclick="fbCreateNew()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Form</button>';
+  h+='</div>';
+  if(!forms.length){
+    h+='<div class="coming-soon-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><h3>No forms yet</h3><p>Create your first form. Embed it on any website to capture leads directly into your CRM.</p></div>';
+  }else{
+    forms.forEach(f=>{
+      const subs=(db.formSubmissions||[]).filter(s=>s.formId===f.id).length;
+      const fields=f.pages.reduce((t,p)=>t+p.fields.length,0);
+      const sc={draft:'fbs-draft',active:'fbs-active',archived:'role-viewer'}[f.status]||'role-viewer';
+      h+='<div class="fb-list-card" onclick="fbOpenBuilder(\''+f.id+'\')">'+
+        '<div class="fb-list-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple-light)" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>'+
+        '<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;margin-bottom:2px">'+esc(f.name)+'</div><div style="font-size:12px;color:var(--text-muted)">'+fields+' field'+(fields!==1?'s':'')+' &bull; '+subs+' submission'+(subs!==1?'s':'')+'</div></div>'+
+        '<span class="role-badge '+sc+'">'+f.status+'</span>'+
+        '<div style="display:flex;gap:5px" onclick="event.stopPropagation()">'+
+        '<button class="btn btn-ghost btn-sm" onclick="fbOpenBuilder(\''+f.id+'\')">Edit</button>'+
+        '<button class="btn btn-ghost btn-sm" onclick="fbOpenSubs(\''+f.id+'\')">Submissions</button>'+
+        '<button class="btn btn-ghost btn-sm" onclick="fbOpenEmbed(\''+f.id+'\')">Embed</button>'+
+        '<button class="btn btn-ghost btn-sm" onclick="fbDuplicate(\''+f.id+'\')">Copy</button>'+
+        '<button class="btn btn-danger btn-sm" onclick="fbDeleteForm(\''+f.id+'\')">Delete</button>'+
+        '</div></div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+function fbCreateNew(){
+  const f=fbNewForm();
+  if(!db.forms)db.forms=[];
+  db.forms.push(f);
+  saveData();
+  fbOpenBuilder(f.id);
+}
+
+function fbDuplicate(id){
+  const f=db.forms.find(x=>x.id===id);if(!f)return;
+  const copy=JSON.parse(JSON.stringify(f));
+  copy.id='form-'+uid();copy.name=f.name+' (Copy)';copy.status='draft';copy.createdAt=now_();copy.updatedAt=now_();
+  db.forms.push(copy);saveData();renderFormsList();toast('Form duplicated.','success');
+}
+
+function fbDeleteForm(id){
+  openModal('Delete Form','<p style="color:var(--text-muted)">Delete this form? All submissions will also be removed. This cannot be undone.</p>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="fbConfirmDelete(\''+id+'\')">Delete</button>');
+}
+function fbConfirmDelete(id){
+  db.forms=(db.forms||[]).filter(f=>f.id!==id);
+  db.formSubmissions=(db.formSubmissions||[]).filter(s=>s.formId!==id);
+  saveData();closeModal();renderFormsList();toast('Form deleted.','success');
+}
+
+// =====================================================
+// FORM BUILDER - Builder View
+// =====================================================
+function fbOpenBuilder(id){
+  const f=(db.forms||[]).find(x=>x.id===id);if(!f)return;
+  fbState.formId=id;
+  fbState.editingForm=JSON.parse(JSON.stringify(f));
+  fbState.pageIdx=0;fbState.fieldId=null;fbState.spTab='field';fbState.view='builder';
+  fbShowBuilder();
+}
+
+function fbShowBuilder(){
+  const ov=document.getElementById('fb-overlay');if(!ov)return;
+  ov.classList.remove('hidden');
+  fbRenderBuilder();
+}
+
+function fbHideOverlay(){
+  const ov=document.getElementById('fb-overlay');if(ov)ov.classList.add('hidden');
+}
+
+function fbCloseBuilder(){
+  fbHideOverlay();
+  fbState.view='list';
+  renderFormsList();
+}
+
+function fbSaveForm(){
+  const f=fbState.editingForm;if(!f)return;
+  f.updatedAt=now_();
+  const idx=(db.forms||[]).findIndex(x=>x.id===f.id);
+  if(idx>=0)db.forms[idx]=JSON.parse(JSON.stringify(f));
+  else{if(!db.forms)db.forms=[];db.forms.push(JSON.parse(JSON.stringify(f)));}
+  saveData();toast('Form saved.','success');
+}
+
+function fbRenderBuilder(){
+  const f=fbState.editingForm;if(!f)return;
+  const ov=document.getElementById('fb-overlay');if(!ov)return;
+  ov.innerHTML='<div class="fb-topbar">'
+    +'<button class="btn btn-ghost btn-sm" onclick="fbCloseBuilder()" title="Back to forms list"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button>'
+    +'<input class="fb-name-inp" id="fb-name-inp" type="text" value="'+esc(f.name)+'" oninput="fbState.editingForm.name=this.value" placeholder="Form name...">'
+    +'<select class="fb-status-sel" onchange="fbState.editingForm.status=this.value"><option value="draft"'+(f.status==='draft'?' selected':'')+'>Draft</option><option value="active"'+(f.status==='active'?' selected':'')+'>Active</option><option value="archived"'+(f.status==='archived'?' selected':'')+'>Archived</option></select>'
+    +'<button class="btn btn-ghost btn-sm" onclick="fbPreview()">Preview</button>'
+    +'<button class="btn btn-primary" onclick="fbSaveForm()">Save</button>'
+    +'</div>'
+    +'<div class="fb-body">'
+    +'<div class="fb-pal" id="fb-pal">'+fbRenderPalette()+'</div>'
+    +'<div class="fb-canvas-area" id="fb-canvas-area">'+fbRenderCanvas()+'</div>'
+    +'<div class="fb-sp" id="fb-sp">'+fbRenderSettingsPanel()+'</div>'
+    +'</div>';
+  setTimeout(fbApplyLiveStyles,0);
+}
+
+function fbRenderPalette(){
+  let h='';
+  FB_FIELD_DEFS.forEach(grp=>{
+    h+='<div class="fb-pal-grp">'+grp.g+'</div>';
+    grp.items.forEach(item=>{
+      h+='<div class="fb-pal-item" draggable="true" ondragstart="fbPalDragStart(event,\''+item.type+'\')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg">'+item.icon+'</svg>'+esc(item.label)+'</div>';
+    });
+  });
+  return h;
+}
+
+function fbGetSt(key,def){const f=fbState.editingForm;return(f&&f.settings&&f.settings.style&&f.settings.style[key])||def;}
+
+function fbApplyLiveStyles(){
+  const f=fbState.editingForm;if(!f)return;
+  const st=f.settings.style||{};
+  const bg=st.bgColor||'#ffffff';
+  const fb=st.fieldBg||'#f8f8f8';
+  const bc=st.borderColor||'#d0d0d8';
+  const lc=st.labelColor||'#222222';
+  const ac=st.primaryColor||'#6b21ea';
+  const pc=document.getElementById('fb-pcanvas');if(pc)pc.style.background=bg;
+  document.querySelectorAll('.fb-fc').forEach(el=>{el.style.background=fb;el.style.borderColor=bc;});
+  document.querySelectorAll('.fb-lbl').forEach(el=>{el.style.color=lc;});
+  document.querySelectorAll('.fb-mi,.fb-mita,.fb-msel').forEach(el=>{el.style.background=fb;el.style.borderColor=bc;});
+  document.querySelectorAll('.fb-mopt-dot,.fb-mopt-box').forEach(el=>{el.style.borderColor=ac;});
+}
+
+function fbRenderCanvas(){
+  const f=fbState.editingForm;if(!f)return'';
+  const pi=fbState.pageIdx;
+  let h='';
+  // Page tabs
+  if(f.settings.multiStep||f.pages.length>1){
+    h+='<div class="fb-pg-tabs-row">';
+    f.pages.forEach((pg,i)=>{
+      h+='<button class="fb-pg-tab'+(i===pi?' active':'')+'" onclick="fbSwitchPage('+i+')">'+esc(pg.title||'Page '+(i+1))+(f.pages.length>1?'<span class="icon-btn-xs" onclick="event.stopPropagation();fbDeletePage('+i+')" style="margin-left:4px;opacity:.5;color:inherit">x</span>':'')+'</button>';
+    });
+    h+='<button class="fb-pg-add" onclick="fbAddPage()">+ Page</button>';
+    h+='</div>';
+  }
+  // Canvas
+  const bgColor=fbGetSt('bgColor','#ffffff');
+  h+='<div class="fb-canvas-center"><div class="fb-page-canvas" id="fb-pcanvas" style="background:'+bgColor+'" ondragover="fbCanvasDragOver(event)" ondragleave="fbCanvasDragLeave(event)" ondrop="fbCanvasDrop(event)">';
+  const pg=f.pages[pi];
+  if(!pg){return h+'<div class="fb-empty-drop">No page found.</div></div>';}
+  const fields=pg.fields||[];
+  h+='<div class="fb-fields-wrap" id="fb-fields-wrap">';
+  // Drop zone before first field
+  h+=fbDZ(pi,0);
+  if(!fields.length){
+    h+='<div class="fb-empty-drop" id="fb-empty-canvas">Drop fields here from the palette on the left.</div>';
+  }else{
+    fields.forEach((fd,fi)=>{
+      const isHalf=fd.width==='half';
+      h+='<div class="fb-field-wrap'+(isHalf?' half-w':'')+'" id="fw-'+fd.id+'">';
+      h+=fbRenderFieldCard(fd,pi,fi);
+      h+='</div>';
+      h+=fbDZ(pi,fi+1);
+    });
+  }
+  h+='</div></div></div>';
+  return h;
+}
+
+function fbDZ(pi,insertIdx){
+  return'<div class="fb-dropzone" id="dz-'+pi+'-'+insertIdx+'" ondragover="fbDZOver(event,'+pi+','+insertIdx+')" ondragleave="fbDZLeave(event)" ondrop="fbDZDrop(event,'+pi+','+insertIdx+')"><div class="fb-dz-line"></div></div>';
+}
+
+function fbRenderFieldCard(fd,pi,fi){
+  const isSel=fbState.fieldId===fd.id;
+  let h='<div class="fb-fc'+(isSel?' sel':'')+(fbState.dragSrc&&fbState.dragSrc.kind==='field'&&fbState.dragSrc.fi===fi&&fbState.dragSrc.pi===pi?' is-dragging':'')+'" id="fc-'+fd.id+'" onclick="fbSelectField(\''+fd.id+'\')" draggable="true" ondragstart="fbFieldDragStart(event,'+pi+','+fi+')">';
+  h+='<div class="dh" title="Drag to reorder"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg></div>';
+  h+='<div class="fp">'+fbFieldPreview(fd)+'</div>';
+  h+='<div class="ft">'+esc(fd.type)+'</div>';
+  h+='<div class="fa"><button class="icon-btn-xs" onclick="event.stopPropagation();fbDupField(\''+fd.id+'\')" title="Duplicate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button class="icon-btn-xs" onclick="event.stopPropagation();fbDeleteField(\''+fd.id+'\')" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div>';
+  h+='</div>';
+  return h;
+}
+
+function fbFieldPreview(fd){
+  if(fd.type==='fheader'){const lv=fd.settings&&fd.settings.level||'h2';const sz={h1:'18px',h2:'15px',h3:'13px'}[lv];const fw={h1:'800',h2:'700',h3:'600'}[lv];return'<div class="fb-content-el"><div class="fb-content-header" style="font-size:'+sz+';font-weight:'+fw+';text-align:'+(fd.settings&&fd.settings.align||'left')+'">'+esc(fd.settings&&fd.settings.text||'Heading')+'</div></div>';}
+  if(fd.type==='fparagraph'){return'<div class="fb-content-el"><div class="fb-content-para" style="text-align:'+(fd.settings&&fd.settings.align||'left')+'">'+esc((fd.settings&&fd.settings.text||'Paragraph...').slice(0,80))+'</div></div>';}
+  if(fd.type==='fdivider'){return'<div class="fb-content-el"><hr class="fb-content-divider" style="border-top-style:'+(fd.settings&&fd.settings.style||'solid')+';border-top-color:'+(fd.settings&&fd.settings.color||'#d0d0d8')+'"></div>';}
+  if(fd.type==='fimage'){const url=fd.settings&&fd.settings.url;return'<div class="fb-content-el" style="text-align:'+(fd.settings&&fd.settings.align||'center')+'">'+(url?'<img src="'+esc(url)+'" style="max-width:'+(fd.settings&&fd.settings.width||'100')+'%;border-radius:5px;max-height:60px;object-fit:cover">':'<div style="height:44px;background:#e8e8ee;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#aaa">Image URL not set</div>')+'</div>';}
+  let h='<div class="fb-lbl">'+esc(fd.label||'Untitled')+(fd.required?'<span class="req">*</span>':'')+'</div>';
+  if(fd.type==='text'||fd.type==='email'||fd.type==='phone'||fd.type==='number'||fd.type==='url'||fd.type==='company'){
+    h+='<div class="fb-mi"></div>';
+  }else if(fd.type==='textarea'){
+    h+='<div class="fb-mita"></div>';
+  }else if(fd.type==='name'){
+    h+='<div style="display:flex;gap:6px"><div class="fb-mi" style="flex:1"></div><div class="fb-mi" style="flex:1"></div></div>';
+  }else if(fd.type==='address'){
+    h+='<div class="fb-mi"></div><div style="display:flex;gap:6px;margin-top:4px"><div class="fb-mi" style="flex:1"></div><div class="fb-mi" style="width:60px"></div></div>';
+  }else if(fd.type==='date'||fd.type==='dob'){
+    h+='<div class="fb-mi"></div>';
+  }else if(fd.type==='dropdown'){
+    h+='<div class="fb-msel"><span>Select...</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M6 9l6 6 6-6"/></svg></div>';
+  }else if(fd.type==='radio'){
+    const opts=(fd.options||[]).slice(0,3);
+    h+='<div class="fb-mock-radios">'+opts.map(o=>'<div class="fb-mopt"><div class="fb-mopt-dot"></div>'+esc(o.label)+'</div>').join('')+'</div>';
+  }else if(fd.type==='checkbox'){
+    const opts=(fd.options||[]).slice(0,3);
+    h+='<div class="fb-mock-checks">'+opts.map(o=>'<div class="fb-mopt"><div class="fb-mopt-box"></div>'+esc(o.label)+'</div>').join('')+'</div>';
+  }else if(fd.type==='tnc'){
+    h+='<div class="fb-mopt"><div class="fb-mopt-box"></div><span style="font-size:11px;color:#666">I agree to the <span style="color:#6b21ea">Terms</span></span></div>';
+  }else if(fd.type==='file'){
+    h+='<div class="fb-mi" style="display:flex;align-items:center;padding:0 8px;font-size:10px;color:var(--text-dim)">Choose file...</div>';
+  }else if(fd.type==='signature'){
+    h+='<div class="fb-mita" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa">Sign here</div>';
+  }else if(fd.type==='hidden'){
+    h='<div style="font-size:11px;color:var(--text-dim);font-style:italic">Hidden: '+esc((fd.settings&&fd.settings.fieldName)||fd.label)+'</div>';
+  }else if(fd.type==='captcha'){
+    h='<div style="font-size:11px;color:var(--text-dim)">Spam Protection (Honeypot - invisible)</div>';
+  }else if(fd.type==='source'){
+    h+='<div class="fb-msel" style="font-size:10px;color:#aaa">How did you hear about us?</div>';
+  }
+  return h;
+}
+
+// =====================================================
+// FORM BUILDER - Settings Panel
+// =====================================================
+function fbRenderSettingsPanel(){
+  const f=fbState.editingForm;if(!f)return'';
+  const fd=fbState.fieldId?fbGetField(fbState.fieldId):null;
+  const tabs=['field','page','form','style'];
+  const tabLabels={field:'Field',page:'Page',form:'Settings',style:'Style'};
+  let h='<div class="fb-sp-tabs">';
+  tabs.forEach(t=>{ h+='<button class="fb-sp-t'+(fbState.spTab===t?' active':'')+'" onclick="fbSetSpTab(\''+t+'\')">'+tabLabels[t]+'</button>'; });
+  h+='</div><div class="fb-sp-body">';
+  if(fbState.spTab==='field'){
+    if(!fd){
+      h+='<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center">Select a field to edit its settings.</div>';
+    }else{
+      h+=fbRenderFieldSettings(fd);
+    }
+  }else if(fbState.spTab==='page'){
+    const pg=f.pages[fbState.pageIdx]||{};
+    h+='<label class="fb-sl">Page Title</label><input class="fb-si" type="text" value="'+esc(pg.title||'')+'" oninput="fbUpdatePageTitle(this.value)">';
+    h+='<div class="fb-divider"></div>';
+    h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Multi-Step Form</span><div class="bh-toggle'+(f.settings.multiStep?' on':'')+'" onclick="fbToggleSetting(\'multiStep\')"></div></div>';
+    h+='<div style="font-size:11px;color:var(--text-muted)">Enable to add multiple pages with a progress bar.</div>';
+  }else if(fbState.spTab==='form'){
+    h+=fbRenderFormSettings();
+  }else if(fbState.spTab==='style'){
+    h+=fbRenderStyleSettings();
+  }
+  h+='</div>';
+  return h;
+}
+
+function fbRenderFieldSettings(fd){
+  let h='';
+  if(fd.type==='captcha'){
+    h+='<div style="font-size:13px;color:var(--text-muted)">Honeypot spam protection is automatically added to your form. No configuration needed.</div>';
+    return h;
+  }
+  if(fd.type!=='hidden'){
+    h+='<label class="fb-sl">Label</label><input class="fb-si" type="text" id="fsp-label" value="'+esc(fd.label||'')+'" oninput="fbUpdateField(\'label\',this.value)">';
+    if(fd.type!=='tnc'&&fd.type!=='checkbox'&&fd.type!=='radio'&&fd.type!=='name'&&fd.type!=='address'){
+      h+='<label class="fb-sl">Placeholder</label><input class="fb-si" type="text" id="fsp-ph" value="'+esc(fd.placeholder||'')+'" oninput="fbUpdateField(\'placeholder\',this.value)">';
+    }
+  }
+  h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Required</span><div class="bh-toggle'+(fd.required?' on':'')+'" onclick="fbToggleFieldBool(\'required\')"></div></div>';
+  h+='<label class="fb-sl">Width</label><div class="fb-col-row"><button class="fb-col-btn'+(fd.width!=='half'?' active':'')+'" onclick="fbUpdateField(\'width\',\'full\')">Full</button><button class="fb-col-btn'+(fd.width==='half'?' active':'')+'" onclick="fbUpdateField(\'width\',\'half\')">Half</button></div>';
+  // Type-specific settings
+  if(fd.type==='dropdown'||fd.type==='radio'||fd.type==='checkbox'){
+    h+='<div class="fb-divider"></div>';
+    if(fd.type==='dropdown'){
+      h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Multi-select</span><div class="bh-toggle'+(fd.multiSelect?' on':'')+'" onclick="fbToggleFieldBool(\'multiSelect\')"></div></div>';
+    }
+    h+='<label class="fb-sl">Options</label>';
+    (fd.options||[]).forEach((opt,oi)=>{
+      h+='<div class="fb-opt-item"><input type="text" value="'+esc(opt.label)+'" oninput="fbUpdateOptLabel(\''+opt.id+'\',this.value)" placeholder="Option..."><button class="icon-btn-xs" onclick="fbRemoveOpt(\''+opt.id+'\')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+    });
+    h+='<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:4px" onclick="fbAddOpt()">+ Add Option</button>';
+  }
+  if(fd.type==='tnc'){
+    h+='<div class="fb-divider"></div>';
+    h+='<label class="fb-sl">Terms Link</label><input class="fb-si" type="url" value="'+esc((fd.settings&&fd.settings.link)||'')+'" placeholder="https://..." oninput="fbUpdateSetting(\'link\',this.value)">';
+    h+='<label class="fb-sl">Link Label</label><input class="fb-si" type="text" value="'+esc((fd.settings&&fd.settings.linkLabel)||'Terms and Conditions')+'" oninput="fbUpdateSetting(\'linkLabel\',this.value)">';
+  }
+  if(fd.type==='hidden'){
+    h+='<label class="fb-sl">Field Name</label><input class="fb-si" type="text" value="'+esc((fd.settings&&fd.settings.fieldName)||'')+'" placeholder="e.g. utm_source" oninput="fbUpdateSetting(\'fieldName\',this.value)">';
+    h+='<label class="fb-sl">Value</label><input class="fb-si" type="text" value="'+esc((fd.settings&&fd.settings.value)||'')+'" placeholder="Static value or leave empty" oninput="fbUpdateSetting(\'value\',this.value)">';
+  }
+  if(fd.type==='file'){
+    h+='<div class="fb-divider"></div>';
+    h+='<label class="fb-sl">Accepted Types</label><input class="fb-si" type="text" value="'+esc((fd.settings&&fd.settings.accept)||'')+'" placeholder=".pdf,.jpg,.png" oninput="fbUpdateSetting(\'accept\',this.value)">';
+    h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Allow multiple files</span><div class="bh-toggle'+((fd.settings&&fd.settings.multiple)?' on':'')+'" onclick="fbToggleSettingBool(\'multiple\')"></div></div>';
+  }
+  if(fd.type==='source'){
+    h+='<div class="fb-divider"></div>';
+    h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Visible to user</span><div class="bh-toggle'+((fd.settings&&fd.settings.visible)?' on':'')+'" onclick="fbToggleSettingBool(\'visible\')"></div></div>';
+    h+='<label class="fb-sl">Sources (one per line)</label>';
+    h+='<textarea class="fb-si" rows="4" oninput="fbUpdateSetting(\'sources\',this.value.split(\'\\n\').filter(Boolean))">'+(fd.settings&&fd.settings.sources?fd.settings.sources.join('\n'):'')+'</textarea>';
+  }
+  // Default value
+  if(fd.type==='text'||fd.type==='email'||fd.type==='number'||fd.type==='url'){
+    h+='<div class="fb-divider"></div>';
+    h+='<label class="fb-sl">Default Value</label><input class="fb-si" type="text" value="'+esc(fd.defaultValue||'')+'" oninput="fbUpdateField(\'defaultValue\',this.value)">';
+  }
+  // Conditional logic
+  h+='<div class="fb-divider"></div>';
+  h+='<label class="fb-sl">Conditional Logic</label>';
+  const f=fbState.editingForm;
+  const pg=f&&f.pages[fbState.pageIdx];
+  const otherFields=pg?pg.fields.filter(x=>x.id!==fd.id&&['text','email','phone','dropdown','radio','checkbox','number'].includes(x.type)):[];
+  (fd.conditions||[]).forEach((cond,ci)=>{
+    const fieldOpts=otherFields.map(x=>'<option value="'+x.id+'"'+(cond.fieldId===x.id?' selected':'')+'>'+esc(x.label||x.type)+'</option>').join('');
+    const ops=['is','is not','contains','is empty','is not empty'];
+    const opOpts=ops.map(op=>'<option value="'+op+'"'+(cond.op===op?' selected':'')+'>'+op+'</option>').join('');
+    h+='<div class="fb-cond-block"><div class="fb-cond-selects"><select onchange="fbUpdateCond('+ci+',\'fieldId\',this.value)"><option value="">Select field</option>'+fieldOpts+'</select><select onchange="fbUpdateCond('+ci+',\'op\',this.value)">'+opOpts+'</select></div><input class="fb-cond-val" type="text" placeholder="Value" value="'+esc(cond.value||'')+'" oninput="fbUpdateCond('+ci+',\'value\',this.value)"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><label style="font-size:11px;color:var(--text-muted)">Action</label><select style="font-size:11px;padding:3px 6px;background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text);outline:none" onchange="fbUpdateCond('+ci+',\'action\',this.value)"><option value="show"'+(cond.action==='show'?' selected':'')+'>Show</option><option value="hide"'+(cond.action==='hide'?' selected':'')+'>Hide</option></select><button class="icon-btn-xs" onclick="fbRemoveCond('+ci+')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>';
+  });
+  if(otherFields.length>0){
+    h+='<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:4px" onclick="fbAddCond()">+ Add Condition</button>';
+  }else{
+    h+='<div style="font-size:11px;color:var(--text-dim)">Add more fields to set up conditions.</div>';
+  }
+  return h;
+}
+
+function fbRenderFormSettings(){
+  const f=fbState.editingForm;if(!f)return'';
+  const s=f.settings;
+  let h='<label class="fb-sl">Submit Action</label>';
+  h+='<select class="fb-ss" onchange="fbUpdateFormSetting(\'submitAction\',this.value)"><option value="message"'+(s.submitAction==='message'?' selected':'')+'>Show Message</option><option value="redirect"'+(s.submitAction==='redirect'?' selected':'')+'>Redirect to URL</option></select>';
+  if(s.submitAction==='message'){
+    h+='<label class="fb-sl">Success Message</label><textarea class="fb-si" rows="3" oninput="fbUpdateFormSetting(\'successMessage\',this.value)">'+esc(s.successMessage||'')+'</textarea>';
+  }else{
+    h+='<label class="fb-sl">Redirect URL</label><input class="fb-si" type="url" value="'+esc(s.redirectUrl||'')+'" placeholder="https://..." oninput="fbUpdateFormSetting(\'redirectUrl\',this.value)">';
+  }
+  h+='<div class="fb-divider"></div>';
+  h+='<label class="fb-sl">Notification Email</label><input class="fb-si" type="email" value="'+esc(s.notifyEmail||'')+'" placeholder="notify@example.com" oninput="fbUpdateFormSetting(\'notifyEmail\',this.value)">';
+  h+='<div class="fb-divider"></div>';
+  h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Auto-create Contact</span><div class="bh-toggle'+(s.createContact?' on':'')+'" onclick="fbToggleFS(\'createContact\')"></div></div>';
+  h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Auto-update Contact</span><div class="bh-toggle'+(s.updateContact?' on':'')+'" onclick="fbToggleFS(\'updateContact\')"></div></div>';
+  h+='<div class="fb-divider"></div>';
+  h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Spam Protection</span><div class="bh-toggle'+(s.honeypot?' on':'')+'" onclick="fbToggleFS(\'honeypot\')"></div></div>';
+  h+='<div style="font-size:11px;color:var(--text-muted);margin-top:-4px;margin-bottom:8px">Adds a hidden honeypot field to catch bots.</div>';
+  h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Workflow Trigger</span><div class="bh-toggle on" style="opacity:.4" title="Coming soon"></div></div>';
+  h+='<div style="font-size:11px;color:var(--text-dim)">Workflow automation coming soon.</div>';
+  return h;
+}
+
+function fbRenderStyleSettings(){
+  const f=fbState.editingForm;if(!f)return'';
+  const st=f.settings.style||{};
+  const colorField=(label,key,def)=>'<label class="fb-sl">'+label+'</label><div style="display:flex;gap:6px;margin-bottom:8px"><input type="color" value="'+(st[key]||def)+'" oninput="fbUpdateStyle(\''+key+'\',this.value)" style="width:36px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px;background:var(--bg-input)"><input class="fb-si" type="text" value="'+(st[key]||def)+'" style="flex:1;margin:0" oninput="fbUpdateStyle(\''+key+'\',this.value)"></div>';
+  let h='';
+  h+=colorField('Button Color','buttonBg','#ff4000');
+  h+=colorField('Button Text Color','buttonTextColor','#ffffff');
+  h+='<label class="fb-sl">Button Label</label><input class="fb-si" type="text" value="'+esc(st.buttonText||'Submit')+'" oninput="fbUpdateStyle(\'buttonText\',this.value)">';
+  h+='<div class="fb-divider"></div>';
+  h+=colorField('Background Color','bgColor','#ffffff');
+  h+=colorField('Field Background','fieldBg','#f8f8f8');
+  h+=colorField('Text Color','textColor','#111111');
+  h+=colorField('Label Color','labelColor','#222222');
+  h+=colorField('Border Color','borderColor','#d0d0d8');
+  h+=colorField('Accent Color','primaryColor','#6b21ea');
+  h+='<div class="fb-divider"></div>';
+  h+='<label class="fb-sl">Border Radius (px)</label><input class="fb-si" type="number" value="'+(st.borderRadius||'8')+'" min="0" max="24" oninput="fbUpdateStyle(\'borderRadius\',this.value)">';
+  h+='<label class="fb-sl">Font Family</label><select class="fb-ss" onchange="fbUpdateStyle(\'fontFamily\',this.value)"><option value="DM Sans"'+(st.fontFamily==='DM Sans'?' selected':'')+'>DM Sans</option><option value="Inter"'+(st.fontFamily==='Inter'?' selected':'')+'>Inter</option><option value="Georgia"'+(st.fontFamily==='Georgia'?' selected':'')+'>Georgia</option><option value="Helvetica"'+(st.fontFamily==='Helvetica'?' selected':'')+'>Helvetica</option><option value="system-ui"'+(st.fontFamily==='system-ui'?' selected':'')+'>System Default</option></select>';
+  return h;
+}
+
+// =====================================================
+// FORM BUILDER - Drag & Drop
+// =====================================================
+function fbPalDragStart(e,ftype){
+  fbState.dragSrc={kind:'pal',ftype};
+  e.dataTransfer.effectAllowed='copy';
+  e.dataTransfer.setData('text/plain',ftype);
+}
+
+function fbFieldDragStart(e,pi,fi){
+  fbState.dragSrc={kind:'field',pi,fi};
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain','field');
+}
+
+function fbDZOver(e,pi,insertIdx){
+  e.preventDefault();e.stopPropagation();
+  const dz=document.getElementById('dz-'+pi+'-'+insertIdx);
+  if(dz)dz.classList.add('dz-over');
+  fbState.dragOverDz={pi,insertIdx};
+}
+
+function fbDZLeave(e){
+  const dz=e.currentTarget;if(dz)dz.classList.remove('dz-over');
+}
+
+function fbDZDrop(e,pi,insertIdx){
+  e.preventDefault();e.stopPropagation();
+  const dz=document.getElementById('dz-'+pi+'-'+insertIdx);
+  if(dz)dz.classList.remove('dz-over');
+  fbHandleDrop(pi,insertIdx);
+}
+
+function fbCanvasDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='copy';}
+function fbCanvasDragLeave(e){}
+function fbCanvasDrop(e){
+  e.preventDefault();
+  const f=fbState.editingForm;if(!f)return;
+  const pg=f.pages[fbState.pageIdx];if(!pg)return;
+  if(!fbState.dragSrc)return;
+  fbHandleDrop(fbState.pageIdx,pg.fields.length);
+}
+
+function fbHandleDrop(pi,insertIdx){
+  const f=fbState.editingForm;if(!f||!fbState.dragSrc)return;
+  if(fbState.dragSrc.kind==='pal'){
+    const fd=fbNewField(fbState.dragSrc.ftype);
+    f.pages[pi].fields.splice(insertIdx,0,fd);
+    fbState.fieldId=fd.id;fbState.spTab='field';
+  }else if(fbState.dragSrc.kind==='field'){
+    const srcPi=fbState.dragSrc.pi,srcFi=fbState.dragSrc.fi;
+    const fd=f.pages[srcPi].fields.splice(srcFi,1)[0];
+    // Adjust insert index if moving within same page
+    let adj=insertIdx;
+    if(srcPi===pi&&srcFi<insertIdx)adj--;
+    f.pages[pi].fields.splice(Math.max(0,adj),0,fd);
+    fbState.fieldId=fd.id;
+  }
+  fbState.dragSrc=null;fbState.dragOverDz=null;
+  fbRenderBuilder();
+}
+
+// =====================================================
+// FORM BUILDER - Field & Form Mutations
+// =====================================================
+function fbGetField(id){
+  const f=fbState.editingForm;if(!f)return null;
+  for(const pg of f.pages){const fd=pg.fields.find(x=>x.id===id);if(fd)return fd;}
+  return null;
+}
+
+function fbSelectField(id){
+  fbState.fieldId=id;fbState.spTab='field';
+  // Re-render just settings panel and field cards
+  const sp=document.getElementById('fb-sp');
+  if(sp)sp.innerHTML=fbRenderSettingsPanel();
+  // Update selected state on cards
+  document.querySelectorAll('.fb-fc').forEach(el=>{
+    const fid=el.id.replace('fc-','');
+    el.classList.toggle('sel',fid===id);
+  });
+}
+
+function fbUpdateField(key,val){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  fd[key]=val;
+}
+
+function fbToggleFieldBool(key){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  fd[key]=!fd[key];
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbUpdateSetting(key,val){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  if(!fd.settings)fd.settings={};
+  fd.settings[key]=val;
+}
+
+function fbToggleSettingBool(key){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  if(!fd.settings)fd.settings={};
+  fd.settings[key]=!fd.settings[key];
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbAddOpt(){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  if(!fd.options)fd.options=[];
+  const n=fd.options.length+1;
+  fd.options.push({id:'o-'+uid(),label:'Option '+n,value:'option_'+n});
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbRemoveOpt(oid){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  fd.options=(fd.options||[]).filter(o=>o.id!==oid);
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbUpdateOptLabel(oid,val){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  const opt=(fd.options||[]).find(o=>o.id===oid);
+  if(opt){opt.label=val;opt.value=val.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');}
+}
+
+function fbAddCond(){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  if(!fd.conditions)fd.conditions=[];
+  fd.conditions.push({fieldId:'',op:'is',value:'',action:'show'});
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbRemoveCond(ci){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  fd.conditions.splice(ci,1);
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbUpdateCond(ci,key,val){
+  const fd=fbGetField(fbState.fieldId);if(!fd||!fd.conditions||!fd.conditions[ci])return;
+  fd.conditions[ci][key]=val;
+}
+
+function fbUpdateFormSetting(key,val){
+  const f=fbState.editingForm;if(!f)return;
+  f.settings[key]=val;
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbToggleFS(key){
+  const f=fbState.editingForm;if(!f)return;
+  f.settings[key]=!f.settings[key];
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbUpdateStyle(key,val){
+  const f=fbState.editingForm;if(!f)return;
+  if(!f.settings.style)f.settings.style={};
+  f.settings.style[key]=val;
+  fbApplyLiveStyles();
+}
+
+function fbToggleSetting(key){
+  const f=fbState.editingForm;if(!f)return;
+  f.settings[key]=!f.settings[key];
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+  const ca=document.getElementById('fb-canvas-area');
+  if(ca){ca.innerHTML=fbRenderCanvas();setTimeout(fbApplyLiveStyles,0);}
+}
+
+function fbUpdatePageTitle(val){
+  const f=fbState.editingForm;if(!f)return;
+  if(f.pages[fbState.pageIdx])f.pages[fbState.pageIdx].title=val;
+}
+
+function fbSwitchPage(i){
+  fbState.pageIdx=i;fbState.fieldId=null;
+  const ca=document.getElementById('fb-canvas-area');
+  if(ca){ca.innerHTML=fbRenderCanvas();setTimeout(fbApplyLiveStyles,0);}
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbAddPage(){
+  const f=fbState.editingForm;if(!f)return;
+  f.settings.multiStep=true;
+  f.pages.push({id:'pg-'+uid(),title:'Page '+(f.pages.length+1),fields:[]});
+  fbState.pageIdx=f.pages.length-1;
+  const ca=document.getElementById('fb-canvas-area');
+  if(ca){ca.innerHTML=fbRenderCanvas();setTimeout(fbApplyLiveStyles,0);}
+}
+
+function fbDeletePage(pi){
+  const f=fbState.editingForm;if(!f||f.pages.length<=1)return;
+  f.pages.splice(pi,1);
+  fbState.pageIdx=Math.min(fbState.pageIdx,f.pages.length-1);
+  const ca=document.getElementById('fb-canvas-area');
+  if(ca){ca.innerHTML=fbRenderCanvas();setTimeout(fbApplyLiveStyles,0);}
+}
+
+function fbDupField(id){
+  const f=fbState.editingForm;if(!f)return;
+  for(const pg of f.pages){
+    const fi=pg.fields.findIndex(x=>x.id===id);
+    if(fi>=0){
+      const copy=JSON.parse(JSON.stringify(pg.fields[fi]));
+      copy.id='f-'+uid();
+      pg.fields.splice(fi+1,0,copy);
+      fbState.fieldId=copy.id;
+      const ca=document.getElementById('fb-canvas-area');if(ca){ca.innerHTML=fbRenderCanvas();setTimeout(fbApplyLiveStyles,0);}
+      const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+      return;
+    }
+  }
+}
+
+function fbDeleteField(id){
+  const f=fbState.editingForm;if(!f)return;
+  for(const pg of f.pages){
+    const fi=pg.fields.findIndex(x=>x.id===id);
+    if(fi>=0){pg.fields.splice(fi,1);break;}
+  }
+  if(fbState.fieldId===id)fbState.fieldId=null;
+  const ca=document.getElementById('fb-canvas-area');if(ca){ca.innerHTML=fbRenderCanvas();setTimeout(fbApplyLiveStyles,0);}
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+function fbSetSpTab(tab){
+  fbState.spTab=tab;
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+// =====================================================
+// FORM BUILDER - Preview
+// =====================================================
+function fbPreview(){
+  const f=fbState.editingForm;if(!f)return;
+  const st=f.settings.style||{};
+  const btnBg=st.buttonBg||'#ff4000',btnTxt=st.buttonTextColor||'#fff';
+  const radius=st.borderRadius||'8';
+  const font=st.fontFamily||'DM Sans';
+  let overlay=document.getElementById('fb-prev-overlay');
+  if(overlay)overlay.remove();
+  const div=document.createElement('div');
+  div.id='fb-prev-overlay';
+  div.className='fb-prev-overlay';
+  div.onclick=function(e){if(e.target===div)div.remove();};
+  div.innerHTML='<div class="fb-prev-card" style="background:'+esc(st.bgColor||'#f4f4f8')+';font-family:'+esc(font)+',sans-serif"><div class="fb-prev-head"><h2 style="color:'+esc(st.labelColor||'#111')+'">'+esc(f.name)+'</h2><button class="icon-btn-xs" onclick="document.getElementById(\'fb-prev-overlay\').remove()" style="color:#666"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="fb-prev-body">'+fbRenderFormHTML(f,st,radius)+'<div style="margin-top:18px"><button class="fb-prev-submit" style="background:'+btnBg+';color:'+btnTxt+';border-radius:'+radius+'px">'+esc(st.buttonText||'Submit')+'</button></div></div></div>';
+  document.body.appendChild(div);
+}
+
+function fbRenderFormHTML(f,st,radius){
+  const r=radius||'8';
+  const fieldBg=st&&st.fieldBg||'#f8f8f8';
+  const border=st&&st.borderColor||'#d0d0d8';
+  const txt=st&&st.textColor||'#111';
+  const lbl=st&&st.labelColor||'#222';
+  const accent=st&&st.primaryColor||'#6b21ea';
+  const iStyle='width:100%;border:1px solid '+border+';border-radius:'+r+'px;padding:9px 12px;font-size:14px;color:'+txt+';background:'+fieldBg+';outline:none;box-sizing:border-box;font-family:inherit';
+  const taStyle='width:100%;border:1px solid '+border+';border-radius:'+r+'px;padding:9px 12px;font-size:14px;color:'+txt+';background:'+fieldBg+';outline:none;box-sizing:border-box;font-family:inherit;min-height:80px;resize:vertical';
+  let h='';
+  const allFields=f.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]);
+  allFields.forEach(fd=>{
+    if(fd.type==='captcha')return;
+    if(fd.type==='hidden')return;
+    const reqStar=fd.required?'<span style="color:#ff4000;margin-left:2px">*</span>':'';
+    h+='<div class="fb-prev-field">';
+    if(fd.type==='name'){
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      h+='<div style="display:flex;gap:8px"><input class="fb-prev-input" style="'+iStyle+'" placeholder="First name"><input class="fb-prev-input" style="'+iStyle+'" placeholder="Last name"></div>';
+    }else if(fd.type==='address'){
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      h+='<input class="fb-prev-input" style="'+iStyle+';margin-bottom:6px" placeholder="Street address">';
+      h+='<div style="display:flex;gap:6px"><input class="fb-prev-input" style="'+iStyle+';flex:2" placeholder="City"><input class="fb-prev-input" style="'+iStyle+';flex:1" placeholder="State"><input class="fb-prev-input" style="'+iStyle+';width:80px" placeholder="ZIP"></div>';
+    }else if(fd.type==='textarea'){
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      h+='<textarea class="fb-prev-input" style="'+taStyle+'" placeholder="'+esc(fd.placeholder||'')+'"></textarea>';
+    }else if(fd.type==='dropdown'){
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      h+='<select class="fb-prev-select" style="'+iStyle+';height:42px"'+(fd.multiSelect?' multiple size="3"':'')+'><option value="">Select...</option>'+(fd.options||[]).map(o=>'<option>'+esc(o.label)+'</option>').join('')+'</select>';
+    }else if(fd.type==='radio'){
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      (fd.options||[]).forEach(o=>{h+='<label class="fb-prev-opt-row"><input type="radio" name="'+fd.id+'" style="accent-color:'+accent+'">'+esc(o.label)+'</label>';});
+    }else if(fd.type==='checkbox'){
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      (fd.options||[]).forEach(o=>{h+='<label class="fb-prev-opt-row"><input type="checkbox" style="accent-color:'+accent+'">'+esc(o.label)+'</label>';});
+    }else if(fd.type==='tnc'){
+      const link=(fd.settings&&fd.settings.link)?'<a href="'+esc(fd.settings.link)+'" target="_blank" style="color:'+accent+';text-decoration:underline">'+esc((fd.settings&&fd.settings.linkLabel)||'Terms and Conditions')+'</a>':'<span style="color:'+accent+'">Terms and Conditions</span>';
+      h+='<label class="fb-prev-tnc"><input type="checkbox" style="accent-color:'+accent+'">I agree to the '+link+'</label>';
+    }else if(fd.type==='signature'){
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      h+='<canvas class="fb-prev-sig" style="border:1px solid '+border+';border-radius:'+r+'px" width="500" height="100"></canvas>';
+    }else if(fd.type==='file'){
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      h+='<input type="file" style="'+iStyle+'"'+(fd.settings&&fd.settings.accept?' accept="'+esc(fd.settings.accept)+'"':'')+' '+(fd.settings&&fd.settings.multiple?'multiple':'')+' >';
+    }else if(fd.type==='source'){
+      if(fd.settings&&fd.settings.visible){
+        h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+'</label>';
+        h+='<select class="fb-prev-select" style="'+iStyle+';height:42px"><option value="">Select...</option>'+(fd.settings.sources||[]).map(s=>'<option>'+esc(s)+'</option>').join('')+'</select>';
+      }
+    }else{
+      // text, email, phone, number, url, date, dob, company
+      const t={email:'email',phone:'tel',number:'number',url:'url',date:'date',dob:'date'}[fd.type]||'text';
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
+      h+='<input class="fb-prev-input" style="'+iStyle+'" type="'+t+'" placeholder="'+esc(fd.placeholder||'')+'" value="'+esc(fd.defaultValue||'')+'">';
+    }
+    h+='</div>';
+  });
+  return h;
+}
+
+// =====================================================
+// FORM BUILDER - Submissions
+// =====================================================
+function fbOpenSubs(id){
+  fbState.subsFormId=id;fbState.view='submissions';
+  fbHideOverlay();
+  const el=document.getElementById('forms-forms-view');if(!el)return;
+  const f=(db.forms||[]).find(x=>x.id===id);if(!f)return;
+  const subs=(db.formSubmissions||[]).filter(s=>s.formId===id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  const fields=f.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]).filter(fd=>fd.type!=='hidden'&&fd.type!=='captcha');
+  let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Submissions: '+esc(f.name)+'</div></div>';
+  if(!subs.length){
+    h+='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><h3>No submissions yet</h3><p>Embed this form on your website to start collecting responses.</p></div>';
+  }else{
+    subs.forEach(sub=>{
+      const c=sub.contactId?getContact(sub.contactId):null;
+      const ts=new Date(sub.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+      h+='<div class="fb-sub-row" onclick="fbViewSub(\''+sub.id+'\')"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:2px">'+(c?esc(c.name):esc(sub.data&&sub.data.email||sub.data&&sub.data.name||'Anonymous'))+'</div><div style="font-size:11px;color:var(--text-muted)">'+ts+(c?' \u00b7 Linked to contact':'')+'</div></div><div style="font-size:12px;color:var(--text-muted)">'+(fields.slice(0,2).map(fd=>{const v=sub.data&&sub.data[fd.id];return v?esc(String(v).slice(0,30)):''}).filter(Boolean).join(' \u00b7 '))+'</div></div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+function fbViewSub(id){
+  const sub=(db.formSubmissions||[]).find(s=>s.id===id);if(!sub)return;
+  const f=(db.forms||[]).find(x=>x.id===sub.formId);if(!f)return;
+  const fields=f.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]).filter(fd=>fd.type!=='hidden'&&fd.type!=='captcha');
+  const ts=new Date(sub.createdAt).toLocaleString('en-US',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+  let body='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Submitted '+ts+'</div>';
+  body+='<div style="display:flex;flex-direction:column;gap:10px">';
+  fields.forEach(fd=>{
+    const v=sub.data&&sub.data[fd.id];
+    if(v===undefined||v===null||v==='')return;
+    body+='<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">'+esc(fd.label)+'</div><div style="font-size:14px">'+esc(Array.isArray(v)?v.join(', '):String(v))+'</div></div>';
+  });
+  body+='</div>';
+  openModal('Submission Details',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="fbLinkSub(\''+sub.id+'\')">Link to Contact</button>','modal-lg');
+}
+
+function fbLinkSub(subId){
+  const sub=(db.formSubmissions||[]).find(s=>s.id===subId);if(!sub)return;
+  closeModal();
+  fbAutoLinkSub(sub);
+}
+
+function fbAutoLinkSub(sub){
+  if(!sub||!sub.data)return;
+  // Try to find email in submission data
+  const form=(db.forms||[]).find(f=>f.id===sub.formId);if(!form)return;
+  const emailField=form.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]).find(fd=>fd.type==='email');
+  const email=emailField&&sub.data[emailField.id];
+  if(email){
+    const existing=db.contacts.find(c=>(c.email||'').toLowerCase()===email.toLowerCase());
+    if(existing){sub.contactId=existing.id;saveData();toast('Linked to '+existing.name,'success');return;}
+  }
+  if(form.settings.createContact){
+    fbCreateContactFromSub(sub,form);
+  }else{
+    toast('No matching contact found.','warn');
+  }
+}
+
+function fbCreateContactFromSub(sub,form){
+  const fields=form.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]);
+  const get=type=>fields.find(f=>f.type===type);
+  const getV=type=>{const fd=get(type);return fd&&sub.data&&sub.data[fd.id]||'';};
+  const emailFd=get('email');const email=emailFd&&sub.data&&sub.data[emailFd.id]||'';
+  if(email&&db.contacts.find(c=>(c.email||'').toLowerCase()===email.toLowerCase())){toast('Contact already exists.','warn');return;}
+  const nameFd=get('name');
+  let name='';
+  if(nameFd&&sub.data){const v=sub.data[nameFd.id];name=v&&(v.first||'')+' '+(v.last||'');name=name.trim();}
+  const contact={id:uid(),name:name||email||'New Contact',email,phone:getV('phone'),company:getV('company'),type:'lead',status:'active',tags:form.settings.contactTags||[],notes:[],source:'Form: '+form.name,createdAt:now_()};
+  db.contacts.push(contact);sub.contactId=contact.id;saveData();toast('Contact created: '+contact.name,'success');
+}
+
+// =====================================================
+// FORM BUILDER - Embed
+// =====================================================
+function fbOpenEmbed(id){
+  fbState.embedFormId=id;fbState.view='embed';
+  fbHideOverlay();
+  const el=document.getElementById('forms-forms-view');if(!el)return;
+  const f=(db.forms||[]).find(x=>x.id===id);if(!f)return;
+  const pageUrl=window.location.href.split('?')[0];
+  const iframeSrc=pageUrl+'?fbembed='+id;
+  const scriptCode='<script>\n(function(){\n  var f=document.createElement("iframe");\n  f.src="'+iframeSrc+'";\n  f.style.cssText="width:100%;border:none;min-height:400px";\n  f.onload=function(){window.addEventListener("message",function(e){if(e.data&&e.data.fbResize)f.style.height=e.data.fbResize+"px";});};\n  document.currentScript.parentNode.insertBefore(f,document.currentScript);\n})();\n<\/script>';
+  const iframeCode='<iframe src="'+iframeSrc+'" style="width:100%;border:none;min-height:400px" frameborder="0"></iframe>';
+  let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Embed: '+esc(f.name)+'</div></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">';
+  h+='<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:6px">Script Embed</div>';
+  h+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Paste before your page closing body tag. Auto-resizes to fit the form.</div>';
+  h+='<div class="fb-code-block">'+esc(scriptCode)+'</div>';
+  h+='<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(scriptCode)+').then(()=>toast(\'Copied!\',\'success\'))">Copy Script</button></div>';
+  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">';
+  h+='<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:6px">iFrame Embed</div>';
+  h+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Simple iframe for any website builder. Works with Wordpress, Squarespace, and Webflow.</div>';
+  h+='<div class="fb-code-block">'+esc(iframeCode)+'</div>';
+  h+='<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(iframeCode)+').then(()=>toast(\'Copied!\',\'success\'))">Copy iFrame</button></div>';
+  h+='</div>';
+  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-top:14px">';
+  h+='<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">Form URL</div>';
+  h+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Direct link to share the form. Works as a standalone page.</div>';
+  h+='<div style="display:flex;gap:8px;align-items:center"><input type="text" value="'+esc(iframeSrc)+'" readonly style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:13px;outline:none;font-family:monospace"><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(\''+esc(iframeSrc)+'\').then(()=>toast(\'URL copied!\',\'success\'))">Copy URL</button></div>';
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+// =====================================================
+// FORM BUILDER - Embed renderer (standalone page)
+// =====================================================
+function fbCheckEmbedMode(){
+  const params=new URLSearchParams(window.location.search);
+  const fid=params.get('fbembed');
+  if(!fid)return false;
+  const f=(db.forms||[]).find(x=>x.id===fid);
+  if(!f){document.body.innerHTML='<p style="padding:20px;font-family:sans-serif;color:#666">Form not found.</p>';return true;}
+  const st=f.settings.style||{};
+  document.body.style.cssText='margin:0;padding:20px;background:'+( st.bgColor||'#ffffff')+';font-family:'+(st.fontFamily||'DM Sans')+',sans-serif';
+  document.body.innerHTML='<div id="fb-embed-form"><h2 style="margin:0 0 16px;color:'+(st.labelColor||'#111')+'">'+esc(f.name)+'</h2><div id="fb-embed-fields">'+fbRenderFormHTML(f,st,st.borderRadius||'8')+'</div><div style="margin-top:16px"><button onclick="fbHandleEmbedSubmit()" style="background:'+(st.buttonBg||'#ff4000')+';color:'+(st.buttonTextColor||'#fff')+';border:none;border-radius:'+(st.borderRadius||'8')+'px;padding:11px 28px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">'+esc(st.buttonText||'Submit')+'</button></div></div>';
+  return true;
+}
+
+function fbHandleEmbedSubmit(){
+  const params=new URLSearchParams(window.location.search);
+  const fid=params.get('fbembed');
+  const f=(db.forms||[]).find(x=>x.id===fid);if(!f)return;
+  // Collect form data
+  const data={};
+  f.pages.forEach(pg=>{pg.fields.forEach(fd=>{
+    if(fd.type==='captcha'||fd.type==='hidden'){if(fd.type==='hidden')data[fd.id]=fd.settings&&fd.settings.value||'';return;}
+    const el=document.querySelector('[name="'+fd.id+'"]')||document.querySelector('#ef-'+fd.id);
+    if(el)data[fd.id]=el.type==='checkbox'?el.checked:el.value;
+  });});
+  // Save submission
+  if(!db.formSubmissions)db.formSubmissions=[];
+  const sub={id:'fsub-'+uid(),formId:fid,data,contactId:null,createdAt:now_(),pageUrl:window.location.href};
+  db.formSubmissions.push(sub);
+  if(f.settings.createContact||f.settings.updateContact)fbCreateContactFromSub(sub,f);
+  saveData();
+  // Action
+  if(f.settings.submitAction==='redirect'&&f.settings.redirectUrl){
+    window.location.href=f.settings.redirectUrl;
+  }else{
+    document.getElementById('fb-embed-form').innerHTML='<div style="text-align:center;padding:40px 20px"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;color:#34d399" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p style="font-size:16px;font-weight:600;margin:0">'+esc(f.settings.successMessage||'Thank you for your submission!')+'</p></div>';
+    window.parent.postMessage({fbResize:240},'*');
+  }
+}
+
+
+// =====================================================
+// FORM BUILDER - Central settings panel change handler
+// Avoids all nested string escaping by reading data attributes
+// =====================================================
+function fbSpChange(el){
+  const fn=el.dataset.fn;
+  const key=el.dataset.key;
+  const val=el.type==='checkbox'?el.checked:el.value;
+  if(fn==='field')fbUpdateField(key,val);
+  else if(fn==='setting')fbUpdateSetting(key,val);
+  else if(fn==='style')fbUpdateStyle(key,val);
+  else if(fn==='formsetting')fbUpdateFormSetting(key,val);
+  // Refresh panel if needed
+  if(el.dataset.refresh==='true'){const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();}
+  // Apply live styles if style changed
+  if(fn==='style')fbApplyLiveStyles();
+}
+function fbSpToggle(el,key){
+  const fn=el.dataset.fn||'field';
+  if(fn==='field')fbToggleFieldBool(key);
+  else if(fn==='setting')fbToggleSettingBool(key);
+  else if(fn==='formsetting')fbToggleFS(key);
+}
+function fbSpAlignSet(fn,key,val){
+  if(fn==='setting')fbUpdateSetting(key,val);
+  else if(fn==='style')fbUpdateStyle(key,val);
+  else fbUpdateField(key,val);
+  fbApplyLiveStyles();
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+// =====================================================
+// FORM BUILDER - Field settings (NEW with data-attrs)
+// =====================================================
+function fbRenderFieldSettingsNew(fd){
+  const h=[];
+  const CT=FB_CONTENT_TYPES;
+
+  function inp(label,key,val,type,fn,extra){
+    type=type||'text';fn=fn||'field';
+    return '<label class="fb-sl">'+label+'</label><input class="fb-si" type="'+type+'" value="'+esc(val||'')+'" data-fn="'+fn+'" data-key="'+key+'" oninput="fbSpChange(this)"'+(extra||'')+'>';
+  }
+  function sel(label,key,val,opts,fn,extra){
+    fn=fn||'field';
+    const options=opts.map(o=>'<option value="'+esc(o.v)+'"'+(val===o.v?' selected':'')+'>'+esc(o.l)+'</option>').join('');
+    return '<label class="fb-sl">'+label+'</label><select class="fb-ss" data-fn="'+fn+'" data-key="'+key+'" onchange="fbSpChange(this)"'+(extra||'')+'>'+options+'</select>';
+  }
+  function tog(label,key,on,fn){
+    fn=fn||'field';
+    return '<div class="fb-toggle-row"><span class="fb-toggle-lbl">'+label+'</span><div class="bh-toggle'+(on?' on':'')+'" onclick="fbSpToggle(this,\''+key+'\')" data-fn="'+fn+'"></div></div>';
+  }
+  function align(fn,key,cur){
+    const a=cur||'left';
+    return '<label class="fb-sl">Alignment</label><div class="fb-align-row">'
+      +'<button class="fb-align-btn'+(a==='left'?' active':'')+'" onclick="fbSpAlignSet(\''+fn+'\',\''+key+'\',\'left\')">Left</button>'
+      +'<button class="fb-align-btn'+(a==='center'?' active':'')+'" onclick="fbSpAlignSet(\''+fn+'\',\''+key+'\',\'center\')">Center</button>'
+      +'<button class="fb-align-btn'+(a==='right'?' active':'')+'" onclick="fbSpAlignSet(\''+fn+'\',\''+key+'\',\'right\')">Right</button>'
+      +'</div>';
+  }
+  function widthToggle(){
+    return '<label class="fb-sl">Width</label><div class="fb-col-row">'
+      +'<button class="fb-col-btn'+(fd.width!=='half'?' active':'')+'" onclick="fbUpdateField(\'width\',\'full\');const sp=document.getElementById(\'fb-sp\');if(sp)sp.innerHTML=fbRenderSettingsPanel()">Full</button>'
+      +'<button class="fb-col-btn'+(fd.width==='half'?' active':'')+'" onclick="fbUpdateField(\'width\',\'half\');const sp=document.getElementById(\'fb-sp\');if(sp)sp.innerHTML=fbRenderSettingsPanel()">Half</button>'
+      +'</div>';
+  }
+  function colorPicker(label,key,val,fn){
+    fn=fn||'field';
+    return '<label class="fb-sl">'+label+'</label><div style="display:flex;gap:6px;margin-bottom:8px">'
+      +'<input type="color" value="'+esc(val)+'" data-fn="'+fn+'" data-key="'+key+'" oninput="fbSpChange(this)" style="width:36px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px;background:var(--bg-input)">'
+      +'<input class="fb-si" type="text" value="'+esc(val)+'" data-fn="'+fn+'" data-key="'+key+'" style="flex:1;margin:0" oninput="fbSpChange(this)"></div>';
+  }
+
+  if(fd.type==='captcha'){
+    return '<div style="font-size:13px;color:var(--text-muted)">Honeypot spam protection is added automatically. No configuration needed.</div>';
+  }
+
+  // Content element settings
+  if(CT.includes(fd.type)){
+    if(fd.type==='fheader'){
+      h.push(inp('Heading Text','text',fd.settings&&fd.settings.text,'text','setting'));
+      h.push(sel('Level','level',fd.settings&&fd.settings.level||'h2',[{v:'h1',l:'H1 Large'},{v:'h2',l:'H2 Medium'},{v:'h3',l:'H3 Small'}],'setting','data-refresh="true"'));
+      h.push(align('setting','align',fd.settings&&fd.settings.align||'left'));
+    }
+    if(fd.type==='fparagraph'){
+      h.push('<label class="fb-sl">Text</label><textarea class="fb-si" rows="5" data-fn="setting" data-key="text" oninput="fbSpChange(this)">'+esc(fd.settings&&fd.settings.text||'')+'</textarea>');
+      h.push(align('setting','align',fd.settings&&fd.settings.align||'left'));
+    }
+    if(fd.type==='fdivider'){
+      h.push(sel('Line Style','style',fd.settings&&fd.settings.style||'solid',[{v:'solid',l:'Solid'},{v:'dashed',l:'Dashed'},{v:'dotted',l:'Dotted'}],'setting'));
+      h.push(colorPicker('Color','color',fd.settings&&fd.settings.color||'#d0d0d8','setting'));
+    }
+    if(fd.type==='fimage'){
+      h.push(inp('Image URL','url',fd.settings&&fd.settings.url,'url','setting'));
+      h.push(inp('Alt Text','alt',fd.settings&&fd.settings.alt,'text','setting'));
+      h.push(inp('Width %','width',fd.settings&&fd.settings.width||'100','number','setting'));
+      h.push(inp('Link URL (optional)','linkUrl',fd.settings&&fd.settings.linkUrl,'url','setting'));
+      h.push(align('setting','align',fd.settings&&fd.settings.align||'center'));
+    }
+    if(fd.type!=='fdivider')h.push(widthToggle());
+    return h.join('');
+  }
+
+  // Standard field settings
+  if(fd.type!=='hidden'){
+    h.push(inp('Label','label',fd.label));
+    if(!['tnc','checkbox','radio','name','address'].includes(fd.type)){
+      h.push(inp('Placeholder','placeholder',fd.placeholder));
+    }
+    if(fd.field_key!==undefined){
+      h.push('<label class="fb-sl">Field ID <span style="font-weight:400;color:var(--text-dim)">(used in submissions)</span></label>'
+        +'<input class="fb-si" type="text" value="'+esc(fd.field_key||'')+'" style="font-family:monospace;font-size:12px" data-fn="field" data-key="field_key" oninput="fbSpChange(this)">');
+    }
+  }
+  h.push(tog('Required','required',fd.required));
+  h.push(widthToggle());
+
+  // Choice fields
+  if(['dropdown','radio','checkbox'].includes(fd.type)){
+    h.push('<div class="fb-divider"></div>');
+    if(fd.type==='dropdown')h.push(tog('Multi-select','multiSelect',fd.multiSelect));
+    h.push('<label class="fb-sl">Options <span style="font-weight:400;color:var(--text-dim)">(Label / Value)</span></label>');
+    (fd.options||[]).forEach(function(opt){
+      h.push('<div class="fb-opt-item">'
+        +'<input type="text" value="'+esc(opt.label)+'" placeholder="Label" style="flex:2;background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 7px;font-size:12px;outline:none" data-optid="'+opt.id+'" data-optype="label" oninput="fbOptChange(this)">'
+        +'<input type="text" value="'+esc(opt.value||'')+'" placeholder="value" style="flex:1;font-family:monospace;font-size:11px;background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 7px;outline:none" data-optid="'+opt.id+'" data-optype="value" oninput="fbOptChange(this)">'
+        +'<button class="icon-btn-xs" data-optid="'+opt.id+'" onclick="fbRemoveOptById(this.dataset.optid)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+        +'</div>');
+    });
+    h.push('<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:4px" onclick="fbAddOpt()">+ Add Option</button>');
+  }
+
+  // T&C
+  if(fd.type==='tnc'){
+    h.push('<div class="fb-divider"></div>');
+    const tncMode=fd.settings&&fd.settings.mode||'link';
+    h.push(sel('Display Mode','mode',tncMode,[{v:'link',l:'External Link'},{v:'inline',l:'Inline Rich Text'}],'setting','data-refresh="true"'));
+    if(tncMode==='inline'){
+      const thtml=(fd.settings&&fd.settings.termsHtml)||'';
+      h.push('<label class="fb-sl">Terms Content</label>'
+        +'<div class="fb-rte-wrap">'
+        +'<div class="fb-rte-bar">'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();document.execCommand(\'italic\')"><i>I</i></button>'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();document.execCommand(\'underline\')"><u>U</u></button>'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();fbInsertRteLink()">Link</button>'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();document.execCommand(\'insertUnorderedList\')">List</button>'
+        +'</div>'
+        +'<div class="fb-rte-body" contenteditable="true" oninput="fbUpdateSetting(\'termsHtml\',this.innerHTML)">'+thtml+'</div>'
+        +'</div>');
+      h.push(inp('Checkbox Label','linkLabel',(fd.settings&&fd.settings.linkLabel)||'I have read and agree to the terms above','text','setting'));
+    }else{
+      h.push(inp('Terms URL','link',(fd.settings&&fd.settings.link)||'','url','setting'));
+      h.push(inp('Link Label','linkLabel',(fd.settings&&fd.settings.linkLabel)||'Terms and Conditions','text','setting'));
+    }
+  }
+
+  // Hidden
+  if(fd.type==='hidden'){
+    h.push(inp('Field Name','fieldName',(fd.settings&&fd.settings.fieldName)||'','text','setting'));
+    h.push(inp('Value','value',(fd.settings&&fd.settings.value)||'','text','setting'));
+  }
+
+  // File upload
+  if(fd.type==='file'){
+    h.push('<div class="fb-divider"></div>');
+    const acceptArr=Array.isArray(fd.settings&&fd.settings.accept)?fd.settings.accept:[];
+    h.push('<label class="fb-sl">Accepted File Types</label>');
+    const FT=[{g:'Images',t:['jpg','jpeg','png','gif','webp','svg','heic']},{g:'Documents',t:['pdf','doc','docx','txt','rtf']},{g:'Spreadsheets',t:['xls','xlsx','csv']},{g:'Presentations',t:['ppt','pptx']},{g:'Video',t:['mp4','mov','avi','webm']},{g:'Audio',t:['mp3','wav','m4a']},{g:'Archives',t:['zip','rar','7z']}];
+    FT.forEach(function(grp){
+      h.push('<div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--text-dim);margin:5px 0 2px">'+grp.g+'</div><div class="fb-file-grid">');
+      grp.t.forEach(function(ext){
+        const chk=acceptArr.includes(ext);
+        h.push('<label class="fb-file-chk"><input type="checkbox" '+(chk?'checked':'')+' data-ext="'+ext+'" onchange="fbToggleFileExt(this)">'+ext.toUpperCase()+'</label>');
+      });
+      h.push('</div>');
+    });
+    h.push(tog('Allow multiple files','multiple',(fd.settings&&fd.settings.multiple)||false,'setting'));
+  }
+
+  // Source
+  if(fd.type==='source'){
+    h.push('<div class="fb-divider"></div>');
+    h.push(tog('Visible to user','visible',(fd.settings&&fd.settings.visible)||false,'setting'));
+    h.push('<label class="fb-sl">Sources (one per line)</label><textarea class="fb-si" rows="4" data-fn="setting" data-key="sources" oninput="fbSourcesChange(this)">'+((fd.settings&&fd.settings.sources)?fd.settings.sources.join('\n'):'')+'</textarea>');
+  }
+
+  // Default value
+  if(['text','email','number','url'].includes(fd.type)){
+    h.push('<div class="fb-divider"></div>');
+    h.push(inp('Default Value','defaultValue',fd.defaultValue));
+  }
+
+  // Conditional logic
+  h.push('<div class="fb-divider"></div><label class="fb-sl">Conditional Logic</label>');
+  const f=fbState.editingForm;const pg=f&&f.pages[fbState.pageIdx];
+  const otherFields=pg?pg.fields.filter(function(x){return x.id!==fd.id&&['text','email','phone','dropdown','radio','checkbox','number'].includes(x.type);}):[];
+  (fd.conditions||[]).forEach(function(cond,ci){
+    const fOpts='<option value="">Field</option>'+otherFields.map(function(x){return'<option value="'+x.id+'"'+(cond.fieldId===x.id?' selected':'')+'>'+esc(x.label||x.type)+'</option>';}).join('');
+    const oOpts=['is','is not','contains','is empty','is not empty'].map(function(op){return'<option value="'+op+'"'+(cond.op===op?' selected':'')+'>'+op+'</option>';}).join('');
+    const aOpts='<option value="show"'+(cond.action==='show'?' selected':'')+'>Show this field</option><option value="hide"'+(cond.action==='hide'?' selected':'')+'>Hide this field</option>';
+    h.push('<div class="fb-cond-block">'
+      +'<div class="fb-cond-selects">'
+      +'<select data-ci="'+ci+'" data-ckey="fieldId" onchange="fbCondChange(this)">'+fOpts+'</select>'
+      +'<select data-ci="'+ci+'" data-ckey="op" onchange="fbCondChange(this)">'+oOpts+'</select>'
+      +'</div>'
+      +'<input class="fb-cond-val" type="text" placeholder="Value" value="'+esc(cond.value||'')+'" data-ci="'+ci+'" data-ckey="value" oninput="fbCondChange(this)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px">'
+      +'<select style="font-size:11px;padding:3px 6px;background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text);outline:none" data-ci="'+ci+'" data-ckey="action" onchange="fbCondChange(this)">'+aOpts+'</select>'
+      +'<button class="icon-btn-xs" data-ci="'+ci+'" onclick="fbRemoveCond(this.dataset.ci)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+      +'</div>'
+      +'</div>');
+  });
+  if(otherFields.length>0){h.push('<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:4px" onclick="fbAddCond()">+ Add Condition</button>');}
+  else{h.push('<div style="font-size:11px;color:var(--text-dim)">Add more fields to enable conditions.</div>');}
+  return h.join('');
+}
+
+// Data-attribute driven handlers
+function fbOptChange(el){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  const opt=(fd.options||[]).find(function(o){return o.id===el.dataset.optid;});
+  if(!opt)return;
+  if(el.dataset.optype==='label'){opt.label=el.value;opt.value=el.value.toLowerCase().replace(/[^a-z0-9]+/g,'_');}
+  else{opt.value=el.value;}
+}
+function fbRemoveOptById(oid){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  fd.options=(fd.options||[]).filter(function(o){return o.id!==oid;});
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+function fbToggleFileExt(el){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  if(!fd.settings)fd.settings={};
+  if(!Array.isArray(fd.settings.accept))fd.settings.accept=[];
+  const ext=el.dataset.ext;
+  if(el.checked){if(!fd.settings.accept.includes(ext))fd.settings.accept.push(ext);}
+  else{fd.settings.accept=fd.settings.accept.filter(function(x){return x!==ext;});}
+}
+function fbSourcesChange(el){
+  const fd=fbGetField(fbState.fieldId);if(!fd)return;
+  if(!fd.settings)fd.settings={};
+  fd.settings.sources=el.value.split('\n').filter(Boolean);
+}
+function fbCondChange(el){
+  const ci=parseInt(el.dataset.ci);
+  const key=el.dataset.ckey;
+  const fd=fbGetField(fbState.fieldId);if(!fd||!fd.conditions||!fd.conditions[ci])return;
+  fd.conditions[ci][key]=el.value;
+}
+function fbInsertRteLink(){
+  const url=prompt('Enter URL:','https://');
+  if(!url)return;
+  document.execCommand('createLink',false,url);
+}
+
+// Override fbRenderFieldSettings to use the new implementation
+function fbRenderFieldSettings(fd){return fbRenderFieldSettingsNew(fd);}
+
+// =====================================================
+// FORM BUILDER - fbRenderStyleSettings with button align/size
+// =====================================================
+function fbRenderStyleSettingsNew(){
+  const f=fbState.editingForm;if(!f)return'';
+  const st=f.settings.style||{};
+  const h=[];
+
+  function colorRow(label,key,def){
+    const v=st[key]||def;
+    return '<label class="fb-sl">'+label+'</label><div style="display:flex;gap:6px;margin-bottom:8px">'
+      +'<input type="color" value="'+v+'" data-fn="style" data-key="'+key+'" oninput="fbSpChange(this)" style="width:36px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px;background:var(--bg-input)">'
+      +'<input class="fb-si" type="text" value="'+v+'" data-fn="style" data-key="'+key+'" style="flex:1;margin:0" oninput="fbSpChange(this)"></div>';
+  }
+  function textRow(label,key,def){
+    return '<label class="fb-sl">'+label+'</label><input class="fb-si" type="text" value="'+esc(st[key]||def||'')+'" data-fn="style" data-key="'+key+'" oninput="fbSpChange(this)">';
+  }
+  function numRow(label,key,def){
+    return '<label class="fb-sl">'+label+'</label><input class="fb-si" type="number" value="'+(st[key]||def)+'" data-fn="style" data-key="'+key+'" oninput="fbSpChange(this)" min="0" max="24">';
+  }
+
+  h.push(colorRow('Button Color','buttonBg','#ff4000'));
+  h.push(colorRow('Button Text Color','buttonTextColor','#ffffff'));
+  h.push(textRow('Button Label','buttonText','Submit'));
+
+  const ba=st.buttonAlign||'left';
+  h.push('<label class="fb-sl">Button Alignment</label><div class="fb-align-row">'
+    +'<button class="fb-align-btn'+(ba==='left'?' active':'')+'" onclick="fbSpAlignSet(\'style\',\'buttonAlign\',\'left\')">Left</button>'
+    +'<button class="fb-align-btn'+(ba==='center'?' active':'')+'" onclick="fbSpAlignSet(\'style\',\'buttonAlign\',\'center\')">Center</button>'
+    +'<button class="fb-align-btn'+(ba==='right'?' active':'')+'" onclick="fbSpAlignSet(\'style\',\'buttonAlign\',\'right\')">Right</button>'
+    +'</div>');
+
+  const bw=st.buttonWidth||'auto';
+  h.push('<label class="fb-sl">Button Width</label><div class="fb-col-row">'
+    +'<button class="fb-col-btn'+(bw==='auto'?' active':'')+'" onclick="fbSpAlignSet(\'style\',\'buttonWidth\',\'auto\')">Auto</button>'
+    +'<button class="fb-col-btn'+(bw==='full'?' active':'')+'" onclick="fbSpAlignSet(\'style\',\'buttonWidth\',\'full\')">Full Width</button>'
+    +'</div>');
+
+  const bs=st.buttonSize||'normal';
+  h.push('<label class="fb-sl">Button Size</label><div class="fb-col-row">'
+    +'<button class="fb-col-btn'+(bs==='normal'?' active':'')+'" onclick="fbSpAlignSet(\'style\',\'buttonSize\',\'normal\')">Normal</button>'
+    +'<button class="fb-col-btn'+(bs==='large'?' active':'')+'" onclick="fbSpAlignSet(\'style\',\'buttonSize\',\'large\')">Large</button>'
+    +'</div>');
+
+  h.push('<div class="fb-divider"></div>');
+  h.push(colorRow('Background Color','bgColor','#ffffff'));
+  h.push(colorRow('Field Background','fieldBg','#f8f8f8'));
+  h.push(colorRow('Text Color','textColor','#111111'));
+  h.push(colorRow('Label Color','labelColor','#222222'));
+  h.push(colorRow('Border Color','borderColor','#d0d0d8'));
+  h.push(colorRow('Accent Color','primaryColor','#6b21ea'));
+  h.push('<div class="fb-divider"></div>');
+  h.push(numRow('Border Radius (px)','borderRadius','8'));
+
+  const ff=st.fontFamily||'DM Sans';
+  h.push('<label class="fb-sl">Font Family</label><select class="fb-ss" data-fn="style" data-key="fontFamily" onchange="fbSpChange(this)">'
+    +'<option value="DM Sans"'+(ff==='DM Sans'?' selected':'')+'>DM Sans</option>'
+    +'<option value="Inter"'+(ff==='Inter'?' selected':'')+'>Inter</option>'
+    +'<option value="Georgia"'+(ff==='Georgia'?' selected':'')+'>Georgia</option>'
+    +'<option value="Helvetica"'+(ff==='Helvetica'?' selected':'')+'>Helvetica</option>'
+    +'<option value="system-ui"'+(ff==='system-ui'?' selected':'')+'>System Default</option>'
+    +'</select>');
+
+  return h.join('');
+}
+function fbRenderStyleSettings(){return fbRenderStyleSettingsNew();}
+
+// =====================================================
+// FORM BUILDER - Preview signature init
+// =====================================================
+function fbInitSigCanvas(canvas){
+  const ctx=canvas.getContext('2d');let drawing=false;
+  function getPos(e){const r=canvas.getBoundingClientRect();const src=e.touches?e.touches[0]:e;return{x:src.clientX-r.left,y:src.clientY-r.top};}
+  canvas.addEventListener('mousedown',function(e){drawing=true;const p=getPos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
+  canvas.addEventListener('mousemove',function(e){if(!drawing)return;const p=getPos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#111';ctx.lineWidth=1.8;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke();});
+  canvas.addEventListener('mouseup',function(){drawing=false;});
+  canvas.addEventListener('mouseleave',function(){drawing=false;});
+  canvas.addEventListener('touchstart',function(e){e.preventDefault();drawing=true;const p=getPos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
+  canvas.addEventListener('touchmove',function(e){e.preventDefault();if(!drawing)return;const p=getPos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#111';ctx.lineWidth=1.8;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke();},{passive:false});
+  canvas.addEventListener('touchend',function(){drawing=false;});
+  const wrap=canvas.parentElement;
+  if(wrap&&!wrap.querySelector('.sig-clear-btn')){const btn=document.createElement('button');btn.textContent='Clear';btn.style.cssText='font-size:11px;color:#888;background:none;border:none;cursor:pointer;display:block;margin-top:4px;padding:0;font-family:inherit';btn.onclick=function(){ctx.clearRect(0,0,canvas.width,canvas.height);};wrap.appendChild(btn);}
+}
+
+// =====================================================
+// FORM BUILDER - Preview with signature init + button style
+// =====================================================
+const _fbPreviewOrig=fbPreview;
+function fbPreview(){
+  const f=fbState.editingForm;if(!f)return;
+  const st=f.settings.style||{};
+  const btnBg=st.buttonBg||'#ff4000';const btnTxt=st.buttonTextColor||'#fff';
+  const radius=st.borderRadius||'8';const font=st.fontFamily||'DM Sans';
+  const btnAlign=st.buttonAlign||'left';const btnW=st.buttonWidth==='full'?'100%':'auto';
+  const btnPad=st.buttonSize==='large'?'14px 36px':'11px 28px';
+  let overlay=document.getElementById('fb-prev-overlay');if(overlay)overlay.remove();
+  const div=document.createElement('div');div.id='fb-prev-overlay';div.className='fb-prev-overlay';
+  div.onclick=function(e){if(e.target===div)div.remove();};
+  const formHtml=fbRenderFormHTML(f,st,radius);
+  const card=document.createElement('div');card.className='fb-prev-card';
+  card.style.cssText='background:'+st.bgColor+';font-family:'+font+',sans-serif';
+  card.innerHTML='<div class="fb-prev-head" style="display:flex;align-items:center;justify-content:space-between">'
+    +'<h2 style="color:'+esc(st.labelColor||'#111')+';margin:0">'+esc(f.name)+'</h2>'
+    +'<button onclick="document.getElementById(\'fb-prev-overlay\').remove()" style="background:none;border:none;cursor:pointer;font-size:20px;color:#666;line-height:1">&times;</button>'
+    +'</div>'
+    +'<div class="fb-prev-body">'+formHtml
+    +'<div style="margin-top:18px;text-align:'+btnAlign+'">'
+    +'<button class="fb-prev-submit" style="background:'+btnBg+';color:'+btnTxt+';border-radius:'+radius+'px;padding:'+btnPad+';width:'+btnW+'">'+esc(st.buttonText||'Submit')+'</button>'
+    +'</div></div>';
+  div.appendChild(card);document.body.appendChild(div);
+  div.querySelectorAll('.fb-prev-sig').forEach(fbInitSigCanvas);
+}
+
+// =====================================================
+// FORM BUILDER - fbRenderFormHTML with content elements, T&C inline, button style
+// =====================================================
+const _fbRenderFormHTMLOrig=fbRenderFormHTML;
+function fbRenderFormHTML(f,st,radius){
+  const r=radius||'8';
+  const fieldBg=st&&st.fieldBg||'#f8f8f8';const border=st&&st.borderColor||'#d0d0d8';
+  const txt=st&&st.textColor||'#111';const lbl=st&&st.labelColor||'#222';
+  const accent=st&&st.primaryColor||'#6b21ea';
+  const iStyle='width:100%;border:1px solid '+border+';border-radius:'+r+'px;padding:9px 12px;font-size:14px;color:'+txt+';background:'+fieldBg+';outline:none;box-sizing:border-box;font-family:inherit';
+  const taStyle='width:100%;border:1px solid '+border+';border-radius:'+r+'px;padding:9px 12px;font-size:14px;color:'+txt+';background:'+fieldBg+';outline:none;box-sizing:border-box;font-family:inherit;min-height:80px;resize:vertical';
+  let h='';
+  const allFields=f.pages.reduce(function(arr,pg){return arr.concat(pg.fields);},[]);
+  allFields.forEach(function(fd){
+    if(fd.type==='captcha'||fd.type==='hidden')return;
+    // Content elements
+    if(fd.type==='fheader'){const lv=fd.settings&&fd.settings.level||'h2';const sz={h1:'22px',h2:'17px',h3:'14px'}[lv];const fw={h1:'800',h2:'700',h3:'600'}[lv];h+='<div class="fb-prev-field" style="text-align:'+(fd.settings&&fd.settings.align||'left')+'"><'+lv+' style="margin:0;font-size:'+sz+';font-weight:'+fw+';color:'+lbl+'">'+esc(fd.settings&&fd.settings.text||'')+'</'+lv+'></div>';return;}
+    if(fd.type==='fparagraph'){h+='<div class="fb-prev-field" style="text-align:'+(fd.settings&&fd.settings.align||'left')+';font-size:14px;color:'+txt+';line-height:1.7">'+esc(fd.settings&&fd.settings.text||'')+'</div>';return;}
+    if(fd.type==='fdivider'){h+='<hr style="border:none;border-top:1.5px '+(fd.settings&&fd.settings.style||'solid')+' '+(fd.settings&&fd.settings.color||'#d0d0d8')+';margin:10px 0">';return;}
+    if(fd.type==='fimage'){const url=fd.settings&&fd.settings.url;if(!url)return;const img='<img src="'+esc(url)+'" alt="'+esc(fd.settings&&fd.settings.alt||'')+'" style="max-width:'+(fd.settings&&fd.settings.width||'100')+'%;border-radius:'+r+'px;display:inline-block">';h+='<div class="fb-prev-field" style="text-align:'+(fd.settings&&fd.settings.align||'center')+'">'+(fd.settings&&fd.settings.linkUrl?'<a href="'+esc(fd.settings.linkUrl)+'" target="_blank">'+img+'</a>':img)+'</div>';return;}
+    const reqStar=fd.required?'<span style="color:#ff4000;margin-left:2px">*</span>':'';
+    h+='<div class="fb-prev-field">';
+    if(fd.type==='name'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><div style="display:flex;gap:8px"><input class="fb-prev-input" style="'+iStyle+'" placeholder="First name"><input class="fb-prev-input" style="'+iStyle+'" placeholder="Last name"></div>';}
+    else if(fd.type==='address'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><input class="fb-prev-input" style="'+iStyle+';margin-bottom:6px" placeholder="Street address"><div style="display:flex;gap:6px"><input class="fb-prev-input" style="'+iStyle+';flex:2" placeholder="City"><input class="fb-prev-input" style="'+iStyle+';flex:1" placeholder="State"><input class="fb-prev-input" style="'+iStyle+';width:80px" placeholder="ZIP"></div>';}
+    else if(fd.type==='textarea'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><textarea class="fb-prev-input" style="'+taStyle+'" placeholder="'+esc(fd.placeholder||'')+'"></textarea>';}
+    else if(fd.type==='dropdown'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><select class="fb-prev-select" style="'+iStyle+';height:42px"'+(fd.multiSelect?' multiple size="3"':'')+'><option value="">Select...</option>'+(fd.options||[]).map(function(o){return'<option>'+esc(o.label)+'</option>';}).join('')+'</select>';}
+    else if(fd.type==='radio'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';(fd.options||[]).forEach(function(o){h+='<label class="fb-prev-opt-row"><input type="radio" name="'+fd.id+'" style="accent-color:'+accent+'">'+esc(o.label)+'</label>';});}
+    else if(fd.type==='checkbox'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';(fd.options||[]).forEach(function(o){h+='<label class="fb-prev-opt-row"><input type="checkbox" style="accent-color:'+accent+'">'+esc(o.label)+'</label>';});}
+    else if(fd.type==='tnc'){
+      const tncMode=fd.settings&&fd.settings.mode||'link';
+      if(tncMode==='inline'&&fd.settings&&fd.settings.termsHtml){
+        h+='<div style="background:#f8f8f8;border:1px solid #e0e0e8;border-radius:'+r+'px;padding:12px 14px;font-size:12px;color:#444;max-height:120px;overflow-y:auto;margin-bottom:8px;line-height:1.6">'+fd.settings.termsHtml+'</div>';
+        h+='<label class="fb-prev-tnc"><input type="checkbox" style="accent-color:'+accent+'">'+esc((fd.settings&&fd.settings.linkLabel)||'I have read and agree to the terms above')+'</label>';
+      }else{
+        const lnk=(fd.settings&&fd.settings.link)?'<a href="'+esc(fd.settings.link)+'" target="_blank" style="color:'+accent+';text-decoration:underline">'+esc((fd.settings&&fd.settings.linkLabel)||'Terms and Conditions')+'</a>':'<span style="color:'+accent+'">'+esc((fd.settings&&fd.settings.linkLabel)||'Terms and Conditions')+'</span>';
+        h+='<label class="fb-prev-tnc"><input type="checkbox" style="accent-color:'+accent+'">I agree to the '+lnk+'</label>';
+      }
+    }
+    else if(fd.type==='signature'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><div><canvas class="fb-prev-sig" style="border:1px solid '+border+';border-radius:'+r+'px" width="500" height="100"></canvas></div>';}
+    else if(fd.type==='file'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><input type="file" style="'+iStyle+'"'+(fd.settings&&Array.isArray(fd.settings.accept)&&fd.settings.accept.length?' accept=".'+(fd.settings.accept.join(',.'))+'"':'')+' '+(fd.settings&&fd.settings.multiple?'multiple':'')+' >';}
+    else if(fd.type==='source'){
+      if(fd.settings&&fd.settings.visible){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+'</label><select class="fb-prev-select" style="'+iStyle+';height:42px"><option value="">Select...</option>'+(fd.settings.sources||[]).map(function(s){return'<option>'+esc(s)+'</option>';}).join('')+'</select>';}
+    }
+    else{
+      const t={email:'email',phone:'tel',number:'number',url:'url',date:'date',dob:'date',company:'text'}[fd.type]||'text';
+      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><input class="fb-prev-input" style="'+iStyle+'" type="'+t+'" placeholder="'+esc(fd.placeholder||'')+'" value="'+esc(fd.defaultValue||'')+'">';
+    }
+    h+='</div>';
+  });
+  return h;
+}
+
+// =====================================================
+// FORM BUILDER - Embed with live URL + single column layout
+// =====================================================
+function fbOpenEmbed(id){
+  fbState.embedFormId=id;fbState.view='embed';fbHideOverlay();
+  const el=document.getElementById('forms-forms-view');if(!el)return;
+  const f=(db.forms||[]).find(function(x){return x.id===id;});if(!f)return;
+  const liveBase=db.settings&&db.settings.appLiveUrl?(db.settings.appLiveUrl||'').replace(/\/+$/,''):null;
+  const rawBase=window.location.href.split('?')[0];
+  const isLocal=rawBase.startsWith('file://');
+  const baseUrl=liveBase||rawBase;
+  const src=baseUrl+'?fbembed='+id;
+  const script='<script>\n(function(){\n  var f=document.createElement("iframe");\n  f.src="'+src+'";\n  f.style.cssText="width:100%;border:none;min-height:400px";\n  f.onload=function(){window.addEventListener("message",function(e){if(e.data&&e.data.fbResize)f.style.height=e.data.fbResize+"px";});};\n  document.currentScript.parentNode.insertBefore(f,document.currentScript);\n})();\n<\/script>';
+  const iframe='<iframe src="'+src+'" style="width:100%;border:none;min-height:400px" frameborder="0"></iframe>';
+  let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button>'
+    +'<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Embed: '+esc(f.name)+'</div></div>';
+  if(isLocal&&!liveBase){h+='<div class="warn-box" style="margin-bottom:14px"><strong>Running locally.</strong> Enter your deployed domain below so embed codes use the correct URL when you go live.</div>';}
+  h+='<div style="display:flex;flex-direction:column;gap:12px">';
+  // Live URL setter
+  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">'
+    +'<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">Your Live URL</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Set once when you deploy. All embed codes update automatically.</div>'
+    +'<div style="display:flex;gap:8px"><input id="fb-live-url" type="text" value="'+esc(liveBase||'')+'" placeholder="https://yourdomain.com/myspark-crm.html" style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:13px;outline:none;font-family:monospace;min-width:0">'
+    +'<button class="btn btn-purple btn-sm" onclick="db.settings.appLiveUrl=document.getElementById(\'fb-live-url\').value.trim();saveData();fbOpenEmbed(\''+id+'\')">Save</button></div></div>';
+  // Form URL
+  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">'
+    +'<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">Form URL</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Share directly or use as a standalone page link.</div>'
+    +'<div style="display:flex;gap:7px;align-items:center"><input type="text" value="'+esc(src)+'" readonly style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:12px;outline:none;font-family:monospace;min-width:0">'
+    +'<button class="btn btn-purple btn-sm" style="flex-shrink:0" onclick="navigator.clipboard.writeText('+JSON.stringify(src)+').then(function(){toast(\'Copied!\',\'success\')})">Copy</button></div></div>';
+  // iFrame
+  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">'
+    +'<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">iFrame Embed</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Works with Wordpress, Oxygen, Breakdance, Squarespace, Webflow.</div>'
+    +'<div class="fb-code-block">'+esc(iframe)+'</div>'
+    +'<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(iframe)+').then(function(){toast(\'Copied!\',\'success\')})">Copy iFrame</button></div>';
+  // Script
+  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">'
+    +'<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">Script Embed</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Auto-resizing. Paste before your closing body tag.</div>'
+    +'<div class="fb-code-block">'+esc(script)+'</div>'
+    +'<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(script)+').then(function(){toast(\'Copied!\',\'success\')})">Copy Script</button></div>';
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+// =====================================================
+// CUSTOM FIELDS SYSTEM
+// =====================================================
+function cfRenderSettings(){
+  const el=document.getElementById('cf-cats-list');if(!el)return;
+  const cats=db.customFieldCategories||[];const cfs=db.customFields||[];
+  if(!cats.length){el.innerHTML='<div style="font-size:13px;color:var(--text-muted);padding:8px 0">No categories yet.</div>';return;}
+  el.innerHTML=cats.map(function(cat){
+    const fields=cfs.filter(function(f){return f.categoryId===cat.id;});
+    return'<div class="cf-cat-section">'
+      +'<div class="cf-cat-head"><span class="cf-cat-name">'+esc(cat.name)+'</span><span class="cf-cat-count">'+fields.length+' field'+(fields.length!==1?'s':'')+'</span>'
+      +'<button class="btn btn-purple btn-sm" onclick="cfOpenField(\''+cat.id+'\',null)">+ Field</button>'
+      +'<button class="btn btn-danger btn-sm" onclick="cfDeleteCat(\''+cat.id+'\')">Remove</button></div>'
+      +(fields.length?'<div class="cf-cat-body">'+fields.map(function(cf){
+        return'<div class="cf-field-row"><span style="flex:1;font-size:13px;font-weight:500">'+esc(cf.label)+'</span>'
+          +'<span class="cf-field-key">'+esc(cf.key)+'</span>'
+          +'<span class="cf-field-type-badge">'+cf.type+'</span>'
+          +'<button class="icon-btn-xs" data-cfid="'+cf.id+'" data-catid="'+cat.id+'" onclick="cfOpenField(this.dataset.catid,this.dataset.cfid)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="12" height="12"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+          +'<button class="icon-btn-xs" data-cfid="'+cf.id+'" onclick="cfDeleteField(this.dataset.cfid)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>'
+          +'</div>';
+      }).join('')+'</div>':'')
+      +'</div>';
+  }).join('');
+}
+
+function cfAddCategory(){
+  const inp=document.getElementById('cf-new-cat');if(!inp)return;
+  const name=inp.value.trim();if(!name){toast('Enter a category name.','error');return;}
+  if(!db.customFieldCategories)db.customFieldCategories=[];
+  db.customFieldCategories.push({id:'cfc-'+uid(),name:name,order:db.customFieldCategories.length});
+  inp.value='';saveData();cfRenderSettings();
+  const pal=document.getElementById('fb-pal');if(pal&&fbState.view==='builder')pal.innerHTML=fbRenderPalette();
+  toast('Category added.','success');
+}
+function cfDeleteCat(id){
+  const fields=(db.customFields||[]).filter(function(f){return f.categoryId===id;});
+  if(fields.length&&!confirm('Delete this category and its '+fields.length+' field(s)?'))return;
+  db.customFieldCategories=(db.customFieldCategories||[]).filter(function(c){return c.id!==id;});
+  db.customFields=(db.customFields||[]).filter(function(f){return f.categoryId!==id;});
+  saveData();cfRenderSettings();
+  const pal=document.getElementById('fb-pal');if(pal&&fbState.view==='builder')pal.innerHTML=fbRenderPalette();
+  toast('Category removed.','success');
+}
+function cfOpenField(catId,editId){
+  const cf=editId?(db.customFields||[]).find(function(x){return x.id===editId;}):null;
+  const typeOpts=['text','textarea','email','phone','number','url','date','dropdown','checkbox','radio'].map(function(t){return'<option value="'+t+'"'+(cf&&cf.type===t?' selected':t==='text'&&!cf?' selected':'')+'>'+(t[0].toUpperCase()+t.slice(1))+'</option>';}).join('');
+  const catOpts=(db.customFieldCategories||[]).map(function(c){return'<option value="'+c.id+'"'+(c.id===catId?' selected':'')+'>'+esc(c.name)+'</option>';}).join('');
+  const body='<div class="form-group"><label>Field Label *</label><input id="cf-fl" type="text" value="'+esc(cf&&cf.label||'')+'"></div>'
+    +'<div class="form-row"><div class="form-group"><label>Field Key <span style="font-weight:400;color:var(--text-muted)">(snake_case identifier)</span></label><input id="cf-fk" type="text" value="'+esc(cf&&cf.key||'')+'" placeholder="e.g. company_size" style="font-family:monospace" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,\'_\')"></div><div class="form-group"><label>Type</label><select id="cf-ft">'+typeOpts+'</select></div></div>'
+    +'<div class="form-group"><label>Category</label><select id="cf-fcat">'+catOpts+'</select></div>';
+  state.modal={type:'cffield',id:editId||null,extra:catId};
+  openModal(cf?'Edit Custom Field':'Add Custom Field',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="cfSaveField()">Save Field</button>');
+}
+function cfSaveField(){
+  const label=document.getElementById('cf-fl').value.trim();if(!label){toast('Label required.','error');return;}
+  let key=document.getElementById('cf-fk').value.trim();
+  if(!key)key=label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  const type=document.getElementById('cf-ft').value;
+  const catId=document.getElementById('cf-fcat').value;
+  const editId=state.modal.id;
+  if(!db.customFields)db.customFields=[];
+  if(editId){const cf=db.customFields.find(function(x){return x.id===editId;});if(cf){cf.label=label;cf.key=key;cf.type=type;cf.categoryId=catId;}}
+  else db.customFields.push({id:'cf-'+uid(),categoryId:catId,label:label,key:key,type:type,options:[],order:(db.customFields||[]).length});
+  saveData();closeModal();cfRenderSettings();
+  const pal=document.getElementById('fb-pal');if(pal&&fbState.view==='builder')pal.innerHTML=fbRenderPalette();
+  toast(editId?'Field updated.':'Field added.','success');
+}
+function cfDeleteField(id){
+  db.customFields=(db.customFields||[]).filter(function(f){return f.id!==id;});
+  saveData();cfRenderSettings();
+  const pal=document.getElementById('fb-pal');if(pal&&fbState.view==='builder')pal.innerHTML=fbRenderPalette();
+  toast('Field removed.','success');
+}
+
+// =====================================================
+// CONTACT DRAWER - Custom field sections
+// =====================================================
+function cfRenderDrawerSections(contactId){
+  const cats=db.customFieldCategories||[];const cfs=db.customFields||[];
+  if(!cats.length)return'';
+  const c=db.contacts.find(function(x){return x.id===contactId;});
+  const vals=(c&&c.customValues)||{};
+  let h='<div class="divider" style="margin:14px 0 10px"></div>';
+  cats.forEach(function(cat){
+    const fields=cfs.filter(function(f){return f.categoryId===cat.id;});
+    if(!fields.length)return;
+    const isOpen=state._cfOpen&&state._cfOpen[cat.id];
+    h+='<div class="drawer-cf-section">'
+      +'<div class="drawer-cf-head" onclick="cfToggleDC(\''+cat.id+'\')">'
+      +'<span>'+esc(cat.name)+'</span>'
+      +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg" style="transition:transform .2s;transform:'+(isOpen?'rotate(180deg)':'none')+'"><polyline points="6 9 12 15 18 9"/></svg>'
+      +'</div>';
+    if(isOpen){
+      h+='<div class="drawer-cf-body">';
+      fields.forEach(function(cf){
+        const val=vals[cf.id]||'';
+        h+='<span class="drawer-cf-label">'+esc(cf.label)+'</span>';
+        if(cf.type==='textarea'){
+          h+='<textarea class="drawer-cf-inp" rows="2" data-cid="'+contactId+'" data-cfid="'+cf.id+'" oninput="cfSetVal(this)">'+esc(val)+'</textarea>';
+        }else if(cf.type==='dropdown'||cf.type==='radio'){
+          h+='<select class="drawer-cf-inp" data-cid="'+contactId+'" data-cfid="'+cf.id+'" onchange="cfSetVal(this)">'
+            +'<option value="">Select...</option>'
+            +(cf.options||[]).map(function(o){return'<option value="'+esc(o.value)+'"'+(val===o.value?' selected':'')+'>'+esc(o.label)+'</option>';}).join('')
+            +'</select>';
+        }else if(cf.type==='checkbox'){
+          h+='<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;margin-bottom:8px">'
+            +'<input type="checkbox" '+(val?'checked':'')+' data-cid="'+contactId+'" data-cfid="'+cf.id+'" onchange="cfSetVal(this)" style="accent-color:var(--purple)">'
+            +'<span>'+esc(cf.label)+'</span></label>';
+        }else{
+          const iType={email:'email',phone:'tel',number:'number',url:'url',date:'date'}[cf.type]||'text';
+          h+='<input class="drawer-cf-inp" type="'+iType+'" value="'+esc(val)+'" data-cid="'+contactId+'" data-cfid="'+cf.id+'" onchange="cfSetVal(this)">';
+        }
+      });
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+  return h;
+}
+function cfSetVal(el){
+  const contactId=el.dataset.cid;const cfId=el.dataset.cfid;
+  const c=db.contacts.find(function(x){return x.id===contactId;});if(!c)return;
+  if(!c.customValues)c.customValues={};
+  c.customValues[cfId]=el.type==='checkbox'?el.checked:el.value;
+  saveData();
+}
+function cfToggleDC(catId){
+  if(!state._cfOpen)state._cfOpen={};
+  state._cfOpen[catId]=!state._cfOpen[catId];
+  if(state.drawer)renderDrawer();
+}
+
+// =====================================================
+// EMBED STANDALONE - standalone form renderer
+// =====================================================
+function fbCheckEmbedMode(){
+  const params=new URLSearchParams(window.location.search);
+  const fid=params.get('fbembed');if(!fid)return false;
+  loadData();
+  const f=(db.forms||[]).find(function(x){return x.id===fid;});
+  if(!f){document.body.innerHTML='<p style="padding:20px;font-family:sans-serif;color:#666">Form not found.</p>';return true;}
+  const st=f.settings.style||{};
+  document.body.style.cssText='margin:0;padding:24px;background:'+(st.bgColor||'#ffffff')+';font-family:'+(st.fontFamily||'DM Sans')+',sans-serif';
+  document.body.innerHTML='<div id="fb-embed-form"><h2 style="margin:0 0 16px;color:'+(st.labelColor||'#111')+'">'+esc(f.name)+'</h2><div id="fb-embed-fields">'+fbRenderFormHTML(f,st,st.borderRadius||'8')+'</div>'
+    +'<div style="margin-top:16px;text-align:'+(st.buttonAlign||'left')+'">'
+    +'<button onclick="fbHandleEmbedSubmit()" style="background:'+(st.buttonBg||'#ff4000')+';color:'+(st.buttonTextColor||'#fff')+';border:none;border-radius:'+(st.borderRadius||'8')+'px;padding:'+(st.buttonSize==='large'?'14px 36px':'11px 28px')+';font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;width:'+(st.buttonWidth==='full'?'100%':'auto')+'">'+esc(st.buttonText||'Submit')+'</button>'
+    +'</div></div>';
+  document.querySelectorAll('.fb-prev-sig').forEach(fbInitSigCanvas);
+  return true;
+}
+
+function fbHandleEmbedSubmit(){
+  const params=new URLSearchParams(window.location.search);
+  const fid=params.get('fbembed');
+  const f=(db.forms||[]).find(function(x){return x.id===fid;});if(!f)return;
+  const data={};
+  f.pages.forEach(function(pg){pg.fields.forEach(function(fd){
+    if(fd.type==='captcha'||FB_CONTENT_TYPES.includes(fd.type))return;
+    if(fd.type==='hidden'){data[fd.field_key||fd.id]=fd.settings&&fd.settings.value||'';return;}
+    const key=fd.field_key||fd.id;
+    const el=document.querySelector('[data-fieldid="'+fd.id+'"]');
+    if(el)data[key]=el.type==='checkbox'?el.checked:el.value;
+  });});
+  if(!db.formSubmissions)db.formSubmissions=[];
+  const sub={id:'fsub-'+uid(),formId:fid,data:data,contactId:null,createdAt:now_(),pageUrl:window.location.href};
+  db.formSubmissions.push(sub);
+  if(f.settings.createContact||f.settings.updateContact)fbCreateContactFromSub(sub,f);
+  saveData();
+  if(f.settings.submitAction==='redirect'&&f.settings.redirectUrl){window.location.href=f.settings.redirectUrl;}
+  else{document.getElementById('fb-embed-form').innerHTML='<div style="text-align:center;padding:40px 20px"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" style="margin:0 auto 12px;display:block" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p style="font-size:16px;font-weight:600;margin:0">'+esc(f.settings.successMessage||'Thank you for your submission!')+'</p></div>';window.parent.postMessage({fbResize:240},'*');}
+}
+
+// fbApplyLiveStyles - update canvas live when style changes
+function fbApplyLiveStyles(){
+  const f=fbState.editingForm;if(!f)return;
+  const st=f.settings.style||{};
+  const pc=document.getElementById('fb-pcanvas');if(pc)pc.style.background=st.bgColor||'#ffffff';
+  document.querySelectorAll('.fb-fc').forEach(function(el){el.style.background=st.fieldBg||'#f8f8f8';el.style.borderColor=st.borderColor||'#d0d0d8';});
+  document.querySelectorAll('.fb-lbl').forEach(function(el){el.style.color=st.labelColor||'#222222';});
+  document.querySelectorAll('.fb-mi,.fb-mita,.fb-msel').forEach(function(el){el.style.background=st.fieldBg||'#f8f8f8';el.style.borderColor=st.borderColor||'#d0d0d8';});
+  document.querySelectorAll('.fb-mopt-dot,.fb-mopt-box').forEach(function(el){el.style.borderColor=st.primaryColor||'#6b21ea';});
+}
+
+// Boot check for embed mode
+document.addEventListener('DOMContentLoaded',function(){
+  loadData();
+  if(fbCheckEmbedMode())return;
+  const sess=loadSession();
+  if(sess){state.user=sess;document.getElementById('auth-screen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');initApp();}
+});
 
 </script>
 </body>
