@@ -101,7 +101,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
 #main-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 #top-bar{height:52px;background:var(--bg-panel);border-bottom:1px solid var(--border);
   display:flex;align-items:center;padding:0 20px;gap:10px;flex-shrink:0}
-.top-bar-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;flex:1}
+.top-bar-title{font-family:Syne,sans-serif;font-size:16px;font-weight:700;flex:1}
 .sync-status{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text-dim)}
 .sync-dot.synced{background:#34d399}.sync-dot.syncing{background:var(--orange);animation:blink 1s infinite}
@@ -385,7 +385,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
 #contact-drawer.open{right:0}
 .drawer-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0}
 .drawer-av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#fff;flex-shrink:0}
+  justify-content:center;font-family:Syne,sans-serif;font-size:16px;font-weight:700;color:#fff;flex-shrink:0}
 .drawer-name{font-family:'Syne',sans-serif;font-size:17px;font-weight:700}
 .drawer-sub{font-size:12px;color:var(--text-muted);margin-top:2px}
 .drawer-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-card);padding:0 20px}
@@ -434,7 +434,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
 .modal-lg{max-width:640px}.modal-xl{max-width:760px}
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.modal-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700}
+.modal-title{font-family:Syne,sans-serif;font-size:16px;font-weight:700}
 .modal-body{flex:1;overflow-y:auto;padding:20px}
 .modal-foot{padding:12px 20px;border-top:1px solid var(--border);
   display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
@@ -523,6 +523,50 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
 .ns-sw::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;
   border-radius:50%;background:#fff;transition:left .2s}
 .ns-sw.on::after{left:21px}
+
+/* PAYMENT PANEL TABS */
+.pay-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 22px;flex-shrink:0}
+.pay-panel-tab{padding:14px 20px;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.pay-panel-tab:hover{color:var(--text)}
+.pay-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
+
+/* SUBSCRIPTIONS */
+.sub-row{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:13px 16px;display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .18s;margin-bottom:7px}
+.sub-row:hover{border-color:var(--purple-border)}
+.sub-row.active{border-left:3px solid #34d399}
+.sub-row.paused{border-left:3px solid var(--orange);opacity:.75}
+.sub-row.cancelled{border-left:3px solid var(--text-dim);opacity:.45}
+.sub-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub-biz{font-size:11px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub-cycle-badge{font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:var(--purple-dim);color:var(--purple-light);display:inline-block;margin-top:3px}
+.sub-date-cell{font-size:12px;color:var(--text-muted)}
+.sub-date-cell strong{display:block;font-size:13px;font-weight:600;color:var(--text)}
+.sub-pay-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-block}
+.spb-paid{background:rgba(52,211,153,.15);color:#34d399}
+.spb-unpaid{background:var(--orange-dim);color:var(--orange)}
+.spb-overdue{background:rgba(239,68,68,.15);color:#f87171}
+.sub-section-label{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:8px 0 6px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sub-count-badge{font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:var(--bg-card)}
+.sub-item-edit-row{display:flex;align-items:flex-start;gap:7px;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px}
+.sub-item-edit-row:last-child{margin-bottom:0}
+
+/* CATEGORY MANAGER */
+.cat-mgr-bar{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:14px;overflow:hidden}
+.cat-mgr-head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;cursor:pointer;user-select:none;transition:background .15s}
+.cat-mgr-head:hover{background:var(--bg-card)}
+.cat-mgr-head-label{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);display:flex;align-items:center;gap:7px}
+.cat-mgr-body{padding:12px 16px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.cat-chip-item{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;background:var(--purple-dim);color:var(--purple-light);border:1px solid var(--purple-border)}
+.cat-chip-rm{background:none;border:none;cursor:pointer;color:rgba(155,85,255,.45);font-size:15px;padding:0;line-height:1;display:flex;align-items:center;transition:color .15s}
+.cat-chip-rm:hover{color:#f87171}
+.cat-mgr-add{display:flex;gap:7px;margin-top:10px;align-items:center;padding-top:10px;border-top:1px solid var(--border);width:100%}
+
+/* INVENTORY */
+.inv-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-top:3px}
+.inv-ok{background:rgba(52,211,153,.12);color:#34d399}
+.inv-low{background:rgba(245,158,11,.15);color:#fbbf24}
+.inv-out{background:rgba(239,68,68,.15);color:#f87171}
+.inv-track-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);margin-top:8px}
 </style>
 </head>
 <body>
@@ -707,6 +751,19 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
           <div><div class="page-title">Products &amp; Services</div><div class="page-subtitle" id="prod-sub"></div></div>
           <button class="btn btn-primary" onclick="openProductModal(null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</button>
         </div>
+        <div class="cat-mgr-bar" id="cat-mgr-bar">
+          <div class="cat-mgr-head" onclick="toggleCatMgr()">
+            <span class="cat-mgr-head-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Manage Categories</span>
+            <svg id="cat-mgr-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="color:var(--text-dim);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="cat-mgr-body hidden" id="cat-mgr-body">
+            <div id="cat-chips-list" style="display:flex;flex-wrap:wrap;gap:7px;width:100%"></div>
+            <div class="cat-mgr-add">
+              <input id="cat-new-input" type="text" placeholder="New category name..." style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none" onkeydown="if(event.key==='Enter')addProductCategory()">
+              <button class="btn btn-purple btn-sm" onclick="addProductCategory()">Add</button>
+            </div>
+          </div>
+        </div>
         <div class="toolbar">
           <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="prod-search" type="text" placeholder="Search products..." oninput="renderProducts()"></div>
           <select class="filter-sel" id="prod-cat-filter" onchange="renderProducts()"><option value="">All Categories</option></select>
@@ -717,7 +774,11 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
 
       <!-- PAYMENTS -->
       <div id="panel-payments" class="panel hidden">
-        <div class="page-header"><div><div class="page-title">Point of Sale</div><div class="page-subtitle">In-person payment collection</div></div></div>
+        <div class="pay-panel-tabs">
+          <button class="pay-panel-tab active" id="ppt-pos" onclick="switchPayTab('pos')">Point of Sale</button>
+          <button class="pay-panel-tab" id="ppt-subs" onclick="switchPayTab('subs')">Subscriptions</button>
+        </div>
+        <div id="pay-pos-view">
         <div class="pos-grid">
           <div>
             <div class="pos-card">
@@ -792,6 +853,25 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
               <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:7px">Square integration ready. Connect in Settings.</div>
             </div>
           </div>
+        </div>
+        </div><!-- end pay-pos-view -->
+        <div id="pay-subs-view" class="hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+            <div>
+              <div style="font-family:Syne,sans-serif;font-size:16px;font-weight:700">Subscriptions</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="subs-sub-label"></div>
+            </div>
+            <button class="btn btn-primary" onclick="openSubModal(null)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subscription
+            </button>
+          </div>
+          <div class="toolbar" style="margin-bottom:14px">
+            <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="subs-search" type="text" placeholder="Search subscriptions..." oninput="renderSubscriptions()"></div>
+            <select class="filter-sel" id="subs-status-filter" onchange="renderSubscriptions()"><option value="">All Status</option><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select>
+            <select class="filter-sel" id="subs-cycle-filter" onchange="renderSubscriptions()"><option value="">All Cycles</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select>
+          </div>
+          <div id="subs-list"></div>
+          <div id="subs-pg"></div>
         </div>
       </div>
 
@@ -922,7 +1002,8 @@ let state={
   modal:{type:null,id:null,extra:null},
   syncTimer:null,
   selTagColor:TAG_COLORS[0],selUserColor:USER_COLORS[0],
-  posItems:[],posTip:'15',posPM:'card'
+  posItems:[],posTip:'15',posPM:'card',
+  paymentsTab:'pos',subsPage:1,subsSearch:'',subsStatusFilter:'',subsCycleFilter:''
 };
 
 // =====================================================
@@ -939,6 +1020,8 @@ let db={
     {id:'tag-referral',name:'Referral',color:'#3b82f6'}
   ],
   users:[],
+  subscriptions:[],
+  productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'],
   settings:{gistToken:'',gistId:'',
     businessHours:JSON.parse(JSON.stringify(DEF_BH)),
     square:{appId:'',accessToken:'',locationId:'',sandbox:true},
@@ -1130,7 +1213,7 @@ function initApp(){
   setInterval(()=>{if(state.panel==='dashboard')renderDash()},30000);
 }
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Point of Sale',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',settings:'Settings'};
 function renderPanel(){({dashboard:renderDash,contacts:renderContacts,calendar:renderCal,tasks:renderTasks,payments:renderPayments,settings:renderSettings})[state.panel]?.()}
 
 function switchPanel(name){
@@ -1279,8 +1362,10 @@ function renderDrawer(){
   const col=avColor(c.name);
   const cAppts=db.appointments.filter(a=>a.contactId===c.id);
   const cTasks=db.tasks.filter(t=>t.contactId===c.id);
-  const tabs=['info','notes','appointments','tasks'];
-  const labels={info:'Info',notes:'Notes ('+c.notes.length+')',appointments:'Appts ('+cAppts.length+')',tasks:'Tasks ('+cTasks.length+')'};
+  const cSubs=db.subscriptions.filter(s=>s.contactId===c.id);
+  const cPays=db.payments.filter(p=>p.contactId===c.id);
+  const tabs=['info','notes','appointments','tasks','payments'];
+  const labels={info:'Info',notes:'Notes ('+c.notes.length+')',appointments:'Appts ('+cAppts.length+')',tasks:'Tasks ('+cTasks.length+')',payments:'Payments'};
   let body='';
   if(state.dTab==='info'){
     const tags=(c.tags||[]).map(tid=>{const t=getTag(tid);return t?'<span class="tag-pill" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'</span>':''}).join('');
@@ -1317,6 +1402,27 @@ function renderDrawer(){
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Open ('+open.length+')</div><button class="btn btn-purple btn-sm" onclick="openTaskModal(\''+c.id+'\',null)">+ Add</button></div>'
       +'<div style="margin-top:8px">'+(open.length?tHTML(open):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No open tasks.</div>')+'</div>'
       +(done.length?'<div class="sec-label" style="margin-top:14px">Done ('+done.length+')</div>'+tHTML(done):'');
+  }else if(state.dTab==='payments'){
+    const activeSubs=cSubs.filter(s=>s.status==='active');
+    const subHTML=activeSubs.length?activeSubs.map(s=>{
+      const cycle=s.billingCycle||'monthly';
+      const total=(s.items||[]).reduce((t,i)=>t+(i.price*( i.qty||1)),0);
+      return'<div class="appt-row-sm" style="cursor:pointer;border-left-color:#34d399" onclick="openSubDetail(\''+s.id+'\')">'
+        +'<div style="flex:1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+'</div>'
+        +'<div class="appt-sm-meta">'+fmtDate(s.startDate)+' · '+fmt$(total)+'/'+cycle+'</div>'
+        +'<span class="sub-cycle-badge">'+cycle+'</span></div>'
+        +'<span class="sub-pay-badge '+(s.paymentStatus==='paid'?'spb-paid':s.paymentStatus==='overdue'?'spb-overdue':'spb-unpaid')+'">'+( s.paymentStatus||'unpaid')+'</span></div>';
+    }).join(''):'<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No active subscriptions.</div>';
+    const recentPays=[...cPays].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,10);
+    const payHTML=recentPays.length?recentPays.map(p=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">'
+      +'<div><div style="font-size:13px;font-weight:500">'+(p.items&&p.items.length?esc(p.items[0].desc)+(p.items.length>1?' + '+(p.items.length-1)+' more':''):'Payment')+'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted)">'+(p.createdAt?new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'')+'</div></div>'
+      +'<div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(p.total)+'</div></div>').join('')
+      :'<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No purchase history.</div>';
+    body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Active Subscriptions ('+activeSubs.length+')</div><button class="btn btn-purple btn-sm" onclick="openSubModal(null,\''+c.id+'\')">+ New</button></div>'
+      +'<div style="margin-top:8px">'+subHTML+'</div>'
+      +'<div class="sec-label" style="margin-top:16px">Purchase History</div>'+payHTML
+      +'<div class="sec-label" style="margin-top:16px">Invoices</div><div style="font-size:13px;color:var(--text-muted);padding:6px 0;font-style:italic">Invoicing coming soon.</div>';
   }
   document.getElementById('drawer-content').innerHTML=
     '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-danger btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Delete</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
@@ -1470,9 +1576,26 @@ function cycleTask(id){const t=getTask(id);if(!t)return;const m={'open':'in-prog
 // PAYMENTS POS
 // =====================================================
 function renderPayments(){
-  const s=document.getElementById('pos-staff');
-  if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
-  renderPosItems();calcTotals();
+  switchPayTab(state.paymentsTab||'pos');
+}
+
+function switchPayTab(tab){
+  state.paymentsTab=tab;
+  ['pos','subs'].forEach(t=>{
+    const btn=document.getElementById('ppt-'+t);
+    if(btn)btn.classList.toggle('active',t===tab);
+  });
+  const posV=document.getElementById('pay-pos-view');
+  const subV=document.getElementById('pay-subs-view');
+  if(posV)posV.classList.toggle('hidden',tab!=='pos');
+  if(subV)subV.classList.toggle('hidden',tab!=='subs');
+  if(tab==='pos'){
+    const s=document.getElementById('pos-staff');
+    if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
+    renderPosItems();calcTotals();
+  }else{
+    renderSubscriptions();
+  }
 }
 
 function posCSearch(v){
@@ -1900,6 +2023,8 @@ function loadData(){
         tags:p.tags&&p.tags.length?p.tags:db.tags,
         users:p.users||[],payments:p.payments||[],
         products:p.products||[],readNotifs:p.readNotifs||[],
+        subscriptions:p.subscriptions||[],
+        productCategories:p.productCategories||['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'],
         settings:{...db.settings,...p.settings,
           businessHours:p.settings&&p.settings.businessHours||JSON.parse(JSON.stringify(DEF_BH)),
           square:p.settings&&p.settings.square||{appId:'',accessToken:'',locationId:'',sandbox:true},
@@ -2222,18 +2347,48 @@ function markAllRead(){
 // =====================================================
 // PRODUCTS
 // =====================================================
-const PROD_CAT_DEFAULTS=['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'];
-
 function getProdCats(){
   const fromDB=db.products.map(p=>p.category).filter(Boolean);
-  return[...new Set([...PROD_CAT_DEFAULTS,...fromDB])].sort();
+  return[...new Set([...(db.productCategories||[]),...fromDB])].sort();
+}
+
+function toggleCatMgr(){
+  const body=document.getElementById('cat-mgr-body');
+  const chev=document.getElementById('cat-mgr-chevron');
+  if(!body)return;
+  body.classList.toggle('hidden');
+  if(chev)chev.style.transform=body.classList.contains('hidden')?'':'rotate(180deg)';
+  if(!body.classList.contains('hidden'))renderCatChips();
+}
+
+function renderCatChips(){
+  const el=document.getElementById('cat-chips-list');if(!el)return;
+  const cats=db.productCategories||[];
+  el.innerHTML=cats.length?cats.map(c=>'<div class="cat-chip-item">'+esc(c)+'<button class="cat-chip-rm" onclick="removeProductCategory('+JSON.stringify(c)+')">\xd7</button></div>').join('')
+    :'<span style="font-size:12px;color:var(--text-muted)">No categories yet.</span>';
+}
+
+function addProductCategory(){
+  const inp=document.getElementById('cat-new-input');if(!inp)return;
+  const name=inp.value.trim();
+  if(!name){toast('Enter a category name.','error');return}
+  if((db.productCategories||[]).find(c=>c.toLowerCase()===name.toLowerCase())){toast('Category already exists.','warn');return}
+  if(!db.productCategories)db.productCategories=[];
+  db.productCategories.push(name);
+  inp.value='';
+  saveData();renderCatChips();renderProducts();toast('Category added.','success');
+}
+
+function removeProductCategory(name){
+  db.productCategories=(db.productCategories||[]).filter(c=>c!==name);
+  saveData();renderCatChips();renderProducts();toast('Category removed.','success');
 }
 
 let editPricingOpts=[];
 
 function renderProducts(){
   const catF=document.getElementById('prod-cat-filter');
-  if(catF){const cv=catF.value;catF.innerHTML='<option value="">All Categories</option>'+[...new Set(db.products.map(p=>p.category).filter(Boolean))].sort().map(c=>'<option value="'+c+'"'+(cv===c?' selected':'')+'>'+esc(c)+'</option>').join('')}
+  if(catF){const cv=catF.value;catF.innerHTML='<option value="">All Categories</option>'+getProdCats().map(c=>'<option value="'+c+'"'+(cv===c?' selected':'')+'>'+esc(c)+'</option>').join('')}
   const q=(document.getElementById('prod-search')&&document.getElementById('prod-search').value||'').toLowerCase();
   const catV=catF&&catF.value||'';
   const statV=document.getElementById('prod-stat-filter')&&document.getElementById('prod-stat-filter').value||'';
@@ -2251,6 +2406,7 @@ function renderProducts(){
     return'<div class="prod-card">'
       +'<div class="prod-head"><div><div class="prod-name">'+esc(p.name)+'</div>'+(p.category?'<div class="prod-cat-badge">'+esc(p.category)+'</div>':'')+'</div><div class="prod-status-dot'+(p.active?' on':'')+'"></div></div>'
       +(p.description?'<div class="prod-desc-text">'+esc(p.description.slice(0,90))+(p.description.length>90?'\u2026':'')+'</div>':'')
+      +(p.trackInventory?'<div style="margin-bottom:6px">'+invBadge(p)+(p.sku?'<span style="font-size:10px;color:var(--text-muted);margin-left:6px">SKU: '+esc(p.sku)+'</span>':'')+'</div>':'')
       +'<div class="prod-opts-section">'+(opts.length?opts.map(o=>'<div class="prod-opt-row"><span class="prod-opt-name">'+esc(o.name)+'</span><span class="prod-opt-price">'+fmt$(o.price)+(o.billingType==='recurring'&&o.interval?'<span style="font-size:9px;color:var(--text-muted)">/'+o.interval+'</span>':'')+'</span><span class="prod-opt-badge '+o.billingType+'">'+(o.billingType==='recurring'?'Recurring':'One-Time')+'</span></div>').join(''):'<div style="font-size:12px;color:var(--text-muted)">No pricing options</div>')+'</div>'
       +'<div class="prod-foot"><button class="btn btn-purple btn-sm" onclick="openProductModal(\''+p.id+'\')">Edit</button><button class="btn btn-danger btn-sm" onclick="delProduct(\''+p.id+'\')">Delete</button></div>'
       +'</div>';
@@ -2272,6 +2428,11 @@ function openProductModal(id){
     +'</div>'
     +'<div class="form-group"><label>Description</label><textarea id="prd-desc" rows="3">'+esc(p&&p.description||'')+'</textarea></div>'
     +'<div class="form-group"><label>Square Catalog ID <span style="font-weight:400;color:var(--text-muted)">(auto-filled when Square is connected)</span></label><input id="prd-sq" type="text" value="'+esc(p&&p.squareCatalogId||'')+'" placeholder="Auto-populated" style="opacity:.7"></div>'
+    +'<div class="divider"></div>'
+    +'<div class="inv-track-row"><div class="bh-toggle'+(p&&p.trackInventory?' on':'')+'" id="prd-inv-toggle" onclick="toggleInvTrack()" style="flex-shrink:0"></div><div style="flex:1"><div style="font-size:13px;font-weight:600">Track Inventory</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Enable for physical products to monitor stock levels</div></div></div>'
+    +'<div id="prd-inv-fields" style="'+(p&&p.trackInventory?'':'display:none')+'">'
+    +'<div class="form-row-3"><div class="form-group"><label>SKU</label><input id="prd-sku" type="text" value="'+esc(p&&p.sku||'')+'" placeholder="ABC-001"></div><div class="form-group"><label>Qty on Hand</label><input id="prd-stock" type="number" value="'+(p&&p.stockQty||0)+'" min="0" step="1"></div><div class="form-group"><label>Low Stock Alert</label><input id="prd-lowstock" type="number" value="'+(p&&p.lowStockThreshold||5)+'" min="0" step="1"></div></div>'
+    +'</div>'
     +'<div class="divider"></div>'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700">Pricing Options</div><button class="btn btn-purple btn-sm" onclick="addPricingOptRow()">+ Add Option</button></div>'
     +'<div id="pricing-opts-list">'+renderPricingOptsList()+'</div>';
@@ -2324,6 +2485,14 @@ function rmPricingOpt(i){
   const el=document.getElementById('pricing-opts-list');if(el)el.innerHTML=renderPricingOptsList();
 }
 
+function toggleInvTrack(){
+  const tog=document.getElementById('prd-inv-toggle');
+  const fields=document.getElementById('prd-inv-fields');
+  if(!tog||!fields)return;
+  tog.classList.toggle('on');
+  fields.style.display=tog.classList.contains('on')?'block':'none';
+}
+
 function saveProduct(){
   const name=document.getElementById('prd-name').value.trim();
   if(!name){toast('Product name required.','error');return}
@@ -2331,6 +2500,7 @@ function saveProduct(){
   const catNew=(document.getElementById('prd-cat-new')&&document.getElementById('prd-cat-new').value||'').trim();
   const category=catNew||catSel||'';
   syncPricingOptsFromDOM();
+  const invOn=document.getElementById('prd-inv-toggle')&&document.getElementById('prd-inv-toggle').classList.contains('on');
   const data={
     name,
     description:(document.getElementById('prd-desc')&&document.getElementById('prd-desc').value||'').trim(),
@@ -2338,6 +2508,10 @@ function saveProduct(){
     active:document.getElementById('prd-active')&&document.getElementById('prd-active').value==='true',
     squareCatalogId:(document.getElementById('prd-sq')&&document.getElementById('prd-sq').value||'').trim(),
     pricingOptions:[...editPricingOpts],
+    trackInventory:invOn,
+    sku:invOn?(document.getElementById('prd-sku')&&document.getElementById('prd-sku').value||'').trim():'',
+    stockQty:invOn?parseInt(document.getElementById('prd-stock')&&document.getElementById('prd-stock').value)||0:0,
+    lowStockThreshold:invOn?parseInt(document.getElementById('prd-lowstock')&&document.getElementById('prd-lowstock').value)||5:5,
     updatedAt:now_()
   };
   if(state.modal.id){const p=db.products.find(x=>x.id===state.modal.id);if(p)Object.assign(p,data)}
@@ -2349,6 +2523,254 @@ function saveProduct(){
 function delProduct(id){
   db.products=db.products.filter(p=>p.id!==id);
   saveData();renderProducts();toast('Product removed.','success');
+}
+
+function invBadge(p){
+  if(!p.trackInventory)return'';
+  const qty=p.stockQty||0,low=p.lowStockThreshold||5;
+  if(qty<=0)return'<span class="inv-badge inv-out">Out of Stock</span>';
+  if(qty<=low)return'<span class="inv-badge inv-low">Low Stock: '+qty+'</span>';
+  return'<span class="inv-badge inv-ok">In Stock: '+qty+'</span>';
+}
+
+// =====================================================
+// SUBSCRIPTIONS
+// =====================================================
+const SUB_CYCLES=['weekly','monthly','quarterly','annual'];
+const SUBS_PER_PAGE=10;
+
+function calcNextDueDate(startDate,cycle){
+  if(!startDate)return'';
+  const d=new Date(startDate+'T12:00:00');
+  const today=new Date();
+  let next=new Date(d);
+  while(next<=today){
+    if(cycle==='weekly')next.setDate(next.getDate()+7);
+    else if(cycle==='monthly')next.setMonth(next.getMonth()+1);
+    else if(cycle==='quarterly')next.setMonth(next.getMonth()+3);
+    else next.setFullYear(next.getFullYear()+1);
+  }
+  return next.toISOString().split('T')[0];
+}
+
+function getSub(id){return db.subscriptions.find(s=>s.id===id)}
+
+function filteredSubs(){
+  const q=(document.getElementById('subs-search')&&document.getElementById('subs-search').value||'').toLowerCase();
+  const sf=document.getElementById('subs-status-filter')&&document.getElementById('subs-status-filter').value||'';
+  const cf=document.getElementById('subs-cycle-filter')&&document.getElementById('subs-cycle-filter').value||'';
+  return db.subscriptions.filter(s=>{
+    if(sf&&s.status!==sf)return false;
+    if(cf&&s.billingCycle!==cf)return false;
+    if(q){
+      const c=s.contactId?getContact(s.contactId):null;
+      const name=(c&&c.name||'').toLowerCase();
+      const biz=(c&&c.company||'').toLowerCase();
+      const plan=(s.planName||'').toLowerCase();
+      if(!name.includes(q)&&!biz.includes(q)&&!plan.includes(q))return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    const order={active:0,paused:1,cancelled:2};
+    const ao=order[a.status]??3,bo=order[b.status]??3;
+    if(ao!==bo)return ao-bo;
+    return(b.startDate||'').localeCompare(a.startDate||'');
+  });
+}
+
+function renderSubscriptions(){
+  const all=filteredSubs();
+  const pages=Math.ceil(all.length/SUBS_PER_PAGE)||1;
+  if(state.subsPage>pages)state.subsPage=1;
+  const slice=all.slice((state.subsPage-1)*SUBS_PER_PAGE,state.subsPage*SUBS_PER_PAGE);
+  const lbl=document.getElementById('subs-sub-label');
+  if(lbl)lbl.textContent=all.length+' subscription'+(all.length!==1?'s':'');
+  const el=document.getElementById('subs-list');if(!el)return;
+  if(!slice.length){
+    el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><h3>No subscriptions found</h3><p>Create a subscription or adjust filters.</p></div>';
+    const pg=document.getElementById('subs-pg');if(pg)pg.innerHTML='';
+    return;
+  }
+  // group by status for section headers
+  const statuses=['active','paused','cancelled'];
+  const statusLabel={active:'Active',paused:'Paused',cancelled:'Cancelled'};
+  const groups={active:[],paused:[],cancelled:[]};
+  slice.forEach(s=>groups[s.status]&&groups[s.status].push(s));
+  let html='';
+  statuses.forEach(st=>{
+    if(!groups[st].length)return;
+    html+='<div class="sub-section-label" style="color:'+(st==='active'?'#34d399':st==='paused'?'var(--orange)':'var(--text-dim)')+'">'+statusLabel[st]+'<span class="sub-count-badge">'+groups[st].length+'</span></div>';
+    groups[st].forEach(s=>{
+      const c=s.contactId?getContact(s.contactId):null;
+      const total=(s.items||[]).reduce((t,i)=>t+(i.price*(i.qty||1)),0);
+      const cycle=s.billingCycle||'monthly';
+      const nd=s.nextDueDate||calcNextDueDate(s.startDate,cycle);
+      html+='<div class="sub-row '+s.status+'" onclick="openSubDetail(\''+s.id+'\')">'
+        +'<div><div class="sub-name">'+(c?esc(c.name):esc(s.planName||'Unnamed'))+'</div>'
+        +(c&&c.company?'<div class="sub-biz">'+esc(c.company)+'</div>':'')
+        +'<span class="sub-cycle-badge">'+cycle+'</span></div>'
+        +'<div class="sub-date-cell"><strong>'+fmtDate(s.startDate)+'</strong>Started</div>'
+        +'<div class="sub-date-cell"><strong>'+(nd?fmtDate(nd):'TBD')+'</strong>Next Due</div>'
+        +'<div><span class="sub-pay-badge '+(s.paymentStatus==='paid'?'spb-paid':s.paymentStatus==='overdue'?'spb-overdue':'spb-unpaid')+'">'+( s.paymentStatus||'unpaid')+'</span><div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;margin-top:4px">'+fmt$(total)+'/'+cycle+'</div></div>'
+        +'<div class="sub-actions" onclick="event.stopPropagation()">'
+        +'<button class="btn btn-ghost btn-sm" onclick="openSubModal(\''+s.id+'\')">Edit</button>'
+        +(s.status==='active'?'<button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border)" onclick="pauseSub(\''+s.id+'\')">Pause</button>':'')
+        +(s.status==='paused'?'<button class="btn btn-purple btn-sm" onclick="restartSub(\''+s.id+'\')">Restart</button>':'')
+        +(s.status!=='cancelled'?'<button class="btn btn-danger btn-sm" onclick="cancelSub(\''+s.id+'\')">Cancel</button>':'')
+        +'</div></div>';
+    });
+  });
+  el.innerHTML=html;
+  renderPg('subs-pg',state.subsPage,pages,'subsPg');
+}
+
+function subsPg(p){state.subsPage=p;renderSubscriptions()}
+
+function openSubDetail(id){
+  const s=getSub(id);if(!s)return;
+  const c=s.contactId?getContact(s.contactId):null;
+  const total=(s.items||[]).reduce((t,i)=>t+(i.price*(i.qty||1)),0);
+  const nd=s.nextDueDate||calcNextDueDate(s.startDate,s.billingCycle||'monthly');
+  const statusColor={active:'#34d399',paused:'var(--orange)',cancelled:'var(--text-muted)'};
+  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">'
+    +'<div><div style="font-family:Syne,sans-serif;font-size:16px;font-weight:700">'+esc(s.planName||'Subscription')+'</div>'
+    +(c?'<div style="font-size:13px;color:var(--text-muted);margin-top:2px">'+esc(c.name)+(c.company?' · '+esc(c.company):'')+'</div>':'')
+    +'</div><span style="font-size:11px;font-weight:700;text-transform:uppercase;padding:3px 9px;border-radius:4px;background:'+statusColor[s.status]+'20;color:'+statusColor[s.status]+'">'+s.status+'</span></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Cycle</div><div style="font-size:13px;font-weight:600">'+( s.billingCycle||'monthly')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Started</div><div style="font-size:13px;font-weight:600">'+fmtDate(s.startDate)+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Next Due</div><div style="font-size:13px;font-weight:600">'+(nd?fmtDate(nd):'TBD')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Payment</div><div class="sub-pay-badge '+(s.paymentStatus==='paid'?'spb-paid':s.paymentStatus==='overdue'?'spb-overdue':'spb-unpaid')+'">'+( s.paymentStatus||'unpaid')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Total/Cycle</div><div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--orange)">'+fmt$(total)+'</div></div>'
+    +(s.squareSubscriptionId?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Square ID</div><div style="font-size:11px;font-family:monospace;color:var(--text-muted)">'+esc(s.squareSubscriptionId)+'</div></div>':'')
+    +'</div>'
+    +'<div style="border-top:1px solid var(--border);padding-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px">Items</div>'
+    +(s.items&&s.items.length?s.items.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)"><span>'+esc(i.name)+(i.qty>1?' × '+i.qty:'')+'</span><span style="font-weight:600">'+fmt$(i.price*(i.qty||1))+'</span></div>').join(''):'<div style="font-size:13px;color:var(--text-muted)">No items.</div>')
+    +'</div>'
+    +(s.notes?'<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(s.notes)+'</div></div>':'')
+    +'</div>';
+  openModal('Subscription Details',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-purple" onclick="closeModal();openSubModal(\''+s.id+'\')">Edit</button>',
+    'modal-lg');
+}
+
+let editSubItems=[];
+
+function openSubModal(id,preContactId){
+  const s=id?getSub(id):null;
+  editSubItems=s?JSON.parse(JSON.stringify(s.items||[])):[];
+  state.modal={type:'sub',id:id||null,extra:preContactId||null};
+  const cid=s&&s.contactId||preContactId||'';
+  const cycleOpts=SUB_CYCLES.map(c=>'<option value="'+c+'"'+(s&&s.billingCycle===c?' selected':c==='monthly'&&!s?' selected':'')+'>'+(c[0].toUpperCase()+c.slice(1))+'</option>').join('');
+  const payOpts=['paid','unpaid','overdue'].map(p=>'<option value="'+p+'"'+(s&&s.paymentStatus===p?' selected':p==='unpaid'&&!s?' selected':'')+'>'+(p[0].toUpperCase()+p.slice(1))+'</option>').join('');
+  const b='<div class="form-row">'
+    +'<div class="form-group"><label>Plan Name *</label><input id="sf-name" type="text" value="'+esc(s&&s.planName||'')+'" placeholder="e.g. Monthly SEO Retainer"></div>'
+    +'<div class="form-group"><label>Billing Cycle</label><select id="sf-cycle">'+cycleOpts+'</select></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Contact</label>'+ssHTML('sf-cw','sf-ci','sf-cv','sf-cd','Search contact...',cid)+'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Start Date *</label><input id="sf-start" type="date" value="'+(s&&s.startDate||todayStr())+'"></div>'
+    +'<div class="form-group"><label>Payment Status</label><select id="sf-pay">'+payOpts+'</select></div>'
+    +'</div>'
+    +'<div class="divider"></div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700">Subscription Items</div><button class="btn btn-purple btn-sm" onclick="addSubItemRow()">+ Add Item</button></div>'
+    +'<div id="sub-items-list">'+renderSubItemsList()+'</div>'
+    +'<div class="divider"></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Square Plan ID <span style="font-weight:400;color:var(--text-muted)">(future)</span></label><input id="sf-sq-plan" type="text" value="'+esc(s&&s.squarePlanId||'')+'" placeholder="Auto-populated"></div>'
+    +'<div class="form-group"><label>Square Subscription ID <span style="font-weight:400;color:var(--text-muted)">(future)</span></label><input id="sf-sq-sub" type="text" value="'+esc(s&&s.squareSubscriptionId||'')+'" placeholder="Auto-populated"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Notes</label><textarea id="sf-notes" rows="2">'+esc(s&&s.notes||'')+'</textarea></div>';
+  openModal(s?'Edit Subscription':'New Subscription',b,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSub()">Save Subscription</button>',
+    'modal-xl');
+}
+
+function renderSubItemsList(){
+  if(!editSubItems.length)return'<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No items yet. Click Add Item above.</div>';
+  return editSubItems.map((it,i)=>'<div class="sub-item-edit-row">'
+    +'<div style="flex:2;min-width:140px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Item Name</div><input type="text" id="si-name-'+i+'" value="'+esc(it.name||'')+'" placeholder="Service name..." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
+    +'<div style="width:95px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price ($)</div><input type="number" id="si-price-'+i+'" value="'+(it.price||0)+'" min="0" step="0.01" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
+    +'<div style="width:60px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Qty</div><input type="number" id="si-qty-'+i+'" value="'+(it.qty||1)+'" min="1" step="1" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
+    +'<div style="flex-shrink:0;padding-top:20px"><button class="icon-btn-xs" onclick="rmSubItem('+i+')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+    +'</div>').join('');
+}
+
+function syncSubItemsFromDOM(){
+  editSubItems.forEach((it,i)=>{
+    const n=document.getElementById('si-name-'+i);if(n)it.name=n.value.trim();
+    const p=document.getElementById('si-price-'+i);if(p)it.price=parseFloat(p.value)||0;
+    const q=document.getElementById('si-qty-'+i);if(q)it.qty=parseInt(q.value)||1;
+  });
+}
+
+function addSubItemRow(){
+  syncSubItemsFromDOM();
+  editSubItems.push({id:'si-'+uid(),name:'',price:0,qty:1});
+  const el=document.getElementById('sub-items-list');if(el)el.innerHTML=renderSubItemsList();
+}
+
+function rmSubItem(i){
+  syncSubItemsFromDOM();
+  editSubItems.splice(i,1);
+  const el=document.getElementById('sub-items-list');if(el)el.innerHTML=renderSubItemsList();
+}
+
+function saveSub(){
+  const name=document.getElementById('sf-name').value.trim();
+  const start=document.getElementById('sf-start').value;
+  if(!name||!start){toast('Plan name and start date required.','error');return}
+  syncSubItemsFromDOM();
+  const cycle=document.getElementById('sf-cycle').value;
+  const data={
+    planName:name,
+    contactId:document.getElementById('sf-cv').value||null,
+    billingCycle:cycle,
+    startDate:start,
+    nextDueDate:calcNextDueDate(start,cycle),
+    paymentStatus:document.getElementById('sf-pay').value,
+    status:(state.modal.id?getSub(state.modal.id).status:'active'),
+    items:[...editSubItems],
+    squarePlanId:(document.getElementById('sf-sq-plan')&&document.getElementById('sf-sq-plan').value||'').trim(),
+    squareSubscriptionId:(document.getElementById('sf-sq-sub')&&document.getElementById('sf-sq-sub').value||'').trim(),
+    notes:(document.getElementById('sf-notes')&&document.getElementById('sf-notes').value||'').trim(),
+    updatedAt:now_()
+  };
+  if(state.modal.id){const s=getSub(state.modal.id);if(s)Object.assign(s,data)}
+  else db.subscriptions.push({id:'sub-'+uid(),...data,createdAt:now_()});
+  saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();
+  toast(state.modal.id?'Subscription updated.':'Subscription created.','success');
+}
+
+function pauseSub(id){
+  openModal('Pause Subscription',
+    '<p style="color:var(--text-muted)">Pause this subscription? The customer will not be billed on the next due date. You can restart it at any time.</p>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Keep Active</button><button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border);padding:9px 16px;border-radius:var(--radius);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:600;cursor:pointer" onclick="confirmPauseSub(\''+id+'\')">Pause</button>');
+}
+function confirmPauseSub(id){const s=getSub(id);if(!s)return;s.status='paused';s.updatedAt=now_();saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();toast('Subscription paused.','warn')}
+
+function cancelSub(id){
+  const s=getSub(id);if(!s)return;
+  const c=s.contactId?getContact(s.contactId):null;
+  openModal('Cancel Subscription',
+    '<p style="color:var(--text-muted)">Cancel the subscription <strong style="color:var(--text)">'+esc(s.planName||'this subscription')+'</strong>'+(c?' for '+esc(c.name):'')+'? This cannot be undone. The record will remain for your history.</p>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Keep It</button><button class="btn btn-danger" onclick="confirmCancelSub(\''+id+'\')">Cancel Subscription</button>');
+}
+function confirmCancelSub(id){const s=getSub(id);if(!s)return;s.status='cancelled';s.updatedAt=now_();saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();toast('Subscription cancelled.','success')}
+
+function restartSub(id){
+  const s=getSub(id);if(!s)return;
+  openModal('Restart Subscription',
+    '<p style="color:var(--text-muted)">Restart this subscription? It will become active again and billing will resume on the next cycle.</p>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Nevermind</button><button class="btn btn-purple" onclick="confirmRestartSub(\''+id+'\')">Restart</button>');
+}
+function confirmRestartSub(id){
+  const s=getSub(id);if(!s)return;
+  s.status='active';
+  s.nextDueDate=calcNextDueDate(todayStr(),s.billingCycle||'monthly');
+  s.updatedAt=now_();
+  saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();toast('Subscription restarted.','success');
 }
 
 </script>
