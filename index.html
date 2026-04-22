@@ -1204,14 +1204,54 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
             </div>
             <div class="pos-card">
-              <div class="pos-card-title">Order Items</div>
-              <div class="pos-item-add">
-                <input id="pos-desc" type="text" placeholder="Item description">
-                <input id="pos-price" type="number" class="price-f" placeholder="0.00" min="0" step="0.01">
-                <button class="btn btn-purple btn-sm" onclick="posAddItem()">Add</button>
+              <div class="pos-card-title" style="display:flex;align-items:center;justify-content:space-between">
+                Order Items
+                <div style="display:flex;gap:6px">
+                  <button class="btn btn-ghost btn-sm" id="pos-mode-product" onclick="setPosMode('product')" style="font-size:11px">Product</button>
+                  <button class="btn btn-ghost btn-sm" id="pos-mode-manual" onclick="setPosMode('manual')" style="font-size:11px">Manual Entry</button>
+                </div>
+              </div>
+              <div id="pos-product-mode">
+                <div class="form-group" style="margin-bottom:8px">
+                  <select id="pos-prod-sel" class="filter-sel" style="width:100%;height:38px" onchange="onPosProductSelect()">
+                    <option value="">Search products...</option>
+                  </select>
+                </div>
+                <div id="pos-pricing-opt-wrap" class="hidden" style="margin-bottom:8px">
+                  <select id="pos-pricing-sel" class="filter-sel" style="width:100%;height:38px" onchange="onPosPricingSelect()">
+                  </select>
+                </div>
+                <div id="pos-product-price-row" class="hidden" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">
+                  <div style="flex:1"><label style="font-size:11px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px">Price</label>
+                  <input id="pos-prod-price" type="number" class="price-f" placeholder="0.00" min="0" step="0.01" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none"></div>
+                  <button class="btn btn-purple btn-sm" onclick="posAddProductItem()">Add</button>
+                </div>
+              </div>
+              <div id="pos-manual-mode" class="hidden">
+                <div class="pos-item-add">
+                  <input id="pos-desc" type="text" placeholder="Item description">
+                  <input id="pos-price" type="number" class="price-f" placeholder="0.00" min="0" step="0.01">
+                  <button class="btn btn-purple btn-sm" onclick="posAddItem()">Add</button>
+                </div>
               </div>
               <div id="pos-items"></div>
-              <div id="pos-no-items" style="font-size:12px;color:var(--text-muted);padding:4px 0">No items added yet.</div>
+              <div id="pos-no-items" style="font-size:12px;color:var(--main-text-muted);padding:4px 0">No items added yet.</div>
+            </div>
+            <div class="pos-card">
+              <div class="pos-card-title" style="display:flex;align-items:center;justify-content:space-between">
+                Discount
+                <button class="btn btn-ghost btn-sm" id="pos-discount-toggle" onclick="togglePosDiscount()" style="font-size:11px">+ Add Discount</button>
+              </div>
+              <div id="pos-discount-wrap" class="hidden">
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                  <select id="pos-discount-type" class="filter-sel" style="height:36px;width:130px" onchange="calcTotals()">
+                    <option value="flat">$ Amount</option>
+                    <option value="pct">% Percent</option>
+                  </select>
+                  <input id="pos-discount-val" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcTotals()" style="flex:1;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none">
+                </div>
+                <input id="pos-discount-note" type="text" placeholder="Discount reason (required)" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none" oninput="calcTotals()">
+              </div>
             </div>
             <div class="pos-card">
               <div class="pos-card-title">Tip</div>
@@ -1227,6 +1267,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
               <div class="pos-totals">
                 <div class="pos-tr"><span>Subtotal</span><span id="pos-subtotal">$0.00</span></div>
+                <div class="pos-tr hidden" id="pos-discount-row"><span id="pos-discount-label" style="color:#34d399">Discount</span><span id="pos-discount-amt" style="color:#34d399">-$0.00</span></div>
+                <div class="pos-tr" id="pos-after-row"><span>After Discount</span><span id="pos-after-discount">$0.00</span></div>
                 <div class="pos-tr"><span>Tip</span><span id="pos-tip-amt">$0.00</span></div>
                 <div class="pos-tr" id="pos-credit-row" style="display:none;align-items:center;justify-content:space-between">
                   <span style="display:flex;align-items:center;gap:8px">Credits
@@ -2372,17 +2414,36 @@ function setTip(v){
 
 function calcTotals(){
   const sub=state.posItems.reduce((s,i)=>s+i.price,0);
+  let discount=0;
+  const discType=document.getElementById('pos-discount-type')&&document.getElementById('pos-discount-type').value||'flat';
+  const discVal=parseFloat(document.getElementById('pos-discount-val')&&document.getElementById('pos-discount-val').value)||0;
+  const discNote=document.getElementById('pos-discount-note')&&document.getElementById('pos-discount-note').value||'';
+  if(discVal>0){if(discType==='pct')discount=Math.min(sub,sub*(discVal/100));else discount=Math.min(sub,discVal);}
+  const afterDiscount=sub-discount;
   let tip=0;
-  if(state.posTip==='10')tip=sub*.1;
-  else if(state.posTip==='15')tip=sub*.15;
-  else if(state.posTip==='20')tip=sub*.2;
+  if(state.posTip==='10')tip=afterDiscount*.1;
+  else if(state.posTip==='15')tip=afterDiscount*.15;
+  else if(state.posTip==='20')tip=afterDiscount*.2;
   else if(state.posTip==='custom')tip=parseFloat(document.getElementById('pos-custom-tip')&&document.getElementById('pos-custom-tip').value)||0;
   const credit=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  const total=Math.max(0,sub+tip-credit);
-  const es=document.getElementById('pos-subtotal'),et=document.getElementById('pos-tip-amt'),etot=document.getElementById('pos-total');
-  if(es)es.textContent=fmt$(sub);if(et)et.textContent=fmt$(tip);
+  const total=Math.max(0,afterDiscount+tip-credit);
+  const es=document.getElementById('pos-subtotal');
+  const ead=document.getElementById('pos-after-discount');
+  const ear=document.getElementById('pos-after-row');
+  const et=document.getElementById('pos-tip-amt');
+  const etot=document.getElementById('pos-total');
+  const edr=document.getElementById('pos-discount-row');
+  const eda=document.getElementById('pos-discount-amt');
+  const edl=document.getElementById('pos-discount-label');
+  if(es)es.textContent=fmt$(sub);
+  if(ead)ead.textContent=fmt$(afterDiscount);
+  if(ear)ear.style.display=discount>0?'flex':'none';
+  if(et)et.textContent=fmt$(tip);
   if(etot)etot.textContent=fmt$(total)+(credit>0?' ('+fmt$(credit)+' credit applied)':'');
-  return{sub,tip,credit,total};
+  if(edr)edr.classList.toggle('hidden',discount<=0);
+  if(eda)eda.textContent='-'+fmt$(discount);
+  if(edl)edl.textContent='Discount'+(discType==='pct'&&discVal?' ('+discVal+'%)':'');
+  return{sub,discount,discountType:discType,discountVal:discVal,discountNote:discNote,afterDiscount,tip,credit,total};
 }
 
 function setPM(v){
@@ -2396,22 +2457,22 @@ function setPM(v){
 function reviewCharge(){
   if(state.posPM==='cof'){chargeCardOnFile();return}
   if(!state.posItems.length){toast('Add at least one item.','error');return}
-  const{sub,tip,total}=calcTotals();
+  const{sub,discount,discountType,discountVal,discountNote,afterDiscount,tip,credit:creditCalc,total}=calcTotals();
   const cid=document.getElementById('pos-c-id').value,c=cid?getContact(cid):null;
   const staffId=document.getElementById('pos-staff').value,staff=staffId?getUserById(staffId):null;
   const cardNum=document.getElementById('pos-card-num')&&document.getElementById('pos-card-num').value||'';
   const last4=cardNum.replace(/\s/g,'').slice(-4);
   const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+(last4?' \u00b7 \u2022\u2022\u2022\u2022 '+last4:'')+'</div></div><p style="font-size:13px;color:var(--text-muted)">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,tip,credit:creditAmt,total,pm:state.posPM,last4,items:[...state.posItems]}};
+  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems]}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="processCharge()">Process Payment</button>');
 }
 
 function processCharge(){
-  const{cid,staffId,sub,tip,total,pm,last4,items}=state.modal.extra;
+  const{cid,staffId,sub,discount,discountType,discountNote,afterDiscount,tip,total,pm,last4,items}=state.modal.extra;
   const tipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;const tipStaffId=tipStaffRaw||staffId||null;
   const creditApplied=state.modal.extra&&state.modal.extra.credit||0;
-  db.payments.push({id:uid(),contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
+  db.payments.push({id:uid(),contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
   // Deduct credits from contact balance
   if(cid&&creditApplied>0){
     const cc=db.contacts.find(function(x){return x.id===cid;});
@@ -6685,6 +6746,111 @@ function confirmSave(saveFn,label){
 }
 function cancelSaveConfirm(){state._saveConfirmPending=false;}
 function executePendingSave(){if(state._pendingSave){state._pendingSave();state._pendingSave=null;}}
+
+
+// =====================================================
+// POS MODE TOGGLE
+// =====================================================
+function setPosMode(mode){
+  state.posMode=mode;
+  const pm=document.getElementById('pos-product-mode');
+  const mm=document.getElementById('pos-manual-mode');
+  const pb=document.getElementById('pos-mode-product');
+  const mb=document.getElementById('pos-mode-manual');
+  if(pm)pm.classList.toggle('hidden',mode!=='product');
+  if(mm)mm.classList.toggle('hidden',mode!=='manual');
+  if(pb){pb.className='btn btn-sm '+(mode==='product'?'btn-purple':'btn-ghost');pb.style.fontSize='11px';}
+  if(mb){mb.className='btn btn-sm '+(mode==='manual'?'btn-purple':'btn-ghost');mb.style.fontSize='11px';}
+  if(mode==='product')populatePosProducts();
+}
+
+function populatePosProducts(){
+  const sel=document.getElementById('pos-prod-sel');
+  if(!sel)return;
+  const prods=db.products.filter(function(p){
+    return p.active&&(p.pricingOptions||[]).some(function(o){return o.billingType==='one_time';});
+  });
+  sel.innerHTML='<option value="">Select a product...</option>'+prods.map(function(p){
+    return'<option value="'+esc(p.id)+'">'+esc(p.name)+(p.category?' ('+esc(p.category)+')':'')+'</option>';
+  }).join('');
+  const pr=document.getElementById('pos-pricing-opt-wrap');
+  const pp=document.getElementById('pos-product-price-row');
+  if(pr)pr.classList.add('hidden');
+  if(pp)pp.classList.add('hidden');
+}
+
+function onPosProductSelect(){
+  const sel=document.getElementById('pos-prod-sel');
+  const prodId=sel&&sel.value;
+  const pricingWrap=document.getElementById('pos-pricing-opt-wrap');
+  const priceRow=document.getElementById('pos-product-price-row');
+  if(!prodId){if(pricingWrap)pricingWrap.classList.add('hidden');if(priceRow)priceRow.classList.add('hidden');return;}
+  const prod=db.products.find(function(p){return p.id===prodId;});
+  if(!prod)return;
+  const opts=(prod.pricingOptions||[]).filter(function(o){return o.billingType==='one_time';});
+  const pricingSel=document.getElementById('pos-pricing-sel');
+  if(opts.length>1){
+    if(pricingSel)pricingSel.innerHTML=opts.map(function(o){return'<option value="'+esc(o.name)+'|'+o.price+'">'+esc(o.name)+' - '+fmt$(o.price)+'</option>';}).join('');
+    if(pricingWrap)pricingWrap.classList.remove('hidden');
+    onPosPricingSelect();
+  }else if(opts.length===1){
+    if(pricingWrap)pricingWrap.classList.add('hidden');
+    const priceInp=document.getElementById('pos-prod-price');
+    if(priceInp)priceInp.value=opts[0].price.toFixed(2);
+    if(priceRow)priceRow.classList.remove('hidden');
+  }else{
+    if(pricingWrap)pricingWrap.classList.add('hidden');
+    if(priceRow)priceRow.classList.remove('hidden');
+  }
+}
+
+function onPosPricingSelect(){
+  const sel=document.getElementById('pos-pricing-sel');
+  const val=sel&&sel.value;
+  if(!val)return;
+  const price=parseFloat(val.split('|')[1])||0;
+  const priceRow=document.getElementById('pos-product-price-row');
+  const priceInp=document.getElementById('pos-prod-price');
+  if(priceInp)priceInp.value=price.toFixed(2);
+  if(priceRow)priceRow.classList.remove('hidden');
+}
+
+function posAddProductItem(){
+  const prodSel=document.getElementById('pos-prod-sel');
+  const prodId=prodSel&&prodSel.value;
+  const priceInp=document.getElementById('pos-prod-price');
+  const price=parseFloat(priceInp&&priceInp.value)||0;
+  if(!prodId){toast('Select a product first.','error');return;}
+  if(price<=0){toast('Price must be greater than $0.','error');return;}
+  const prod=db.products.find(function(p){return p.id===prodId;});
+  const pricingSel=document.getElementById('pos-pricing-sel');
+  const pricingVal=pricingSel&&!document.getElementById('pos-pricing-opt-wrap').classList.contains('hidden')&&pricingSel.value||'';
+  const optName=pricingVal?pricingVal.split('|')[0]:'';
+  const desc=prod?(prod.name+(optName?' - '+optName:'')):'Product';
+  state.posItems.push({id:uid(),desc,price,productId:prodId,pricingOption:optName});
+  renderPosItems();calcTotals();
+  if(prodSel)prodSel.value='';
+  if(priceInp)priceInp.value='';
+  document.getElementById('pos-pricing-opt-wrap').classList.add('hidden');
+  document.getElementById('pos-product-price-row').classList.add('hidden');
+}
+
+// =====================================================
+// POS DISCOUNT TOGGLE
+// =====================================================
+function togglePosDiscount(){
+  const wrap=document.getElementById('pos-discount-wrap');
+  const btn=document.getElementById('pos-discount-toggle');
+  if(!wrap)return;
+  const hidden=wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden',!hidden);
+  if(btn)btn.textContent=hidden?'Remove Discount':'+ Add Discount';
+  if(!hidden){
+    const dv=document.getElementById('pos-discount-val');if(dv)dv.value='';
+    const dn=document.getElementById('pos-discount-note');if(dn)dn.value='';
+    calcTotals();
+  }
+}
 
 </script>
 </body>
