@@ -2332,6 +2332,7 @@ function selPosC(id,name){
   document.getElementById('pos-c-inp').value=name;
   document.getElementById('pos-c-drop').classList.add('hidden');
   posUpdateCreditDisplay();
+  state.posCOFIndex=0;
   setTimeout(updatePosCoFTab,50);
 }
 
@@ -5997,9 +5998,11 @@ async function importFromSquare(){
     let updated=0;
     customers.forEach(function(sqC){
       const cards=(sqC.cards||[]).map(function(card){return{
-        id:card.id,brand:card.card_brand||'Card',
-        last4:card.last_4||'****',
-        expMonth:card.exp_month,expYear:card.exp_year
+        id:card.id,
+        brand:card.brand||card.card_brand||'Card',
+        last4:card.last4||card.last_4||null,
+        expMonth:card.expMonth||card.exp_month||null,
+        expYear:card.expYear||card.exp_year||null
       }});
       // Find matching MySpark contact by squareCustomerId or email
       let contact=db.contacts.find(function(c){return c.squareCustomerId===sqC.id});
@@ -6157,13 +6160,29 @@ function updatePosCoFTab(){
   if(!tab)return;
   if(cards.length>0){
     tab.classList.remove('hidden');
-    const info=document.getElementById('pm-cof-card-info');
-    const first=cards[0];
-    if(info)info.textContent=(first.brand||'Card')+' ending in '+(first.last4||'****');
+    const display=document.getElementById('pm-cof-display');
+    if(display){
+      display.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Select Card</div>'+
+        cards.map(function(card,i){
+          const label=(card.brand||'Card')+(card.last4?' ending in '+card.last4:'on file');
+          const exp=card.expMonth&&card.expYear?card.expMonth+'/'+card.expYear:'';
+          return'<div class="card-on-file" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.posCOFIndex===i?'var(--purple)':'var(--border)')+'" onclick="selectPosCard('+i+')">'
+            +'<div class="card-brand-icon">'+esc((card.brand||'Card').slice(0,4).toUpperCase())+'</div>'
+            +'<div class="card-details"><div class="card-number">'+esc(label)+'</div>'+(exp?'<div class="card-exp">Expires '+esc(exp)+'</div>':'')+'</div>'
+            +'<div style="width:16px;height:16px;border-radius:50%;border:2px solid '+(state.posCOFIndex===i?'var(--purple)':'var(--border)')+';background:'+(state.posCOFIndex===i?'var(--purple)':'transparent')+';flex-shrink:0"></div>'
+            +'</div>';
+        }).join('');
+    }
+    if(state.posCOFIndex===undefined)state.posCOFIndex=0;
   }else{
     tab.classList.add('hidden');
     if(state.posPM==='cof')setPM('card');
   }
+}
+
+function selectPosCard(idx){
+  state.posCOFIndex=idx;
+  updatePosCoFTab();
 }
 
 // Override setPM to handle cof
@@ -6192,7 +6211,7 @@ async function chargeCardOnFile(){
   if(!sq.accessToken){toast('Square not connected.','error');return}
   const total=parseFloat((document.getElementById('pos-total').textContent||'0').replace('$',''))||0;
   if(total<=0){toast('Total must be greater than $0.','error');return}
-  const card=cards[0];
+  const card=cards[state.posCOFIndex||0]||cards[0];
   const amountCents=Math.round(total*100);
   const staffId=document.getElementById('pos-staff')&&document.getElementById('pos-staff').value;
   const staff=getUserById(staffId);
