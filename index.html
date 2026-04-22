@@ -1857,8 +1857,8 @@ function renderDrawer(){
   const cTasks=db.tasks.filter(t=>t.contactId===c.id);
   const cSubs=db.subscriptions.filter(s=>s.contactId===c.id);
   const cPays=db.payments.filter(p=>p.contactId===c.id);
-  const tabs=['info','notes','appointments','tasks','payments'];
-  const labels={info:'Info',notes:'Notes ('+c.notes.length+')',appointments:'Appts ('+cAppts.length+')',tasks:'Tasks ('+cTasks.length+')',payments:'Payments'};
+  const tabs=['info','notes','appointments','tasks','payments','cards'];
+  const labels={info:'Info',notes:'Notes ('+c.notes.length+')',appointments:'Appts ('+cAppts.length+')',tasks:'Tasks ('+cTasks.length+')',payments:'Payments',cards:'Cards'};
   let body='';
   if(state.dTab==='info'){
     const tags=(c.tags||[]).map(tid=>{const t=getTag(tid);return t?'<span class="tag-pill" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'</span>':''}).join('');
@@ -1896,6 +1896,8 @@ function renderDrawer(){
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Open ('+open.length+')</div><button class="btn btn-purple btn-sm" onclick="openTaskModal(\''+c.id+'\',null)">+ Add</button></div>'
       +'<div style="margin-top:8px">'+(open.length?tHTML(open):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No open tasks.</div>')+'</div>'
       +(done.length?'<div class="sec-label" style="margin-top:14px">Done ('+done.length+')</div>'+tHTML(done):'');
+  }else if(state.dTab==='cards'){
+    body=renderCardsTab(c);
   }else if(state.dTab==='payments'){
     const activeSubs=cSubs.filter(s=>s.status==='active');
     const subHTML=activeSubs.length?activeSubs.map(s=>{
@@ -1922,7 +1924,7 @@ function renderDrawer(){
   document.getElementById('drawer-content').innerHTML=
     '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-danger btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Delete</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
     +'<div class="drawer-tabs">'+tabs.map(t=>'<button class="drawer-tab'+(state.dTab===t?' active':'')+'" onclick="switchDTab(\''+t+'\')">'+labels[t]+'</button>').join('')+'</div>'
-    +'<div class="drawer-body">'+body+'</div>';
+    +'<div class="drawer-body" id="drawer-tab-body">'+body+'</div>';
 }
 
 // =====================================================
