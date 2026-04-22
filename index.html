@@ -1477,6 +1477,11 @@ CREATE POLICY "allow_all" ON crm_data FOR ALL USING (true) WITH CHECK (true);</d
 // CONSTANTS
 // =====================================================
 const SK='myspark_crm_v2',SSK='myspark_session_v1',GIST_FILE='myspark-crm-data.json';
+// Fallback credentials - always available even if localStorage is wiped
+const SB_FALLBACK_URL='https://jytnzqaatkdtcflysadw.supabase.co';
+const SB_FALLBACK_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dG56cWFhdGtkdGNmbHlzYWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDE5NDUsImV4cCI6MjA5MjM3Nzk0NX0.znP5Tx2qU89BCuRBJZJlbmR-abde5J0NEzL0BXVi80g';
+const SQ_FALLBACK_TOKEN='EAAAltTSKhihm6k7nQ7cvcl2k-lmi-VwJrJ-DhA6zOvW4Pt1RBN0owHAhAUXHiZn';
+const SQ_FALLBACK_MERCHANT='MLKQN95NEH4F8';
 const PER_PAGE=20;
 const ADMIN_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -1647,6 +1652,23 @@ function loadData(){
   }catch(e){}
 }
 
+function applyFallbackCredentials(){
+  if(!db.settings.supabaseUrl||!db.settings.supabaseKey){
+    db.settings.supabaseUrl=SB_FALLBACK_URL;
+    db.settings.supabaseKey=SB_FALLBACK_KEY;
+    console.log('Applied Supabase fallback credentials.');
+  }
+  const sqStored=localStorage.getItem('myspark_sq_v1');
+  if(!db.settings.square||!db.settings.square.accessToken){
+    if(sqStored){
+      try{const sq=JSON.parse(sqStored);db.settings.square={...db.settings.square,...sq};}catch(e){}
+    } else {
+      db.settings.square={appId:'',sandbox:false,merchantId:SQ_FALLBACK_MERCHANT,accessToken:SQ_FALLBACK_TOKEN};
+      localStorage.setItem('myspark_sq_v1',JSON.stringify({accessToken:SQ_FALLBACK_TOKEN,merchantId:SQ_FALLBACK_MERCHANT,sandbox:false}));
+      console.log('Applied Square fallback credentials.');
+    }
+  }
+}
 function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
 function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(doSync,2200)}
 
@@ -2779,6 +2801,9 @@ function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(do
 async function doSync(){
   const url=db.settings.supabaseUrl,key=db.settings.supabaseKey;
   if(!url||!key)return;
+  // Safety check: never sync if contacts are empty and we have had contacts before
+  const hasData=db.contacts.length>0||db.payments.length>0||db.tasks.length>0;
+  if(!hasData){console.log('Sync skipped: no data to sync.');return;}
   setSyncSt('syncing');
   try{
     await fetch(url+'/rest/v1/crm_data',{
