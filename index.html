@@ -2491,15 +2491,16 @@ function openModal(title,bodyHTML,footHTML,size){
   document.getElementById('modal-overlay').classList.add('open');
 }
 function closeModal(force){
-  if(!force&&state.modal&&state.modal.id&&state.modal.isDirty){
+  const overlay=document.getElementById('modal-overlay');
+  const isOpen=overlay&&overlay.classList.contains('open');
+  if(!force&&isOpen&&state.modal&&state.modal.id&&state.modal.isDirty){
     showUnsavedWarning();return;
   }
-  document.getElementById('modal-overlay').classList.remove('open');
-  state.modal={type:null,id:null,extra:null};
+  if(overlay)overlay.classList.remove('open');
+  state.modal={type:null,id:null,extra:null,isDirty:false};
   state._saveConfirmPending=false;
   state._savedFootHTML=null;
 }
-function closeModalForce(){state.modal={};closeModal(true);}
 function onModalBg(e){if(e.target.id==='modal-overlay')closeModal()}
 function showUnsavedWarning(){
   const foot=document.getElementById('modal-foot');
