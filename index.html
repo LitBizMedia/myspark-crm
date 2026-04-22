@@ -2491,11 +2491,9 @@ function onModalBg(e){if(e.target.id==='modal-overlay')closeModal()}
 
 function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,val){
   const c=val?db.contacts.find(x=>x.id===val):null;
-  return'<div class="ss-wrap" id="'+wrapId+'">'
-    +'<input class="ss-inp" id="'+inputId+'" type="text" placeholder="'+placeholder+'" value="'+esc(c?c.name:'')+'" oninput="ssFilter(''+inputId+'',''+hiddenId+'',''+ddId+'',this.value)" onclick="ssFilter(''+inputId+'',''+hiddenId+'',''+ddId+'',this.value)" autocomplete="off">'
-    +'<input type="hidden" id="'+hiddenId+'" value="'+esc(val||'')+'">'
-    +'<div class="ss-drop hidden" id="'+ddId+'"></div>'
-    +'</div>';
+  const iv=c?c.name:'';
+  const sf="ssFilter(\'"+inputId+"\',\'"+hiddenId+"\',\'"+ddId+"\',this.value)";
+  return'<div class="ss-wrap" id="'+wrapId+'"><input class="ss-inp" id="'+inputId+'" type="text" placeholder="'+esc(placeholder)+'" value="'+esc(iv)+'" oninput="'+sf+'" onclick="'+sf+'" autocomplete="off"><input type="hidden" id="'+hiddenId+'" value="'+esc(val||'')+'"><div class="ss-drop hidden" id="'+ddId+'"></div></div>';
 }
 function ssFilter(inputId,hiddenId,ddId,v){
   const dd=document.getElementById(ddId);if(!v&&!document.getElementById(inputId).value){dd.classList.add('hidden');return}
