@@ -5,475 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MySpark+ CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<script src="https://web.squarecdn.com/v1/square.js">
-// =====================================================
-// TRANSACTIONS TAB
-// =====================================================
-const TXN_PER_PAGE = 20;
-
-function txnNorm(p){
-  return {
-    id: p.id,
-    createdAt: p.createdAt || '',
-    date: (p.createdAt || '').split('T')[0],
-    staffId: p.staffId || null,
-    contactId: p.contactId || null,
-    contactName: p.contactName || null,
-    items: p.items || [],
-    subtotal: p.subtotal != null ? p.subtotal : (p.amount || 0),
-    discountAmount: p.discountAmount || 0,
-    discountNote: p.discountNote || '',
-    afterDiscount: p.afterDiscount != null ? p.afterDiscount : (p.subtotal != null ? p.subtotal : (p.amount || 0)),
-    tipAmount: p.tipAmount != null ? p.tipAmount : (p.tip || 0),
-    creditApplied: p.creditApplied || 0,
-    total: p.total != null ? p.total : (p.amount || 0),
-    paymentMethod: p.paymentMethod || p.method || 'card',
-    cardLast4: p.cardLast4 || '',
-    cardBrand: p.cardBrand || '',
-    status: p.status || 'completed',
-    notes: p.notes || '',
-    squarePaymentId: p.squarePaymentId || ''
-  };
-}
-
-function txnGetRange(){
-  const range = state.txnRange || 'this_month';
-  const now = new Date();
-  let from, to;
-  if(range === 'today'){
-    from = to = todayStr();
-  } else if(range === 'this_week'){
-    const dow = now.getDay();
-    const ws = new Date(now); ws.setDate(now.getDate() - dow);
-    const we = new Date(ws); we.setDate(ws.getDate() + 6);
-    from = ws.toISOString().split('T')[0];
-    to = we.toISOString().split('T')[0];
-  } else if(range === 'last_week'){
-    const dow = now.getDay();
-    const ws = new Date(now); ws.setDate(now.getDate() - dow - 7);
-    const we = new Date(ws); we.setDate(ws.getDate() + 6);
-    from = ws.toISOString().split('T')[0];
-    to = we.toISOString().split('T')[0];
-  } else if(range === 'this_month'){
-    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  } else if(range === 'last_month'){
-    from = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-    to = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
-  } else if(range === 'custom'){
-    from = state.txnFrom || todayStr();
-    to = state.txnTo || todayStr();
-  } else {
-    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  }
-  return {from: from, to: to};
-}
-
-function txnGetFiltered(){
-  var r = txnGetRange();
-  var from = r.from; var to = r.to;
-  var staff = state.txnStaff || '';
-  var method = state.txnMethod || '';
-  return (db.payments || []).filter(function(p){
-    var date = (p.createdAt || '').split('T')[0];
-    if(date < from || date > to) return false;
-    if(staff && p.staffId !== staff) return false;
-    var pm = p.paymentMethod || p.method || '';
-    if(method && pm !== method) return false;
-    return true;
-  }).sort(function(a, b){ return b.createdAt.localeCompare(a.createdAt); });
-}
-
-function renderTransactions(){
-  var el = document.getElementById('pay-transactions-view');
-  if(!el) return;
-  if(!state.txnRange) state.txnRange = 'this_month';
-  if(!state.txnPage) state.txnPage = 1;
-  if(state.txnStaff === undefined) state.txnStaff = '';
-  if(state.txnMethod === undefined) state.txnMethod = '';
-  el.innerHTML = txnBuildShell();
-  txnRenderSummary();
-  txnRenderTable();
-}
-
-function txnBuildShell(){
-  var users = allUsers();
-  var uOpts = users.map(function(u){ return '<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>'; }).join('');
-  var rangeVal = state.txnRange || 'this_month';
-  var staffVal = state.txnStaff || '';
-  var methodVal = state.txnMethod || '';
-  var isCustom = rangeVal === 'custom';
-  var ranges = ['today','this_week','this_month','last_month','custom'];
-  var rangeLabels = {'today':'Today','this_week':'This Week','this_month':'This Month','last_month':'Last Month','custom':'Custom Range'};
-  var rangeOpts = ranges.map(function(v){ return '<option value="'+v+'"'+(rangeVal===v?' selected':'')+'>'+rangeLabels[v]+'</option>'; }).join('');
-  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Transactions</div>'
-    +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px" id="txn-sub-label">All transactions</div></div>'
-    +'<button class="btn btn-ghost btn-sm" onclick="txnExportCSV()">'
-    +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export CSV</button></div>'
-    +'<div id="txn-summary-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
-    +'<select class="filter-sel" id="txn-range-sel" onchange="txnSetRange(this.value)" style="height:36px">'+rangeOpts+'</select>'
-    +'<div id="txn-custom-wrap"'+(isCustom?'':' class="hidden"')+' style="display:'+(isCustom?'flex':'none')+';gap:6px;align-items:center">'
-    +'<input type="date" id="txn-from-inp" class="filter-sel" style="height:36px" value="'+(state.txnFrom||'')+'" onchange="state.txnFrom=this.value;txnRenderSummary();txnRenderTable()">'
-    +'<span style="color:var(--main-text-muted);font-size:12px">to</span>'
-    +'<input type="date" id="txn-to-inp" class="filter-sel" style="height:36px" value="'+(state.txnTo||'')+'" onchange="state.txnTo=this.value;txnRenderSummary();txnRenderTable()">'
-    +'</div>'
-    +'<select class="filter-sel" id="txn-staff-sel" onchange="state.txnStaff=this.value;state.txnPage=1;txnRenderSummary();txnRenderTable()" style="height:36px"><option value="">All Staff</option>'+uOpts+'</select>'
-    +'<select class="filter-sel" id="txn-method-sel" onchange="state.txnMethod=this.value;state.txnPage=1;txnRenderSummary();txnRenderTable()" style="height:36px">'
-    +'<option value=""'+(methodVal===''?' selected':'')+'>All Methods</option>'
-    +'<option value="card"'+(methodVal==='card'?' selected':'')+'>Card</option>'
-    +'<option value="cash"'+(methodVal==='cash'?' selected':'')+'>Cash</option>'
-    +'<option value="other"'+(methodVal==='other'?' selected':'')+'>Other</option>'
-    +'<option value="card_on_file"'+(methodVal==='card_on_file'?' selected':'')+'>Card on File</option>'
-    +'</select>'
-    +'</div>'
-    +'<div class="tbl-wrap" style="overflow-x:auto">'
-    +'<table class="ct-table" id="txn-table" style="min-width:880px"><thead id="txn-thead"></thead><tbody id="txn-tbody"></tbody></table>'
-    +'</div>'
-    +'<div id="txn-pg-wrap"></div>';
-}
-
-function txnSetRange(v){
-  state.txnRange = v;
-  state.txnPage = 1;
-  var wrap = document.getElementById('txn-custom-wrap');
-  if(wrap){
-    if(v === 'custom'){
-      wrap.classList.remove('hidden');
-      wrap.style.display = 'flex';
-    }else{
-      wrap.classList.add('hidden');
-      wrap.style.display = 'none';
-    }
-  }
-  txnRenderSummary();
-  txnRenderTable();
-}
-
-function txnRenderSummary(){
-  var el = document.getElementById('txn-summary-grid');
-  if(!el) return;
-  var now = new Date();
-  var td = todayStr();
-  var wd = now.getDay();
-  var wStart = new Date(now); wStart.setDate(now.getDate() - wd);
-  var wEnd = new Date(wStart); wEnd.setDate(wStart.getDate() + 6);
-  var mStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  var mEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  var wsStr = wStart.toISOString().split('T')[0];
-  var weStr = wEnd.toISOString().split('T')[0];
-  var all = db.payments || [];
-  var todayRev = all.filter(function(p){ return (p.createdAt||'').split('T')[0] === td && p.status !== 'voided'; })
-    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
-  var weekRev = all.filter(function(p){ var d=(p.createdAt||'').split('T')[0]; return d>=wsStr&&d<=weStr&&p.status!=='voided'; })
-    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
-  var monthRev = all.filter(function(p){ var d=(p.createdAt||'').split('T')[0]; return d>=mStart&&d<=mEnd&&p.status!=='voided'; })
-    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
-  var filtered = txnGetFiltered();
-  var r = txnGetRange(); var from = r.from; var to = r.to;
-  var periodRev = filtered.filter(function(p){ return p.status!=='voided'; })
-    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
-  var cards = [
-    {label:'Today', val: fmt$(todayRev), color:'var(--orange)', sub: null},
-    {label:'This Week', val: fmt$(weekRev), color:'var(--purple)', sub: null},
-    {label:'This Month', val: fmt$(monthRev), color:'#34d399', sub: null},
-    {label:'Period Total', val: fmt$(periodRev), color:'var(--main-text)', sub: filtered.length+' transaction'+(filtered.length!==1?'s':'')}
-  ];
-  el.innerHTML = cards.map(function(c){
-    return '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:14px 16px;border-top:3px solid '+c.color+';box-shadow:0 2px 12px rgba(107,33,234,.07)">'
-      +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;margin-bottom:4px">'+c.label+'</div>'
-      +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800;color:'+c.color+'">'+c.val+'</div>'
-      +(c.sub?'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+c.sub+'</div>':'')
-      +'</div>';
-  }).join('');
-  var lbl = document.getElementById('txn-sub-label');
-  if(lbl) lbl.textContent = filtered.length + ' transaction' + (filtered.length !== 1 ? 's' : '') + (from === to ? ' on '+fmtDate(from) : ' from '+fmtDate(from)+' to '+fmtDate(to));
-}
-
-function txnRenderTable(){
-  var thead = document.getElementById('txn-thead');
-  var tbody = document.getElementById('txn-tbody');
-  if(!tbody) return;
-  var filtered = txnGetFiltered();
-  var pages = Math.ceil(filtered.length / TXN_PER_PAGE) || 1;
-  if(state.txnPage > pages) state.txnPage = 1;
-  var slice = filtered.slice((state.txnPage - 1) * TXN_PER_PAGE, state.txnPage * TXN_PER_PAGE);
-  if(thead) thead.innerHTML = '<tr>'
-    +'<th style="min-width:110px">Date</th>'
-    +'<th style="min-width:110px">Staff</th>'
-    +'<th style="min-width:120px">Contact</th>'
-    +'<th>Items</th>'
-    +'<th style="text-align:right;min-width:85px">Subtotal</th>'
-    +'<th style="text-align:right;min-width:85px">Discount</th>'
-    +'<th style="text-align:right;min-width:90px">After Disc.</th>'
-    +'<th style="text-align:right;min-width:70px">Tip</th>'
-    +'<th style="min-width:120px">Method</th>'
-    +'<th style="min-width:90px">Status</th>'
-    +'<th style="width:40px"></th>'
-    +'</tr>';
-  if(!slice.length){
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">'
-      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'
-      +'<h3>No transactions found</h3><p>Process a sale in Point of Sale or adjust your filters.</p></div></td></tr>';
-    document.getElementById('txn-pg-wrap').innerHTML = '';
-    return;
-  }
-  tbody.innerHTML = slice.map(function(p){
-    var t = txnNorm(p);
-    var staff = t.staffId ? getUserById(t.staffId) : null;
-    var contact = t.contactId ? db.contacts.find(function(c){ return c.id === t.contactId; }) : null;
-    var contactName = contact ? contact.name : (t.contactName || '');
-    var firstItem = t.items.length ? esc(t.items[0].desc || t.items[0].name || '') : 'Payment';
-    var moreItems = t.items.length > 1 ? ' <span style="color:var(--main-text-muted);font-size:11px">+' + (t.items.length - 1) + ' more</span>' : '';
-    var itemLabel = firstItem + moreItems;
-    var methodLabel = txnMethodLabel(t.paymentMethod, t.cardLast4, t.cardBrand);
-    var statusBadge = txnStatusBadge(t.status);
-    var dt = new Date(t.createdAt);
-    var dtLabel = dt.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + '<br><span style="font-size:10px;color:var(--main-text-muted)">' + dt.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) + '</span>';
-    var staffColor = t.staffId ? getUserColor(t.staffId) : 'var(--main-text-muted)';
-    var staffName = staff ? esc(staff.name || staff.username) : '<span style="color:var(--main-text-muted)">Unassigned</span>';
-    return '<tr onclick="txnOpenDetail(\''+t.id+'\')" style="cursor:pointer">'
-      +'<td style="font-size:12px;line-height:1.5">'+dtLabel+'</td>'
-      +'<td><span style="font-size:12px;font-weight:600;color:'+staffColor+'">'+staffName+'</span></td>'
-      +'<td style="font-size:12px">'+(contactName?esc(contactName):'<span style="color:var(--main-text-muted)">Walk-in</span>')+'</td>'
-      +'<td style="font-size:12px">'+itemLabel+'</td>'
-      +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.subtotal)+'</td>'
-      +'<td style="text-align:right;font-size:13px">'+(t.discountAmount>0?'<span style="color:#34d399">-'+fmt$(t.discountAmount)+'</span>':'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
-      +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.afterDiscount)+'</td>'
-      +'<td style="text-align:right;font-size:13px">'+(t.tipAmount>0?fmt$(t.tipAmount):'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
-      +'<td style="font-size:12px">'+methodLabel+'</td>'
-      +'<td>'+statusBadge+'</td>'
-      +'<td onclick="event.stopPropagation()"><button class="icon-btn-xs" onclick="txnOpenDetail(\''+t.id+'\')" title="View details"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></td>'
-      +'</tr>';
-  }).join('');
-  renderPg('txn-pg-wrap', state.txnPage, pages, 'txnPg');
-}
-
-function txnPg(p){ state.txnPage = p; txnRenderTable(); }
-
-function txnMethodLabel(method, last4, brand){
-  var cardIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
-  var cashIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><rect x="1" y="6" width="22" height="13" rx="2"/><circle cx="12" cy="12" r="3"/></svg>';
-  var otherIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
-  var icon = method==='cash' ? cashIcon : (method==='other' ? otherIcon : cardIcon);
-  var label = '';
-  if(method === 'card_on_file') label = (brand ? esc(brand) : 'Card on File') + (last4 ? ' \u00b7\u00b7\u00b7\u00b7 '+esc(last4) : '');
-  else if(method === 'card') label = 'Card' + (last4 ? ' \u00b7\u00b7\u00b7\u00b7 '+esc(last4) : '');
-  else if(method === 'cash') label = 'Cash';
-  else label = esc(method || 'Other');
-  return '<span style="display:inline-flex;align-items:center;color:var(--main-text-muted)">'+icon+label+'</span>';
-}
-
-function txnStatusBadge(status){
-  var map = {
-    completed:     {bg:'rgba(52,211,153,.15)',  color:'#34d399', label:'Completed'},
-    voided:        {bg:'rgba(239,68,68,.12)',    color:'#f87171', label:'Voided'},
-    refunded:      {bg:'rgba(245,158,11,.12)',   color:'#fbbf24', label:'Refunded'},
-    partial_refund:{bg:'rgba(245,158,11,.12)',   color:'#fbbf24', label:'Partial Refund'},
-    failed:        {bg:'rgba(239,68,68,.12)',    color:'#f87171', label:'Failed'}
-  };
-  var s = map[status] || {bg:'rgba(107,33,234,.12)', color:'var(--purple-light)', label: status || 'Unknown'};
-  return '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:4px;white-space:nowrap;background:'+s.bg+';color:'+s.color+'">'+s.label+'</span>';
-}
-
-function txnOpenDetail(id){
-  var p = (db.payments || []).find(function(x){ return x.id === id; });
-  if(!p) return;
-  var t = txnNorm(p);
-  var staff = t.staffId ? getUserById(t.staffId) : null;
-  var contact = t.contactId ? db.contacts.find(function(c){ return c.id === t.contactId; }) : null;
-  var contactName = contact ? contact.name : (t.contactName || 'Walk-in');
-  var dt = new Date(t.createdAt);
-  var dtFull = dt.toLocaleString('en-US', {month:'long', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
-  var canVoid = t.status === 'completed';
-  var canRefund = t.status === 'completed' && t.total > 0;
-  var hasSquare = !!(t.squarePaymentId);
-  var staffColor = t.staffId ? getUserColor(t.staffId) : 'var(--text-muted)';
-  var itemsHTML = '';
-  if(t.items && t.items.length){
-    itemsHTML = t.items.map(function(item){
-      return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)">'
-        +'<span style="color:var(--text)">'+esc(item.desc||item.name||'Item')+'</span>'
-        +'<span style="font-weight:600;color:var(--text)">'+fmt$(item.price||0)+'</span>'
-        +'</div>';
-    }).join('');
-  } else {
-    itemsHTML = '<div style="font-size:13px;color:var(--text-muted);padding:5px 0">No item detail recorded.</div>';
-  }
-  var body = '<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Transaction</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);font-family:monospace">'+esc(t.id)+'</div>'
-    +'<div style="font-size:13px;font-weight:600;color:var(--text);margin-top:4px">'+dtFull+'</div></div>'
-    +txnStatusBadge(t.status)+'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Customer</div>'
-    +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(contactName)+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Staff</div>'
-    +'<div style="font-size:13px;font-weight:600;color:'+staffColor+'">'+esc(staff?(staff.name||staff.username):'Unassigned')+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Payment Method</div>'
-    +'<div style="font-size:13px;color:var(--text)">'+txnMethodLabel(t.paymentMethod, t.cardLast4, t.cardBrand)+'</div></div>'
-    +(hasSquare?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Square Payment ID</div><div style="font-size:11px;font-family:monospace;color:var(--text-muted);word-break:break-all">'+esc(t.squarePaymentId)+'</div></div>':'')
-    +'</div>'
-    +'<div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Items</div>'
-    +itemsHTML+'</div>'
-    +'<div style="border-top:1px solid var(--border);padding-top:12px">'
-    +'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>Subtotal</span><span>'+fmt$(t.subtotal)+'</span></div>'
-    +(t.discountAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:4px 0"><span>Discount'+(t.discountNote?' ('+esc(t.discountNote)+')':'')+'</span><span>-'+fmt$(t.discountAmount)+'</span></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>After Discount</span><span>'+fmt$(t.afterDiscount)+'</span></div>':'')
-    +(t.tipAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>Tip</span><span>'+fmt$(t.tipAmount)+'</span></div>':'')
-    +(t.creditApplied>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--purple-light);padding:4px 0"><span>Credits Applied</span><span>-'+fmt$(t.creditApplied)+'</span></div>':'')
-    +'<div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:8px 0;border-top:1px solid var(--border);margin-top:5px"><span style="color:var(--text)">Total</span><span style="color:var(--orange)">'+fmt$(t.total)+'</span></div>'
-    +'</div>'
-    +(t.notes?'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(t.notes)+'</div></div>':'')
-    +'</div>';
-  var footBtns = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
-  if(canVoid) footBtns += '<button class="btn btn-danger" onclick="txnVoid(\''+id+'\')">Void</button>';
-  if(canRefund) footBtns += '<button class="btn btn-purple" onclick="txnRefund(\''+id+'\')">Refund</button>';
-  state.modal = {type:'txn-detail', id: id};
-  openModal('Transaction Details', body, footBtns, 'modal-lg');
-}
-
-function txnVoid(id){
-  var p = (db.payments||[]).find(function(x){ return x.id===id; });
-  if(!p) return;
-  var t = txnNorm(p);
-  openModal('Void Transaction',
-    '<div class="warn-box">Void this transaction of <strong>'+fmt$(t.total)+'</strong>? '
-    +(t.squarePaymentId?'This will attempt to cancel the payment in Square. ':'No Square payment ID found. Only the local record will be updated. ')
-    +'This cannot be undone.</div>',
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-danger" onclick="txnConfirmVoid(\''+id+'\')">Void Transaction</button>');
-}
-
-async function txnConfirmVoid(id){
-  var p = (db.payments||[]).find(function(x){ return x.id===id; });
-  if(!p){ closeModal(); return; }
-  var t = txnNorm(p);
-  if(t.squarePaymentId){
-    var sq = db.settings.square || {};
-    if(sq.accessToken){
-      try{
-        var r = await fetch('/api/square/void',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({accessToken: sq.accessToken, paymentId: t.squarePaymentId})
-        });
-        var d = await r.json();
-        if(d.error) toast('Square void error: '+d.error+'. Local record updated.','warn');
-        else toast('Payment voided in Square.','success');
-      }catch(e){ toast('Square unreachable. Local record updated.','warn'); }
-    }
-  }
-  p.status = 'voided';
-  p.voidedAt = now_();
-  saveData();
-  closeModal();
-  txnRenderSummary();
-  txnRenderTable();
-  if(!t.squarePaymentId) toast('Transaction voided.','success');
-}
-
-function txnRefund(id){
-  var p = (db.payments||[]).find(function(x){ return x.id===id; });
-  if(!p) return;
-  var t = txnNorm(p);
-  var hasSquare = !!(t.squarePaymentId);
-  var body = '<div class="form-group"><label>Refund Amount ($)</label>'
-    +'<input id="refund-amt" type="number" min="0.01" max="'+t.total.toFixed(2)+'" step="0.01" value="'+t.total.toFixed(2)+'">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Maximum: '+fmt$(t.total)+'</div></div>'
-    +'<div class="form-group"><label>Reason</label><input id="refund-reason" type="text" placeholder="Customer request, billing error..."></div>'
-    +(hasSquare?'<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--purple-light)">Square payment detected. Refund will be processed through Square automatically.</div>'
-    :'<div class="warn-box" style="margin-bottom:0">No Square payment ID found. Only the local record will be updated.</div>');
-  state.modal = {type:'txn-refund', id: id};
-  openModal('Refund Transaction', body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-purple" onclick="txnConfirmRefund(\''+id+'\')">Process Refund</button>');
-}
-
-async function txnConfirmRefund(id){
-  var amtEl = document.getElementById('refund-amt');
-  var amt = parseFloat(amtEl && amtEl.value) || 0;
-  var reason = (document.getElementById('refund-reason') && document.getElementById('refund-reason').value) || '';
-  if(amt <= 0){ toast('Enter a valid amount.','error'); return; }
-  var p = (db.payments||[]).find(function(x){ return x.id===id; });
-  if(!p){ closeModal(); return; }
-  var t = txnNorm(p);
-  if(amt > t.total){ toast('Refund cannot exceed original total.','error'); return; }
-  if(t.squarePaymentId){
-    var sq = db.settings.square || {};
-    if(sq.accessToken){
-      try{
-        var r = await fetch('/api/square/refund',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({accessToken: sq.accessToken, paymentId: t.squarePaymentId, amountCents: Math.round(amt*100), reason: reason})
-        });
-        var d = await r.json();
-        if(d.error) toast('Square refund error: '+d.error+'. Local record updated.','warn');
-        else toast('Refund of '+fmt$(amt)+' processed in Square.','success');
-      }catch(e){ toast('Square unreachable. Local record updated.','warn'); }
-    }
-  }
-  var isFull = Math.abs(amt - t.total) < 0.01;
-  p.status = isFull ? 'refunded' : 'partial_refund';
-  p.refundedAmount = amt;
-  p.refundReason = reason;
-  p.refundedAt = now_();
-  saveData();
-  closeModal();
-  txnRenderSummary();
-  txnRenderTable();
-  if(!t.squarePaymentId) toast('Refund of '+fmt$(amt)+' recorded.','success');
-}
-
-function txnExportCSV(){
-  var filtered = txnGetFiltered();
-  if(!filtered.length){ toast('No transactions to export.','error'); return; }
-  var headers = ['Date','Time','Contact','Staff','Items','Subtotal','Discount ($)','After Discount','Tip','Credits Applied','Total','Payment Method','Card Last 4','Status','Discount Reason','Notes','Square Payment ID'];
-  var rows = filtered.map(function(p){
-    var t = txnNorm(p);
-    var staff = t.staffId ? getUserById(t.staffId) : null;
-    var contact = t.contactId ? db.contacts.find(function(c){ return c.id===t.contactId; }) : null;
-    var dt = new Date(t.createdAt);
-    var itemsList = t.items.map(function(i){ return i.desc||i.name||''; }).filter(Boolean).join('; ') || 'Payment';
-    return [
-      dt.toLocaleDateString('en-US'),
-      dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),
-      contact ? contact.name : (t.contactName||'Walk-in'),
-      staff ? (staff.name||staff.username) : 'Unassigned',
-      itemsList,
-      t.subtotal.toFixed(2),
-      t.discountAmount.toFixed(2),
-      t.afterDiscount.toFixed(2),
-      t.tipAmount.toFixed(2),
-      t.creditApplied.toFixed(2),
-      t.total.toFixed(2),
-      t.paymentMethod || '',
-      t.cardLast4 || '',
-      t.status || '',
-      (t.discountNote||'').replace(/\n/g,' '),
-      (t.notes||'').replace(/\n/g,' '),
-      t.squarePaymentId || ''
-    ];
-  });
-  var csv = [headers].concat(rows).map(function(r){
-    return r.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(',');
-  }).join('\n');
-  var blob = new Blob([csv],{type:'text/csv'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  var rng = txnGetRange();
-  a.download = 'transactions_'+rng.from+'_'+rng.to+'.csv';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast(filtered.length+' transactions exported.','success');
-}
-
-</script>
+<script src="https://web.squarecdn.com/v1/square.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -7317,6 +6849,475 @@ function togglePosDiscount(){
     calcTotals();
   }
 }
+
+
+// =====================================================
+// TRANSACTIONS TAB
+// =====================================================
+const TXN_PER_PAGE = 20;
+
+function txnNorm(p){
+  return {
+    id: p.id,
+    createdAt: p.createdAt || '',
+    date: (p.createdAt || '').split('T')[0],
+    staffId: p.staffId || null,
+    contactId: p.contactId || null,
+    contactName: p.contactName || null,
+    items: p.items || [],
+    subtotal: p.subtotal != null ? p.subtotal : (p.amount || 0),
+    discountAmount: p.discountAmount || 0,
+    discountNote: p.discountNote || '',
+    afterDiscount: p.afterDiscount != null ? p.afterDiscount : (p.subtotal != null ? p.subtotal : (p.amount || 0)),
+    tipAmount: p.tipAmount != null ? p.tipAmount : (p.tip || 0),
+    creditApplied: p.creditApplied || 0,
+    total: p.total != null ? p.total : (p.amount || 0),
+    paymentMethod: p.paymentMethod || p.method || 'card',
+    cardLast4: p.cardLast4 || '',
+    cardBrand: p.cardBrand || '',
+    status: p.status || 'completed',
+    notes: p.notes || '',
+    squarePaymentId: p.squarePaymentId || ''
+  };
+}
+
+function txnGetRange(){
+  const range = state.txnRange || 'this_month';
+  const now = new Date();
+  let from, to;
+  if(range === 'today'){
+    from = to = todayStr();
+  } else if(range === 'this_week'){
+    const dow = now.getDay();
+    const ws = new Date(now); ws.setDate(now.getDate() - dow);
+    const we = new Date(ws); we.setDate(ws.getDate() + 6);
+    from = ws.toISOString().split('T')[0];
+    to = we.toISOString().split('T')[0];
+  } else if(range === 'last_week'){
+    const dow = now.getDay();
+    const ws = new Date(now); ws.setDate(now.getDate() - dow - 7);
+    const we = new Date(ws); we.setDate(ws.getDate() + 6);
+    from = ws.toISOString().split('T')[0];
+    to = we.toISOString().split('T')[0];
+  } else if(range === 'this_month'){
+    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+  } else if(range === 'last_month'){
+    from = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+    to = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+  } else if(range === 'custom'){
+    from = state.txnFrom || todayStr();
+    to = state.txnTo || todayStr();
+  } else {
+    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+  }
+  return {from: from, to: to};
+}
+
+function txnGetFiltered(){
+  var r = txnGetRange();
+  var from = r.from; var to = r.to;
+  var staff = state.txnStaff || '';
+  var method = state.txnMethod || '';
+  return (db.payments || []).filter(function(p){
+    var date = (p.createdAt || '').split('T')[0];
+    if(date < from || date > to) return false;
+    if(staff && p.staffId !== staff) return false;
+    var pm = p.paymentMethod || p.method || '';
+    if(method && pm !== method) return false;
+    return true;
+  }).sort(function(a, b){ return b.createdAt.localeCompare(a.createdAt); });
+}
+
+function renderTransactions(){
+  var el = document.getElementById('pay-transactions-view');
+  if(!el) return;
+  if(!state.txnRange) state.txnRange = 'this_month';
+  if(!state.txnPage) state.txnPage = 1;
+  if(state.txnStaff === undefined) state.txnStaff = '';
+  if(state.txnMethod === undefined) state.txnMethod = '';
+  el.innerHTML = txnBuildShell();
+  txnRenderSummary();
+  txnRenderTable();
+}
+
+function txnBuildShell(){
+  var users = allUsers();
+  var uOpts = users.map(function(u){ return '<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>'; }).join('');
+  var rangeVal = state.txnRange || 'this_month';
+  var staffVal = state.txnStaff || '';
+  var methodVal = state.txnMethod || '';
+  var isCustom = rangeVal === 'custom';
+  var ranges = ['today','this_week','this_month','last_month','custom'];
+  var rangeLabels = {'today':'Today','this_week':'This Week','this_month':'This Month','last_month':'Last Month','custom':'Custom Range'};
+  var rangeOpts = ranges.map(function(v){ return '<option value="'+v+'"'+(rangeVal===v?' selected':'')+'>'+rangeLabels[v]+'</option>'; }).join('');
+  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Transactions</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px" id="txn-sub-label">All transactions</div></div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="txnExportCSV()">'
+    +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export CSV</button></div>'
+    +'<div id="txn-summary-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
+    +'<select class="filter-sel" id="txn-range-sel" onchange="txnSetRange(this.value)" style="height:36px">'+rangeOpts+'</select>'
+    +'<div id="txn-custom-wrap"'+(isCustom?'':' class="hidden"')+' style="display:'+(isCustom?'flex':'none')+';gap:6px;align-items:center">'
+    +'<input type="date" id="txn-from-inp" class="filter-sel" style="height:36px" value="'+(state.txnFrom||'')+'" onchange="state.txnFrom=this.value;txnRenderSummary();txnRenderTable()">'
+    +'<span style="color:var(--main-text-muted);font-size:12px">to</span>'
+    +'<input type="date" id="txn-to-inp" class="filter-sel" style="height:36px" value="'+(state.txnTo||'')+'" onchange="state.txnTo=this.value;txnRenderSummary();txnRenderTable()">'
+    +'</div>'
+    +'<select class="filter-sel" id="txn-staff-sel" onchange="state.txnStaff=this.value;state.txnPage=1;txnRenderSummary();txnRenderTable()" style="height:36px"><option value="">All Staff</option>'+uOpts+'</select>'
+    +'<select class="filter-sel" id="txn-method-sel" onchange="state.txnMethod=this.value;state.txnPage=1;txnRenderSummary();txnRenderTable()" style="height:36px">'
+    +'<option value=""'+(methodVal===''?' selected':'')+'>All Methods</option>'
+    +'<option value="card"'+(methodVal==='card'?' selected':'')+'>Card</option>'
+    +'<option value="cash"'+(methodVal==='cash'?' selected':'')+'>Cash</option>'
+    +'<option value="other"'+(methodVal==='other'?' selected':'')+'>Other</option>'
+    +'<option value="card_on_file"'+(methodVal==='card_on_file'?' selected':'')+'>Card on File</option>'
+    +'</select>'
+    +'</div>'
+    +'<div class="tbl-wrap" style="overflow-x:auto">'
+    +'<table class="ct-table" id="txn-table" style="min-width:880px"><thead id="txn-thead"></thead><tbody id="txn-tbody"></tbody></table>'
+    +'</div>'
+    +'<div id="txn-pg-wrap"></div>';
+}
+
+function txnSetRange(v){
+  state.txnRange = v;
+  state.txnPage = 1;
+  var wrap = document.getElementById('txn-custom-wrap');
+  if(wrap){
+    if(v === 'custom'){
+      wrap.classList.remove('hidden');
+      wrap.style.display = 'flex';
+    }else{
+      wrap.classList.add('hidden');
+      wrap.style.display = 'none';
+    }
+  }
+  txnRenderSummary();
+  txnRenderTable();
+}
+
+function txnRenderSummary(){
+  var el = document.getElementById('txn-summary-grid');
+  if(!el) return;
+  var now = new Date();
+  var td = todayStr();
+  var wd = now.getDay();
+  var wStart = new Date(now); wStart.setDate(now.getDate() - wd);
+  var wEnd = new Date(wStart); wEnd.setDate(wStart.getDate() + 6);
+  var mStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  var mEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+  var wsStr = wStart.toISOString().split('T')[0];
+  var weStr = wEnd.toISOString().split('T')[0];
+  var all = db.payments || [];
+  var todayRev = all.filter(function(p){ return (p.createdAt||'').split('T')[0] === td && p.status !== 'voided'; })
+    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
+  var weekRev = all.filter(function(p){ var d=(p.createdAt||'').split('T')[0]; return d>=wsStr&&d<=weStr&&p.status!=='voided'; })
+    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
+  var monthRev = all.filter(function(p){ var d=(p.createdAt||'').split('T')[0]; return d>=mStart&&d<=mEnd&&p.status!=='voided'; })
+    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
+  var filtered = txnGetFiltered();
+  var r = txnGetRange(); var from = r.from; var to = r.to;
+  var periodRev = filtered.filter(function(p){ return p.status!=='voided'; })
+    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
+  var cards = [
+    {label:'Today', val: fmt$(todayRev), color:'var(--orange)', sub: null},
+    {label:'This Week', val: fmt$(weekRev), color:'var(--purple)', sub: null},
+    {label:'This Month', val: fmt$(monthRev), color:'#34d399', sub: null},
+    {label:'Period Total', val: fmt$(periodRev), color:'var(--main-text)', sub: filtered.length+' transaction'+(filtered.length!==1?'s':'')}
+  ];
+  el.innerHTML = cards.map(function(c){
+    return '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:14px 16px;border-top:3px solid '+c.color+';box-shadow:0 2px 12px rgba(107,33,234,.07)">'
+      +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;margin-bottom:4px">'+c.label+'</div>'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800;color:'+c.color+'">'+c.val+'</div>'
+      +(c.sub?'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+c.sub+'</div>':'')
+      +'</div>';
+  }).join('');
+  var lbl = document.getElementById('txn-sub-label');
+  if(lbl) lbl.textContent = filtered.length + ' transaction' + (filtered.length !== 1 ? 's' : '') + (from === to ? ' on '+fmtDate(from) : ' from '+fmtDate(from)+' to '+fmtDate(to));
+}
+
+function txnRenderTable(){
+  var thead = document.getElementById('txn-thead');
+  var tbody = document.getElementById('txn-tbody');
+  if(!tbody) return;
+  var filtered = txnGetFiltered();
+  var pages = Math.ceil(filtered.length / TXN_PER_PAGE) || 1;
+  if(state.txnPage > pages) state.txnPage = 1;
+  var slice = filtered.slice((state.txnPage - 1) * TXN_PER_PAGE, state.txnPage * TXN_PER_PAGE);
+  if(thead) thead.innerHTML = '<tr>'
+    +'<th style="min-width:110px">Date</th>'
+    +'<th style="min-width:110px">Staff</th>'
+    +'<th style="min-width:120px">Contact</th>'
+    +'<th>Items</th>'
+    +'<th style="text-align:right;min-width:85px">Subtotal</th>'
+    +'<th style="text-align:right;min-width:85px">Discount</th>'
+    +'<th style="text-align:right;min-width:90px">After Disc.</th>'
+    +'<th style="text-align:right;min-width:70px">Tip</th>'
+    +'<th style="min-width:120px">Method</th>'
+    +'<th style="min-width:90px">Status</th>'
+    +'<th style="width:40px"></th>'
+    +'</tr>';
+  if(!slice.length){
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">'
+      +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'
+      +'<h3>No transactions found</h3><p>Process a sale in Point of Sale or adjust your filters.</p></div></td></tr>';
+    document.getElementById('txn-pg-wrap').innerHTML = '';
+    return;
+  }
+  tbody.innerHTML = slice.map(function(p){
+    var t = txnNorm(p);
+    var staff = t.staffId ? getUserById(t.staffId) : null;
+    var contact = t.contactId ? db.contacts.find(function(c){ return c.id === t.contactId; }) : null;
+    var contactName = contact ? contact.name : (t.contactName || '');
+    var firstItem = t.items.length ? esc(t.items[0].desc || t.items[0].name || '') : 'Payment';
+    var moreItems = t.items.length > 1 ? ' <span style="color:var(--main-text-muted);font-size:11px">+' + (t.items.length - 1) + ' more</span>' : '';
+    var itemLabel = firstItem + moreItems;
+    var methodLabel = txnMethodLabel(t.paymentMethod, t.cardLast4, t.cardBrand);
+    var statusBadge = txnStatusBadge(t.status);
+    var dt = new Date(t.createdAt);
+    var dtLabel = dt.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + '<br><span style="font-size:10px;color:var(--main-text-muted)">' + dt.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) + '</span>';
+    var staffColor = t.staffId ? getUserColor(t.staffId) : 'var(--main-text-muted)';
+    var staffName = staff ? esc(staff.name || staff.username) : '<span style="color:var(--main-text-muted)">Unassigned</span>';
+    return '<tr onclick="txnOpenDetail(\''+t.id+'\')" style="cursor:pointer">'
+      +'<td style="font-size:12px;line-height:1.5">'+dtLabel+'</td>'
+      +'<td><span style="font-size:12px;font-weight:600;color:'+staffColor+'">'+staffName+'</span></td>'
+      +'<td style="font-size:12px">'+(contactName?esc(contactName):'<span style="color:var(--main-text-muted)">Walk-in</span>')+'</td>'
+      +'<td style="font-size:12px">'+itemLabel+'</td>'
+      +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.subtotal)+'</td>'
+      +'<td style="text-align:right;font-size:13px">'+(t.discountAmount>0?'<span style="color:#34d399">-'+fmt$(t.discountAmount)+'</span>':'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
+      +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.afterDiscount)+'</td>'
+      +'<td style="text-align:right;font-size:13px">'+(t.tipAmount>0?fmt$(t.tipAmount):'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
+      +'<td style="font-size:12px">'+methodLabel+'</td>'
+      +'<td>'+statusBadge+'</td>'
+      +'<td onclick="event.stopPropagation()"><button class="icon-btn-xs" onclick="txnOpenDetail(\''+t.id+'\')" title="View details"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></td>'
+      +'</tr>';
+  }).join('');
+  renderPg('txn-pg-wrap', state.txnPage, pages, 'txnPg');
+}
+
+function txnPg(p){ state.txnPage = p; txnRenderTable(); }
+
+function txnMethodLabel(method, last4, brand){
+  var cardIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
+  var cashIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><rect x="1" y="6" width="22" height="13" rx="2"/><circle cx="12" cy="12" r="3"/></svg>';
+  var otherIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+  var icon = method==='cash' ? cashIcon : (method==='other' ? otherIcon : cardIcon);
+  var label = '';
+  if(method === 'card_on_file') label = (brand ? esc(brand) : 'Card on File') + (last4 ? ' \u00b7\u00b7\u00b7\u00b7 '+esc(last4) : '');
+  else if(method === 'card') label = 'Card' + (last4 ? ' \u00b7\u00b7\u00b7\u00b7 '+esc(last4) : '');
+  else if(method === 'cash') label = 'Cash';
+  else label = esc(method || 'Other');
+  return '<span style="display:inline-flex;align-items:center;color:var(--main-text-muted)">'+icon+label+'</span>';
+}
+
+function txnStatusBadge(status){
+  var map = {
+    completed:     {bg:'rgba(52,211,153,.15)',  color:'#34d399', label:'Completed'},
+    voided:        {bg:'rgba(239,68,68,.12)',    color:'#f87171', label:'Voided'},
+    refunded:      {bg:'rgba(245,158,11,.12)',   color:'#fbbf24', label:'Refunded'},
+    partial_refund:{bg:'rgba(245,158,11,.12)',   color:'#fbbf24', label:'Partial Refund'},
+    failed:        {bg:'rgba(239,68,68,.12)',    color:'#f87171', label:'Failed'}
+  };
+  var s = map[status] || {bg:'rgba(107,33,234,.12)', color:'var(--purple-light)', label: status || 'Unknown'};
+  return '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:4px;white-space:nowrap;background:'+s.bg+';color:'+s.color+'">'+s.label+'</span>';
+}
+
+function txnOpenDetail(id){
+  var p = (db.payments || []).find(function(x){ return x.id === id; });
+  if(!p) return;
+  var t = txnNorm(p);
+  var staff = t.staffId ? getUserById(t.staffId) : null;
+  var contact = t.contactId ? db.contacts.find(function(c){ return c.id === t.contactId; }) : null;
+  var contactName = contact ? contact.name : (t.contactName || 'Walk-in');
+  var dt = new Date(t.createdAt);
+  var dtFull = dt.toLocaleString('en-US', {month:'long', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
+  var canVoid = t.status === 'completed';
+  var canRefund = t.status === 'completed' && t.total > 0;
+  var hasSquare = !!(t.squarePaymentId);
+  var staffColor = t.staffId ? getUserColor(t.staffId) : 'var(--text-muted)';
+  var itemsHTML = '';
+  if(t.items && t.items.length){
+    itemsHTML = t.items.map(function(item){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)">'
+        +'<span style="color:var(--text)">'+esc(item.desc||item.name||'Item')+'</span>'
+        +'<span style="font-weight:600;color:var(--text)">'+fmt$(item.price||0)+'</span>'
+        +'</div>';
+    }).join('');
+  } else {
+    itemsHTML = '<div style="font-size:13px;color:var(--text-muted);padding:5px 0">No item detail recorded.</div>';
+  }
+  var body = '<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Transaction</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);font-family:monospace">'+esc(t.id)+'</div>'
+    +'<div style="font-size:13px;font-weight:600;color:var(--text);margin-top:4px">'+dtFull+'</div></div>'
+    +txnStatusBadge(t.status)+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Customer</div>'
+    +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(contactName)+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Staff</div>'
+    +'<div style="font-size:13px;font-weight:600;color:'+staffColor+'">'+esc(staff?(staff.name||staff.username):'Unassigned')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Payment Method</div>'
+    +'<div style="font-size:13px;color:var(--text)">'+txnMethodLabel(t.paymentMethod, t.cardLast4, t.cardBrand)+'</div></div>'
+    +(hasSquare?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Square Payment ID</div><div style="font-size:11px;font-family:monospace;color:var(--text-muted);word-break:break-all">'+esc(t.squarePaymentId)+'</div></div>':'')
+    +'</div>'
+    +'<div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">'
+    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Items</div>'
+    +itemsHTML+'</div>'
+    +'<div style="border-top:1px solid var(--border);padding-top:12px">'
+    +'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>Subtotal</span><span>'+fmt$(t.subtotal)+'</span></div>'
+    +(t.discountAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:4px 0"><span>Discount'+(t.discountNote?' ('+esc(t.discountNote)+')':'')+'</span><span>-'+fmt$(t.discountAmount)+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>After Discount</span><span>'+fmt$(t.afterDiscount)+'</span></div>':'')
+    +(t.tipAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>Tip</span><span>'+fmt$(t.tipAmount)+'</span></div>':'')
+    +(t.creditApplied>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--purple-light);padding:4px 0"><span>Credits Applied</span><span>-'+fmt$(t.creditApplied)+'</span></div>':'')
+    +'<div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:8px 0;border-top:1px solid var(--border);margin-top:5px"><span style="color:var(--text)">Total</span><span style="color:var(--orange)">'+fmt$(t.total)+'</span></div>'
+    +'</div>'
+    +(t.notes?'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(t.notes)+'</div></div>':'')
+    +'</div>';
+  var footBtns = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  if(canVoid) footBtns += '<button class="btn btn-danger" onclick="txnVoid(\''+id+'\')">Void</button>';
+  if(canRefund) footBtns += '<button class="btn btn-purple" onclick="txnRefund(\''+id+'\')">Refund</button>';
+  state.modal = {type:'txn-detail', id: id};
+  openModal('Transaction Details', body, footBtns, 'modal-lg');
+}
+
+function txnVoid(id){
+  var p = (db.payments||[]).find(function(x){ return x.id===id; });
+  if(!p) return;
+  var t = txnNorm(p);
+  openModal('Void Transaction',
+    '<div class="warn-box">Void this transaction of <strong>'+fmt$(t.total)+'</strong>? '
+    +(t.squarePaymentId?'This will attempt to cancel the payment in Square. ':'No Square payment ID found. Only the local record will be updated. ')
+    +'This cannot be undone.</div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-danger" onclick="txnConfirmVoid(\''+id+'\')">Void Transaction</button>');
+}
+
+async function txnConfirmVoid(id){
+  var p = (db.payments||[]).find(function(x){ return x.id===id; });
+  if(!p){ closeModal(); return; }
+  var t = txnNorm(p);
+  if(t.squarePaymentId){
+    var sq = db.settings.square || {};
+    if(sq.accessToken){
+      try{
+        var r = await fetch('/api/square/void',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({accessToken: sq.accessToken, paymentId: t.squarePaymentId})
+        });
+        var d = await r.json();
+        if(d.error) toast('Square void error: '+d.error+'. Local record updated.','warn');
+        else toast('Payment voided in Square.','success');
+      }catch(e){ toast('Square unreachable. Local record updated.','warn'); }
+    }
+  }
+  p.status = 'voided';
+  p.voidedAt = now_();
+  saveData();
+  closeModal();
+  txnRenderSummary();
+  txnRenderTable();
+  if(!t.squarePaymentId) toast('Transaction voided.','success');
+}
+
+function txnRefund(id){
+  var p = (db.payments||[]).find(function(x){ return x.id===id; });
+  if(!p) return;
+  var t = txnNorm(p);
+  var hasSquare = !!(t.squarePaymentId);
+  var body = '<div class="form-group"><label>Refund Amount ($)</label>'
+    +'<input id="refund-amt" type="number" min="0.01" max="'+t.total.toFixed(2)+'" step="0.01" value="'+t.total.toFixed(2)+'">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Maximum: '+fmt$(t.total)+'</div></div>'
+    +'<div class="form-group"><label>Reason</label><input id="refund-reason" type="text" placeholder="Customer request, billing error..."></div>'
+    +(hasSquare?'<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--purple-light)">Square payment detected. Refund will be processed through Square automatically.</div>'
+    :'<div class="warn-box" style="margin-bottom:0">No Square payment ID found. Only the local record will be updated.</div>');
+  state.modal = {type:'txn-refund', id: id};
+  openModal('Refund Transaction', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-purple" onclick="txnConfirmRefund(\''+id+'\')">Process Refund</button>');
+}
+
+async function txnConfirmRefund(id){
+  var amtEl = document.getElementById('refund-amt');
+  var amt = parseFloat(amtEl && amtEl.value) || 0;
+  var reason = (document.getElementById('refund-reason') && document.getElementById('refund-reason').value) || '';
+  if(amt <= 0){ toast('Enter a valid amount.','error'); return; }
+  var p = (db.payments||[]).find(function(x){ return x.id===id; });
+  if(!p){ closeModal(); return; }
+  var t = txnNorm(p);
+  if(amt > t.total){ toast('Refund cannot exceed original total.','error'); return; }
+  if(t.squarePaymentId){
+    var sq = db.settings.square || {};
+    if(sq.accessToken){
+      try{
+        var r = await fetch('/api/square/refund',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({accessToken: sq.accessToken, paymentId: t.squarePaymentId, amountCents: Math.round(amt*100), reason: reason})
+        });
+        var d = await r.json();
+        if(d.error) toast('Square refund error: '+d.error+'. Local record updated.','warn');
+        else toast('Refund of '+fmt$(amt)+' processed in Square.','success');
+      }catch(e){ toast('Square unreachable. Local record updated.','warn'); }
+    }
+  }
+  var isFull = Math.abs(amt - t.total) < 0.01;
+  p.status = isFull ? 'refunded' : 'partial_refund';
+  p.refundedAmount = amt;
+  p.refundReason = reason;
+  p.refundedAt = now_();
+  saveData();
+  closeModal();
+  txnRenderSummary();
+  txnRenderTable();
+  if(!t.squarePaymentId) toast('Refund of '+fmt$(amt)+' recorded.','success');
+}
+
+function txnExportCSV(){
+  var filtered = txnGetFiltered();
+  if(!filtered.length){ toast('No transactions to export.','error'); return; }
+  var headers = ['Date','Time','Contact','Staff','Items','Subtotal','Discount ($)','After Discount','Tip','Credits Applied','Total','Payment Method','Card Last 4','Status','Discount Reason','Notes','Square Payment ID'];
+  var rows = filtered.map(function(p){
+    var t = txnNorm(p);
+    var staff = t.staffId ? getUserById(t.staffId) : null;
+    var contact = t.contactId ? db.contacts.find(function(c){ return c.id===t.contactId; }) : null;
+    var dt = new Date(t.createdAt);
+    var itemsList = t.items.map(function(i){ return i.desc||i.name||''; }).filter(Boolean).join('; ') || 'Payment';
+    return [
+      dt.toLocaleDateString('en-US'),
+      dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),
+      contact ? contact.name : (t.contactName||'Walk-in'),
+      staff ? (staff.name||staff.username) : 'Unassigned',
+      itemsList,
+      t.subtotal.toFixed(2),
+      t.discountAmount.toFixed(2),
+      t.afterDiscount.toFixed(2),
+      t.tipAmount.toFixed(2),
+      t.creditApplied.toFixed(2),
+      t.total.toFixed(2),
+      t.paymentMethod || '',
+      t.cardLast4 || '',
+      t.status || '',
+      (t.discountNote||'').replace(/\n/g,' '),
+      (t.notes||'').replace(/\n/g,' '),
+      t.squarePaymentId || ''
+    ];
+  });
+  var csv = [headers].concat(rows).map(function(r){
+    return r.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(',');
+  }).join('\n');
+  var blob = new Blob([csv],{type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  var rng = txnGetRange();
+  a.download = 'transactions_'+rng.from+'_'+rng.to+'.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(filtered.length+' transactions exported.','success');
+}
+
 
 </script>
 </body>
