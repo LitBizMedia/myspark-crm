@@ -2342,6 +2342,7 @@ function cycleTask(id){const t=getTask(id);if(!t)return;const m={'open':'in-prog
 // PAYMENTS POS
 // =====================================================
 function renderPayments(){
+  setTimeout(function(){if(typeof setPosMode==='function')setPosMode('product');},50);
   switchPayTab(state.paymentsTab||'pos');
 }
 
