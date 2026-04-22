@@ -2481,13 +2481,28 @@ function checkDoubleBook(apptId,date,time,duration,userId){
 // =====================================================
 function openModal(title,bodyHTML,footHTML,size){
   document.getElementById('modal-title').textContent=title;
+  if(state.modal&&state.modal.id)state.modal.isDirty=false;
+  initDirtyTracking();
   document.getElementById('modal-body').innerHTML=bodyHTML;
   document.getElementById('modal-foot').innerHTML=footHTML;
   document.getElementById('modal-box').className='modal'+(size?' '+size:'');
   document.getElementById('modal-overlay').classList.add('open');
 }
-function closeModal(){document.getElementById('modal-overlay').classList.remove('open');state.modal={type:null,id:null,extra:null}}
+function closeModal(force){
+  if(!force&&state.modal&&state.modal.id&&state.modal.isDirty){
+    showUnsavedWarning();return;
+  }
+  document.getElementById('modal-overlay').classList.remove('open');
+  state.modal={type:null,id:null,extra:null};
+  state._saveConfirmPending=false;
+}
 function onModalBg(e){if(e.target.id==='modal-overlay')closeModal()}
+function showUnsavedWarning(){
+  const foot=document.getElementById('modal-foot');
+  if(!foot)return;
+  const orig=foot.innerHTML;
+  foot.innerHTML='<div style="display:flex;align-items:center;gap:8px;width:100%"><span style="flex:1;font-size:12px;color:#fbbf24;font-weight:600">Unsaved changes will be lost.</span><button class="btn btn-ghost" onclick="document.getElementById('modal-foot').innerHTML='+JSON.stringify(orig).replace(/'/g,"\'")+';state.modal.isDirty=true">Keep Editing</button><button class="btn btn-danger" onclick="state.modal.isDirty=false;closeModal(true)">Leave</button></div>';
+}
 
 // Searchable contact picker
 function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,selId){
@@ -2532,7 +2547,7 @@ async function saveContact(){
   const isNew=!state.modal.id;
   if(!isNew){const c=getContact(state.modal.id);if(c)Object.assign(c,data,{updatedAt:now_()})}
   else{const nc={id:uid(),...data,notes:[],squareCards:[],createdAt:now_()};db.contacts.push(nc);state._newContactId=nc.id;}
-  saveData();closeModal();renderContacts();if(state.drawer)renderDrawer();updateNotifBadge();toast(isNew?'Contact added.':'Contact updated.','success');
+  state.modal.isDirty=false;saveData();closeModal(true);renderContacts();if(state.drawer)renderDrawer();updateNotifBadge();toast(isNew?'Contact added.':'Contact updated.','success');
   if(isNew){linkContactToSquare(state._newContactId);}
 }
 
@@ -6635,6 +6650,47 @@ function toggleArchiveView(){
   if(archiveBtn)archiveBtn.textContent=state.cShowArchived?'Restore Selected':'Archive Selected';
   if(deleteBtn)deleteBtn.classList.toggle('hidden',!state.cShowArchived);
   renderContacts();
+}
+
+
+// =====================================================
+// UNSAVED CHANGES TRACKING
+// =====================================================
+function markDirty(){
+  if(state.modal&&state.modal.id)state.modal.isDirty=true;
+}
+
+function initDirtyTracking(){
+  setTimeout(function(){
+    const overlay=document.getElementById('modal-overlay');
+    if(!overlay)return;
+    const inputs=overlay.querySelectorAll('input,select,textarea');
+    inputs.forEach(function(el){
+      el.addEventListener('input',markDirty);
+      el.addEventListener('change',markDirty);
+    });
+  },100);
+}
+
+// =====================================================
+// CONFIRM SAVE BUTTON PATTERN
+// =====================================================
+function armSaveBtn(btnId){
+  if(!state.modal||!state.modal.id)return; // only for edits
+  const btn=document.getElementById(btnId);
+  if(!btn)return;
+  const orig=btn.textContent;
+  const origClick=btn.getAttribute('onclick');
+  btn.textContent='Confirm Save';
+  btn.style.background='var(--orange)';
+  state._saveConfirmPending=true;
+  setTimeout(function(){
+    if(state._saveConfirmPending){
+      btn.textContent=orig;
+      btn.style.background='';
+      state._saveConfirmPending=false;
+    }
+  },3000);
 }
 
 </script>
