@@ -1563,7 +1563,7 @@ function fmtTime(t){if(!t)return'';const[h,m]=t.split(':').map(Number);return`${
 const isOverdue=d=>!!d&&d<todayStr();
 const t2m=t=>{const[h,m]=(t||'0:0').split(':').map(Number);return h*60+m};
 const getDK=ds=>DKEYS[new Date(ds+'T12:00:00').getDay()];
-const getContact=id=>db.contacts.find(c=>c.id===id);
+const getContact=id=>{const c=db.contacts.find(c=>c.id===id);if(!c)return null;if(c.archived&&!state.cShowArchived)return null;return c;};
 const getAppt=id=>db.appointments.find(a=>a.id===id);
 const getTask=id=>db.tasks.find(t=>t.id===id);
 const getTag=id=>db.tags.find(t=>t.id===id);
