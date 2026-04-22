@@ -3376,7 +3376,7 @@ function delProduct(id){
   document.getElementById('modal-title').textContent='Delete Product';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+(p?esc(p.name):'this product')+'</strong>? This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelProduct(''+id+'')">Delete</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelProduct('\''+id+'\'')">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function confirmDelProduct(id){
