@@ -6015,7 +6015,10 @@ async function importFromSquare(){
         updated++;
       }
     });
-    saveData();
+    // Save directly to localStorage first, then sync to Supabase
+    localStorage.setItem(SK, JSON.stringify(db));
+    // Push to Supabase immediately with correct data
+    await doSync();
     toast('Cards synced for '+updated+' contact'+(updated===1?'':'s')+'.','success');
     if(state.panel==='contacts')renderContacts();
   }catch(e){
