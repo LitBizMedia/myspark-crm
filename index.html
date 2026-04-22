@@ -2488,17 +2488,6 @@ function openModal(title,bodyHTML,footHTML,size){
 }
 function closeModal(){document.getElementById('modal-overlay').classList.remove('open');state.modal={type:null,id:null,extra:null}}
 function onModalBg(e){if(e.target.id==='modal-overlay')closeModal()}
-function showUnsavedWarning(){
-  const foot=document.getElementById('modal-foot');
-  if(!foot)return;
-  state._savedFootHTML=foot.innerHTML;
-  foot.innerHTML='<div style="display:flex;align-items:center;gap:8px;width:100%"><span style="flex:1;font-size:12px;color:#fbbf24;font-weight:600">Unsaved changes will be lost.</span><button class="btn btn-ghost" onclick="restoreModalFoot()">Keep Editing</button><button class="btn btn-danger" onclick="closeModal()">Leave</button></div>';
-}
-function restoreModalFoot(){
-  const foot=document.getElementById('modal-foot');
-  if(foot&&state._savedFootHTML)foot.innerHTML=state._savedFootHTML;
-  state.modal.isDirty=true;
-}
 
 function ssFilter(inputId,hiddenId,ddId,v){
   const dd=document.getElementById(ddId);if(!v&&!document.getElementById(inputId).value){dd.classList.add('hidden');return}
@@ -6643,43 +6632,7 @@ function toggleArchiveView(){
 }
 
 
-// =====================================================
-// UNSAVED CHANGES TRACKING
-// =====================================================
-function markDirty(){
-  if(state.modal&&state.modal.id)state.modal.isDirty=true;
-}
 
-function initDirtyTracking(){
-  setTimeout(function(){
-    const overlay=document.getElementById('modal-overlay');
-    if(!overlay)return;
-    const inputs=overlay.querySelectorAll('input,select,textarea');
-    inputs.forEach(function(el){
-      el.addEventListener('input',markDirty);
-      el.addEventListener('change',markDirty);
-    });
-  },100);
-}
-
-// =====================================================
-// CONFIRM SAVE BUTTON PATTERN
-// =====================================================
-function armSaveBtn(btnId){
-  if(!state.modal||!state.modal.id)return; // only for edits
-  const btn=document.getElementById(btnId);
-  if(!btn)return;
-  const orig=btn.textContent;
-  const origClick=btn.getAttribute('onclick');
-  btn.textContent='Confirm Save';
-  btn.style.background='var(--orange)';
-  state._saveConfirmPending=true;
-  setTimeout(function(){
-    if(state._saveConfirmPending){
-      btn.textContent=orig;
-      btn.style.background='';
-      state._saveConfirmPending=false;
-    }
   },3000);
 }
 
