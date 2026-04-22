@@ -2490,18 +2490,8 @@ function openModal(title,bodyHTML,footHTML,size){
   document.getElementById('modal-box').className='modal'+(size?' '+size:'');
   document.getElementById('modal-overlay').classList.add('open');
 }
-function closeModal(force){
-  const overlay=document.getElementById('modal-overlay');
-  const isOpen=overlay&&overlay.classList.contains('open');
-  if(!force&&isOpen&&state.modal&&state.modal.id&&state.modal.isDirty){
-    showUnsavedWarning();return;
-  }
-  if(overlay)overlay.classList.remove('open');
-  state.modal={type:null,id:null,extra:null,isDirty:false};
-  state._saveConfirmPending=false;
-  state._savedFootHTML=null;
-}
-function onModalBg(e){if(e.target.id==='modal-overlay')closeModal()}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('open');state.modal={type:null,id:null,extra:null}}
+function onModalBgfunction onModalBg(e){if(e.target.id==='modal-overlay')closeModal()}
 function showUnsavedWarning(){
   const foot=document.getElementById('modal-foot');
   if(!foot)return;
