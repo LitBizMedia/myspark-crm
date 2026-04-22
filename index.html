@@ -3176,14 +3176,8 @@ function removeProductCategory(name){
 let editPricingOpts=[];
 
 function renderProducts(){
-  const catSel=document.getElementById('prod-cat-filter');
-  if(catSel){
-    const cur=catSel.value;
-    const cats=getAllProductCategories();
-    catSel.innerHTML='<option value="">All Categories</option>'+cats.map(c=>'<option value="'+esc(c)+'"'+(cur===c?' selected':'')+'>'+esc(c)+'</option>').join('');
-  }
   const catF=document.getElementById('prod-cat-filter');
-  if(catF){const cv=catF.value;catF.innerHTML='<option value="">All Categories</option>'+getProdCats().map(c=>'<option value="'+c+'"'+(cv===c?' selected':'')+'>'+esc(c)+'</option>').join('')}
+  if(catF){const cv=catF.value;catF.innerHTML='<option value="">All Categories</option>'+getAllProductCategories().map(c=>'<option value="'+esc(c)+'"'+(cv===c?' selected':'')+'>'+esc(c)+'</option>').join('')}
   const q=(document.getElementById('prod-search')&&document.getElementById('prod-search').value||'').toLowerCase();
   const catV=catF&&catF.value||'';
   const statV=document.getElementById('prod-stat-filter')&&document.getElementById('prod-stat-filter').value||'';
