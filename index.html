@@ -2500,14 +2500,14 @@ function onModalBg(e){if(e.target.id==='modal-overlay')closeModal()}
 function showUnsavedWarning(){
   const foot=document.getElementById('modal-foot');
   if(!foot)return;
-  const orig=foot.innerHTML;
-  foot.innerHTML='<div style="display:flex;align-items:center;gap:8px;width:100%"><span style="flex:1;font-size:12px;color:#fbbf24;font-weight:600">Unsaved changes will be lost.</span><button class="btn btn-ghost" onclick="document.getElementById('modal-foot').innerHTML='+JSON.stringify(orig).replace(/'/g,"\'")+';state.modal.isDirty=true">Keep Editing</button><button class="btn btn-danger" onclick="state.modal.isDirty=false;closeModal(true)">Leave</button></div>';
+  state._savedFootHTML=foot.innerHTML;
+  foot.innerHTML='<div style="display:flex;align-items:center;gap:8px;width:100%"><span style="flex:1;font-size:12px;color:#fbbf24;font-weight:600">Unsaved changes will be lost.</span><button class="btn btn-ghost" onclick="restoreModalFoot()">Keep Editing</button><button class="btn btn-danger" onclick="state.modal.isDirty=false;closeModal(true)">Leave</button></div>';
 }
-
-// Searchable contact picker
-function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,selId){
-  const c=selId?getContact(selId):null;
-  return'<div class="ss-wrap" id="'+wrapId+'"><input class="ss-inp" type="text" id="'+inputId+'" placeholder="'+placeholder+'" value="'+(c?esc(c.name):'')+'" oninput="ssFilter(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',this.value)" onclick="ssFilter(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',this.value)" autocomplete="off"><input type="hidden" id="'+hiddenId+'" value="'+(selId||'')+'"><div class="ss-drop hidden" id="'+ddId+'"></div></div>';
+function restoreModalFoot(){
+  const foot=document.getElementById('modal-foot');
+  if(foot&&state._savedFootHTML)foot.innerHTML=state._savedFootHTML;
+  state.modal.isDirty=true;
+}
 }
 
 function ssFilter(inputId,hiddenId,ddId,v){
