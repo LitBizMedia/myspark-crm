@@ -3177,7 +3177,7 @@ let editPricingOpts=[];
 
 function renderProducts(){
   const catF=document.getElementById('prod-cat-filter');
-  if(catF){const cv=catF.value;catF.innerHTML='<option value="">All Categories</option>'+getAllProductCategories().map(c=>'<option value="'+esc(c)+'"'+(cv===c?' selected':'')+'>'+esc(c)+'</option>').join('')}
+  if(catF){const cv=catF.value;catF.innerHTML='<option value="">All Categories</option>'+getProdCats().map(c=>'<option value="'+esc(c)+'"'+(cv===c?' selected':'')+'>'+esc(c)+'</option>').join('')}
   const q=(document.getElementById('prod-search')&&document.getElementById('prod-search').value||'').toLowerCase();
   const catV=catF&&catF.value||'';
   const statV=document.getElementById('prod-stat-filter')&&document.getElementById('prod-stat-filter').value||'';
