@@ -6049,7 +6049,7 @@ async function initSquareCardForm(){
     if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return}
     if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return}
     const payments=window.Square.payments(cfg.appId,'production');
-    sqCard=await payments.card({style:{'.input-container':{borderColor:'transparent',borderRadius:'8px'},'input':{color:'#ede8ff',fontFamily:'DM Sans'}}});
+    sqCard=await payments.card();
     await sqCard.attach('#sq-card-container');
   }catch(e){
     console.error('Square card form error:',e);
