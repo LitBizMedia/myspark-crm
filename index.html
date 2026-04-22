@@ -2520,7 +2520,7 @@ function openContactModal(id){
     +'<div class="form-row"><div class="form-group"><label>Website</label><input id="cf-web" type="url" value="'+esc(c&&c.website||'')+'"></div><div class="form-group"><label>Source</label><input id="cf-source" type="text" value="'+esc(c&&c.source||'')+'"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Address</label><input id="cf-addr" type="text" value="'+esc(c&&c.address||'')+'"></div><div class="form-group"><label>Status</label><select id="cf-status"><option value="active"'+(c&&c.status!=='inactive'?' selected':'')+'">Active</option><option value="inactive"'+(c&&c.status==='inactive'?' selected':'')+'">Inactive</option></select></div></div>'
     +'<div class="form-group"><label>Tags</label><div class="tag-sel-wrap" id="tag-sel-c">'+tagOpts+'</div></div>';
-  openModal(c?'Edit Contact':'Add Contact',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveContact,'contact')">Save Contact</button>','modal-lg');
+  openModal(c?'Edit Contact':'Add Contact',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveContact,\'contact\')">Save Contact</button>','modal-lg');
 }
 
 function toggleTagOpt(btn){btn.classList.toggle('selected');const t=getTag(btn.dataset.tag);if(t){if(btn.classList.contains('selected')){btn.style.background=t.color+'20';btn.style.color=t.color;btn.style.borderColor=t.color+'40'}else{btn.style.background='';btn.style.color='';btn.style.borderColor=''}}}
@@ -2573,7 +2573,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId){
     +'<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
     +'<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
-  openModal(a?'Edit Appointment':'Book Appointment',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,'appointment')">Save</button>','modal-lg');
+  openModal(a?'Edit Appointment':'Book Appointment',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>','modal-lg');
   setTimeout(checkApptConflict,80);
 }
 
@@ -2638,7 +2638,7 @@ function openTaskModal(contactId,taskId){
     +'<div class="form-row"><div class="form-group"><label>Due Date</label><input id="tf-due" type="date" value="'+esc(t&&t.dueDate||'')+'"></div><div class="form-group"><label>Priority</label><select id="tf-pri">'+['high','medium','low'].map(x=>'<option value="'+x+'"'+(t&&t.priority===x?' selected':x==='medium'&&!t?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Status</label><select id="tf-status">'+['open','in-progress','done'].map(x=>'<option value="'+x+'"'+(t&&t.status===x?' selected':x==='open'&&!t?' selected':'')+'>'+(x==='in-progress'?'In Progress':x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Assigned To</label><select id="tf-user">'+uOpts+'</select></div></div>'
     +'<div class="form-group"><label>Linked Contact</label>'+ssHTML('tf-cw','tf-ci','tf-cv','tf-cd','Search contact...',cid||'')+'</div>';
-  openModal(t?'Edit Task':'Add Task',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveTask,'task')">Save Task</button>','modal-lg');
+  openModal(t?'Edit Task':'Add Task',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveTask,\'task\')">Save Task</button>','modal-lg');
 }
 
 function saveTask(){
@@ -3285,7 +3285,7 @@ function openProductModal(id){
     +'<div class="divider"></div>'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:#ffffff">Pricing Options</div><button class="btn btn-purple btn-sm" onclick="addPricingOptRow()">+ Add Option</button></div>'
     +'<div id="pricing-opts-list">'+renderPricingOptsList()+'</div>';
-  openModal(p?'Edit Product':'Add Product',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveProduct,'product')">Save Product</button>','modal-xl');
+  openModal(p?'Edit Product':'Add Product',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveProduct,\'product\')">Save Product</button>','modal-xl');
 }
 
 function renderPricingOptsList(){
