@@ -2480,8 +2480,10 @@ function checkDoubleBook(apptId,date,time,duration,userId){
 // MODALS
 // =====================================================
 function openModal(title,bodyHTML,footHTML,size){
+  // Reset dirty state before opening any modal
+  if(state.modal)state.modal.isDirty=false;
+  state._savedFootHTML=null;
   document.getElementById('modal-title').textContent=title;
-  if(state.modal&&state.modal.id)state.modal.isDirty=false;
   initDirtyTracking();
   document.getElementById('modal-body').innerHTML=bodyHTML;
   document.getElementById('modal-foot').innerHTML=footHTML;
@@ -2495,7 +2497,9 @@ function closeModal(force){
   document.getElementById('modal-overlay').classList.remove('open');
   state.modal={type:null,id:null,extra:null};
   state._saveConfirmPending=false;
+  state._savedFootHTML=null;
 }
+function closeModalForce(){state.modal={};closeModal(true);}
 function onModalBg(e){if(e.target.id==='modal-overlay')closeModal()}
 function showUnsavedWarning(){
   const foot=document.getElementById('modal-foot');
