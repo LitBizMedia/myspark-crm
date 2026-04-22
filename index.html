@@ -2461,7 +2461,7 @@ function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,selId){
 
 function ssFilter(inputId,hiddenId,ddId,v){
   const dd=document.getElementById(ddId);if(!v&&!document.getElementById(inputId).value){dd.classList.add('hidden');return}
-  const m=db.contacts.filter(c=>(c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase())).slice(0,8);
+  const m=db.contacts.filter(c=>!c.archived&&((c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase()))).slice(0,8);
   if(!m.length)dd.innerHTML='<div class="ss-empty">No contacts found</div>';
   else dd.innerHTML='<div class="ss-opt" onclick="ssSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\'\',\'\')" style="color:var(--text-muted);font-style:italic">None</div>'+m.map(c=>'<div class="ss-opt" onclick="ssSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>').join('');
   dd.classList.remove('hidden');
