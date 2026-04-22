@@ -11,10 +11,12 @@ module.exports = async function handler(req, res) {
     const customers = cd.customers || [];
     const kr = await fetch(base + '/v2/cards?limit=200', { headers: hdrs });
     const kd = await kr.json();
+    console.log('Cards API status:', kr.status);
+    console.log('Cards API response:', JSON.stringify(kd));
     const allCards = kd.cards || [];
     const byCustomer = {};
     allCards.forEach(function(c) { if(c.customer_id){ if(!byCustomer[c.customer_id])byCustomer[c.customer_id]=[]; byCustomer[c.customer_id].push({id:c.id,brand:c.card_brand||'Card',last4:c.last_4||'****',expMonth:c.exp_month,expYear:c.exp_year}); } });
     const out = customers.map(function(c){ return Object.assign({},c,{cards:byCustomer[c.id]||[]}); });
-    return res.status(200).json({ customers: out, total: out.length });
-  } catch(e) { console.error(e); return res.status(500).json({ error: 'Server error' }); }
+    return res.status(200).json({ customers: out, total: out.length, debug: { cardsApiStatus: kr.status, rawCards: kd } });
+  } catch(e) { console.error(e); return res.status(500).json({ error: 'Server error', detail: e.message }); }
 };
