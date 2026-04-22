@@ -3137,8 +3137,7 @@ function markAllRead(){
 // PRODUCTS
 // =====================================================
 function getProdCats(){
-  const fromDB=db.products.map(p=>p.category).filter(Boolean);
-  return[...new Set([...(db.productCategories||[]),...fromDB])].sort();
+  return(db.productCategories||[]).slice().sort();
 }
 
 function toggleCatMgr(){
