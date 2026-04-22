@@ -1760,7 +1760,7 @@ function initApp(){
 
 const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',staff:'Staff',settings:'Settings'};
 function renderPanel(){
-  const fns={dashboard:renderDash,contacts:renderContacts,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,staff:renderStaff,settings:renderSettings};
+  const fns={dashboard:renderDash,contacts:renderContacts,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,staff:renderStaff,settings:renderSettings,products:renderProducts};
   if(fns[state.panel])fns[state.panel]();
 }
 
@@ -3283,6 +3283,16 @@ function toggleInvTrack(){
 }
 
 function saveProduct(){
+  // Save any new category to productCategories
+  const catSel=document.getElementById('pf-cat');
+  const catNew=document.getElementById('pf-cat-new');
+  if(catNew&&catNew.value.trim()){
+    const newCat=catNew.value.trim();
+    if(!db.productCategories)db.productCategories=[];
+    if(!db.productCategories.find(c=>c.toLowerCase()===newCat.toLowerCase())){
+      db.productCategories.push(newCat);
+    }
+  }
   const name=document.getElementById('prd-name').value.trim();
   if(!name){toast('Product name required.','error');return}
   const catSel=document.getElementById('prd-cat')&&document.getElementById('prd-cat').value||'';
