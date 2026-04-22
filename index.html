@@ -3288,6 +3288,7 @@ function saveProduct(){
   const catSel=document.getElementById('prd-cat')&&document.getElementById('prd-cat').value||'';
   const catNew=(document.getElementById('prd-cat-new')&&document.getElementById('prd-cat-new').value||'').trim();
   const category=catNew||catSel||'';
+  if(catNew&&catNew.trim()){if(!db.productCategories)db.productCategories=[];if(!db.productCategories.find(function(c){return c.toLowerCase()===catNew.toLowerCase();})){db.productCategories.push(catNew);}}
   syncPricingOptsFromDOM();
   const invOn=document.getElementById('prd-inv-toggle')&&document.getElementById('prd-inv-toggle').classList.contains('on');
   const data={
