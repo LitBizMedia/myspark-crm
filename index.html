@@ -2623,10 +2623,10 @@ function delAppt(id){
   document.getElementById('modal-title').textContent='Delete Appointment';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+(a?esc(a.title):'this appointment')+'</strong>? This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelAppt(''+id+'')">Delete</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelAppt()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelAppt(id){db.appointments=db.appointments.filter(a=>a.id!==id);saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();typeof renderApptList==='function'&&renderApptList();toast('Appointment removed.','success')}
+function confirmDelAppt(){const id=state.modal&&state.modal.id;if(!id)return;db.appointments=db.appointments.filter(a=>a.id!==id);saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();typeof renderApptList==='function'&&renderApptList();toast('Appointment removed.','success')}
 
 // TASK MODAL
 function openTaskModal(contactId,taskId){
@@ -2655,10 +2655,10 @@ function delTask(id){
   document.getElementById('modal-title').textContent='Delete Task';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+(t?esc(t.title):'this task')+'</strong>? This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelTask(''+id+'')">Delete</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelTask()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelTask(id){db.tasks=db.tasks.filter(t=>t.id!==id);saveData();closeModal();if(state.panel==='tasks')renderTasks();if(state.drawer)renderDrawer();updateNotifBadge();toast('Task removed.','success')}
+function confirmDelTask(){const id=state.modal&&state.modal.id;if(!id)return;db.tasks=db.tasks.filter(t=>t.id!==id);saveData();closeModal();if(state.panel==='tasks')renderTasks();if(state.drawer)renderDrawer();updateNotifBadge();toast('Task removed.','success')}
 
 // NOTE MODAL
 function openNoteModal(cid,nid){
@@ -2780,10 +2780,10 @@ function delUser(id){
   document.getElementById('modal-title').textContent='Remove User';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove <strong>'+(u?esc(u.name||u.username):'this user')+'</strong>? This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelUser(''+id+'')">Remove</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelUser()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelUser(id){db.users=db.users.filter(u=>u.id!==id);saveData();closeModal();renderUserList();typeof renderStaffUserList==='function'&&renderStaffUserList();toast('User removed.','success')}
+function confirmDelUser(){const id=state.modal&&state.modal.id;if(!id)return;db.users=db.users.filter(u=>u.id!==id);saveData();closeModal();renderUserList();typeof renderStaffUserList==='function'&&renderStaffUserList();toast('User removed.','success')}
 
 // TAG MODAL
 function openTagModal(){
@@ -2798,10 +2798,10 @@ function delTag(id){
   document.getElementById('modal-title').textContent='Remove Tag';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove tag <strong>'+(t?esc(t.name):'this tag')+'</strong>? It will be removed from all contacts.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelTag(''+id+'')">Remove</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelTag()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelTag(id){db.tags=db.tags.filter(t=>t.id!==id);db.contacts.forEach(c=>{c.tags=(c.tags||[]).filter(t=>t!==id)});saveData();closeModal();renderTagMgr();renderContacts();toast('Tag removed.','success')}
+function confirmDelTag(){const id=state.modal&&state.modal.id;if(!id)return;db.tags=db.tags.filter(t=>t.id!==id);db.contacts.forEach(c=>{c.tags=(c.tags||[]).filter(t=>t!==id)});saveData();closeModal();renderTagMgr();renderContacts();toast('Tag removed.','success')}
 
 // =====================================================
 // PAGINATION
@@ -3376,10 +3376,10 @@ function delProduct(id){
   document.getElementById('modal-title').textContent='Delete Product';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+(p?esc(p.name):'this product')+'</strong>? This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelProduct('\''+id+'\'')">Delete</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelProduct()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelProduct(id){
+function confirmDelProduct(){const id=state.modal&&state.modal.id;if(!id)return;
   db.products=db.products.filter(p=>p.id!==id);
   saveData();renderProducts();toast('Product removed.','success');
 }
