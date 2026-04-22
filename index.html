@@ -560,7 +560,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 /* PAYMENT PANEL TABS */
 .pay-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 22px;flex-shrink:0}
 .pay-panel-tab{padding:14px 20px;font-size:13px;font-weight:600;color:rgba(255,255,255,.6);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif;white-space:nowrap}
-.pay-panel-tab:hover{color:var(--text)}
+.pay-panel-tab:hover{color:#ffffff}
 .pay-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
 
 /* SUBSCRIPTIONS */
@@ -602,8 +602,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .inv-track-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);margin-top:8px}
 
 /* CAL TABS */
-.cal-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 20px;flex-shrink:0}
-.cal-panel-tab{padding:13px 18px;font-size:13px;font-weight:600;color:rgba(237,232,255,.65);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif;white-space:nowrap}
+.cal-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 20px;flex-shrink:0;padding:0}
+.cal-panel-tab{padding:13px 18px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif;white-space:nowrap}
 .cal-panel-tab:hover{color:var(--text)}
 .cal-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
 
@@ -617,8 +617,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .appt-list-meta{font-size:12px;color:var(--text-muted)}
 
 /* FORMS PANEL */
-.forms-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 22px;flex-shrink:0}
-.forms-panel-tab{padding:13px 18px;font-size:13px;font-weight:600;color:rgba(237,232,255,.65);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif;white-space:nowrap}
+.forms-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 22px;flex-shrink:0;padding:0}
+.forms-panel-tab{padding:13px 18px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif;white-space:nowrap}
 .forms-panel-tab:hover{color:var(--text)}
 .forms-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
 
@@ -6071,9 +6071,25 @@ function renderCardsTab(contact){
 function removeCardFromContact(contactId,cardId){
   const c=getContact(contactId);
   if(!c)return;
-  c.squareCards=(c.squareCards||[]).filter(function(x){return x.id!==cardId});
+  const card=(c.squareCards||[]).find(function(x){return x.id===cardId});
+  const label=card?(card.brand||'Card')+(card.last4?' ending in '+card.last4:''):'this card';
+  state.modal={type:'remove-card',data:{contactId,cardId}};
+  document.getElementById('modal-title').textContent='Remove Card';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove <strong>'+esc(label)+'</strong> from '+esc(c.name)+'? This cannot be undone.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmRemoveCard()">Remove Card</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function confirmRemoveCard(){
+  const d=state.modal&&state.modal.data;
+  if(!d)return;
+  const c=db.contacts.find(function(x){return x.id===d.contactId});
+  if(!c)return;
+  c.squareCards=(c.squareCards||[]).filter(function(x){return x.id!==d.cardId});
   saveData();
-  if(state.drawer===contactId&&state.dTab==='cards'){
+  closeModal();
+  if(state.drawer===d.contactId&&state.dTab==='cards'){
     const body=document.getElementById('drawer-tab-body');
     if(body)body.innerHTML=renderCardsTab(c);
   }
