@@ -1393,7 +1393,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px">Merchant ID: <span id="sq-merchant-display" style="color:var(--text);font-family:monospace;font-size:11px"></span></div>
               <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Environment: <span id="sq-env-display" style="color:var(--text)"></span></div>
               <div style="display:flex;gap:8px;margin-top:2px">
-                <button class="btn btn-purple btn-sm" onclick="importFromSquare()">Import Customers</button>
+                <button class="btn btn-purple btn-sm" onclick="importFromSquare()">Sync Cards from Square</button>
                 <button class="btn btn-danger btn-sm" onclick="disconnectSquare()">Disconnect Square</button>
               </div>
             </div>
@@ -2518,12 +2518,34 @@ function openContactModal(id){
 function toggleTagOpt(btn){btn.classList.toggle('selected');const t=getTag(btn.dataset.tag);if(t){if(btn.classList.contains('selected')){btn.style.background=t.color+'20';btn.style.color=t.color;btn.style.borderColor=t.color+'40'}else{btn.style.background='';btn.style.color='';btn.style.borderColor=''}}}
 function getSelTags(){return[...document.querySelectorAll('#tag-sel-c .tag-opt.selected')].map(b=>b.dataset.tag)}
 
-function saveContact(){
+async function saveContact(){
   const name=document.getElementById('cf-name').value.trim();if(!name){toast('Name is required.','error');return}
   const data={name,type:document.getElementById('cf-type').value,email:document.getElementById('cf-email').value.trim(),phone:document.getElementById('cf-phone').value.trim(),company:document.getElementById('cf-company').value.trim(),title:document.getElementById('cf-title').value.trim(),website:document.getElementById('cf-web').value.trim(),source:document.getElementById('cf-source').value.trim(),address:document.getElementById('cf-addr').value.trim(),status:document.getElementById('cf-status').value,tags:getSelTags()};
-  if(state.modal.id){const c=getContact(state.modal.id);if(c)Object.assign(c,data,{updatedAt:now_()})}
-  else db.contacts.push({id:uid(),...data,notes:[],createdAt:now_()});
-  saveData();closeModal();renderContacts();if(state.drawer)renderDrawer();updateNotifBadge();toast(state.modal.id?'Contact updated.':'Contact added.','success');
+  const isNew=!state.modal.id;
+  if(!isNew){const c=getContact(state.modal.id);if(c)Object.assign(c,data,{updatedAt:now_()})}
+  else{const nc={id:uid(),...data,notes:[],squareCards:[],createdAt:now_()};db.contacts.push(nc);state._newContactId=nc.id;}
+  saveData();closeModal();renderContacts();if(state.drawer)renderDrawer();updateNotifBadge();toast(isNew?'Contact added.':'Contact updated.','success');
+  if(isNew){linkContactToSquare(state._newContactId);}
+}
+
+async function linkContactToSquare(contactId){
+  const sq=db.settings.square||{};
+  if(!sq.accessToken)return;
+  const c=db.contacts.find(function(x){return x.id===contactId});
+  if(!c||c.squareCustomerId)return;
+  try{
+    const r=await fetch('/api/square/find-or-create-customer',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accessToken:sq.accessToken,name:c.name,email:c.email||'',phone:c.phone||''})
+    });
+    const d=await r.json();
+    if(d.customerId){
+      c.squareCustomerId=d.customerId;
+      saveData();
+      console.log('Square link:',d.action,'customerId:',d.customerId);
+    }
+  }catch(e){console.error('Square link error:',e);}
 }
 
 function confirmDelContact(id){const c=getContact(id);openModal('Delete Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>')}
@@ -5962,7 +5984,7 @@ function renderSquareCard(){
 async function importFromSquare(){
   const sq=db.settings.square||{};
   if(!sq.accessToken){toast('Square not connected.','error');return}
-  toast('Importing from Square...','warn');
+  toast('Syncing cards from Square...','warn');
   try{
     const r=await fetch('/api/square/customers',{
       method:'POST',
@@ -5970,41 +5992,32 @@ async function importFromSquare(){
       body:JSON.stringify({accessToken:sq.accessToken})
     });
     const data=await r.json();
-    if(data.error){toast('Import failed: '+data.error,'error');return}
+    if(data.error){toast('Sync failed: '+data.error,'error');return}
     const customers=data.customers||[];
-    let added=0;
-    customers.forEach(c=>{
-      const name=((c.given_name||'')+' '+(c.family_name||'')).trim()||c.company_name||'Unknown';
-      const contact={
-        id:uid(),name,
-        email:c.email_address||'',
-        phone:c.phone_number||'',
-        type:'client',status:'active',
-        tags:[],notes:[],
-        squareCustomerId:c.id,
-        squareCards:(c.cards||[]).map(function(card){return{
-          id:card.id,
-          brand:card.card_brand||'Card',
-          last4:card.last_4||'****',
-          expMonth:card.exp_month,
-          expYear:card.exp_year
-        }}),
-        createdAt:now_()
-      };
-      if(c.address){
-        const addr=[c.address.address_line_1,c.address.locality,c.address.administrative_district_level_1].filter(Boolean).join(', ');
-        if(addr)contact.address=addr;
+    let updated=0;
+    customers.forEach(function(sqC){
+      const cards=(sqC.cards||[]).map(function(card){return{
+        id:card.id,brand:card.card_brand||'Card',
+        last4:card.last_4||'****',
+        expMonth:card.exp_month,expYear:card.exp_year
+      }});
+      // Find matching MySpark contact by squareCustomerId or email
+      let contact=db.contacts.find(function(c){return c.squareCustomerId===sqC.id});
+      if(!contact&&sqC.email_address){
+        contact=db.contacts.find(function(c){return c.email&&c.email.toLowerCase()===sqC.email_address.toLowerCase()});
+        if(contact){contact.squareCustomerId=sqC.id;}
       }
-      if(c.note){contact.notes.push({id:uid(),text:c.note,createdAt:now_()})}
-      db.contacts.push(contact);
-      added++;
+      if(contact&&cards.length){
+        contact.squareCards=cards;
+        updated++;
+      }
     });
     saveData();
-    toast(added+' contact'+(added===1?'':'s')+' imported from Square.','success');
+    toast('Cards synced for '+updated+' contact'+(updated===1?'':'s')+'.','success');
     if(state.panel==='contacts')renderContacts();
   }catch(e){
-    console.error('Import error:',e);
-    toast('Import failed. Check connection.','error');
+    console.error('Sync error:',e);
+    toast('Sync failed. Check connection.','error');
   }
 }
 
