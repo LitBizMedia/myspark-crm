@@ -1345,7 +1345,10 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
               </div>
               <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px">Merchant ID: <span id="sq-merchant-display" style="color:var(--text);font-family:monospace;font-size:11px"></span></div>
               <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Environment: <span id="sq-env-display" style="color:var(--text)"></span></div>
-              <button class="btn btn-danger btn-sm" onclick="disconnectSquare()">Disconnect Square</button>
+              <div style="display:flex;gap:8px;margin-top:2px">
+                <button class="btn btn-purple btn-sm" onclick="importFromSquare()">Import Customers</button>
+                <button class="btn btn-danger btn-sm" onclick="disconnectSquare()">Disconnect Square</button>
+              </div>
             </div>
             <div id="sq-connect-panel">
               <button class="btn btn-purple btn-sm" onclick="connectSquare()">Connect Square Account</button>
@@ -5865,6 +5868,59 @@ function renderSquareCard(){
     if(senv)senv.value=sq.sandbox===false?'production':'sandbox';
   }
   console.log('renderSquareCard connected:',connected,'token:',!!(sq.accessToken));
+}
+
+
+// =====================================================
+// SQUARE IMPORT
+// =====================================================
+async function importFromSquare(){
+  const sq=db.settings.square||{};
+  if(!sq.accessToken){toast('Square not connected.','error');return}
+  toast('Importing from Square...','warn');
+  try{
+    const r=await fetch('/api/square/customers',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accessToken:sq.accessToken})
+    });
+    const data=await r.json();
+    if(data.error){toast('Import failed: '+data.error,'error');return}
+    const customers=data.customers||[];
+    let added=0;
+    customers.forEach(c=>{
+      const name=((c.given_name||'')+' '+(c.family_name||'')).trim()||c.company_name||'Unknown';
+      const contact={
+        id:uid(),name,
+        email:c.email_address||'',
+        phone:c.phone_number||'',
+        type:'client',status:'active',
+        tags:[],notes:[],
+        squareCustomerId:c.id,
+        squareCards:(c.cards||[]).map(function(card){return{
+          id:card.id,
+          brand:card.card_brand||'Card',
+          last4:card.last_4||'****',
+          expMonth:card.exp_month,
+          expYear:card.exp_year
+        }}),
+        createdAt:now_()
+      };
+      if(c.address){
+        const addr=[c.address.address_line_1,c.address.locality,c.address.administrative_district_level_1].filter(Boolean).join(', ');
+        if(addr)contact.address=addr;
+      }
+      if(c.note){contact.notes.push({id:uid(),text:c.note,createdAt:now_()})}
+      db.contacts.push(contact);
+      added++;
+    });
+    saveData();
+    toast(added+' contact'+(added===1?'':'s')+' imported from Square.','success');
+    if(state.panel==='contacts')renderContacts();
+  }catch(e){
+    console.error('Import error:',e);
+    toast('Import failed. Check connection.','error');
+  }
 }
 
 </script>
