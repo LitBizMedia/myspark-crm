@@ -1348,9 +1348,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
               <button class="btn btn-danger btn-sm" onclick="disconnectSquare()">Disconnect Square</button>
             </div>
             <div id="sq-connect-panel">
-              <div class="form-group"><label>Square App ID</label><input id="sq-app-id" type="text" placeholder="sq0idp-xxxx"></div>
-              <div class="form-group"><label>Environment</label><select id="sq-env"><option value="sandbox">Sandbox (testing)</option><option value="production">Production (live)</option></select></div>
-              <button class="btn btn-purple btn-sm" onclick="connectSquare()">Connect Square via OAuth</button>
+              <button class="btn btn-purple btn-sm" onclick="connectSquare()">Connect Square Account</button>
               <div style="font-size:11px;color:var(--text-muted);margin-top:8px">You will be redirected to Square to authorize access.</div>
             </div>
           </div>
@@ -5811,17 +5809,7 @@ function calSelectAllStaff(show){
 // SQUARE OAUTH
 // =====================================================
 function connectSquare(){
-  const appId=(document.getElementById('sq-app-id').value||'').trim();
-  const env=(document.getElementById('sq-env')&&document.getElementById('sq-env').value)||'sandbox';
-  if(!appId){toast('Enter your Square App ID first.','error');return}
-  db.settings.square={...db.settings.square,appId:appId,sandbox:env==='sandbox'};
-  saveData();
-  const isSandbox=env==='sandbox';
-  const base=isSandbox?'https://connect.squareupsandbox.com':'https://connect.squareup.com';
-  const scopes='MERCHANT_PROFILE_READ+PAYMENTS_WRITE+PAYMENTS_READ+CUSTOMERS_WRITE+CUSTOMERS_READ';
-  const redir=encodeURIComponent('https://myspark-crm.vercel.app/api/square/callback');
-  const st=Math.random().toString(36).slice(2);
-  window.location.href=base+'/oauth2/authorize?client_id='+encodeURIComponent(appId)+'&scope='+scopes+'&redirect_uri='+redir+'&state='+st;
+  window.location.href='/api/square/connect';
 }
 
 function disconnectSquare(){
