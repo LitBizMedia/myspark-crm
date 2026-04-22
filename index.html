@@ -3217,12 +3217,12 @@ function openProductModal(id){
     +'<div class="form-group"><label>Description</label><textarea id="prd-desc" rows="3">'+esc(p&&p.description||'')+'</textarea></div>'
     +'<div class="form-group"><label>Square Catalog ID <span style="font-weight:400;color:var(--text-muted)">(auto-filled when Square is connected)</span></label><input id="prd-sq" type="text" value="'+esc(p&&p.squareCatalogId||'')+'" placeholder="Auto-populated" style="opacity:.7"></div>'
     +'<div class="divider"></div>'
-    +'<div class="inv-track-row"><div class="bh-toggle'+(p&&p.trackInventory?' on':'')+'" id="prd-inv-toggle" onclick="toggleInvTrack()" style="flex-shrink:0"></div><div style="flex:1"><div style="font-size:13px;font-weight:600">Track Inventory</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Enable for physical products to monitor stock levels</div></div></div>'
+    +'<div class="inv-track-row"><div class="bh-toggle'+(p&&p.trackInventory?' on':'')+'" id="prd-inv-toggle" onclick="toggleInvTrack()" style="flex-shrink:0"></div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:#ffffff">Track Inventory</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:1px">Enable for physical products to monitor stock levels</div></div></div>'
     +'<div id="prd-inv-fields" style="'+(p&&p.trackInventory?'':'display:none')+'">'
     +'<div class="form-row-3"><div class="form-group"><label>SKU</label><input id="prd-sku" type="text" value="'+esc(p&&p.sku||'')+'" placeholder="ABC-001"></div><div class="form-group"><label>Qty on Hand</label><input id="prd-stock" type="number" value="'+(p&&p.stockQty||0)+'" min="0" step="1"></div><div class="form-group"><label>Low Stock Alert</label><input id="prd-lowstock" type="number" value="'+(p&&p.lowStockThreshold||5)+'" min="0" step="1"></div></div>'
     +'</div>'
     +'<div class="divider"></div>'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700">Pricing Options</div><button class="btn btn-purple btn-sm" onclick="addPricingOptRow()">+ Add Option</button></div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-family:'Exo 2',sans-serif;font-size:13px;font-weight:700;color:#ffffff">Pricing Options</div><button class="btn btn-purple btn-sm" onclick="addPricingOptRow()">+ Add Option</button></div>'
     +'<div id="pricing-opts-list">'+renderPricingOptsList()+'</div>';
   openModal(p?'Edit Product':'Add Product',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProduct()">Save Product</button>','modal-xl');
 }
