@@ -6,7 +6,7 @@ module.exports = async function handler(req, res) {
     return res.redirect(302, 'https://myspark-crm.vercel.app/#sq_error=not_configured');
   }
 
-  const scopes = 'MERCHANT_PROFILE_READ+PAYMENTS_WRITE+PAYMENTS_READ+CUSTOMERS_WRITE+CUSTOMERS_READ';
+  const scopes = 'MERCHANT_PROFILE_READ+PAYMENTS_WRITE+PAYMENTS_READ+CUSTOMERS_WRITE+CUSTOMERS_READ+APPOINTMENTS_READ+APPOINTMENTS_WRITE';
   const state = Math.random().toString(36).slice(2);
   const url = 'https://connect.squareup.com/oauth2/authorize'
     + '?client_id=' + encodeURIComponent(appId)
