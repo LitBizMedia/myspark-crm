@@ -989,7 +989,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <button class="btn btn-ghost btn-sm" onclick="openBulkTagModal()">Add Tag</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulkStatusModal()">Change Status</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulkTypeModal()">Change Type</button>
-          <button class="btn btn-danger btn-sm" onclick="bulkArchive()">Archive Selected</button>
+          <button class="btn btn-danger btn-sm" id="bulk-archive-btn" onclick="bulkArchive()">Archive Selected</button>
+          <button class="btn btn-danger btn-sm hidden" id="bulk-delete-btn" onclick="bulkDeletePermanent()">Delete Permanently</button>
           <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
         </div>
         <div class="toolbar">
@@ -2290,6 +2291,7 @@ function switchPayTab(tab){
 
 function posCSearch(v){
   const dd=document.getElementById('pos-c-drop');
+  const activeContacts=db.contacts.filter(function(c){return!c.archived});
   if(!v.trim()){dd.classList.add('hidden');return}
   const m=db.contacts.filter(c=>(c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase())).slice(0,8);
   if(!m.length){dd.innerHTML='<div class="ss-empty">No contacts found</div>';}
@@ -6418,6 +6420,56 @@ function bulkExportCSV(){
   a.href=url;a.download='contacts-export.csv';a.click();
   URL.revokeObjectURL(url);
   toast(contacts.length+' contacts exported.','success');
+}
+
+
+// =====================================================
+// BULK PERMANENT DELETE
+// =====================================================
+function bulkDeletePermanent(){
+  const n=state.cSelected.size;
+  if(!n)return;
+  state.modal={type:'bulk-delete'};
+  document.getElementById('modal-title').textContent='Delete Permanently';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML=
+    '<div class="warn-box">You are about to <strong>permanently delete '+n+' contact'+(n===1?'':'s')+'</strong>. This cannot be undone. All linked appointments and tasks will also be removed.</div>';
+  document.getElementById('modal-foot').innerHTML=
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn btn-danger" onclick="confirmBulkDelete()">Delete '+n+' Contact'+(n===1?'':'s')+' Permanently</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function confirmBulkDelete(){
+  const ids=[...state.cSelected];
+  ids.forEach(function(id){
+    db.contacts=db.contacts.filter(function(c){return c.id!==id});
+    db.appointments=db.appointments.filter(function(a){return a.contactId!==id});
+    db.tasks=db.tasks.filter(function(t){return t.contactId!==id});
+  });
+  saveData();
+  state.cSelected.clear();
+  closeModal();
+  renderContacts();
+  toast(ids.length+' contact'+(ids.length===1?'':'s')+' permanently deleted.','success');
+}
+
+// Toggle bulk bar buttons based on archive view
+const _origToggleArchiveView=typeof toggleArchiveView==='function'?toggleArchiveView:null;
+function toggleArchiveView(){
+  state.cShowArchived=!state.cShowArchived;
+  state.cSelected.clear();
+  state.cPage=1;
+  const btn=document.getElementById('archive-toggle-btn');
+  const addBtn=document.getElementById('add-contact-btn');
+  const archiveBtn=document.getElementById('bulk-archive-btn');
+  const deleteBtn=document.getElementById('bulk-delete-btn');
+  if(btn)btn.textContent=state.cShowArchived?'Back to Contacts':'View Archive';
+  if(btn)btn.style.color=state.cShowArchived?'var(--orange)':'';
+  if(addBtn)addBtn.classList.toggle('hidden',state.cShowArchived);
+  if(archiveBtn)archiveBtn.textContent=state.cShowArchived?'Restore Selected':'Archive Selected';
+  if(deleteBtn)deleteBtn.classList.toggle('hidden',!state.cShowArchived);
+  renderContacts();
 }
 
 </script>
