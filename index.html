@@ -853,7 +853,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-manage-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0}
 .cal-manage-head-title{font-family:Exo 2,sans-serif;font-size:14px;font-weight:700}
 .cal-manage-section{padding:12px 16px;border-bottom:1px solid var(--border)}
-.cal-manage-section-hd{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.cal-manage-section-hd{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.6);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
 .cal-staff-row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-radius:6px;cursor:pointer;transition:background .1s}
 .cal-staff-row:hover{background:var(--bg-card)}
 .cal-sf-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
@@ -3153,7 +3153,7 @@ function toggleCatMgr(){
 function renderCatChips(){
   const el=document.getElementById('cat-chips-list');if(!el)return;
   const cats=db.productCategories||[];
-  el.innerHTML=cats.length?cats.map(c=>'<div class="cat-chip-item">'+esc(c)+'<button class="cat-chip-rm" onclick="removeProductCategory('+JSON.stringify(c)+')">\xd7</button></div>').join('')
+  el.innerHTML=cats.length?cats.map(c=>'<div class="cat-chip-item">'+esc(c)+'<button class="cat-chip-rm" onclick="removeProductCategory(\''+esc(c)+'\')">×</button></div>').join('')
     :'<span style="font-size:12px;color:var(--text-muted)">No categories yet.</span>';
 }
 
@@ -3176,6 +3176,12 @@ function removeProductCategory(name){
 let editPricingOpts=[];
 
 function renderProducts(){
+  const catSel=document.getElementById('prod-cat-filter');
+  if(catSel){
+    const cur=catSel.value;
+    const cats=getAllProductCategories();
+    catSel.innerHTML='<option value="">All Categories</option>'+cats.map(c=>'<option value="'+esc(c)+'"'+(cur===c?' selected':'')+'>'+esc(c)+'</option>').join('');
+  }
   const catF=document.getElementById('prod-cat-filter');
   if(catF){const cv=catF.value;catF.innerHTML='<option value="">All Categories</option>'+getProdCats().map(c=>'<option value="'+c+'"'+(cv===c?' selected':'')+'>'+esc(c)+'</option>').join('')}
   const q=(document.getElementById('prod-search')&&document.getElementById('prod-search').value||'').toLowerCase();
