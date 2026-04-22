@@ -3104,7 +3104,7 @@ function renderNotifs(){
   const unread=all.filter(n=>!n.read),read=all.filter(n=>n.read);
   let html='';
   if(unread.length){
-    html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;border-bottom:1px solid var(--border)"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Unread ('+unread.length+')</span><button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 9px" onclick="markAllRead()">Mark all read</button></div>';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;border-bottom:1px solid var(--border)"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.7)">Unread ('+unread.length+')</span><button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 9px;color:rgba(255,255,255,.85);border-color:rgba(255,255,255,.25)" onclick="markAllRead()">Mark all read</button></div>';
     html+=unread.map(n=>'<div class="notif-item" onclick="handleNotifClick(\''+n.kind+'\',\''+n.id+'\')"><div class="notif-icon '+n.cls+'">'+n.icon+'</div><div style="flex:1"><div class="notif-text">'+esc(n.text)+'</div><div class="notif-sub">'+n.sub+'</div></div><button class="icon-btn-xs" onclick="markNotifRead(\''+n.key+'\',event)" title="Mark read" style="flex-shrink:0"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg></button></div>').join('');
   }
   if(read.length){
