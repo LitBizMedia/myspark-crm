@@ -2293,7 +2293,7 @@ function posCSearch(v){
   const dd=document.getElementById('pos-c-drop');
   const activeContacts=db.contacts.filter(function(c){return!c.archived});
   if(!v.trim()){dd.classList.add('hidden');return}
-  const m=db.contacts.filter(c=>(c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase())).slice(0,8);
+  const m=activeContacts.filter(c=>(c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase())).slice(0,8);
   if(!m.length){dd.innerHTML='<div class="ss-empty">No contacts found</div>';}
   else dd.innerHTML=m.map(c=>'<div class="ss-opt" onclick="selPosC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>').join('');
   dd.classList.remove('hidden');
