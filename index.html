@@ -6640,14 +6640,29 @@ function toggleArchiveView(){
 
 function confirmSave(saveFn,label){
   if(!state.modal||!state.modal.id){saveFn();return;}
-  state._pendingSave=saveFn;
-  const foot=document.getElementById('modal-foot');
-  if(!foot)return;
-  state._origFoot=foot.innerHTML;
-  foot.innerHTML='<div style="display:flex;align-items:center;gap:8px;width:100%"><span style="flex:1;font-size:12px;color:#fbbf24;font-weight:600">Save changes to this '+(label||'record')+'?</span><button class="btn btn-ghost" onclick="cancelSaveConfirm()">Cancel</button><button class="btn btn-primary" onclick="executePendingSave()">Save</button></div>';
+  const btn=document.querySelector('#modal-foot .btn-primary');
+  if(!btn)return;
+  if(state._saveConfirmPending){
+    state._saveConfirmPending=false;
+    btn.textContent=state._origBtnText||'Save';
+    btn.style.background='';
+    saveFn();
+    return;
+  }
+  state._saveConfirmPending=true;
+  state._origBtnText=btn.textContent;
+  btn.textContent='Confirm Save';
+  btn.style.background='var(--orange)';
+  setTimeout(function(){
+    if(state._saveConfirmPending){
+      state._saveConfirmPending=false;
+      btn.textContent=state._origBtnText||'Save';
+      btn.style.background='';
+    }
+  },3000);
 }
-function cancelSaveConfirm(){const foot=document.getElementById('modal-foot');if(foot&&state._origFoot)foot.innerHTML=state._origFoot;state._pendingSave=null;state._origFoot=null;}
-function executePendingSave(){const fn=state._pendingSave;state._pendingSave=null;state._origFoot=null;if(fn)fn();}
+function cancelSaveConfirm(){state._saveConfirmPending=false;}
+function executePendingSave(){if(state._pendingSave){state._pendingSave();state._pendingSave=null;}}
 
 </script>
 </body>
