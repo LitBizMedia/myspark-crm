@@ -1322,7 +1322,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <button class="pay-tab hidden" id="pm-gc" onclick="setPM('gc')">Gift Card</button>
               </div>
               <div id="pm-card-fields">
-                <div style="font-size:12px;color:var(--text-muted);padding:6px 0">Card details collected securely at checkout.</div>
+                <div id="pos-sq-card-container" class="sq-card-form" style="min-height:89px"></div>
+                <div id="pos-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>
                 <input id="pos-card-num" type="hidden"><input id="pos-exp" type="hidden"><input id="pos-cvv" type="hidden"><input id="pos-zip" type="hidden">
               </div>
               <div id="pm-cash-fields" class="hidden" style="font-size:13px;color:var(--text-muted);padding:6px 0">Record cash payment. Amount will be logged.</div>
@@ -2375,7 +2376,7 @@ function switchPayTab(tab){
     if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
     renderPosItems();calcTotals();
     setTimeout(updatePosGCTab,100);
-    // Square form initialized fresh per transaction in review modal
+    if(db.settings&&db.settings.square&&db.settings.square.accessToken){if(!posSqCard)setTimeout(initPosSquareCardForm,400);}
   }else if(tab==='subs'){
     renderSubscriptions();
   }else if(tab==='transactions'){
@@ -2502,27 +2503,18 @@ async function reviewCharge(){
   const sqConnected=db.settings&&db.settings.square&&db.settings.square.accessToken;
   const useSquare=state.posPM==='card'&&sqConnected;
   const last4='';
-  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+'</div></div>'+(useSquare?'<div style="margin-top:12px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px">Card Details</div><div id="pos-sq-modal-slot"></div><div id="pos-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div></div>':'')+'<p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
+  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+(useSquare?' · Card on form':''  )+'</div></div><p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
   state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="processCharge()">Process Payment</button>');
-  // Init fresh Square form in modal
-  if(useSquare) setTimeout(initPosSquareCardForm,150);
 }
 
 let posSqCard=null;
 async function initPosSquareCardForm(){
   const errEl=document.getElementById('pos-sq-card-errors');
-  const container=document.getElementById('pos-sq-modal-slot');
-  if(!container)return;
-  // Destroy previous instance
-  if(posSqCard){try{await posSqCard.destroy();}catch(e){}posSqCard=null;}
-  // Create fresh card input element inside modal slot
-  const cardDiv=document.createElement('div');
-  cardDiv.id='pos-sq-card-container';
-  cardDiv.className='sq-card-form';
-  container.innerHTML='';
-  container.appendChild(cardDiv);
+  const container=document.getElementById('pos-sq-card-container');
+  if(!container){console.log('Square container not found');return;}
+  if(posSqCard)return; // Already initialized, don't re-init
   try{
     const cfgRes=await fetch('/api/square/config');
     const cfg=await cfgRes.json();
@@ -2531,7 +2523,9 @@ async function initPosSquareCardForm(){
     const payments=window.Square.payments(cfg.appId,'production');
     posSqCard=await payments.card();
     await posSqCard.attach('#pos-sq-card-container');
+    console.log('Square card form ready');
   }catch(e){
+    console.error('Square init error:',e);
     if(errEl)errEl.textContent='Could not load card form: '+e.message;
   }
 }
@@ -2584,17 +2578,19 @@ async function processCharge(){
   const tipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;const tipStaffId=tipStaffRaw||staffId||null;
   const creditApplied=state.modal.extra&&state.modal.extra.credit||0;
   const btn=document.getElementById('process-charge-btn');
-  // If Square card payment, tokenize now and charge
+  // If Square card payment, tokenize from permanent POS form
   if(useSquare){
-    if(!posSqCard){toast('Card form not ready.','error');return;}
+    if(!posSqCard){closeModal();toast('Card form not ready. Select Card tab and wait for form to load.','error');return;}
     if(btn){btn.disabled=true;btn.textContent='Processing...';}
-    const errEl=document.getElementById('pos-sq-card-errors');
     try{
       const result=await posSqCard.tokenize();
       if(result.status!=='OK'){
         const msgs=(result.errors||[]).map(e=>e.message).join(', ');
-        if(errEl)errEl.textContent=msgs||'Card error.';
         if(btn){btn.disabled=false;btn.textContent='Process Payment';}
+        closeModal();
+        toast('Card error: '+(msgs||'Please check card details and try again.'),'error');
+        const errEl=document.getElementById('pos-sq-card-errors');
+        if(errEl)errEl.textContent=msgs||'Please check card details.';
         return;
       }
       const sq=db.settings.square||{};
@@ -2606,14 +2602,18 @@ async function processCharge(){
       });
       const chargeData=await chargeRes.json();
       if(chargeData.error){
-        if(errEl)errEl.textContent=chargeData.error;
         if(btn){btn.disabled=false;btn.textContent='Process Payment';}
+        closeModal();
+        toast('Charge failed: '+chargeData.error,'error');
         return;
       }
       posSqCard=null;
+      // Re-init form for next transaction
+      setTimeout(initPosSquareCardForm,500);
     }catch(e){
-      if(errEl)errEl.textContent='Charge failed: '+e.message;
       if(btn){btn.disabled=false;btn.textContent='Process Payment';}
+      closeModal();
+      toast('Charge failed: '+e.message,'error');
       return;
     }
   }
