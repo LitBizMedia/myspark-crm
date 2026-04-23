@@ -3246,7 +3246,13 @@ async function saveProfile(){
     const oldHash=await sha256(oldPass);
     // Verify old password
     var validOld=false;
-    if(isAdmin){validOld=(oldHash===ADMIN_HASH)||(db.settings.adminProfile&&db.settings.adminProfile.passwordHash&&oldHash===db.settings.adminProfile.passwordHash);}
+    if(isAdmin){
+      if(db._subaccountAdmin&&u.username===db._subaccountAdmin.username){
+        validOld=oldHash===db._subaccountAdmin.passwordHash;
+      }else{
+        validOld=(oldHash===ADMIN_HASH)||(db.settings.adminProfile&&db.settings.adminProfile.passwordHash&&oldHash===db.settings.adminProfile.passwordHash);
+      }
+    }
     else if(db._subaccountAdmin&&u.username===db._subaccountAdmin.username){validOld=oldHash===db._subaccountAdmin.passwordHash;}
     else{const userRec=db.users.find(x=>x.id===u.id);validOld=userRec&&oldHash===userRec.passwordHash;}
     if(!validOld){toast('Current password is incorrect.','error');return;}
@@ -3255,7 +3261,12 @@ async function saveProfile(){
   }
   const updates={name,color:state.selUserColor};
   if(pass){updates.passwordHash=await sha256(pass)}
-  if(isAdmin){db.settings.adminProfile={...db.settings.adminProfile,...updates}}
+  if(isAdmin){
+    db.settings.adminProfile={...db.settings.adminProfile,...updates};
+    if(db._subaccountAdmin&&u.username===db._subaccountAdmin.username&&updates.passwordHash){
+      db._subaccountAdmin.passwordHash=updates.passwordHash;
+    }
+  }
   else{const user=db.users.find(x=>x.id===u.id);if(user)Object.assign(user,updates)}
   state.user={...state.user,...updates};
   const sess=JSON.parse(localStorage.getItem(SSK)||'{}');
