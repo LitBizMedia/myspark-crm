@@ -2529,6 +2529,49 @@ async function initPosSquareCardForm(){
 }
 
 async function processCharge(){
+  // ── Gift Card payment path ──
+  var gc=state.posGC;
+  if(state.posPM==='gc'&&gc){
+    var gObj=(db.giftCards||[]).find(function(x){return x.id===gc.id;});
+    if(!gObj){toast('Gift card not found.','error');return;}
+    var totals=calcTotals();
+    var gcTotal=totals.total;
+    var gcApplied=Math.min(gObj.balance,gcTotal);
+    var remainder=Math.max(0,gcTotal-gcApplied);
+    if(remainder>0&&!state.posGCRemainderMethod){toast('Choose a payment method for the remaining '+fmt$(remainder)+'.','error');return;}
+    gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
+    if(gObj.balance<=0)gObj.status='redeemed';
+    else if(gcApplied>0)gObj.status='partial';
+    if(!gObj.log)gObj.log=[];
+    var gcCid=document.getElementById('pos-c-id')&&document.getElementById('pos-c-id').value||'';
+    var gcStaffId=document.getElementById('pos-staff')&&document.getElementById('pos-staff').value||'';
+    var gcTipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;
+    gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at POS'+(remainder>0?' + '+fmt$(remainder)+' '+state.posGCRemainderMethod:''),date:now_(),contactId:gcCid||null});
+    var gcRemRef=state.posGCRemainderMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
+    var gcNotes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
+    db.payments.push({id:uid(),contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:state.posGCRemainderMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()});
+    saveData();
+    state.posItems=[];state.posCoupon=null;state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
+    renderPosItems();calcTotals();posClearGiftCard();
+    document.getElementById('pos-c-id').value='';document.getElementById('pos-c-inp').value='';
+    closeModal();
+    toast('Payment of '+fmt$(gcTotal)+' recorded. Gift card: '+fmt$(gcApplied)+(remainder>0?', remainder: '+fmt$(remainder):''),'success');
+    if(remainder>0&&state.posGCRemainderMethod==='card'){
+      var gcSq=db.settings.square||{};
+      if(gcSq.accessToken&&gcRemCard){
+        gcRemCard.tokenize().then(function(res){
+          if(res.status!=='OK'){toast('Remainder card error.','error');return;}
+          return fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessToken:gcSq.accessToken,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
+        }).then(function(r){if(r)return r.json();}).then(function(d){
+          if(!d)return;gcRemCard=null;
+          if(d.error)toast('Remainder charge failed: '+d.error,'error');
+          else toast('Remainder of '+fmt$(remainder)+' charged.','success');
+        }).catch(function(e){toast('Square error: '+e.message,'error');});
+      }
+    }
+    return;
+  }
+  // ── Normal payment path ──
   const{cid,staffId,sub,couponDiscount,couponCode,couponId,discount,discountType,discountNote,afterDiscount,tip,total,pm,last4,items,useSquare}=state.modal.extra;
   const tipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;const tipStaffId=tipStaffRaw||staffId||null;
   const creditApplied=state.modal.extra&&state.modal.extra.credit||0;
@@ -8590,68 +8633,7 @@ async function gcInitRemainderCardForm(){
 }
 
 // Override processCharge to handle gift card deduction
-var _origProcessCharge=processCharge;
-async function processCharge(){
-  var gc=state.posGC;
-  if(state.posPM==='gc'&&gc){
-    // Gift card payment path
-    var gObj=(db.giftCards||[]).find(function(x){return x.id===gc.id;});
-    if(!gObj){toast('Gift card not found.','error');return;}
-    var totals=calcTotals();
-    var total=totals.total;
-    var gcApplied=Math.min(gObj.balance,total);
-    var remainder=Math.max(0,total-gcApplied);
-    if(remainder>0&&!state.posGCRemainderMethod){toast('Choose a payment method for the remaining '+fmt$(remainder)+'.','error');return;}
-    // Deduct balance
-    gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
-    if(gObj.balance<=0)gObj.status='redeemed';
-    else if(gcApplied>0)gObj.status='partial';
-    if(!gObj.log)gObj.log=[];
-    var cid=document.getElementById('pos-c-id')&&document.getElementById('pos-c-id').value||'';
-    gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at POS'+(remainder>0?' + '+fmt$(remainder)+' '+state.posGCRemainderMethod:''),date:now_(),contactId:cid||null});
-    var staffId=document.getElementById('pos-staff')&&document.getElementById('pos-staff').value||'';
-    var tipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;
-    var tipStaffId=tipStaffRaw||staffId||null;
-    var creditApplied=totals.credit||0;
-    var remRef=state.posGCRemainderMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
-    var notes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
-    var payRecord={id:uid(),contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:creditApplied,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:state.posGCRemainderMethod||'',remainderRef:remRef,total:total,paymentMethod:'gift_card',status:'completed',notes:notes,createdAt:now_()};
-    db.payments.push(payRecord);
-    saveData();
-    state.posItems=[];state.posCoupon=null;state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
-    renderPosItems();calcTotals();posClearGiftCard();
-    document.getElementById('pos-c-id').value='';document.getElementById('pos-c-inp').value='';
-    closeModal();
-    toast('Payment of '+fmt$(total)+' recorded. Gift card: '+fmt$(gcApplied)+(remainder>0?', remainder: '+fmt$(remainder):''),'success');
-    // Charge remainder via Square if card selected
-    if(remainder>0&&state.posGCRemainderMethod==='card'){
-      var sq=db.settings.square||{};
-      if(sq.accessToken&&gcRemCard){
-        gcRemCard.tokenize().then(function(result){
-          if(result.status!=='OK'){
-            var msgs=(result.errors||[]).map(function(e){return e.message;}).join(', ');
-            toast('Remainder card error: '+(msgs||'Unknown error'),'error');
-            return;
-          }
-          return fetch('/api/square/charge',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({accessToken:sq.accessToken,sourceId:result.token,amountCents:Math.round(remainder*100),note:'Gift card remainder - POS'})
-          });
-        }).then(function(r){if(r)return r.json();}).then(function(d){
-          if(!d)return;
-          gcRemCard=null;
-          if(d.error){toast('Remainder charge failed: '+d.error,'error');}
-          else{toast('Remainder of '+fmt$(remainder)+' charged to card.','success');}
-        }).catch(function(e){toast('Square error: '+e.message,'error');});
-      }else if(sq.accessToken&&!gcRemCard){
-        toast('Card form not ready. Payment recorded but remainder not charged.','warn');
-      }
-    }
-    return;
-  }
-  _origProcessCharge().catch(function(e){console.error('processCharge error:',e);});
-}
+// GC handling merged into main processCharge
 
 // Show gc tab in POS when contact with gift cards is selected
 function updatePosGCTab(){
