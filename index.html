@@ -7976,7 +7976,7 @@ function gcOpenSell(prodId){
     +'<button class="pay-tab" id="gc-pm-cash" onclick="gcSellSetPM(\'cash\')">Cash</button>'
     +'<button class="pay-tab" id="gc-pm-other" onclick="gcSellSetPM(\'other\')">Other</button>'
     +'</div>'
-    +'<div id="gc-pm-card-fields"><div style="font-size:12px;color:var(--text-muted);padding:4px 0">'+(db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Card payment will be charged via Square.':'Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.')+'</div></div>'
+    +'<div id="gc-pm-card-fields">'+(db.settings&&db.settings.square&&db.settings.square.accessToken?'<div id="gc-sq-card-container" class="sq-card-form" style="min-height:44px"></div><div id="gc-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>':'<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.</div>')+'</div>'
     +'<div id="gc-pm-cash-fields" class="hidden"><div style="font-size:12px;color:var(--text-muted);padding:4px 0">Cash payment will be recorded.</div></div>'
     +'<div id="gc-pm-other-fields" class="hidden"><input id="gc-sell-ref" type="text" placeholder="Reference # (Venmo, check, etc.)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:13px;outline:none"></div>'
     +'</div>'
@@ -7986,8 +7986,11 @@ function gcOpenSell(prodId){
     +'</select></div>';
   openModal('Sell: '+esc(prod.name),body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="gcProcessSale()">Process & Issue Card</button>',
+    +'<button class="btn btn-primary" id="gc-sell-btn" onclick="gcProcessSale()">Process & Issue Card</button>',
     'modal-lg');
+  if(db.settings&&db.settings.square&&db.settings.square.accessToken){
+    setTimeout(gcInitSellCardForm,100);
+  }
 }
 
 function gcSellSelDenom(amt){
@@ -8029,7 +8032,27 @@ function gcSellSelC(id,name){
   var ri=document.getElementById('gc-sell-recip');if(ri&&!ri.value)ri.value=name;
 }
 
-function gcProcessSale(){
+let gcSellCard=null;
+
+async function gcInitSellCardForm(){
+  var errEl=document.getElementById('gc-sq-card-errors');
+  var container=document.getElementById('gc-sq-card-container');
+  if(!container)return;
+  try{
+    var cfgRes=await fetch('/api/square/config');
+    var cfg=await cfgRes.json();
+    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
+    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
+    var payments=window.Square.payments(cfg.appId,'production');
+    gcSellCard=await payments.card();
+    await gcSellCard.attach('#gc-sq-card-container');
+  }catch(e){
+    console.error('GC Square card form error:',e);
+    if(errEl)errEl.textContent='Could not load card form: '+e.message;
+  }
+}
+
+async function gcProcessSale(){
   var prodId=state.modal&&state.modal.id;
   var prod=(db.giftCardProducts||[]).find(function(x){return x.id===prodId;});
   if(!prod){toast('Product not found.','error');return;}
@@ -8040,20 +8063,70 @@ function gcProcessSale(){
   var staffId=document.getElementById('gc-sell-staff')&&document.getElementById('gc-sell-staff').value||'';
   var pm=state.gcSellPM||'card';
   var ref=(document.getElementById('gc-sell-ref')&&document.getElementById('gc-sell-ref').value||'').trim();
+  var btn=document.getElementById('gc-sell-btn');
+
+  // If card + Square connected, tokenize and charge
+  if(pm==='card'&&db.settings&&db.settings.square&&db.settings.square.accessToken){
+    if(!gcSellCard){toast('Card form not ready. Please wait.','error');return;}
+    if(btn){btn.disabled=true;btn.textContent='Processing...';}
+    var errEl=document.getElementById('gc-sq-card-errors');
+    try{
+      var result=await gcSellCard.tokenize();
+      if(result.status!=='OK'){
+        var msgs=(result.errors||[]).map(function(e){return e.message;}).join(', ');
+        if(errEl)errEl.textContent=msgs||'Card error.';
+        if(btn){btn.disabled=false;btn.textContent='Process & Issue Card';}
+        return;
+      }
+      var sq=db.settings.square||{};
+      var amtCents=Math.round(amt*100);
+      var chargeRes=await fetch('/api/square/charge',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          accessToken:sq.accessToken,
+          sourceId:result.token,
+          amountCents:amtCents,
+          note:'Gift Card: '+prod.name
+        })
+      });
+      var chargeData=await chargeRes.json();
+      if(chargeData.error){
+        if(errEl)errEl.textContent=chargeData.error;
+        if(btn){btn.disabled=false;btn.textContent='Process & Issue Card';}
+        return;
+      }
+      gcSellCard=null;
+      gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,'card','',chargeData.payment&&chargeData.payment.id||'');
+    }catch(e){
+      console.error('GC charge error:',e);
+      if(errEl)errEl.textContent='Charge failed: '+e.message;
+      if(btn){btn.disabled=false;btn.textContent='Process & Issue Card';}
+    }
+    return;
+  }
+
+  // Cash or Other - just record
+  gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,'');
+}
+
+function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squarePaymentId){
   var payId=uid();
   var code=gcGenCode();
   db.payments.push({id:payId,contactId:contactId||null,staffId:staffId||null,
     items:[{desc:'Gift Card: '+prod.name+' ('+code+')',price:amt}],
     subtotal:amt,discountAmount:0,afterDiscount:amt,tipAmount:0,creditApplied:0,
-    total:amt,paymentMethod:pm,paymentRef:ref,status:'completed',
-    notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,createdAt:now_()});
+    total:amt,paymentMethod:pm,paymentRef:ref,squarePaymentId:squarePaymentId,
+    status:'completed',notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,createdAt:now_()});
   if(!db.giftCards)db.giftCards=[];
   db.giftCards.push({id:'gc-'+uid(),code:code,productId:prodId,
     contactId:contactId||null,recipientName:recipName||null,
     originalAmount:amt,balance:amt,status:'active',
     issuedById:staffId||null,soldVia:'gift-card-tab',paymentId:payId,paymentMethod:pm,
+    squarePaymentId:squarePaymentId,
     issuedAt:now_(),log:[{type:'issued',amount:amt,note:'Sold via Gift Card tab ('+pm+')',date:now_()}]});
   saveData();closeModal();
+  gcSellCard=null;
   toast('Gift card sold and issued: '+code,'success');
   switchGcTab('orders');
 }
