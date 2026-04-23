@@ -1928,8 +1928,8 @@ function renderDash(){
 // CONTACTS
 // =====================================================
 function filteredContacts(){
-  if(!state.cShowArchived&&db.contacts.some(c=>c.archived)){return _filteredContacts().filter(c=>!c.archived)}
-  return _filteredContacts();
+  if(state.cShowArchived){return _filteredContacts().filter(c=>c.archived);}
+  return _filteredContacts().filter(c=>!c.archived);
 }
 function _filteredContacts(){
   const{cSearch:q,cType:type,cStatus:status,cTag:tag}=state;
@@ -2796,7 +2796,8 @@ function confirmDelContact(id){
       '<p style="color:var(--text-muted)">Archive <strong style="color:var(--text)">'+esc(ct&&ct.name)+'</strong>? They can be restored from the archive later.</p>',
       '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="archiveContact(\''+id+'\');closeModal()">Archive</button>');
     return;
-  }const c=getContact(id);openModal(canDeleteContact()?'Delete Contact':'Archive Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+(canDeleteContact()?'<button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>':'<button class="btn btn-warning" onclick="archiveContact(\''+id+'\')">Archive</button>'))}
+  }const c=getContact(id);if(!c)return;openModal('Delete Contact','<p style="color:var(--text-muted)">Permanently delete <strong style="color:var(--text)">'+esc(c.name)+'</strong>? This cannot be undone.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>');
+}
 function delContact(id){db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);saveData();closeModal();closeDrawer();renderContacts();toast('Contact deleted.','success')}
 
 // APPOINTMENT MODAL
@@ -3993,9 +3994,8 @@ function renderApptList(){
 function renderForms(){
   var role=userRole();
   var defaultTab=role==='admin'?'forms':'contracts';
-  var tab=state.formsTab||defaultTab;
-  if(tab==='forms'&&role!=='admin') tab='contracts';
-  state.formsTab=tab;
+  if(!state.formsTab||state.formsTab==='forms'&&role!=='admin') state.formsTab=defaultTab;
+  var tab=state.formsTab;
   switchFormsTab(tab);
   if(tab==='forms')renderFormsList();
 }
@@ -5738,9 +5738,9 @@ function renderStaff(){
   var settingBtn=document.getElementById('stt-settings');
   var reportBtn=document.getElementById('stt-reporting');
   var teamBtn=document.getElementById('stt-team');
-  if(settingBtn)settingBtn.classList.toggle('hidden',!isAdm);
-  if(reportBtn)reportBtn.classList.toggle('hidden',!isAdm&&!isMgr);
-  if(teamBtn)teamBtn.classList.remove('hidden');
+  if(settingBtn){settingBtn.classList.toggle('hidden',!isAdm);}
+  if(reportBtn){reportBtn.classList.remove('hidden');reportBtn.classList.toggle('hidden',!isAdm&&!isMgr);}
+  if(teamBtn){teamBtn.classList.remove('hidden');}
   var tab=state.staffTab||'team';
   if(!isAdm&&tab==='settings') tab='team';
   switchStaffTab(tab);
@@ -9096,10 +9096,7 @@ function applyRolePermissions(){
   if(archBtn)archBtn.classList.toggle('hidden',!am);
   var fptForms=document.getElementById('fpt-forms');
   if(fptForms)fptForms.classList.toggle('hidden',!adm);
-  var sttReporting=document.getElementById('stt-reporting');
-  if(sttReporting)sttReporting.classList.toggle('hidden',!am);
-  var sttTeam=document.getElementById('stt-team');
-  if(sttTeam)sttTeam.classList.remove('hidden');
+  // Staff tabs visibility handled by renderStaff
 }
 
 
