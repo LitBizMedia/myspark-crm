@@ -7,9 +7,10 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { accessToken, cardId, customerId, amountCents, note } = req.body || {};
+  const { accessToken, cardId, sourceId, customerId, amountCents, note } = req.body || {};
+  const sourceIdFinal = sourceId || cardId;
 
-  if (!accessToken || !cardId || !amountCents) {
+  if (!accessToken || !sourceIdFinal || !amountCents) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -33,7 +34,7 @@ module.exports = async function handler(req, res) {
 
     const body = {
       idempotency_key: idempotencyKey,
-      source_id: cardId,
+      source_id: sourceIdFinal,
       amount_money: {
         amount: amountCents,
         currency: 'USD'
