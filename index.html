@@ -2369,6 +2369,9 @@ function switchPayTab(tab){
     const v=document.getElementById('pay-'+t+'-view');
     if(v)v.classList.toggle('hidden',t!==tab);
   });
+  if(tab!=='pos'&&posSqCard){
+    try{posSqCard.destroy();posSqCard=null;const con=document.getElementById('pos-sq-card-container');if(con)con.innerHTML='';}catch(e){}
+  }
   if(tab==='pos'){
     const tipSt=document.getElementById('pos-tip-staff');if(tipSt){tipSt.innerHTML='<option value="">Same as Staff</option>'+allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('');}
     const crRow=document.getElementById('pos-credit-row');if(crRow)crRow.style.display='none';
