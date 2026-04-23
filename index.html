@@ -2507,7 +2507,7 @@ function reviewCharge(){
   const modalBody=body+(useSquare?'<div style="margin-top:12px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px">Card Details</div><div id="pos-sq-card-container" class="sq-card-form"></div><div id="pos-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div></div>':'');
   state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare}};
   openModal('Review Charge',modalBody,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="processCharge()">Process Payment</button>');
-  if(useSquare) initPosSquareCardForm();
+  if(useSquare) setTimeout(initPosSquareCardForm, 200);
 }
 
 let posSqCard=null;
@@ -2577,7 +2577,8 @@ async function processCharge(){
   const creditApplied=state.modal.extra&&state.modal.extra.credit||0;
   const btn=document.getElementById('process-charge-btn');
   // If Square card payment, tokenize and charge first
-  if(useSquare&&posSqCard){
+  if(useSquare){
+    if(!posSqCard){toast('Card form not ready. Please wait a moment and try again.','error');return;}
     if(btn){btn.disabled=true;btn.textContent='Processing...';}
     const errEl=document.getElementById('pos-sq-card-errors');
     try{
