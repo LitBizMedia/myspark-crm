@@ -1804,7 +1804,7 @@ function handleLogout(){localStorage.removeItem(SSK);location.reload()}
 function initApp(){
   const u=state.user;
   document.getElementById('sb-name').textContent=u.name||u.username;
-  var _roleLabels={admin:'Admin',manager:'Manager',user:'Staff',receptionist:'Receptionist',practitioner:'Practitioner'};
+  var _roleLabels={admin:'Admin',manager:'Manager',user:'Staff',practitioner:'Practitioner'};
   document.getElementById('sb-role').textContent=_roleLabels[u.role]||u.role;
   const av=document.getElementById('sb-avatar');
   av.textContent=initials(u.name||u.username);av.style.background=u.color||'#6b21ea';
@@ -1827,6 +1827,9 @@ function switchPanel(name){
   if(name==='settings'&&_r!=='admin'){toast('Access denied.','error');return;}
   if((name==='products'||name==='forms'||name==='staff')&&!_am){toast('Access denied.','error');return;}
   if((name==='tasks'||name==='payments')&&_r==='practitioner'){toast('Access denied.','error');return;}
+  if(name==='payments'&&_r==='user'){
+    // Users can access payments but not transactions tab - handled via tab hide
+  }
   if(name==='contacts'&&_r==='practitioner'){toast('Access denied.','error');return;}
   state.panel=name;
   document.querySelectorAll('.sb-item').forEach(i=>i.classList.toggle('active',i.dataset.panel===name));
@@ -2063,7 +2066,7 @@ function renderDrawer(){
 // =====================================================
 function renderCal(){
   if(userRole()==='practitioner'&&state.user&&state.user.id){
-    state.calStaffFilter=state.user.id;
+    state._practitionerFilter=state.user.id;
   }
   renderCalLegend();
   if(state.calView==='month')renderMonthCal();
@@ -2955,7 +2958,7 @@ function openUserSchedModal(uid){
 function buildUserBody(){
   const cols=USER_COLORS.map((c,i)=>'<div class="color-sw'+(i===0?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Username</label><input id="uf-user" type="text" placeholder="jsmith"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Password</label><input id="uf-pass" type="password"></div><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Manager</option><option value="user">User</option><option value="receptionist">Receptionist</option><option value="practitioner">Practitioner</option></select></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Password</label><input id="uf-pass" type="password"></div><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Manager</option><option value="user">User</option><option value="practitioner">Practitioner</option></select></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Working Schedule</div>'
     +buildSchedSection(false);
@@ -3268,7 +3271,7 @@ function openEditUserModal(userId){
   state.modal={type:'edituser',id:userId};
   state.selUserColor=u.color||USER_COLORS[0];
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
-  const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','receptionist','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
+  const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Username</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
     +'<div class="form-row"><div class="form-group"><label>New Password <span style="font-weight:400;color:var(--text-muted)">(blank to keep)</span></label><input id="eu-pass" type="password" placeholder=""></div>'+roleField+'</div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
@@ -7169,9 +7172,7 @@ function txnGetFiltered(){
   var from = r.from; var to = r.to;
   var staff = state.txnStaff || '';
   var method = state.txnMethod || '';
-  var ownOnly = !txnCanSeeAll();
   return (db.payments || []).filter(function(p){
-    if(ownOnly && p.staffId !== (state.user&&state.user.id)) return false;
     var date = (p.createdAt || '').split('T')[0];
     if(date < from || date > to) return false;
     if(staff && p.staffId !== staff) return false;
@@ -7633,7 +7634,7 @@ function cpnAppliesToLabel(v){
   return{pos:'POS Only',invoices:'Invoices',subscriptions:'Subscriptions',all:'All Channels'}[v]||v;
 }
 
-function toggleCouponStatus(id){
+function toggleCouponStatus(id){if(!canManageCoupons()){toast('Permission denied.','error');return;}
   var cpn=(db.coupons||[]).find(function(x){return x.id===id;});
   if(!cpn)return;
   cpn.status=cpn.status==='active'?'inactive':'active';
@@ -7641,7 +7642,7 @@ function toggleCouponStatus(id){
   toast('Coupon '+(cpn.status==='active'?'activated':'deactivated')+'.','success');
 }
 
-function deleteCoupon(id){
+function deleteCoupon(id){if(!canManageCoupons()){toast('Permission denied.','error');return;}
   var cpn=(db.coupons||[]).find(function(x){return x.id===id;});
   state.modal={type:'del-coupon',id:id};
   document.getElementById('modal-title').textContent='Delete Coupon';
@@ -7679,7 +7680,7 @@ function openCouponUsageLog(id){
 }
 
 // ─── Coupon Modal ───
-function openCouponModal(id){
+function openCouponModal(id){if(!canManageCoupons()){toast('Permission denied.','error');return;}
   var cpn=id?(db.coupons||[]).find(function(x){return x.id===id;}):null;
   state.modal={type:'coupon',id:id||null};
   var prodOpts=(db.products||[]).filter(function(p){return p.active;}).map(function(p){
@@ -7984,7 +7985,7 @@ function gcRenderProducts(){
   return h;
 }
 
-function gcToggleProduct(id){
+function gcToggleProduct(id){if(!canManageGiftCards()){toast('Permission denied.','error');return;}
   var p=(db.giftCardProducts||[]).find(function(x){return x.id===id;});
   if(!p)return;
   p.status=p.status==='active'?'inactive':'active';
@@ -8008,7 +8009,7 @@ function gcConfirmDeleteProduct(){
 }
 
 // ── Product Modal ──
-function openGcProductModal(id){
+function openGcProductModal(id){if(!canManageGiftCards()){toast('Permission denied.','error');return;}
   var prod=id?(db.giftCardProducts||[]).find(function(x){return x.id===id;}):null;
   state.modal={type:'gcprod',id:id||null};
   var denoms=prod&&prod.denominations?prod.denominations.join(', '):'25, 50, 100';
@@ -9092,19 +9093,33 @@ function applyRolePermissions(){
   var adm=r==='admin';
   var am=adm||r==='manager';
   var prac=r==='practitioner';
-  var rec=r==='receptionist';
   function hide(id,hidden){var el=document.getElementById(id);if(el)el.classList.toggle('hidden',hidden);}
   hide('sb-contacts',   prac);
-  hide('sb-tasks',      rec||prac);
+  hide('sb-tasks',      prac);
   hide('sb-payments',   prac);
   hide('sb-products',   !am);
   hide('sb-forms',      !am);
-  hide('sb-staff',      !am); // managers can see staff panel to edit schedules
+  hide('sb-staff',      !am);
   hide('sb-settings',   !adm);
+  // Hide transactions tab for users and practitioners
+  hide('ppt-transactions', !am);
   var bk=document.getElementById('cpt-booking');if(bk)bk.classList.toggle('hidden',!adm);
+  var svc=document.getElementById('cpt-service');if(svc)svc.classList.toggle('hidden',prac);
   hide('ppt-subs',      !am);
   hide('ppt-invoices',  !am);
   hide('ppt-orders',    !am);
+  // Hide View Archive from users/practitioners
+  var archBtn=document.getElementById('archive-toggle-btn');
+  if(archBtn)archBtn.classList.toggle('hidden',!am);
+}
+
+
+function archiveContact(id){
+  var contact=db.contacts.find(function(x){return x.id===id;});
+  if(!contact)return;
+  contact.archived=true;
+  saveData();closeDrawer();renderContacts();
+  toast(esc(contact.name)+' archived.','success');
 }
 
 </script>
