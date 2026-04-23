@@ -1087,7 +1087,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="staff-tabs">
           <button class="staff-tab active" id="stt-team" onclick="switchStaffTab('team')">Team</button>
           <button class="staff-tab" id="stt-resources" onclick="switchStaffTab('resources')">Resources</button>
-          <button class="staff-tab hidden" id="stt-reporting" onclick="switchStaffTab('reporting')">Reporting</button>
+          <button class="staff-tab" id="stt-reporting" onclick="switchStaffTab('reporting')">Reporting</button>
         </div>
         <div id="staff-team-view"></div>
         <div id="staff-resources-view" class="hidden">
@@ -2056,7 +2056,7 @@ function renderDrawer(){
       +'<div class="sec-label" style="margin-top:16px">Invoices</div><div style="font-size:13px;color:var(--text-muted);padding:6px 0;font-style:italic">Invoicing coming soon.</div>';
   }
   document.getElementById('drawer-content').innerHTML=
-    '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-danger btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Delete</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
+    '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Archive</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
     +'<div class="drawer-tabs">'+tabs.map(t=>'<button class="drawer-tab'+(state.dTab===t?' active':'')+'" onclick="switchDTab(\''+t+'\')">'+labels[t]+'</button>').join('')+'</div>'
     +'<div class="drawer-body" id="drawer-tab-body">'+body+'</div>';
 }
@@ -2788,7 +2788,7 @@ async function linkContactToSquare(contactId){
   }catch(e){console.error('Square link error:',e);}
 }
 
-function confirmDelContact(id){if(!canDeleteContact()){toast('You do not have permission to delete contacts.','error');return;}const c=getContact(id);openModal('Delete Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>')}
+function confirmDelContact(id){if(!canDeleteContact()){archiveContact(id);return;}const c=getContact(id);openModal('Delete Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>')}
 function delContact(id){db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);saveData();closeModal();closeDrawer();renderContacts();toast('Contact deleted.','success')}
 
 // APPOINTMENT MODAL
@@ -7616,9 +7616,9 @@ function renderCoupons(){
         +(cpn.appliesTo?'<span>'+cpnAppliesToLabel(cpn.appliesTo)+'</span>':'')
         +'</div>'
         +'<div style="display:flex;gap:6px;border-top:1px solid var(--main-border);padding-top:9px;margin-top:auto">'
-        +'<button class="btn btn-ghost btn-sm" onclick="openCouponModal(\''+cpn.id+'\')">Edit</button>'
+        +(canManageCoupons()?'<button class="btn btn-ghost btn-sm" onclick="openCouponModal(\''+cpn.id+'\')">Edit</button>':'')
         +'<button class="btn btn-ghost btn-sm" onclick="openCouponUsageLog(\''+cpn.id+'\')">Usage ('+( cpn.usageCount||0)+')</button>'
-        +(cpn.status==='active'&&!isExpired&&!isMaxed
+        +(canManageCoupons()&&cpn.status==='active'&&!isExpired&&!isMaxed
           ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.12);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="toggleCouponStatus(\''+cpn.id+'\')">Deactivate</button>'
           :(effectiveStatus==='inactive'?'<button class="btn btn-purple btn-sm" onclick="toggleCouponStatus(\''+cpn.id+'\')">Activate</button>':''))
         +'<button class="btn btn-danger btn-sm" onclick="deleteCoupon(\''+cpn.id+'\')">Delete</button>'
@@ -7944,8 +7944,7 @@ function gcRenderProducts(){
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Gift Card Products</div>'
     +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">'+prods.filter(function(p){return p.status==='active';}).length+' active designs</div></div>'
-    +'<button class="btn btn-primary" onclick="openGcProductModal(null)">'
-    +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Gift Card</button></div>';
+    +(canManageGiftCards()?'<button class="btn btn-primary" onclick="openGcProductModal(null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Gift Card</button>':'')+'</div>';
   if(!prods.length){
     h+='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>'
       +'<h3>No gift cards yet</h3><p>Create your first gift card design. Staff can then sell or issue them to customers.</p></div>';
@@ -7974,7 +7973,7 @@ function gcRenderProducts(){
       +'</div>'
       +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:10px">'+denomLabel+' &bull; '+issuedCount+' issued</div>'
       +'<div style="display:flex;gap:6px;border-top:1px solid var(--main-border);padding-top:9px;flex-wrap:wrap">'
-      +'<button class="btn btn-ghost btn-sm" onclick="openGcProductModal(\''+prod.id+'\')">Edit</button>'
+      +(canManageGiftCards()?'<button class="btn btn-ghost btn-sm" onclick="openGcProductModal(\''+prod.id+'\')">Edit</button>':'')
       +'<button class="btn btn-primary btn-sm" onclick="gcOpenSell(\''+prod.id+'\')">Sell</button>'+'<button class="btn btn-ghost btn-sm" onclick="gcShowEmbed(\''+prod.id+'\')">Embed</button>'
       +(canManageGiftCards()?(isActive?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="gcToggleProduct(\''+prod.id+'\')">Deactivate</button>'
         :'<button class="btn btn-purple btn-sm" onclick="gcToggleProduct(\''+prod.id+'\')">Activate</button>'):'')
@@ -9098,7 +9097,7 @@ function applyRolePermissions(){
   hide('sb-tasks',      prac);
   hide('sb-payments',   prac);
   hide('sb-products',   !am);
-  hide('sb-forms',      !am);
+  hide('sb-forms',      prac);
   hide('sb-staff',      !am);
   hide('sb-settings',   !adm);
   // Hide transactions tab for users and practitioners
@@ -9111,6 +9110,10 @@ function applyRolePermissions(){
   // Hide View Archive from users/practitioners
   var archBtn=document.getElementById('archive-toggle-btn');
   if(archBtn)archBtn.classList.toggle('hidden',!am);
+  var fptForms=document.getElementById('fpt-forms');
+  if(fptForms)fptForms.classList.toggle('hidden',!adm);
+  var sttReporting=document.getElementById('stt-reporting');
+  if(sttReporting)sttReporting.classList.toggle('hidden',!am);
 }
 
 
