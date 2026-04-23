@@ -1802,6 +1802,10 @@ document.getElementById('login-form').addEventListener('submit',async function(e
   let user=null;
   if(username===DEFAULT_ADMIN.username&&hash===DEFAULT_ADMIN.passwordHash)user=DEFAULT_ADMIN;
   else user=db.users.find(u=>u.username.toLowerCase()===username&&u.passwordHash===hash&&u.active);
+  // Check subaccount admin credentials stored in data
+  if(!user&&db._subaccountAdmin&&username===db._subaccountAdmin.username.toLowerCase()&&hash===db._subaccountAdmin.passwordHash){
+    user={id:'admin-'+state.subaccountSlug,username:db._subaccountAdmin.username,role:'admin',name:db._subaccountAdmin.name||db._subaccountAdmin.username,color:db._subaccountAdmin.color||'#6b21ea'};
+  }
   if(!user){err.textContent='Invalid username or password.';err.classList.remove('hidden');return}
   err.classList.add('hidden');
   state.user=user;
