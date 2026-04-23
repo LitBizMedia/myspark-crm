@@ -1660,6 +1660,15 @@ const getUserById=id=>allUsers().find(u=>u.id===id);
 const getUserColor=id=>{const u=getUserById(id);return u?u.color||'#6b21ea':'#6b21ea'};
 const fmt$=n=>'$'+(+n||0).toFixed(2);
 
+
+function checkPasswordStrength(pass){
+  if(!pass||pass.length<8)return'Password must be at least 8 characters.';
+  if(!/[A-Z]/.test(pass))return'Password must contain at least one uppercase letter.';
+  if(!/[0-9]/.test(pass))return'Password must contain at least one number.';
+  if(!/[^A-Za-z0-9]/.test(pass))return'Password must contain at least one special character.';
+  return null;
+}
+
 async function sha256(str){
   const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -1750,33 +1759,7 @@ function applyFallbackCredentials(){
 function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
 function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(doSync,2200)}
 
-async function doSync(){
-  const token=db.settings.gistToken;if(!token)return;
-  setSyncSt('syncing');
-  try{
-    const content=JSON.stringify(db,null,2);
-    const headers={'Authorization':'token '+token,'Content-Type':'application/json'};
-    if(db.settings.gistId){
-      await fetch('https://api.github.com/gists/'+db.settings.gistId,{method:'PATCH',headers,body:JSON.stringify({files:{[GIST_FILE]:{content}}})});
-    }else{
-      const r=await fetch('https://api.github.com/gists',{method:'POST',headers,body:JSON.stringify({description:'MySpark+ CRM',public:false,files:{[GIST_FILE]:{content}}})});
-      const d=await r.json();
-      if(d.id){db.settings.gistId=d.id;localStorage.setItem(SK,JSON.stringify(db));const el=document.getElementById('gist-id');if(el)el.value=d.id}
-    }
-    setSyncSt('synced');
-  }catch(e){setSyncSt('error')}
-}
-
-async function fetchGist(){
-  const{gistToken:t,gistId}=db.settings;if(!t||!gistId)return false;
-  setSyncSt('syncing');
-  try{
-    const r=await fetch('https://api.github.com/gists/'+gistId,{headers:{'Authorization':'token '+t}});
-    const d=await r.json();const c=d.files&&d.files[GIST_FILE]&&d.files[GIST_FILE].content;
-    if(c){const rem=JSON.parse(c);db={...db,...rem};localStorage.setItem(SK,JSON.stringify(db));setSyncSt('synced');return true}
-  }catch(e){setSyncSt('error')}
-  return false;
-}
+// Legacy Gist sync removed - using Supabase subaccount_data
 
 function setSyncSt(s){
   ['','2'].forEach(x=>{
@@ -3116,7 +3099,9 @@ function openProfileModal(){
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="pf-name" type="text" value="'+esc(eff&&eff.name||'')+'"></div><div class="form-group"><label>Username</label><input id="pf-user" type="text" value="'+esc(eff&&eff.username||'')+'" '+(isAdmin?'disabled':'')+'></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
-    +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="Leave blank to keep current"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>';
+    +'<div class="form-group"><label>Current Password <span style=\"font-weight:400;color:var(--text-muted)\">(required to change password)</span></label><input id="pf-old-pass" type="password" placeholder="Enter current password"></div>'
+    +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="Leave blank to keep current"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div>';
   openModal('My Profile',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>','modal-lg');
 }
 
@@ -3126,6 +3111,19 @@ async function saveProfile(){
   const pass2=document.getElementById('pf-pass2').value;
   if(pass&&pass!==pass2){toast('Passwords do not match.','error');return}
   const u=state.user,isAdmin=u.id==='admin-patrick';
+  if(pass){
+    const oldPass=document.getElementById('pf-old-pass')&&document.getElementById('pf-old-pass').value||'';
+    if(!oldPass){toast('Enter your current password to change it.','error');return;}
+    const oldHash=await sha256(oldPass);
+    // Verify old password
+    var validOld=false;
+    if(isAdmin){validOld=(oldHash===ADMIN_HASH)||(db.settings.adminProfile&&db.settings.adminProfile.passwordHash&&oldHash===db.settings.adminProfile.passwordHash);}
+    else if(db._subaccountAdmin&&u.username===db._subaccountAdmin.username){validOld=oldHash===db._subaccountAdmin.passwordHash;}
+    else{const userRec=db.users.find(x=>x.id===u.id);validOld=userRec&&oldHash===userRec.passwordHash;}
+    if(!validOld){toast('Current password is incorrect.','error');return;}
+    const passErr=checkPasswordStrength(pass);
+    if(passErr){toast(passErr,'error');return;}
+  }
   const updates={name,color:state.selUserColor};
   if(pass){updates.passwordHash=await sha256(pass)}
   if(isAdmin){db.settings.adminProfile={...db.settings.adminProfile,...updates}}
@@ -8730,6 +8728,49 @@ async function renderAgencyDashboard(){
   agencyLoadSubaccounts();
 }
 
+
+// ── Agency Reset Subaccount Admin Password ──
+function agencyResetPassword(subId,slug){
+  state.modal={type:'agency-reset-pass',id:subId,extra:{slug:slug}};
+  var body='<div class="form-group"><label>New Admin Password *</label>'
+    +'<input id="agency-new-pass" type="password" placeholder="Strong password">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
+    +'<div class="form-group"><label>Confirm Password *</label>'
+    +'<input id="agency-new-pass2" type="password" placeholder="Confirm password"></div>';
+  openModal('Reset Admin Password: '+slug, body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-danger" onclick="agencyConfirmResetPassword(\''+subId+'\',\''+slug+'\')">Reset Password</button>');
+}
+
+async function agencyConfirmResetPassword(subId,slug){
+  var pass=document.getElementById('agency-new-pass')&&document.getElementById('agency-new-pass').value||'';
+  var pass2=document.getElementById('agency-new-pass2')&&document.getElementById('agency-new-pass2').value||'';
+  if(!pass||!pass2){toast('Both fields required.','error');return;}
+  if(pass!==pass2){toast('Passwords do not match.','error');return;}
+  var passErr=checkPasswordStrength(pass);
+  if(passErr){toast(passErr,'error');return;}
+  var passHash=await sha256(pass);
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    // Fetch current data
+    var r=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId+'&select=data',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    var rows=await r.json();
+    if(!rows||!rows.length){toast('Subaccount data not found.','error');return;}
+    var data=rows[0].data||{};
+    if(!data._subaccountAdmin){toast('No admin record found for this subaccount.','error');return;}
+    data._subaccountAdmin.passwordHash=passHash;
+    await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId,{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({data:data,updated_at:new Date().toISOString()})
+    });
+    closeModal();
+    toast('Password reset for '+slug+'.','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
 async function agencyLoadSubaccounts(){
   var el=document.getElementById('agency-subs-grid');if(!el)return;
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
@@ -8781,7 +8822,7 @@ async function agencyLoadSubaccounts(){
         +'</div>'
         +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
         +'<button class="btn btn-primary btn-sm" onclick="agencyLoginAs(\''+esc(sub.slug)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Login As</button>'
-        +'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(plan)+'\')">Edit</button>'
+        +'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(plan)+'\')">Edit</button>'+'<button class="btn btn-ghost btn-sm" onclick="agencyResetPassword(\''+sub.id+'\',\''+esc(sub.slug)+'\')">Reset Password</button>'
         +(isActive
           ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false)">Suspend</button>'
           :'<button class="btn btn-purple btn-sm" onclick="agencyToggleSub(\''+sub.id+'\',true)">Activate</button>')
@@ -8835,6 +8876,8 @@ async function createSubaccount(){
   var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
   if(!name||!slug||!adminUser||!adminPass){toast('All fields required.','error');return;}
   if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
+  var passErr=checkPasswordStrength(adminPass);
+  if(passErr){toast(passErr,'error');return;}
   var passHash=await sha256(adminPass);
   var subId='sub-'+slug;
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
