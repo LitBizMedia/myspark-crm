@@ -8179,8 +8179,9 @@ function gcPrintCard(id){
   var bizName=db.settings&&db.settings.businessName||'MySpark+';
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Gift Card - '+g.code+'</title>'
     +'<style>'
+    +'*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}'
     +'body{margin:0;padding:20px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:\'Helvetica Neue\',Arial,sans-serif}'
-    +'@media print{body{padding:0;background:#fff}.no-print{display:none}@page{size:3.5in 2in;margin:0}}'
+    +'@media print{body{padding:0;margin:0;background:transparent;display:block}.no-print{display:none}@page{size:3.5in 2in;margin:0}}'
     +'.card{width:3.5in;height:2in;border-radius:10px;overflow:hidden;position:relative;box-shadow:0 4px 20px rgba(0,0,0,.25);'+bgStyle+'}'
     +'.overlay{position:absolute;inset:0;background:rgba(0,0,0,.38);display:flex;flex-direction:column;justify-content:space-between;padding:14px 16px}'
     +'.card-name{font-size:14px;font-weight:800;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);letter-spacing:.02em}'
