@@ -1956,7 +1956,7 @@ function renderContacts(){
   if(state.cPage>pages)state.cPage=1;
   const slice=filtered.slice((state.cPage-1)*PER_PAGE,state.cPage*PER_PAGE);
   const totalActive=db.contacts.filter(function(c){return!c.archived}).length;
-  const sub=document.getElementById('contacts-sub');if(sub)sub.textContent=filtered.length+' of '+totalActive+' contacts';
+  const sub=document.getElementById('contacts-sub');if(sub)sub.textContent=state.cShowArchived?(filtered.length+' archived contacts'):(filtered.length+' of '+totalActive+' contacts');
   const{col,dir}=state.cSort;
   const th=(label,key)=>'<th class="'+(col===key?'sort-'+dir:'')+'" onclick="sortC(\''+key+'\')">'+label+'</th>';
   const thead=document.getElementById('ct-head');
@@ -2790,13 +2790,11 @@ async function linkContactToSquare(contactId){
 }
 
 function confirmDelContact(id){
-  if(!canDeleteContact()){
-    var ct=db.contacts.find(function(x){return x.id===id;});
-    openModal('Archive Contact',
-      '<p style="color:var(--text-muted)">Archive <strong style="color:var(--text)">'+esc(ct&&ct.name)+'</strong>? They can be restored from the archive later.</p>',
-      '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="archiveContact(\''+id+'\');closeModal()">Archive</button>');
-    return;
-  }const c=getContact(id);if(!c)return;openModal('Delete Contact','<p style="color:var(--text-muted)">Permanently delete <strong style="color:var(--text)">'+esc(c.name)+'</strong>? This cannot be undone.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>');
+  var ct=db.contacts.find(function(x){return x.id===id;});
+  if(!ct)return;
+  openModal('Archive Contact',
+    '<p style="color:var(--text-muted)">Archive <strong style="color:var(--text)">'+ esc(ct.name)+'</strong>? They can be restored from the archive later.</p>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="archiveContact(\''+ct.id+'\');closeModal()">Archive</button>');
 }
 function delContact(id){db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);saveData();closeModal();closeDrawer();renderContacts();toast('Contact deleted.','success')}
 
@@ -5952,7 +5950,7 @@ function renderStaffTeam(){
         +'<button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button>'
         +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="openUserSchedModal(\''+u.id+'\')">Schedule</button>':'')
         +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button>':'')
-        +(u.id!=='admin-patrick'?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')
+        +(u.id!=='admin-patrick'&&isAdminOrManager()&&userRole()==='admin'?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')
         +'</div>':'')
       +'</div>';
   });
