@@ -8591,7 +8591,7 @@ async function gcInitRemainderCardForm(){
 
 // Override processCharge to handle gift card deduction
 var _origProcessCharge=processCharge;
-function processCharge(){
+async function processCharge(){
   var gc=state.posGC;
   if(state.posPM==='gc'&&gc){
     // Gift card payment path
@@ -8650,7 +8650,7 @@ function processCharge(){
     }
     return;
   }
-  _origProcessCharge();
+  _origProcessCharge().catch(function(e){console.error('processCharge error:',e);});
 }
 
 // Show gc tab in POS when contact with gift cards is selected
