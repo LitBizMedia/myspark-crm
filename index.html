@@ -3175,6 +3175,8 @@ function initApp(){
   handleSquareHash();
   var sbCard=document.getElementById('supabase-card');
   if(sbCard)sbCard.style.display='none';
+  var sqLbl=document.getElementById('sq-status-label');
+  if(sqLbl)sqLbl.textContent=db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
 }
 
 // =====================================================
