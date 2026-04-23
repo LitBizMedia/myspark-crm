@@ -5,41 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MySpark+ CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<script src="https://web.squarecdn.com/v1/square.js">
-function gcHandleBgUpload(input){
-  var file=input.files&&input.files[0];
-  if(!file)return;
-  if(file.size>2*1024*1024){toast('Image too large. Max 2MB.','error');input.value='';return;}
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var dataUrl=e.target.result;
-    var hid=document.getElementById('gcp-bgimg');
-    if(hid)hid.value=dataUrl;
-    var cur=document.getElementById('gcp-bgimg-cur');
-    if(cur){cur.textContent='Image loaded: '+file.name;cur.style.display='block';}
-    gcUpdatePreview();
-  };
-  reader.readAsDataURL(file);
-}
-
-
-function gcHandleBgUpload(input){
-  var file=input.files&&input.files[0];
-  if(!file)return;
-  if(file.size>2*1024*1024){toast('Image too large. Max 2MB.','error');input.value='';return;}
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var dataUrl=e.target.result;
-    var hid=document.getElementById('gcp-bgimg');
-    if(hid)hid.value=dataUrl;
-    var cur=document.getElementById('gcp-bgimg-cur');
-    if(cur){cur.textContent='Image loaded: '+file.name;cur.style.display='block';}
-    gcUpdatePreview();
-  };
-  reader.readAsDataURL(file);
-}
-
-</script>
+<script src="https://web.squarecdn.com/v1/square.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -8361,6 +8327,23 @@ var _origRenderPayments=renderPayments;
 function renderPayments(){
   _origRenderPayments();
   setTimeout(updatePosGCTab,100);
+}
+
+
+function gcHandleBgUpload(input){
+  var file=input.files&&input.files[0];
+  if(!file)return;
+  if(file.size>2*1024*1024){toast('Image too large. Max 2MB.','error');input.value='';return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var dataUrl=e.target.result;
+    var hid=document.getElementById('gcp-bgimg');
+    if(hid)hid.value=dataUrl;
+    var cur=document.getElementById('gcp-bgimg-cur');
+    if(cur){cur.textContent='Image loaded: '+file.name;cur.style.display='block';}
+    gcUpdatePreview();
+  };
+  reader.readAsDataURL(file);
 }
 
 </script>
