@@ -1482,16 +1482,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-size:11px;color:var(--text-muted);margin-top:8px">You will be redirected to Square to authorize access.</div>
             </div>
           </div>
-          <div class="s-card full">
+          <div class="s-card full" id="supabase-card" style="display:none">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Supabase Sync</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Connect Supabase for shared data sync across all devices. Create a free project at supabase.com, then run the setup SQL below in the Supabase SQL editor.</div>
-            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:11px 14px;margin-bottom:12px;font-family:monospace;font-size:11px;color:#a5f3a5;white-space:pre;overflow-x:auto;line-height:1.7">CREATE TABLE crm_data (
-  id TEXT PRIMARY KEY,
-  data JSONB,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE crm_data ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "allow_all" ON crm_data FOR ALL USING (true) WITH CHECK (true);</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Agency-level database connection. All subaccounts sync through this connection automatically.</div>
             <div class="form-row" style="max-width:580px">
               <div class="form-group"><label>Project URL</label><input id="sb-url" type="text" placeholder="https://xxxx.supabase.co"></div>
               <div class="form-group"><label>Anon Key</label><input id="sb-key" type="password" placeholder="eyJhbGci..."></div>
@@ -1501,7 +1494,7 @@ CREATE POLICY "allow_all" ON crm_data FOR ALL USING (true) WITH CHECK (true);</d
               <button class="btn btn-ghost btn-sm" onclick="pullFromSupabase()">Pull Latest Data</button>
               <div class="sync-status"><div class="sync-dot" id="sync-dot2"></div><span id="sync-lbl2" style="font-size:12px;color:var(--text-muted)">&#8211;</span></div>
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">All users connecting to the same Supabase project share data automatically. HIPAA-compliant plans are available on Supabase Pro.</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">Managed at agency level. Subaccounts connect automatically.</div>
           </div>
           <div class="s-card full">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Custom Fields</div>
@@ -3090,6 +3083,8 @@ function initApp(){
   updateNotifBadge();renderPanel();
   fetchFromSupabase().then(ok=>{if(ok)renderPanel()});
   handleSquareHash();
+  var sbCard=document.getElementById('supabase-card');
+  if(sbCard)sbCard.style.display=state.user&&state.user.role==='admin'&&window.location.pathname.indexOf('litbiz')>-1?'block':'none';
 }
 
 // =====================================================
