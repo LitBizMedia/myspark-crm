@@ -1322,7 +1322,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <button class="pay-tab hidden" id="pm-gc" onclick="setPM('gc')">Gift Card</button>
               </div>
               <div id="pm-card-fields">
-                <div style="font-size:12px;color:var(--text-muted);padding:6px 0">Card details will be collected securely at checkout via Square.</div>
+                <div id="pos-sq-card-container" class="sq-card-form"></div>
+                <div id="pos-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>
                 <input id="pos-card-num" type="hidden"><input id="pos-exp" type="hidden"><input id="pos-cvv" type="hidden"><input id="pos-zip" type="hidden">
               </div>
               <div id="pm-cash-fields" class="hidden" style="font-size:13px;color:var(--text-muted);padding:6px 0">Record cash payment. Amount will be logged.</div>
@@ -2375,6 +2376,7 @@ function switchPayTab(tab){
     if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
     renderPosItems();calcTotals();
     setTimeout(updatePosGCTab,100);
+    if(!posSqCard&&db.settings&&db.settings.square&&db.settings.square.accessToken) setTimeout(initPosSquareCardForm,300);
   }else if(tab==='subs'){
     renderSubscriptions();
   }else if(tab==='transactions'){
@@ -2504,10 +2506,10 @@ function reviewCharge(){
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
   const sqConnected=db.settings&&db.settings.square&&db.settings.square.accessToken;
   const useSquare=state.posPM==='card'&&sqConnected;
-  const modalBody=body+(useSquare?'<div style="margin-top:12px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px">Card Details</div><div id="pos-sq-card-container" class="sq-card-form"></div><div id="pos-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div></div>':'');
+  const modalBody=body;
   state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare}};
   openModal('Review Charge',modalBody,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="processCharge()">Process Payment</button>');
-  if(useSquare) setTimeout(initPosSquareCardForm, 200);
+  // Square form already initialized in POS panel
 }
 
 let posSqCard=null;
