@@ -774,7 +774,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 /* STAFF PANEL */
 .staff-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 20px;flex-shrink:0}
 .staff-tab{padding:12px 18px;font-size:13px;font-weight:600;color:rgba(237,232,255,.65);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;font-family:Lato,sans-serif;transition:all .18s;white-space:nowrap}
-.staff-tab:hover{color:var(--text)}
+.staff-tab:hover{color:rgba(237,232,255,.9)}
 .staff-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
 .staff-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:20px}
 .staff-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
@@ -1928,7 +1928,8 @@ function renderDash(){
 // CONTACTS
 // =====================================================
 function filteredContacts(){
-  if(!state.cShowArchived&&db.contacts.some(c=>c.archived)){return _filteredContacts().filter(c=>!c.archived)}
+  if(state.cShowArchived){return _filteredContacts().filter(c=>c.archived)}
+  return _filteredContacts().filter(c=>!c.archived)
   return _filteredContacts();
 }
 function _filteredContacts(){
@@ -5729,15 +5730,7 @@ document.addEventListener('DOMContentLoaded',function(){
 // =====================================================
 // STAFF PANEL
 // =====================================================
-function renderStaff(){
-  const isAdmin=state.user&&state.user.role==='admin';
-  const settingBtn=document.getElementById('stt-settings');
-  const reportBtn=document.getElementById('stt-reporting');
-  if(settingBtn)settingBtn.classList.toggle('hidden',!isAdmin);
-  if(reportBtn)reportBtn.classList.toggle('hidden',!(isAdmin||(state.user&&state.user.role==='manager')));
-  const tab=state.staffTab||'team';
-  switchStaffTab(tab);
-}
+// renderStaff merged below
 
 function switchStaffTab(tab){
   state.staffTab=tab;
@@ -5752,34 +5745,7 @@ function switchStaffTab(tab){
   if(tab==='reporting')renderStaffReporting();
 }
 
-function renderStaffTeam(){
-  // Hide add user button for managers
-  setTimeout(function(){
-    var addBtn=document.getElementById('add-user-btn');
-    if(addBtn&&!isAdminOrManager())addBtn.style.display='none';
-    if(addBtn&&isAdminOrManager()&&userRole()!=='admin')addBtn.style.display='none';
-  },100);
-  const el=document.getElementById('staff-team-view');if(!el)return;
-  const users=allUsers();
-  const today=todayStr();
-  let h='<div class="page-header" style="margin-bottom:18px"><div><div class="page-title">Team</div><div class="page-subtitle">'+users.length+' team member'+(users.length!==1?'s':'')+'</div></div></div>';
-  h+='<div class="staff-card-grid">';
-  users.forEach(function(u){
-    const col=u.color||'#6b21ea';
-    const todayAppts=db.appointments.filter(function(a){return a.assignedTo===u.id&&a.date===today&&a.status==='scheduled';});
-    const bh=db.settings&&db.settings.businessHours&&db.settings.businessHours[['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()]];
-    const schedLabel=bh&&bh.open?'Working today: '+fmtTime(bh.start)+' \u2013 '+fmtTime(bh.end):'Not scheduled today';
-    h+='<div class="staff-card">'
-      +'<div class="staff-card-avatar" style="background:'+col+'">'+initials(u.name||u.username)+'</div>'
-      +'<div class="staff-card-name">'+esc(u.name||u.username)+'</div>'
-      +'<div class="staff-card-role">'+esc(u.role)+'</div>'
-      +'<div class="staff-card-sched">'+todayAppts.length+' appt'+(todayAppts.length!==1?'s':'')+'  today</div>'
-      +(state.user&&state.user.role==='admin'?'<div style="display:flex;gap:5px;margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button></div>':'')
-      +'</div>';
-  });
-  h+='</div>';
-  el.innerHTML=h;
-}
+
 
 function renderStaffUserList(){
   const el=document.getElementById('staff-user-list');if(!el)return;
@@ -5970,7 +5936,8 @@ function renderStaffTeam(){
       +'<div class="staff-card-sched" style="margin-top:2px">'+schedLabel+'</div>'
       +(isAdmin?'<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">'
         +'<button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button>'
-        +'<button class="btn btn-ghost btn-sm" onclick="openUserSchedModal(\''+u.id+'\')">Schedule</button>'
+        +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="openUserSchedModal(\''+u.id+'\')">Schedule</button>':'')
+        +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button>':'')
         +(u.id!=='admin-patrick'?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')
         +'</div>':'')
       +'</div>';
@@ -9084,7 +9051,7 @@ function updateAuthSubtitle(){
 function userRole(){ return (state.user&&state.user.role)||'user'; }
 function hasRole(){ var r=userRole(); return Array.prototype.slice.call(arguments).indexOf(r)>-1; }
 function isAdminOrManager(){ return hasRole('admin','manager'); }
-function canDeleteContact(){ return hasRole('admin','manager'); }
+function canDeleteContact(){ return hasRole('admin'); } // only admin permanently deletes
 function canManageGiftCards(){ return hasRole('admin','manager'); }
 function canManageCoupons(){ return hasRole('admin','manager'); }
 function canRefundVoid(){ return hasRole('admin','manager'); }
@@ -9117,6 +9084,8 @@ function applyRolePermissions(){
   if(fptForms)fptForms.classList.toggle('hidden',!adm);
   var sttReporting=document.getElementById('stt-reporting');
   if(sttReporting)sttReporting.classList.toggle('hidden',!am);
+  var sttTeam=document.getElementById('stt-team');
+  if(sttTeam)sttTeam.classList.remove('hidden');
 }
 
 
