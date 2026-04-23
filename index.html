@@ -2388,6 +2388,7 @@ function switchPayTab(tab){
   const s=document.getElementById('pos-staff');
     if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
     renderPosItems();calcTotals();
+    setTimeout(updatePosGCTab,100);
   }else if(tab==='subs'){
     renderSubscriptions();
   }else if(tab==='transactions'){
@@ -2416,6 +2417,7 @@ function selPosC(id,name){
   posUpdateCreditDisplay();
   state.posCOFIndex=0;
   setTimeout(updatePosCoFTab,50);
+  setTimeout(updatePosGCTab,60);
 }
 
 function posAddItem(){
@@ -8495,19 +8497,7 @@ function updatePosGCTab(){
   gcTab.classList.toggle('hidden',!hasCards);
 }
 
-// Hook into selPosC to show gc tab
-var _origSelPosC=selPosC;
-function selPosC(id,name){
-  _origSelPosC(id,name);
-  updatePosGCTab();
-}
-
-// Also update gc tab when payments tab loads
-var _origRenderPayments=renderPayments;
-function renderPayments(){
-  _origRenderPayments();
-  setTimeout(updatePosGCTab,100);
-}
+// updatePosGCTab called directly where needed
 
 
 function gcHandleBgUpload(input){
