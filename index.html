@@ -886,11 +886,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
   </div>
 </div>
 
-<!-- AGENCY DASHBOARD -->
-<div id="agency-screen" class="hidden" style="min-height:100vh;background:var(--bg);color:var(--text);font-family:Lato,sans-serif">
-  <div id="agency-content"></div>
-</div>
-
 <!-- APP -->
 <div id="app" class="hidden">
   <!-- SIDEBAR -->
@@ -903,22 +898,22 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <button class="sb-item active" data-panel="dashboard" onclick="switchPanel('dashboard')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard
       </button>
-      <button class="sb-item" data-panel="contacts" onclick="switchPanel('contacts')">
+      <button class="sb-item" id="sb-contacts" data-panel="contacts" onclick="switchPanel('contacts')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Contacts
       </button>
       <button class="sb-item" data-panel="calendar" onclick="switchPanel('calendar')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Calendar
       </button>
-      <button class="sb-item" data-panel="tasks" onclick="switchPanel('tasks')">
+      <button class="sb-item" id="sb-tasks" data-panel="tasks" onclick="switchPanel('tasks')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Tasks
       </button>
-      <button class="sb-item" data-panel="payments" onclick="switchPanel('payments')">
+      <button class="sb-item" id="sb-payments" data-panel="payments" onclick="switchPanel('payments')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Payments
       </button>
-      <button class="sb-item" data-panel="products" onclick="switchPanel('products')">
+      <button class="sb-item" id="sb-products" data-panel="products" onclick="switchPanel('products')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Products
       </button>
-      <button class="sb-item" data-panel="forms" onclick="switchPanel('forms')">
+      <button class="sb-item" id="sb-forms" data-panel="forms" onclick="switchPanel('forms')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Forms
       </button>
       <button class="sb-item" id="sb-staff" data-panel="staff" onclick="switchPanel('staff')">
@@ -1304,19 +1299,29 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <div class="pos-tr grand"><span>Total</span><span id="pos-total" style="color:var(--orange)">$0.00</span></div>
               </div>
             </div>
-<div class="pos-card">
+          </div>
+          <div>
+            <div class="pos-card">
+              <div class="pos-card-title">Staff</div>
+              <select id="pos-staff" class="filter-sel" style="width:100%;height:38px"></select>
+              <label class="sec-label" style="margin-top:10px">Tip Goes To (optional)</label>
+              <select id="pos-tip-staff" class="filter-sel" style="width:100%;height:38px"><option value="">Same as Staff</option></select>
+            </div>
+            <div class="pos-card">
               <div class="pos-card-title">Payment Method</div>
               <div class="pay-tabs">
                 <button class="pay-tab active" id="pm-card" onclick="setPM('card')">Card</button>
                 <button class="pay-tab" id="pm-cash" onclick="setPM('cash')">Cash</button>
                 <button class="pay-tab" id="pm-other" onclick="setPM('other')">Other</button>
                 <button class="pay-tab hidden" id="pm-cof" onclick="setPM('cof')">Card on File</button>
-                <button class="pay-tab hidden" id="pm-gc" onclick="setPM('gc')">Gift Card</button>
               </div>
               <div id="pm-card-fields">
-                <div id="pos-sq-card-container" class="sq-card-form" style="min-height:89px"></div>
-                <div id="pos-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>
-                <input id="pos-card-num" type="hidden"><input id="pos-exp" type="hidden"><input id="pos-cvv" type="hidden"><input id="pos-zip" type="hidden">
+                <div style="margin-bottom:8px"><div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Card Number</div><input id="pos-card-num" type="text" placeholder="**** **** **** ****" maxlength="19" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">
+                  <div><div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Expiry</div><input id="pos-exp" type="text" placeholder="MM/YY" maxlength="5" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 8px;font-family:Lato,sans-serif;font-size:13px;outline:none"></div>
+                  <div><div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">CVV</div><input id="pos-cvv" type="text" placeholder="***" maxlength="4" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 8px;font-family:Lato,sans-serif;font-size:13px;outline:none"></div>
+                  <div><div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">ZIP</div><input id="pos-zip" type="text" placeholder="46382" maxlength="10" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 8px;font-family:Lato,sans-serif;font-size:13px;outline:none"></div>
+                </div>
               </div>
               <div id="pm-cash-fields" class="hidden" style="font-size:13px;color:var(--text-muted);padding:6px 0">Record cash payment. Amount will be logged.</div>
               <div id="pm-cof-fields" class="hidden" style="margin-top:4px">
@@ -1329,49 +1334,14 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Payment Reference</div>
                 <input id="pos-other-ref" type="text" placeholder="Check #, Venmo, etc." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none">
               </div>
-              <div id="pm-gc-fields" class="hidden" style="margin-top:8px">
-                <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Gift Card Code</div>
-                <div id="pos-gc-entry" style="display:flex;gap:7px;margin-bottom:8px">
-                  <input id="pos-gc-code" type="text" placeholder="XXXX-XXXX-XXXX" maxlength="14" oninput="this.value=posGcFmt(this.value)" style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none;letter-spacing:.08em">
-                  <button class="btn btn-purple btn-sm" onclick="posApplyGiftCard()">Apply</button>
-                </div>
-                <div id="pos-gc-info" class="hidden" style="background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25);border-radius:var(--radius);padding:9px 12px">
-                  <div style="display:flex;justify-content:space-between;align-items:center">
-                    <div>
-                      <div style="font-size:12px;font-weight:700;color:#34d399" id="pos-gc-balance-label">Balance: $0.00</div>
-                      <div style="font-size:11px;color:var(--text-muted)" id="pos-gc-name-label"></div>
-                    </div>
-                    <button class="btn btn-danger btn-sm" onclick="posClearGiftCard()">Remove</button>
-                  </div>
-                  <div id="pos-gc-partial-wrap" class="hidden" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(52,211,153,.2)">
-                    <div style="font-size:11px;color:#fbbf24;font-weight:600;margin-bottom:7px">Insufficient balance. Pay remainder with:</div>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap">
-                      <button class="btn btn-sm" id="gc-rem-card" onclick="gcSetRemainder('card')" style="font-size:11px;background:var(--bg-card);border:1px solid var(--border);color:var(--text)">Card</button>
-                      <button class="btn btn-sm" id="gc-rem-cash" onclick="gcSetRemainder('cash')" style="font-size:11px;background:var(--bg-card);border:1px solid var(--border);color:var(--text)">Cash</button>
-                      <button class="btn btn-sm" id="gc-rem-other" onclick="gcSetRemainder('other')" style="font-size:11px;background:var(--bg-card);border:1px solid var(--border);color:var(--text)">Other</button>
-                    </div>
-                    <div id="gc-rem-extra" class="hidden" style="margin-top:8px"></div>
-                  </div>
-                </div>
-                <div id="pos-gc-error" class="hidden" style="font-size:12px;color:#f87171;margin-top:5px"></div>
-              </div>
             </div>
-          </div>
-          <div>
-            <div class="pos-card">
-              <div class="pos-card-title">Staff</div>
-              <select id="pos-staff" class="filter-sel" style="width:100%;height:38px"></select>
-              <label class="sec-label" style="margin-top:10px">Tip Goes To (optional)</label>
-              <select id="pos-tip-staff" class="filter-sel" style="width:100%;height:38px"><option value="">Same as Staff</option></select>
-            </div>
-            
             <div class="pos-card">
               <div class="pos-card-title">Notes</div>
               <textarea id="pos-notes" rows="2" placeholder="Order notes..." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none;resize:vertical"></textarea>
               <button class="btn btn-primary btn-full" style="margin-top:10px;font-size:14px;padding:12px" onclick="reviewCharge()">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Review &amp; Charge
               </button>
-              <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:7px" id="sq-status-label">Checking Square status...</div>
+              <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:7px">Square integration ready. Connect in Settings.</div>
             </div>
           </div>
         </div>
@@ -1411,7 +1381,14 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           </div>
         </div>
         <div id="pay-coupons-view" class="hidden"></div>
-        <div id="pay-giftcards-view" class="hidden"></div>
+        <div id="pay-giftcards-view" class="hidden">
+          <div class="coming-soon-wrap">
+            <span class="coming-soon-badge">Coming Soon</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            <h3>Gift Cards</h3>
+            <p>Issue and manage gift cards for your clients. Track balances and redemptions through Square integration.</p>
+          </div>
+        </div>
         <div id="pay-transactions-view" class="hidden"></div>
       </div>
 
@@ -1480,9 +1457,16 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-size:11px;color:var(--text-muted);margin-top:8px">You will be redirected to Square to authorize access.</div>
             </div>
           </div>
-          <div class="s-card full" id="supabase-card" style="display:none">
+          <div class="s-card full">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Supabase Sync</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Agency-level database connection. All subaccounts sync through this connection automatically.</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Connect Supabase for shared data sync across all devices. Create a free project at supabase.com, then run the setup SQL below in the Supabase SQL editor.</div>
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:11px 14px;margin-bottom:12px;font-family:monospace;font-size:11px;color:#a5f3a5;white-space:pre;overflow-x:auto;line-height:1.7">CREATE TABLE crm_data (
+  id TEXT PRIMARY KEY,
+  data JSONB,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE crm_data ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON crm_data FOR ALL USING (true) WITH CHECK (true);</div>
             <div class="form-row" style="max-width:580px">
               <div class="form-group"><label>Project URL</label><input id="sb-url" type="text" placeholder="https://xxxx.supabase.co"></div>
               <div class="form-group"><label>Anon Key</label><input id="sb-key" type="password" placeholder="eyJhbGci..."></div>
@@ -1492,7 +1476,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <button class="btn btn-ghost btn-sm" onclick="pullFromSupabase()">Pull Latest Data</button>
               <div class="sync-status"><div class="sync-dot" id="sync-dot2"></div><span id="sync-lbl2" style="font-size:12px;color:var(--text-muted)">&#8211;</span></div>
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">Managed at agency level. Subaccounts connect automatically.</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">All users connecting to the same Supabase project share data automatically. HIPAA-compliant plans are available on Supabase Pro.</div>
           </div>
           <div class="s-card full">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Custom Fields</div>
@@ -1547,7 +1531,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 // =====================================================
 // CONSTANTS
 // =====================================================
-let SK='myspark_crm_v2';const SSK='myspark_session_v1',GIST_FILE='myspark-crm-data.json';
+const SK='myspark_crm_v2',SSK='myspark_session_v1',GIST_FILE='myspark-crm-data.json';
 // Fallback credentials - always available even if localStorage is wiped
 const SB_FALLBACK_URL='https://jytnzqaatkdtcflysadw.supabase.co';
 const SB_FALLBACK_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dG56cWFhdGtkdGNmbHlzYWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDE5NDUsImV4cCI6MjA5MjM3Nzk0NX0.znP5Tx2qU89BCuRBJZJlbmR-abde5J0NEzL0BXVi80g';
@@ -1555,10 +1539,6 @@ const SQ_FALLBACK_TOKEN='EAAAltTSKhihm6k7nQ7cvcl2k-lmi-VwJrJ-DhA6zOvW4Pt1RBN0owH
 const SQ_FALLBACK_MERCHANT='MLKQN95NEH4F8';
 const PER_PAGE=20;
 const ADMIN_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
-const AGENCY_SLUG='agency';
-const DEFAULT_SLUG='litbiz';
-const AGENCY_SESSION_KEY='myspark_agency_v1';
-const AGENCY_TOKEN_PREFIX='myspark_at_';
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DSHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DKEYS=['sun','mon','tue','wed','thu','fri','sat'];
@@ -1585,7 +1565,6 @@ const DEF_BH={
 // =====================================================
 let state={
   user:null,panel:'dashboard',
-  subaccountSlug:'litbiz',subaccountId:'sub-litbiz',agencyMode:false,
   cPage:1,cSearch:'',cType:'',cStatus:'',cTag:'',cSort:{col:'name',dir:'asc'},cSelected:new Set(),cShowArchived:false,
   drawer:null,dTab:'info',
   calView:'month',calDate:new Date(),calUser:'all',
@@ -1603,7 +1582,7 @@ let state={
 // DB
 // =====================================================
 let db={
-  contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],
+  contacts:[],appointments:[],tasks:[],payments:[],coupons:[],
   tags:[
     {id:'tag-hotlead',name:'Hot Lead',color:'#ff4000'},
     {id:'tag-vip',name:'VIP Client',color:'#6b21ea'},
@@ -1657,15 +1636,6 @@ const allUsers=()=>[getEffectiveAdmin(),...db.users];
 const getUserById=id=>allUsers().find(u=>u.id===id);
 const getUserColor=id=>{const u=getUserById(id);return u?u.color||'#6b21ea':'#6b21ea'};
 const fmt$=n=>'$'+(+n||0).toFixed(2);
-
-
-function checkPasswordStrength(pass){
-  if(!pass||pass.length<8)return'Password must be at least 8 characters.';
-  if(!/[A-Z]/.test(pass))return'Password must contain at least one uppercase letter.';
-  if(!/[0-9]/.test(pass))return'Password must contain at least one number.';
-  if(!/[^A-Za-z0-9]/.test(pass))return'Password must contain at least one special character.';
-  return null;
-}
 
 async function sha256(str){
   const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
@@ -1757,7 +1727,33 @@ function applyFallbackCredentials(){
 function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
 function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(doSync,2200)}
 
-// Legacy Gist sync removed - using Supabase subaccount_data
+async function doSync(){
+  const token=db.settings.gistToken;if(!token)return;
+  setSyncSt('syncing');
+  try{
+    const content=JSON.stringify(db,null,2);
+    const headers={'Authorization':'token '+token,'Content-Type':'application/json'};
+    if(db.settings.gistId){
+      await fetch('https://api.github.com/gists/'+db.settings.gistId,{method:'PATCH',headers,body:JSON.stringify({files:{[GIST_FILE]:{content}}})});
+    }else{
+      const r=await fetch('https://api.github.com/gists',{method:'POST',headers,body:JSON.stringify({description:'MySpark+ CRM',public:false,files:{[GIST_FILE]:{content}}})});
+      const d=await r.json();
+      if(d.id){db.settings.gistId=d.id;localStorage.setItem(SK,JSON.stringify(db));const el=document.getElementById('gist-id');if(el)el.value=d.id}
+    }
+    setSyncSt('synced');
+  }catch(e){setSyncSt('error')}
+}
+
+async function fetchGist(){
+  const{gistToken:t,gistId}=db.settings;if(!t||!gistId)return false;
+  setSyncSt('syncing');
+  try{
+    const r=await fetch('https://api.github.com/gists/'+gistId,{headers:{'Authorization':'token '+t}});
+    const d=await r.json();const c=d.files&&d.files[GIST_FILE]&&d.files[GIST_FILE].content;
+    if(c){const rem=JSON.parse(c);db={...db,...rem};localStorage.setItem(SK,JSON.stringify(db));setSyncSt('synced');return true}
+  }catch(e){setSyncSt('error')}
+  return false;
+}
 
 function setSyncSt(s){
   ['','2'].forEach(x=>{
@@ -1783,10 +1779,6 @@ document.getElementById('login-form').addEventListener('submit',async function(e
   let user=null;
   if(username===DEFAULT_ADMIN.username&&hash===DEFAULT_ADMIN.passwordHash)user=DEFAULT_ADMIN;
   else user=db.users.find(u=>u.username.toLowerCase()===username&&u.passwordHash===hash&&u.active);
-  // Check subaccount admin credentials stored in data
-  if(!user&&db._subaccountAdmin&&username===db._subaccountAdmin.username.toLowerCase()&&hash===db._subaccountAdmin.passwordHash){
-    user={id:'admin-'+state.subaccountSlug,username:db._subaccountAdmin.username,role:'admin',name:db._subaccountAdmin.name||db._subaccountAdmin.username,color:db._subaccountAdmin.color||'#6b21ea'};
-  }
   if(!user){err.textContent='Invalid username or password.';err.classList.remove('hidden');return}
   err.classList.add('hidden');
   state.user=user;
@@ -2369,9 +2361,6 @@ function switchPayTab(tab){
     const v=document.getElementById('pay-'+t+'-view');
     if(v)v.classList.toggle('hidden',t!==tab);
   });
-  if(tab!=='pos'&&posSqCard){
-    try{posSqCard.destroy();posSqCard=null;const con=document.getElementById('pos-sq-card-container');if(con)con.innerHTML='';}catch(e){}
-  }
   if(tab==='pos'){
     const tipSt=document.getElementById('pos-tip-staff');if(tipSt){tipSt.innerHTML='<option value="">Same as Staff</option>'+allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('');}
     const crRow=document.getElementById('pos-credit-row');if(crRow)crRow.style.display='none';
@@ -2379,16 +2368,12 @@ function switchPayTab(tab){
   const s=document.getElementById('pos-staff');
     if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
     renderPosItems();calcTotals();
-    setTimeout(updatePosGCTab,100);
-    if(db.settings&&db.settings.square&&db.settings.square.accessToken){if(!posSqCard)setTimeout(initPosSquareCardForm,400);}
   }else if(tab==='subs'){
     renderSubscriptions();
   }else if(tab==='transactions'){
     renderTransactions();
   }else if(tab==='coupons'){
     renderCoupons();
-  }else if(tab==='giftcards'){
-    renderGiftCards();
   }
 }
 
@@ -2409,7 +2394,6 @@ function selPosC(id,name){
   posUpdateCreditDisplay();
   state.posCOFIndex=0;
   setTimeout(updatePosCoFTab,50);
-  setTimeout(updatePosGCTab,60);
 }
 
 function posAddItem(){
@@ -2498,130 +2482,24 @@ function setPM(v){
   document.getElementById('pm-other-fields')&&document.getElementById('pm-other-fields').classList.toggle('hidden',v!=='other');
 }
 
-async function reviewCharge(){
+function reviewCharge(){
   if(state.posPM==='cof'){chargeCardOnFile();return}
   if(!state.posItems.length){toast('Add at least one item.','error');return}
   const{sub,couponDiscount,couponCode,couponId,discount,discountType,discountVal,discountNote,afterDiscount,tip,credit:creditCalc,total}=calcTotals();
   const cid=document.getElementById('pos-c-id').value,c=cid?getContact(cid):null;
   const staffId=document.getElementById('pos-staff').value,staff=staffId?getUserById(staffId):null;
-  const sqConnected=db.settings&&db.settings.square&&db.settings.square.accessToken;
-  const useSquare=state.posPM==='card'&&sqConnected;
-  const last4='';
-  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600;color:var(--text)">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;color:var(--text)"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+(useSquare?' · Card on form':''  )+'</div></div><p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
+  const cardNum=document.getElementById('pos-card-num')&&document.getElementById('pos-card-num').value||'';
+  const last4=cardNum.replace(/\s/g,'').slice(-4);
+  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+(last4?' \u00b7 \u2022\u2022\u2022\u2022 '+last4:'')+'</div></div><p style="font-size:13px;color:var(--text-muted)">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
-  openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="processCharge()">Process Payment</button>');
+  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems]}};
+  openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="processCharge()">Process Payment</button>');
 }
 
-let posSqCard=null;
-async function initPosSquareCardForm(){
-  const errEl=document.getElementById('pos-sq-card-errors');
-  const container=document.getElementById('pos-sq-card-container');
-  if(!container){console.log('Square container not found');return;}
-  if(posSqCard)return; // Already initialized, don't re-init
-  container.innerHTML='';
-  try{
-    const cfgRes=await fetch('/api/square/config');
-    const cfg=await cfgRes.json();
-    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
-    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
-    const payments=window.Square.payments(cfg.appId,'production');
-    posSqCard=await payments.card();
-    await posSqCard.attach('#pos-sq-card-container');
-    console.log('Square card form ready');
-  }catch(e){
-    console.error('Square init error:',e);
-    if(errEl)errEl.textContent='Could not load card form: '+e.message;
-  }
-}
-
-async function processCharge(){
-  // ── Gift Card payment path ──
-  var gc=state.posGC;
-  if(state.posPM==='gc'&&gc){
-    var gObj=(db.giftCards||[]).find(function(x){return x.id===gc.id;});
-    if(!gObj){toast('Gift card not found.','error');return;}
-    var totals=calcTotals();
-    var gcTotal=totals.total;
-    var gcApplied=Math.min(gObj.balance,gcTotal);
-    var remainder=Math.max(0,gcTotal-gcApplied);
-    if(remainder>0&&!state.posGCRemainderMethod){toast('Choose a payment method for the remaining '+fmt$(remainder)+'.','error');return;}
-    gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
-    if(gObj.balance<=0)gObj.status='redeemed';
-    else if(gcApplied>0)gObj.status='partial';
-    if(!gObj.log)gObj.log=[];
-    var gcCid=document.getElementById('pos-c-id')&&document.getElementById('pos-c-id').value||'';
-    var gcStaffId=document.getElementById('pos-staff')&&document.getElementById('pos-staff').value||'';
-    var gcTipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;
-    gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at POS'+(remainder>0?' + '+fmt$(remainder)+' '+state.posGCRemainderMethod:''),date:now_(),contactId:gcCid||null});
-    var gcRemRef=state.posGCRemainderMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
-    var gcNotes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
-    db.payments.push({id:uid(),contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:state.posGCRemainderMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()});
-    saveData();
-    state.posItems=[];state.posCoupon=null;state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
-    renderPosItems();calcTotals();posClearGiftCard();
-    document.getElementById('pos-c-id').value='';document.getElementById('pos-c-inp').value='';
-    closeModal();
-    toast('Payment of '+fmt$(gcTotal)+' recorded. Gift card: '+fmt$(gcApplied)+(remainder>0?', remainder: '+fmt$(remainder):''),'success');
-    if(remainder>0&&state.posGCRemainderMethod==='card'){
-      var gcSq=db.settings.square||{};
-      if(gcSq.accessToken&&gcRemCard){
-        gcRemCard.tokenize().then(function(res){
-          if(res.status!=='OK'){toast('Remainder card error.','error');return;}
-          return fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessToken:gcSq.accessToken,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
-        }).then(function(r){if(r)return r.json();}).then(function(d){
-          if(!d)return;gcRemCard=null;
-          if(d.error)toast('Remainder charge failed: '+d.error,'error');
-          else toast('Remainder of '+fmt$(remainder)+' charged.','success');
-        }).catch(function(e){toast('Square error: '+e.message,'error');});
-      }
-    }
-    return;
-  }
-  // ── Normal payment path ──
-  const{cid,staffId,sub,couponDiscount,couponCode,couponId,discount,discountType,discountNote,afterDiscount,tip,total,pm,last4,items,useSquare,squareToken}=state.modal.extra;
+function processCharge(){
+  const{cid,staffId,sub,couponDiscount,couponCode,couponId,discount,discountType,discountNote,afterDiscount,tip,total,pm,last4,items}=state.modal.extra;
   const tipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;const tipStaffId=tipStaffRaw||staffId||null;
   const creditApplied=state.modal.extra&&state.modal.extra.credit||0;
-  const btn=document.getElementById('process-charge-btn');
-  // If Square card payment, tokenize from permanent POS form
-  if(useSquare){
-    if(!posSqCard){closeModal();toast('Card form not ready. Select Card tab and wait for form to load.','error');return;}
-    if(btn){btn.disabled=true;btn.textContent='Processing...';}
-    try{
-      const result=await posSqCard.tokenize();
-      if(result.status!=='OK'){
-        const msgs=(result.errors||[]).map(e=>e.message).join(', ');
-        if(btn){btn.disabled=false;btn.textContent='Process Payment';}
-        closeModal();
-        toast('Card error: '+(msgs||'Please check card details and try again.'),'error');
-        const errEl=document.getElementById('pos-sq-card-errors');
-        if(errEl)errEl.textContent=msgs||'Please check card details.';
-        return;
-      }
-      const sq=db.settings.square||{};
-      const amtCents=Math.round(total*100);
-      const chargeRes=await fetch('/api/square/charge',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({accessToken:sq.accessToken,sourceId:result.token,amountCents:amtCents,note:'POS Sale'})
-      });
-      const chargeData=await chargeRes.json();
-      if(chargeData.error){
-        if(btn){btn.disabled=false;btn.textContent='Process Payment';}
-        closeModal();
-        toast('Charge failed: '+chargeData.error,'error');
-        return;
-      }
-      posSqCard=null;
-      // Re-init form for next transaction
-      setTimeout(initPosSquareCardForm,500);
-    }catch(e){
-      if(btn){btn.disabled=false;btn.textContent='Process Payment';}
-      closeModal();
-      toast('Charge failed: '+e.message,'error');
-      return;
-    }
-  }
   const payId=uid();
   db.payments.push({id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
   // Log coupon usage
@@ -2948,7 +2826,7 @@ function openUserSchedModal(uid){
 function buildUserBody(){
   const cols=USER_COLORS.map((c,i)=>'<div class="color-sw'+(i===0?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Username</label><input id="uf-user" type="text" placeholder="jsmith"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Password</label><input id="uf-pass" type="password"></div><div class="form-group"><label>Role</label><select id="uf-role"><option value="user">User</option><option value="viewer">Viewer</option></select></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Password</label><input id="uf-pass" type="password"></div><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Manager</option><option value="user">User</option><option value="receptionist">Receptionist</option><option value="practitioner">Practitioner</option></select></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Working Schedule</div>'
     +buildSchedSection(false);
@@ -3091,7 +2969,7 @@ function loadData(){
       db={...db,...p,
         tags:p.tags&&p.tags.length?p.tags:db.tags,
         users:p.users||[],payments:p.payments||[],
-        products:p.products||[],readNotifs:p.readNotifs||[],coupons:p.coupons||[],giftCards:p.giftCards||[],giftCardProducts:p.giftCardProducts||[],
+        products:p.products||[],readNotifs:p.readNotifs||[],coupons:p.coupons||[],
         subscriptions:p.subscriptions||[],
         forms:p.forms||[],
         formSubmissions:p.formSubmissions||[],
@@ -3119,16 +2997,15 @@ function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(do
 async function doSync(){
   const url=db.settings.supabaseUrl,key=db.settings.supabaseKey;
   if(!url||!key)return;
+  // Safety check: never sync if contacts are empty and we have had contacts before
   const hasData=db.contacts.length>0||db.payments.length>0||db.tasks.length>0;
   if(!hasData){console.log('Sync skipped: no data to sync.');return;}
   setSyncSt('syncing');
-  const subId=state.subaccountId||'sub-litbiz';
-  const dataId='data-'+(state.subaccountSlug||'litbiz');
   try{
-    await fetch(url+'/rest/v1/subaccount_data',{
+    await fetch(url+'/rest/v1/crm_data',{
       method:'POST',
       headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify({id:dataId,subaccount_id:subId,data:db,updated_at:new Date().toISOString()})
+      body:JSON.stringify({id:'main',data:db,updated_at:new Date().toISOString()})
     });
     setSyncSt('synced');
   }catch(e){setSyncSt('error')}
@@ -3138,9 +3015,8 @@ async function fetchFromSupabase(){
   const url=db.settings.supabaseUrl,key=db.settings.supabaseKey;
   if(!url||!key)return false;
   setSyncSt('syncing');
-  const subId=state.subaccountId||'sub-litbiz';
   try{
-    const r=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId+'&select=data',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    const r=await fetch(url+'/rest/v1/crm_data?id=eq.main&select=data',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
     const rows=await r.json();
     if(rows&&rows.length&&rows[0].data){
       const rem=rows[0].data;
@@ -3173,17 +3049,11 @@ function initApp(){
   document.getElementById('sb-role').textContent=u.role;
   const av=document.getElementById('sb-avatar');
   av.textContent=initials(u.name||u.username);av.style.background=u.color||'#6b21ea';
-  if(u.role!=='admin')document.getElementById('sb-settings').classList.add('hidden');
   if(db.settings.supabaseUrl&&db.settings.supabaseKey)setSyncSt('synced');
+  applyRolePermissions();
   updateNotifBadge();renderPanel();
   fetchFromSupabase().then(ok=>{if(ok)renderPanel()});
   handleSquareHash();
-  var sbCard=document.getElementById('supabase-card');
-  if(sbCard)sbCard.style.display='none';
-  var sqLbl=document.getElementById('sq-status-label');
-  if(sqLbl)sqLbl.textContent=db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
-  var sqLbl=document.getElementById('sq-status-label');
-  if(sqLbl)sqLbl.textContent=db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
 }
 
 // =====================================================
@@ -3211,9 +3081,7 @@ function openProfileModal(){
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="pf-name" type="text" value="'+esc(eff&&eff.name||'')+'"></div><div class="form-group"><label>Username</label><input id="pf-user" type="text" value="'+esc(eff&&eff.username||'')+'" '+(isAdmin?'disabled':'')+'></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
-    +'<div class="form-group"><label>Current Password <span style=\"font-weight:400;color:var(--text-muted)\">(required to change password)</span></label><input id="pf-old-pass" type="password" placeholder="Enter current password"></div>'
-    +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="Leave blank to keep current"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div>';
+    +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="Leave blank to keep current"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>';
   openModal('My Profile',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>','modal-lg');
 }
 
@@ -3223,19 +3091,6 @@ async function saveProfile(){
   const pass2=document.getElementById('pf-pass2').value;
   if(pass&&pass!==pass2){toast('Passwords do not match.','error');return}
   const u=state.user,isAdmin=u.id==='admin-patrick';
-  if(pass){
-    const oldPass=document.getElementById('pf-old-pass')&&document.getElementById('pf-old-pass').value||'';
-    if(!oldPass){toast('Enter your current password to change it.','error');return;}
-    const oldHash=await sha256(oldPass);
-    // Verify old password
-    var validOld=false;
-    if(isAdmin){validOld=(oldHash===ADMIN_HASH)||(db.settings.adminProfile&&db.settings.adminProfile.passwordHash&&oldHash===db.settings.adminProfile.passwordHash);}
-    else if(db._subaccountAdmin&&u.username===db._subaccountAdmin.username){validOld=oldHash===db._subaccountAdmin.passwordHash;}
-    else{const userRec=db.users.find(x=>x.id===u.id);validOld=userRec&&oldHash===userRec.passwordHash;}
-    if(!validOld){toast('Current password is incorrect.','error');return;}
-    const passErr=checkPasswordStrength(pass);
-    if(passErr){toast(passErr,'error');return;}
-  }
   const updates={name,color:state.selUserColor};
   if(pass){updates.passwordHash=await sha256(pass)}
   if(isAdmin){db.settings.adminProfile={...db.settings.adminProfile,...updates}}
@@ -3261,7 +3116,7 @@ function openEditUserModal(userId){
   state.modal={type:'edituser',id:userId};
   state.selUserColor=u.color||USER_COLORS[0];
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
-  const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['user','viewer','admin'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
+  const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','receptionist','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Username</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
     +'<div class="form-row"><div class="form-group"><label>New Password <span style="font-weight:400;color:var(--text-muted)">(blank to keep)</span></label><input id="eu-pass" type="password" placeholder=""></div>'+roleField+'</div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
@@ -5654,57 +5509,10 @@ function fbApplyLiveStyles(){
 
 // Boot check for embed mode
 document.addEventListener('DOMContentLoaded',function(){
-  // Detect path-based routing
-  var pathSlug=getPathSlug();
-  state.subaccountSlug=pathSlug;
-  state.subaccountId='sub-'+pathSlug;
-  state.agencyMode=pathSlug===AGENCY_SLUG;
-  // Scope localStorage key per subaccount
-  SK='myspark_crm_v2_'+(state.agencyMode?'agency':pathSlug);
   loadData();
-  applyFallbackCredentials();
   if(fbCheckEmbedMode())return;
-  // Agency path
-  if(state.agencyMode){
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app').classList.add('hidden');
-    document.getElementById('agency-screen').classList.remove('hidden');
-    var asess=loadAgencySession();
-    if(asess){renderAgencyDashboard();}
-    else{renderAgencyLogin();}
-    return;
-  }
-  // Pre-fetch Supabase data before showing login so _subaccountAdmin is available
-  fetchFromSupabase().then(function(){});
-  // Check for agency login-as token in URL
-  var urlParams=new URLSearchParams(window.location.search);
-  var agencyToken=urlParams.get('at');
-  if(agencyToken){
-    var storedToken=localStorage.getItem(AGENCY_TOKEN_PREFIX+pathSlug);
-    if(storedToken){
-      try{
-        var td=JSON.parse(storedToken);
-        if(td.token===agencyToken&&td.exp>Date.now()){
-          // Auto-login as admin for agency login-as
-          state.user={id:'admin-patrick',username:'patrick',role:'admin',name:'Patrick',color:'#ff4000'};
-          localStorage.setItem(SSK,JSON.stringify({...state.user,ts:Date.now()}));
-          history.replaceState(null,'',window.location.pathname);
-          document.getElementById('auth-screen').classList.add('hidden');
-          document.getElementById('app').classList.remove('hidden');
-          fetchFromSupabase().then(function(){initApp();});
-          return;
-        }
-      }catch(e){}
-    }
-  }
-  // Normal CRM login flow
   const sess=loadSession();
-  if(sess){
-    state.user=sess;
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    fetchFromSupabase().then(function(ok){initApp();});
-  }
+  if(sess){state.user=sess;document.getElementById('auth-screen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');initApp();}
 });
 
 
@@ -6605,15 +6413,14 @@ function selectPosCard(idx){
 const _origSetPM=typeof setPM==='function'?setPM:null;
 function setPM(m){
   state.posPM=m;
-  ['card','cash','other','cof','gc'].forEach(function(x){
+  ['card','cash','other','cof'].forEach(function(x){
     const btn=document.getElementById('pm-'+x);
     if(btn)btn.classList.toggle('active',x===m);
   });
-  ['card','cash','other','cof','gc'].forEach(function(x){
+  ['card','cash','other','cof'].forEach(function(x){
     const f=document.getElementById('pm-'+x+'-fields');
     if(f)f.classList.toggle('hidden',x!==m);
   });
-  if(m!=='gc'&&!state.posGC) posClearGiftCard();
 }
 
 // =====================================================
@@ -6711,7 +6518,7 @@ async function confirmChargeCoF(){
 function posUpdateTotals(){calcTotals();}
 
 function resetPos(){
-  state.posItems=[];state.posTip='15';state.posPM='card';state.posCoupon=null;state.posGC=null;
+  state.posItems=[];state.posTip='15';state.posPM='card';state.posCoupon=null;
   const fields=['pos-c-inp','pos-desc','pos-price','pos-notes','pos-card-num','pos-exp','pos-cvv','pos-zip','pos-other-ref'];
   fields.forEach(function(id){const el=document.getElementById(id);if(el)el.value=''});
   const cid=document.getElementById('pos-c-id');if(cid)cid.value='';
@@ -7867,1196 +7674,149 @@ function posRemoveCoupon(){
 
 
 // =====================================================
-// GIFT CARDS TAB
+// ROLE PERMISSION SYSTEM
 // =====================================================
 
-// ── Helpers ──
-function gcGenCode(){
-  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  var code='';
-  for(var i=0;i<12;i++){
-    if(i>0&&i%4===0)code+='-';
-    code+=chars[Math.floor(Math.random()*chars.length)];
+function userRole(){
+  return (state.user&&state.user.role)||'user';
+}
+
+function hasRole(){
+  var role=userRole();
+  var args=Array.prototype.slice.call(arguments);
+  return args.indexOf(role)>-1;
+}
+
+function isAdmin(){ return hasRole('admin'); }
+function isAdminOrManager(){ return hasRole('admin','manager'); }
+
+function applyRolePermissions(){
+  var role=userRole();
+  var isAdm=role==='admin';
+  var isMgr=role==='manager';
+  var isUsr=role==='user';
+  var isRec=role==='receptionist';
+  var isPrac=role==='practitioner';
+  var admMgr=isAdm||isMgr;
+
+  function show(id,visible){
+    var el=document.getElementById(id);
+    if(el)el.classList.toggle('hidden',!visible);
   }
-  return code; // format: XXXX-XXXX-XXXX
-}
 
-function gcCodeStrip(code){ return(code||'').replace(/-/g,'').toUpperCase(); }
+  // Sidebar nav visibility
+  show('sb-contacts',   !isPrac);
+  show('sb-tasks',      !isRec&&!isPrac);
+  show('sb-payments',   !isPrac);
+  show('sb-products',   admMgr);
+  show('sb-forms',      admMgr);
+  show('sb-staff',      admMgr);
+  show('sb-settings',   isAdm);
 
-function posGcFmt(v){
-  var s=v.replace(/[^A-Z0-9]/gi,'').toUpperCase().slice(0,12);
-  var out='';
-  for(var i=0;i<s.length;i++){if(i>0&&i%4===0)out+='-';out+=s[i];}
-  return out;
-}
+  // Calendar sub-tabs
+  var bookingTab=document.getElementById('cpt-booking');
+  if(bookingTab)bookingTab.classList.toggle('hidden',!isAdm);
 
-function gcFind(code){
-  var stripped=gcCodeStrip(code);
-  return(db.giftCards||[]).find(function(g){return gcCodeStrip(g.code)===stripped;});
-}
+  // Payment sub-tabs
+  show('ppt-subs',          admMgr);
+  show('ppt-invoices',      admMgr);
+  show('ppt-orders',        admMgr);
 
-function gcFmtBalance(g){ return fmt$(g.balance||0); }
-
-// ── Main render ──
-function renderGiftCards(){
-  var el=document.getElementById('pay-giftcards-view');
-  if(!el)return;
-  if(!db.giftCardProducts)db.giftCardProducts=[];
-  if(!db.giftCards)db.giftCards=[];
-  var gcState=state.gcTab||'products';
-  var h='<div class="pay-panel-tabs" style="margin:-22px -24px 22px">'
-    +'<button class="pay-panel-tab'+(gcState==='products'?' active':'')+'" onclick="switchGcTab(\'products\')">Gift Card Products</button>'
-    +'<button class="pay-panel-tab'+(gcState==='orders'?' active':'')+'" onclick="switchGcTab(\'orders\')">Issued Cards</button>'
-    +'<button class="pay-panel-tab'+(gcState==='send'?' active':'')+'" onclick="switchGcTab(\'send\')">Issue / Send</button>'
-    +'</div>'
-    +'<div id="gc-tab-body">';
-  if(gcState==='products') h+=gcRenderProducts();
-  else if(gcState==='orders') h+=gcRenderOrders();
-  else if(gcState==='send') h+=gcRenderSend();
-  h+='</div>';
-  el.innerHTML=h;
-}
-
-function switchGcTab(tab){
-  state.gcTab=tab;
-  renderGiftCards();
-}
-
-// ── Products Tab ──
-function gcRenderProducts(){
-  var prods=db.giftCardProducts||[];
-  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Gift Card Products</div>'
-    +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">'+prods.filter(function(p){return p.status==='active';}).length+' active designs</div></div>'
-    +'<button class="btn btn-primary" onclick="openGcProductModal(null)">'
-    +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Gift Card</button></div>';
-  if(!prods.length){
-    h+='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>'
-      +'<h3>No gift cards yet</h3><p>Create your first gift card design. Staff can then sell or issue them to customers.</p></div>';
-    return h;
+  // Hide "Add user" and "Delete user" buttons for managers
+  if(isMgr){
+    setTimeout(function(){
+      var addUserBtn=document.getElementById('add-user-btn');
+      if(addUserBtn)addUserBtn.classList.add('hidden');
+    },200);
   }
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">';
-  prods.forEach(function(prod){
-    var isActive=prod.status==='active';
-    var denomLabel=prod.customAmount?'Custom Amount':(prod.denominations||[]).map(function(d){return'$'+d;}).join(', ');
-    var issuedCount=(db.giftCards||[]).filter(function(g){return g.productId===prod.id;}).length;
-    h+='<div class="prod-card">'
-      // Card preview
-      +'<div style="width:100%;height:120px;border-radius:var(--radius);overflow:hidden;margin-bottom:12px;position:relative;'
-      +(prod.bgImage?'background:url(\''+esc(prod.bgImage)+'\') center/cover no-repeat;':'background:linear-gradient(135deg,'+esc(prod.bgColor1||'#6b21ea')+','+esc(prod.bgColor2||'#ff4000')+');')
-      +'">'
-      +'<div style="position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;flex-direction:column;justify-content:space-between;padding:12px 14px">'
-      +'<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)">'+esc(prod.name)+'</div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-end">'
-      +'<div style="font-size:11px;color:rgba(255,255,255,.8);letter-spacing:.08em">GIFT CARD</div>'
-      +'<div style="font-size:13px;font-weight:700;color:#fff;background:rgba(0,0,0,.3);padding:3px 8px;border-radius:4px">'+esc(denomLabel)+'</div>'
-      +'</div></div></div>'
-      // Info
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
-      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--main-text)">'+esc(prod.name)+'</div>'
-      +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:4px;'+(isActive?'background:rgba(52,211,153,.12);color:#34d399':'background:rgba(239,68,68,.1);color:#f87171')+'">'+(isActive?'Active':'Inactive')+'</span>'
-      +'</div>'
-      +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:10px">'+denomLabel+' &bull; '+issuedCount+' issued</div>'
-      +'<div style="display:flex;gap:6px;border-top:1px solid var(--main-border);padding-top:9px;flex-wrap:wrap">'
-      +'<button class="btn btn-ghost btn-sm" onclick="openGcProductModal(\''+prod.id+'\')">Edit</button>'
-      +'<button class="btn btn-primary btn-sm" onclick="gcOpenSell(\''+prod.id+'\')">Sell</button>'+'<button class="btn btn-ghost btn-sm" onclick="gcShowEmbed(\''+prod.id+'\')">Embed</button>'
-      +(isActive?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="gcToggleProduct(\''+prod.id+'\')">Deactivate</button>'
-        :'<button class="btn btn-purple btn-sm" onclick="gcToggleProduct(\''+prod.id+'\')">Activate</button>')
-      +'<button class="btn btn-danger btn-sm" onclick="gcDeleteProduct(\''+prod.id+'\')">Delete</button>'
-      +'</div></div>';
-  });
-  h+='</div>';
-  return h;
+
+  // Display role label nicely
+  var roleLabels={admin:'Admin',manager:'Manager',user:'Staff',receptionist:'Receptionist',practitioner:'Practitioner'};
+  var roleLbl=document.getElementById('sb-role');
+  if(roleLbl)roleLbl.textContent=roleLabels[role]||role;
 }
 
-function gcToggleProduct(id){
-  var p=(db.giftCardProducts||[]).find(function(x){return x.id===id;});
-  if(!p)return;
-  p.status=p.status==='active'?'inactive':'active';
-  saveData();renderGiftCards();
-  toast('Gift card '+(p.status==='active'?'activated':'deactivated')+'.','success');
-}
+// Call after each panel render to enforce sub-level permissions
+function enforceRoleInPanel(panel){
+  var role=userRole();
+  var admMgr=role==='admin'||role==='manager';
+  var isAdm=role==='admin';
 
-function gcDeleteProduct(id){
-  var p=(db.giftCardProducts||[]).find(function(x){return x.id===id;});
-  state.modal={type:'del-gcprod',id:id};
-  document.getElementById('modal-title').textContent='Delete Gift Card';
-  document.getElementById('modal-box').className='modal';
-  document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+esc(p?p.name:'this gift card')+'</strong>? Already issued cards will remain valid. This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="gcConfirmDeleteProduct()">Delete</button>';
-  document.getElementById('modal-overlay').classList.add('open');
-}
-function gcConfirmDeleteProduct(){
-  var id=state.modal&&state.modal.id;if(!id)return;
-  db.giftCardProducts=(db.giftCardProducts||[]).filter(function(x){return x.id!==id;});
-  saveData();closeModal();renderGiftCards();toast('Gift card deleted.','success');
-}
-
-// ── Product Modal ──
-function openGcProductModal(id){
-  var prod=id?(db.giftCardProducts||[]).find(function(x){return x.id===id;}):null;
-  state.modal={type:'gcprod',id:id||null};
-  var denoms=prod&&prod.denominations?prod.denominations.join(', '):'25, 50, 100';
-  var hasBg=!!(prod&&prod.bgImage);
-  var body='<div class="form-row">'
-    +'<div class="form-group"><label>Gift Card Name *</label>'
-    +'<input id="gcp-name" type="text" value="'+esc(prod&&prod.name||'')+'" placeholder="e.g. Holiday Gift Card"></div>'
-    +'<div class="form-group"><label>Status</label>'
-    +'<select id="gcp-status"><option value="active"'+((!prod||prod.status==='active')?' selected':'')+'>Active</option><option value="inactive"'+(prod&&prod.status==='inactive'?' selected':'')+'>Inactive</option></select></div>'
-    +'</div>'
-    +'<div class="divider"></div>'
-    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Card Design</div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Gradient Color 1</label>'
-    +'<input id="gcp-c1" type="color" value="'+(prod&&prod.bgColor1||'#6b21ea')+'" style="width:100%;height:38px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;padding:2px;background:var(--bg-input)"></div>'
-    +'<div class="form-group"><label>Gradient Color 2</label>'
-    +'<input id="gcp-c2" type="color" value="'+(prod&&prod.bgColor2||'#ff4000')+'" style="width:100%;height:38px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;padding:2px;background:var(--bg-input)"></div>'
-    +'</div>'
-    +'<div class="form-group"><label>Background Image <span style="font-weight:400;color:var(--text-muted)">(overrides gradient - 800x400px, max 2MB)</span></label>'
-    +'<input id="gcp-bgimg" type="hidden" value="'+esc(prod&&prod.bgImage||'')+'">'
-    +'<input id="gcp-bgimg-file" type="file" accept="image/*" onchange="gcHandleBgUpload(this)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-family:Lato,sans-serif;font-size:13px;cursor:pointer">'
-    +'<div id="gcp-bgimg-cur" style="font-size:11px;color:#34d399;margin-top:4px;display:'+( prod&&prod.bgImage?'block':'none')+'">'+( prod&&prod.bgImage?'Current image loaded. Upload a new one to replace.':'')+'</div>'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Tip: Use a dark or vibrant image. Text always shows with a dark overlay for readability.</div></div>'
-    +'<div id="gcp-preview" style="width:100%;height:110px;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;position:relative;background:linear-gradient(135deg,'+(prod&&prod.bgColor1||'#6b21ea')+','+(prod&&prod.bgColor2||'#ff4000')+')">'
-    +'<div style="position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;flex-direction:column;justify-content:space-between;padding:12px 14px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)" id="gcp-prev-name">'+(prod&&prod.name||'Card Name')+'</div>'
-    +'<div style="display:flex;justify-content:space-between;align-items:flex-end"><div style="font-size:10px;color:rgba(255,255,255,.8);letter-spacing:.08em">GIFT CARD</div>'
-    +'<div style="font-size:12px;font-weight:700;color:#fff;background:rgba(0,0,0,.3);padding:3px 8px;border-radius:4px" id="gcp-prev-denom">$25 | $50 | $100</div></div>'
-    +'</div></div>'
-    +'<div class="divider"></div>'
-    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Pricing</div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Fixed Denominations <span style="font-weight:400;color:var(--text-muted)">(comma separated)</span></label>'
-    +'<input id="gcp-denoms" type="text" value="'+esc(denoms)+'" placeholder="25, 50, 100, 200" oninput="gcUpdatePreview()"></div>'
-    +'<div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">'
-    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0">'
-    +'<input type="checkbox" id="gcp-custom" '+(prod&&prod.customAmount?'checked':'')+' style="accent-color:var(--purple);width:15px;height:15px">'
-    +'<span style="color:var(--text)">Also allow custom amount</span></label></div>'
-    +'</div>'
-    +'<div class="form-group"><label>Terms &amp; Conditions <span style="font-weight:400;color:var(--text-muted)">(optional, shown at checkout)</span></label>'
-    +'<textarea id="gcp-terms" rows="2" placeholder="Valid for all services. No cash value.">'+esc(prod&&prod.terms||'')+'</textarea></div>';
-  openModal(prod?'Edit Gift Card':'New Gift Card', body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveGcProduct()">Save</button>',
-    'modal-lg');
-  setTimeout(function(){
-    var nameInp=document.getElementById('gcp-name');
-    var c1=document.getElementById('gcp-c1');
-    var c2=document.getElementById('gcp-c2');
-    var bgImg=document.getElementById('gcp-bgimg');
-    if(nameInp)nameInp.addEventListener('input',gcUpdatePreview);
-    if(c1)c1.addEventListener('input',gcUpdatePreview);
-    if(c2)c2.addEventListener('input',gcUpdatePreview);
-    if(bgImg)bgImg.addEventListener('input',gcUpdatePreview);
-    gcUpdatePreview();
-  },60);
-}
-
-function gcUpdatePreview(){
-  var name=document.getElementById('gcp-name')&&document.getElementById('gcp-name').value||'Card Name';
-  var c1=document.getElementById('gcp-c1')&&document.getElementById('gcp-c1').value||'#6b21ea';
-  var c2=document.getElementById('gcp-c2')&&document.getElementById('gcp-c2').value||'#ff4000';
-  var bgImg=document.getElementById('gcp-bgimg')&&document.getElementById('gcp-bgimg').value||'';
-  var denoms=document.getElementById('gcp-denoms')&&document.getElementById('gcp-denoms').value||'';
-  var custom=document.getElementById('gcp-custom')&&document.getElementById('gcp-custom').checked;
-  var prev=document.getElementById('gcp-preview');
-  if(prev){
-    if(bgImg){prev.style.background='url(\''+bgImg+'\') center/cover no-repeat';}
-    else{prev.style.background='linear-gradient(135deg,'+c1+','+c2+')';}
+  if(panel==='staff'){
+    // Show reports tab only for admin/manager
+    var rptTab=document.querySelector('[onclick*="switchStaffTab"][onclick*="reporting"]');
+    if(rptTab)rptTab.classList.toggle('hidden',!admMgr);
+    // Hide add/delete user buttons for managers
+    if(!isAdm){
+      var addBtn=document.getElementById('add-user-btn');
+      if(addBtn)addBtn.style.display='none';
+    }
   }
-  var pn=document.getElementById('gcp-prev-name');if(pn)pn.textContent=name||'Card Name';
-  var pd=document.getElementById('gcp-prev-denom');
-  if(pd){
-    var vals=denoms.split(',').map(function(d){return d.trim();}).filter(Boolean).map(function(d){return'$'+d;});
-    if(custom)vals.push('Custom');
-    pd.textContent=vals.join(' | ')||'Enter amounts above';
+
+  if(panel==='payments'){
+    // Transactions tab - visible to all with payments access
+    // but filter by own transactions for user/receptionist is handled in renderTransactions
   }
-}
 
-function saveGcProduct(){
-  var name=(document.getElementById('gcp-name')&&document.getElementById('gcp-name').value||'').trim();
-  if(!name){toast('Name required.','error');return;}
-  var denomStr=document.getElementById('gcp-denoms')&&document.getElementById('gcp-denoms').value||'';
-  var denominations=denomStr.split(',').map(function(d){return parseFloat(d.trim());}).filter(function(d){return d>0;});
-  var customAmount=!!(document.getElementById('gcp-custom')&&document.getElementById('gcp-custom').checked);
-  if(!denominations.length&&!customAmount){toast('Add at least one denomination.','error');return;}
-  var data={
-    name:name,
-    status:document.getElementById('gcp-status')&&document.getElementById('gcp-status').value||'active',
-    bgColor1:document.getElementById('gcp-c1')&&document.getElementById('gcp-c1').value||'#6b21ea',
-    bgColor2:document.getElementById('gcp-c2')&&document.getElementById('gcp-c2').value||'#ff4000',
-    bgImage:(document.getElementById('gcp-bgimg')&&document.getElementById('gcp-bgimg').value||'').trim(),
-    denominations:denominations,
-    customAmount:customAmount,
-    terms:(document.getElementById('gcp-terms')&&document.getElementById('gcp-terms').value||'').trim(),
-    updatedAt:now_()
-  };
-  if(!db.giftCardProducts)db.giftCardProducts=[];
-  if(state.modal.id){
-    var ex=db.giftCardProducts.find(function(x){return x.id===state.modal.id;});
-    if(ex)Object.assign(ex,data);
-  }else{
-    db.giftCardProducts.push(Object.assign({id:'gcp-'+uid(),createdAt:now_()},data));
-  }
-  saveData();closeModal();renderGiftCards();
-  toast(state.modal.id?'Gift card updated.':'Gift card created.','success');
-}
-
-function gcShowSellEmbed(prodId){
-  var prod=(db.giftCardProducts||[]).find(function(x){return x.id===prodId;});
-  if(!prod)return;
-  var rawBase=window.location.href.split('?')[0];
-  var liveBase=(db.settings&&db.settings.appLiveUrl||'').replace(/\/+$/,'');
-  var base=liveBase||rawBase;
-  var embedUrl=base+'?gcembed='+prodId;
-  var iframeCode='<iframe src="'+embedUrl+'" style="width:100%;border:none;min-height:480px" frameborder="0"></iframe>';
-  var body='<div style="margin-bottom:14px">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Direct Link</div>'
-    +'<div style="display:flex;gap:7px"><input type="text" value="'+esc(embedUrl)+'" readonly style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:12px;outline:none;font-family:monospace;min-width:0">'
-    +'<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText(\''+esc(embedUrl)+'\').then(function(){toast(\'Copied!\',\'success\')})">Copy</button></div></div>'
-    +'<div style="margin-bottom:14px">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">iFrame Embed</div>'
-    +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-family:monospace;font-size:11px;color:#a5f3a5;word-break:break-all;margin-bottom:7px">'+esc(iframeCode)+'</div>'
-    +'<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(iframeCode)+').then(function(){toast(\'Copied!\',\'success\')})">Copy Embed</button></div>'
-    +'<div class="warn-box" style="margin-bottom:0">Square payment collection on the embed is a placeholder. Connect Square and wire the charge endpoint when ready.</div>';
-  openModal('Sell: '+prod.name, body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
-}
-
-// ── Orders Tab ──
-
-function gcOpenSell(prodId){
-  var prod=(db.giftCardProducts||[]).find(function(x){return x.id===prodId;});
-  if(!prod)return;
-  state.modal={type:'gc-sell',id:prodId};
-  state.gcSellPM='card';
-  var denomBtns=(prod.denominations||[]).map(function(d){
-    return '<button class="chip" onclick="gcSellSelDenom('+d+')" id="gc-sell-denom-'+d+'">$'+d+'</button>';
-  }).join('');
-  var body='<div style="margin-bottom:14px">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Amount</div>'
-    +(denomBtns?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="gc-sell-denom-row">'+denomBtns+'</div>':'')
-    +'<input id="gc-sell-amt" type="number" min="1" step="0.01" placeholder="Enter amount" oninput="gcSellClearDenoms()" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none">'
-    +'</div>'
-    +'<div class="form-group"><label>Customer <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
-    +'<div class="ss-wrap"><input class="ss-inp" id="gc-sell-c-inp" type="text" placeholder="Search contacts..." oninput="gcSellCSearch(this.value)" onclick="gcSellCSearch(this.value)" autocomplete="off"><input type="hidden" id="gc-sell-c-id"><div class="ss-drop hidden" id="gc-sell-c-drop"></div></div></div>'
-    +'<div class="form-group"><label>Recipient Name <span style="font-weight:400;color:var(--text-muted)">(printed on card)</span></label>'
-    +'<input id="gc-sell-recip" type="text" placeholder="e.g. Jane Smith"></div>'
-    +'<div class="form-group"><label>Payment Method</label>'
-    +'<div class="pay-tabs" style="margin-bottom:10px">'
-    +'<button class="pay-tab active" id="gc-pm-card" onclick="gcSellSetPM(\'card\')">Card</button>'
-    +'<button class="pay-tab" id="gc-pm-cash" onclick="gcSellSetPM(\'cash\')">Cash</button>'
-    +'<button class="pay-tab" id="gc-pm-other" onclick="gcSellSetPM(\'other\')">Other</button>'
-    +'</div>'
-    +'<div id="gc-pm-card-fields">'+(db.settings&&db.settings.square&&db.settings.square.accessToken?'<div id="gc-sq-card-container" class="sq-card-form" style="min-height:44px"></div><div id="gc-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>':'<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.</div>')+'</div>'
-    +'<div id="gc-pm-cash-fields" class="hidden"><div style="font-size:12px;color:var(--text-muted);padding:4px 0">Cash payment will be recorded.</div></div>'
-    +'<div id="gc-pm-other-fields" class="hidden"><input id="gc-sell-ref" type="text" placeholder="Reference # (Venmo, check, etc.)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:13px;outline:none"></div>'
-    +'</div>'
-    +'<div class="form-group"><label>Staff</label>'
-    +'<select id="gc-sell-staff" class="filter-sel" style="width:100%;height:38px">'
-    +allUsers().map(function(u){return'<option value="'+u.id+'"'+(state.user&&state.user.id===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>';}).join('')
-    +'</select></div>';
-  openModal('Sell: '+esc(prod.name),body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" id="gc-sell-btn" onclick="gcProcessSale()">Process & Issue Card</button>',
-    'modal-lg');
-  if(db.settings&&db.settings.square&&db.settings.square.accessToken){
-    setTimeout(gcInitSellCardForm,100);
-  }
-}
-
-function gcSellSelDenom(amt){
-  var inp=document.getElementById('gc-sell-amt');
-  if(inp)inp.value=amt;
-  document.querySelectorAll('[id^="gc-sell-denom-"]').forEach(function(b){b.classList.remove('active');});
-  var btn=document.getElementById('gc-sell-denom-'+amt);
-  if(btn)btn.classList.add('active');
-}
-
-function gcSellClearDenoms(){
-  document.querySelectorAll('[id^="gc-sell-denom-"]').forEach(function(b){b.classList.remove('active');});
-}
-
-function gcSellSetPM(m){
-  state.gcSellPM=m;
-  ['card','cash','other'].forEach(function(x){
-    var btn=document.getElementById('gc-pm-'+x);
-    if(btn)btn.classList.toggle('active',x===m);
-    var f=document.getElementById('gc-pm-'+x+'-fields');
-    if(f)f.classList.toggle('hidden',x!==m);
-  });
-}
-
-function gcSellCSearch(v){
-  var dd=document.getElementById('gc-sell-c-drop');if(!dd)return;
-  if(!v.trim()){dd.classList.add('hidden');return;}
-  var m=db.contacts.filter(function(c){return !c.archived&&((c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase()));}).slice(0,8);
-  if(!m.length)dd.innerHTML='<div class="ss-empty">No contacts found</div>';
-  else dd.innerHTML=m.map(function(c){return'<div class="ss-opt" onclick="gcSellSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+''+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+''+'</div>';}).join('');
-  dd.classList.remove('hidden');
-  setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
-}
-
-function gcSellSelC(id,name){
-  var ci=document.getElementById('gc-sell-c-id');if(ci)ci.value=id;
-  var ni=document.getElementById('gc-sell-c-inp');if(ni)ni.value=name;
-  var dd=document.getElementById('gc-sell-c-drop');if(dd)dd.classList.add('hidden');
-  var ri=document.getElementById('gc-sell-recip');if(ri&&!ri.value)ri.value=name;
-}
-
-let gcSellCard=null;
-
-async function gcInitSellCardForm(){
-  var errEl=document.getElementById('gc-sq-card-errors');
-  var container=document.getElementById('gc-sq-card-container');
-  if(!container)return;
-  try{
-    var cfgRes=await fetch('/api/square/config');
-    var cfg=await cfgRes.json();
-    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
-    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
-    var payments=window.Square.payments(cfg.appId,'production');
-    gcSellCard=await payments.card();
-    await gcSellCard.attach('#gc-sq-card-container');
-  }catch(e){
-    console.error('GC Square card form error:',e);
-    if(errEl)errEl.textContent='Could not load card form: '+e.message;
-  }
-}
-
-async function gcProcessSale(){
-  var prodId=state.modal&&state.modal.id;
-  var prod=(db.giftCardProducts||[]).find(function(x){return x.id===prodId;});
-  if(!prod){toast('Product not found.','error');return;}
-  var amt=parseFloat(document.getElementById('gc-sell-amt')&&document.getElementById('gc-sell-amt').value)||0;
-  if(amt<=0){toast('Enter an amount.','error');return;}
-  var contactId=document.getElementById('gc-sell-c-id')&&document.getElementById('gc-sell-c-id').value||'';
-  var recipName=(document.getElementById('gc-sell-recip')&&document.getElementById('gc-sell-recip').value||'').trim();
-  var staffId=document.getElementById('gc-sell-staff')&&document.getElementById('gc-sell-staff').value||'';
-  var pm=state.gcSellPM||'card';
-  var ref=(document.getElementById('gc-sell-ref')&&document.getElementById('gc-sell-ref').value||'').trim();
-  var btn=document.getElementById('gc-sell-btn');
-
-  // If card + Square connected, tokenize and charge
-  if(pm==='card'&&db.settings&&db.settings.square&&db.settings.square.accessToken){
-    if(!gcSellCard){toast('Card form not ready. Please wait.','error');return;}
-    if(btn){btn.disabled=true;btn.textContent='Processing...';}
-    var errEl=document.getElementById('gc-sq-card-errors');
-    try{
-      var result=await gcSellCard.tokenize();
-      if(result.status!=='OK'){
-        var msgs=(result.errors||[]).map(function(e){return e.message;}).join(', ');
-        if(errEl)errEl.textContent=msgs||'Card error.';
-        if(btn){btn.disabled=false;btn.textContent='Process & Issue Card';}
-        return;
-      }
-      var sq=db.settings.square||{};
-      var amtCents=Math.round(amt*100);
-      var chargeRes=await fetch('/api/square/charge',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          accessToken:sq.accessToken,
-          sourceId:result.token,
-          amountCents:amtCents,
-          note:'Gift Card: '+prod.name
-        })
+  if(panel==='contacts'){
+    // Hide permanent delete for user/receptionist
+    if(role==='user'||role==='receptionist'){
+      document.querySelectorAll('.btn-danger[onclick*="confirmDelContact"]').forEach(function(b){
+        b.style.display='none';
       });
-      var chargeData=await chargeRes.json();
-      if(chargeData.error){
-        if(errEl)errEl.textContent=chargeData.error;
-        if(btn){btn.disabled=false;btn.textContent='Process & Issue Card';}
-        return;
-      }
-      gcSellCard=null;
-      gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,'card','',chargeData.payment&&chargeData.payment.id||'');
-    }catch(e){
-      console.error('GC charge error:',e);
-      if(errEl)errEl.textContent='Charge failed: '+e.message;
-      if(btn){btn.disabled=false;btn.textContent='Process & Issue Card';}
     }
+  }
+}
+
+// Override switchPanel to enforce permissions
+var _origSwitchPanel=switchPanel;
+function switchPanel(name){
+  var role=userRole();
+  var admMgr=role==='admin'||role==='manager';
+  var isAdm=role==='admin';
+  var isPrac=role==='practitioner';
+  var isRec=role==='receptionist';
+
+  // Block access to restricted panels
+  var blocked=false;
+  if(name==='settings'&&!isAdm) blocked=true;
+  if(name==='products'&&!admMgr) blocked=true;
+  if(name==='forms'&&!admMgr) blocked=true;
+  if(name==='staff'&&!admMgr) blocked=true;
+  if(name==='tasks'&&(isRec||isPrac)) blocked=true;
+  if(name==='payments'&&isPrac) blocked=true;
+  if(name==='contacts'&&isPrac) blocked=true;
+
+  if(blocked){
+    toast('You do not have permission to access this area.','error');
     return;
   }
-
-  // Cash or Other - just record
-  gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,'');
+  _origSwitchPanel(name);
+  setTimeout(function(){enforceRoleInPanel(name);},100);
 }
 
-function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squarePaymentId){
-  var payId=uid();
-  var code=gcGenCode();
-  db.payments.push({id:payId,contactId:contactId||null,staffId:staffId||null,
-    items:[{desc:'Gift Card: '+prod.name+' ('+code+')',price:amt}],
-    subtotal:amt,discountAmount:0,afterDiscount:amt,tipAmount:0,creditApplied:0,
-    total:amt,paymentMethod:pm,paymentRef:ref,squarePaymentId:squarePaymentId,
-    status:'completed',notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,createdAt:now_()});
-  if(!db.giftCards)db.giftCards=[];
-  db.giftCards.push({id:'gc-'+uid(),code:code,productId:prodId,
-    contactId:contactId||null,recipientName:recipName||null,
-    originalAmount:amt,balance:amt,status:'active',
-    issuedById:staffId||null,soldVia:'gift-card-tab',paymentId:payId,paymentMethod:pm,
-    squarePaymentId:squarePaymentId,
-    issuedAt:now_(),log:[{type:'issued',amount:amt,note:'Sold via Gift Card tab ('+pm+')',date:now_()}]});
-  saveData();closeModal();
-  gcSellCard=null;
-  toast('Gift card sold and issued: '+code,'success');
-  switchGcTab('orders');
+// Filter transactions by role
+function txnCanSeeAll(){
+  return hasRole('admin','manager');
 }
 
-function gcRenderOrders(){
-  var orders=db.giftCards||[];
-  orders=[...orders].sort(function(a,b){return(b.issuedAt||'').localeCompare(a.issuedAt||'');});
-  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Issued Cards</div>'
-    +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">'+orders.length+' total &bull; '+fmt$(orders.reduce(function(s,g){return s+(g.balance||0);},0))+' outstanding balance</div></div>'
-    +'<div style="display:flex;gap:7px">'
-    +'<input type="text" id="gc-orders-search" placeholder="Search code or name..." oninput="gcRenderOrdersTable()" style="background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:7px 12px;font-family:Lato,sans-serif;font-size:13px;outline:none;width:200px">'
-    +'<select id="gc-orders-filter" class="filter-sel" onchange="gcRenderOrdersTable()" style="height:36px"><option value="">All Status</option><option value="active">Active</option><option value="redeemed">Redeemed</option><option value="partial">Partial</option><option value="refunded">Refunded</option></select>'
-    +'</div></div>'
-    +'<div id="gc-orders-table"></div>';
-  setTimeout(gcRenderOrdersTable,0);
-  return h;
+// Check if user can delete contacts permanently
+function canDeleteContact(){
+  return hasRole('admin','manager');
 }
 
-function gcRenderOrdersTable(){
-  var el=document.getElementById('gc-orders-table');if(!el)return;
-  var q=(document.getElementById('gc-orders-search')&&document.getElementById('gc-orders-search').value||'').toLowerCase();
-  var sf=document.getElementById('gc-orders-filter')&&document.getElementById('gc-orders-filter').value||'';
-  var orders=(db.giftCards||[]).filter(function(g){
-    if(sf&&g.status!==sf)return false;
-    if(q){
-      var c=g.contactId?db.contacts.find(function(x){return x.id===g.contactId;}):null;
-      var name=(c?c.name:'').toLowerCase();
-      var code=(g.code||'').toLowerCase();
-      if(!code.includes(q)&&!name.includes(q))return false;
-    }
-    return true;
-  }).sort(function(a,b){return(b.issuedAt||'').localeCompare(a.issuedAt||'');});
-  if(!orders.length){
-    el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><h3>No issued cards</h3><p>Issue or sell a gift card to see it here.</p></div>';
-    return;
-  }
-  var statusColors={active:{bg:'rgba(52,211,153,.12)',color:'#34d399',label:'Active'},partial:{bg:'rgba(245,158,11,.12)',color:'#fbbf24',label:'Partial'},redeemed:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Redeemed'},refunded:{bg:'rgba(239,68,68,.12)',color:'#f87171',label:'Refunded'}};
-  var h='<div class="tbl-wrap"><table class="ct-table"><thead><tr>'
-    +'<th>Code</th><th>Card</th><th>Recipient</th><th>Issued By</th><th>Date</th>'
-    +'<th style="text-align:right">Original</th><th style="text-align:right">Balance</th>'
-    +'<th>Status</th><th style="width:40px"></th></tr></thead><tbody>';
-  orders.forEach(function(g){
-    var prod=g.productId?(db.giftCardProducts||[]).find(function(x){return x.id===g.productId;}):null;
-    var contact=g.contactId?db.contacts.find(function(x){return x.id===g.contactId;}):null;
-    var issuedBy=g.issuedById?getUserById(g.issuedById):null;
-    var sc=statusColors[g.status]||statusColors.active;
-    h+='<tr onclick="gcOpenOrderDetail(\''+g.id+'\')" style="cursor:pointer">'
-      +'<td><span style="font-family:monospace;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--main-text)">'+esc(g.code)+'</span></td>'
-      +'<td style="font-size:12px">'+esc(prod?prod.name:'Gift Card')+'</td>'
-      +'<td style="font-size:12px">'+(contact?esc(contact.name):'<span style="color:var(--main-text-muted)">No contact</span>')+'</td>'
-      +'<td style="font-size:12px">'+(issuedBy?esc(issuedBy.name||issuedBy.username):'<span style="color:var(--main-text-muted)">Staff</span>')+'</td>'
-      +'<td style="font-size:12px;color:var(--main-text-muted)">'+fmtDate((g.issuedAt||'').split('T')[0])+'</td>'
-      +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(g.originalAmount||0)+'</td>'
-      +'<td style="text-align:right;font-size:13px;font-weight:700;color:'+(g.balance>0?'var(--orange)':'var(--main-text-muted)')+'">'+fmt$(g.balance||0)+'</td>'
-      +'<td><span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:4px;background:'+sc.bg+';color:'+sc.color+'">'+sc.label+'</span></td>'
-      +'<td onclick="event.stopPropagation()"><button class="icon-btn-xs" onclick="gcOpenOrderDetail(\''+g.id+'\')" title="View"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></td>'
-      +'</tr>';
-  });
-  h+='</tbody></table></div>';
-  el.innerHTML=h;
+// Check if user can manage (create/edit/delete) gift cards and coupons
+function canManageGiftCards(){
+  return hasRole('admin','manager');
 }
 
-function gcOpenOrderDetail(id){
-  var g=(db.giftCards||[]).find(function(x){return x.id===id;});if(!g)return;
-  var prod=g.productId?(db.giftCardProducts||[]).find(function(x){return x.id===g.productId;}):null;
-  var contact=g.contactId?db.contacts.find(function(x){return x.id===g.contactId;}):null;
-  var issuedBy=g.issuedById?getUserById(g.issuedById):null;
-  var sc={active:{bg:'rgba(52,211,153,.12)',color:'#34d399',label:'Active'},partial:{bg:'rgba(245,158,11,.12)',color:'#fbbf24',label:'Partial'},redeemed:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Redeemed'},refunded:{bg:'rgba(239,68,68,.12)',color:'#f87171',label:'Refunded'}}[g.status]||{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Active'};
-  var body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
-    // Preview
-    +(prod?'<div style="width:100%;height:90px;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;position:relative;'+(prod.bgImage?'background:url(\''+esc(prod.bgImage)+'\') center/cover no-repeat':'background:linear-gradient(135deg,'+esc(prod.bgColor1||'#6b21ea')+','+esc(prod.bgColor2||'#ff4000')+')') +'"><div style="position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;flex-direction:column;justify-content:space-between;padding:10px 14px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:800;color:#fff">'+esc(prod.name)+'</div><div style="font-family:monospace;font-size:11px;color:rgba(255,255,255,.9);letter-spacing:.1em">'+esc(g.code)+'</div></div></div>':'')
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Code</div><div style="font-family:monospace;font-size:14px;font-weight:700;letter-spacing:.08em;color:var(--text)">'+esc(g.code)+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Status</div><span style="font-size:11px;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:4px;background:'+sc.bg+';color:'+sc.color+'">'+sc.label+'</span></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Original Amount</div><div style="font-size:15px;font-weight:700;color:var(--text)">'+fmt$(g.originalAmount||0)+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Current Balance</div><div style="font-size:15px;font-weight:800;color:var(--orange)">'+fmt$(g.balance||0)+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Recipient</div><div style="font-size:13px;color:var(--text)">'+(contact?esc(contact.name):'No contact linked')+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Issued By</div><div style="font-size:13px;color:var(--text)">'+(issuedBy?esc(issuedBy.name||issuedBy.username):'Staff')+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Issued Date</div><div style="font-size:13px;color:var(--text)">'+fmtDate((g.issuedAt||'').split('T')[0])+'</div></div>'
-    +'</div>'
-    // Transaction log
-    +'<div style="border-top:1px solid var(--border);padding-top:12px">'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Transaction History</div>';
-  var log=g.log||[];
-  if(!log.length){
-    body+='<div style="font-size:13px;color:var(--text-muted)">No redemptions yet.</div>';
-  }else{
-    log.forEach(function(entry){
-      var sign=entry.type==='redeem'?'-':'+';
-      var col=entry.type==='redeem'?'#f87171':'#34d399';
-      body+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">'
-        +'<div><div style="font-size:12px;font-weight:500;color:var(--text)">'+esc(entry.note||entry.type)+'</div>'
-        +'<div style="font-size:11px;color:var(--text-muted)">'+fmtDate((entry.date||'').split('T')[0])+'</div></div>'
-        +'<div style="font-size:13px;font-weight:700;color:'+col+'">'+sign+fmt$(entry.amount||0)+'</div>'
-        +'</div>';
-    });
-  }
-  body+='</div></div>';
-  var foot='<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
-    +(g.balance>0&&g.status!=='refunded'?'<button class="btn btn-purple" onclick="gcIssueRefund(\''+g.id+'\')">Add Balance / Refund</button>':'')
-    +'<button class="btn btn-ghost btn-sm" onclick="gcPrintCard(\''+g.id+'\')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print</button>';
-  state.modal={type:'gc-detail',id:id};
-  openModal('Gift Card Details', body, foot, 'modal-lg');
+function canManageCoupons(){
+  return hasRole('admin','manager');
 }
 
-function gcIssueRefund(id){
-  var g=(db.giftCards||[]).find(function(x){return x.id===id;});if(!g)return;
-  openModal('Add Balance',
-    '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Current balance: <strong style="color:var(--orange)">'+fmt$(g.balance||0)+'</strong></div>'
-    +'<div class="form-group"><label>Amount to Add ($)</label><input id="gc-refund-amt" type="number" min="0.01" step="0.01" placeholder="0.00"></div>'
-    +'<div class="form-group"><label>Reason</label><input id="gc-refund-note" type="text" placeholder="Refund, store credit, bonus..."></div>',
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="gcConfirmAddBalance(\''+id+'\')">Add Balance</button>');
-}
-
-function gcConfirmAddBalance(id){
-  var amt=parseFloat(document.getElementById('gc-refund-amt')&&document.getElementById('gc-refund-amt').value)||0;
-  var note=(document.getElementById('gc-refund-note')&&document.getElementById('gc-refund-note').value||'').trim()||'Balance added';
-  if(amt<=0){toast('Enter a valid amount.','error');return;}
-  var g=(db.giftCards||[]).find(function(x){return x.id===id;});if(!g)return;
-  g.balance=(g.balance||0)+amt;
-  if(g.status==='redeemed')g.status='active';
-  if(!g.log)g.log=[];
-  g.log.push({type:'credit',amount:amt,note:note,date:now_()});
-  saveData();closeModal();
-  if(state.gcTab==='orders')renderGiftCards();
-  toast(fmt$(amt)+' added to gift card.','success');
-}
-
-// ── Send / Issue Tab ──
-function gcRenderSend(){
-  var prods=(db.giftCardProducts||[]).filter(function(p){return p.status==='active';});
-  var h='<div style="max-width:540px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);margin-bottom:5px">Issue a Gift Card</div>'
-    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:18px">Issue a prepaid gift card to a customer without requiring a payment. For rewards, make-goods, or VIP perks.</div>'
-    +'<div class="form-group"><label>Gift Card Product</label>'
-    +'<select id="gc-issue-prod" class="filter-sel" style="width:100%;height:38px" onchange="gcUpdateIssueDenoms()">'
-    +(prods.length?prods.map(function(p){return'<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join(''):'<option value="">No active gift cards - create one first</option>')
-    +'</select></div>'
-    +'<div class="form-group"><label>Recipient Contact <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
-    +'<div class="ss-wrap"><input class="ss-inp" id="gc-issue-c-inp" type="text" placeholder="Search contacts..." oninput="gcIssueCSearch(this.value)" onclick="gcIssueCSearch(this.value)" autocomplete="off"><input type="hidden" id="gc-issue-c-id"><div class="ss-drop hidden" id="gc-issue-c-drop"></div></div></div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Amount ($)</label>'
-    +'<div id="gc-issue-denom-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>'
-    +'<input id="gc-issue-amt" type="number" min="1" step="0.01" placeholder="Or enter custom amount"></div>'
-    +'<div class="form-group"><label>Recipient Name <span style="font-weight:400;color:var(--text-muted)">(printed on card)</span></label>'
-    +'<input id="gc-issue-recip" type="text" placeholder="e.g. Jane Smith"></div>'
-    +'</div>'
-    +'<div class="form-group"><label>Note <span style="font-weight:400;color:var(--text-muted)">(internal)</span></label>'
-    +'<input id="gc-issue-note" type="text" placeholder="Birthday gift, service credit..."></div>'
-    +'<div style="display:flex;gap:8px;margin-top:4px">'
-    +'<button class="btn btn-primary" onclick="gcIssueCard()">Issue Gift Card</button>'
-    +'<button class="btn btn-ghost" onclick="gcIssueCard(true)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Issue &amp; Print</button>'
-    +'</div></div>';
-  setTimeout(gcUpdateIssueDenoms,50);
-  return h;
-}
-
-function gcUpdateIssueDenoms(){
-  var prodId=document.getElementById('gc-issue-prod')&&document.getElementById('gc-issue-prod').value;
-  var prod=prodId?(db.giftCardProducts||[]).find(function(x){return x.id===prodId;}):null;
-  var row=document.getElementById('gc-issue-denom-row');if(!row)return;
-  if(!prod){row.innerHTML='';return;}
-  var amtInp=document.getElementById('gc-issue-amt');
-  row.innerHTML=(prod.denominations||[]).map(function(d){
-    return'<button class="chip" onclick="if(document.getElementById(\'gc-issue-amt\'))document.getElementById(\'gc-issue-amt\').value='+d+'">$'+d+'</button>';
-  }).join('');
-}
-
-function gcIssueCSearch(v){
-  var dd=document.getElementById('gc-issue-c-drop');if(!dd)return;
-  if(!v.trim()){dd.classList.add('hidden');return;}
-  var m=db.contacts.filter(function(c){return!c.archived&&((c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase()));}).slice(0,8);
-  if(!m.length)dd.innerHTML='<div class="ss-empty">No contacts found</div>';
-  else dd.innerHTML=m.map(function(c){return'<div class="ss-opt" onclick="gcIssueSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';}).join('');
-  dd.classList.remove('hidden');
-  setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
-}
-
-function gcIssueSelC(id,name){
-  document.getElementById('gc-issue-c-id').value=id;
-  document.getElementById('gc-issue-c-inp').value=name;
-  document.getElementById('gc-issue-c-drop').classList.add('hidden');
-  var ri=document.getElementById('gc-issue-recip');
-  if(ri&&!ri.value)ri.value=name;
-}
-
-function gcIssueCard(andPrint){
-  var prodId=document.getElementById('gc-issue-prod')&&document.getElementById('gc-issue-prod').value;
-  var amt=parseFloat(document.getElementById('gc-issue-amt')&&document.getElementById('gc-issue-amt').value)||0;
-  var contactId=document.getElementById('gc-issue-c-id')&&document.getElementById('gc-issue-c-id').value||'';
-  var recipName=(document.getElementById('gc-issue-recip')&&document.getElementById('gc-issue-recip').value||'').trim();
-  var note=(document.getElementById('gc-issue-note')&&document.getElementById('gc-issue-note').value||'').trim();
-  if(!prodId){toast('Select a gift card product.','error');return;}
-  if(amt<=0){toast('Enter an amount.','error');return;}
-  var code=gcGenCode();
-  var card={
-    id:'gc-'+uid(),
-    code:code,
-    productId:prodId,
-    contactId:contactId||null,
-    recipientName:recipName||null,
-    originalAmount:amt,
-    balance:amt,
-    status:'active',
-    issuedById:state.user&&state.user.id||null,
-    issuedAt:now_(),
-    note:note,
-    log:[{type:'issued',amount:amt,note:'Issued'+( note?' - '+note:''),date:now_()}]
-  };
-  if(!db.giftCards)db.giftCards=[];
-  db.giftCards.push(card);
-  saveData();
-  toast('Gift card issued: '+code,'success');
-  if(andPrint)gcPrintCard(card.id);
-  // Reset form
-  var fields=['gc-issue-amt','gc-issue-recip','gc-issue-note','gc-issue-c-inp'];
-  fields.forEach(function(fid){var el=document.getElementById(fid);if(el)el.value='';});
-  var cid=document.getElementById('gc-issue-c-id');if(cid)cid.value='';
-  // Show the new card details
-  switchGcTab('orders');
-}
-
-// ── Print wallet card (3.5" x 2") ──
-function gcPrintCard(id){
-  var g=(db.giftCards||[]).find(function(x){return x.id===id;});if(!g)return;
-  var prod=g.productId?(db.giftCardProducts||[]).find(function(x){return x.id===g.productId;}):null;
-  var bgStyle=prod&&prod.bgImage?'background:url(\''+prod.bgImage+'\') center/cover no-repeat':'background:linear-gradient(135deg,'+(prod&&prod.bgColor1||'#6b21ea')+','+(prod&&prod.bgColor2||'#ff4000')+')';
-  var bizName=db.settings&&db.settings.businessName||'MySpark+';
-  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Gift Card - '+g.code+'</title>'
-    +'<style>'
-    +'*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}'
-    +'body{margin:0;padding:20px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:\'Helvetica Neue\',Arial,sans-serif}'
-    +'@media print{body{padding:0;margin:0;background:transparent;display:block}.no-print{display:none}@page{size:3.5in 2in;margin:0}}'
-    +'.card{width:3.5in;height:2in;border-radius:10px;overflow:hidden;position:relative;box-shadow:0 4px 20px rgba(0,0,0,.25);'+bgStyle+'}'
-    +'.overlay{position:absolute;inset:0;background:rgba(0,0,0,.38);display:flex;flex-direction:column;justify-content:space-between;padding:14px 16px}'
-    +'.card-name{font-size:14px;font-weight:800;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);letter-spacing:.02em}'
-    +'.card-biz{font-size:9px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.1em}'
-    +'.card-bottom{display:flex;flex-direction:column;gap:3px}'
-    +'.card-recip{font-size:9px;color:rgba(255,255,255,.8)}'
-    +'.card-code{font-size:13px;font-weight:700;color:#fff;letter-spacing:.12em;text-shadow:0 1px 4px rgba(0,0,0,.6)}'
-    +'.card-balance{font-size:11px;color:rgba(255,255,255,.9);font-weight:600}'
-    +'.print-btn{display:block;margin:20px auto;padding:10px 24px;background:#6b21ea;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit}'
-    +'</style></head><body>'
-    +'<div>'
-    +'<div class="card"><div class="overlay">'
-    +'<div><div class="card-name">'+(prod?prod.name:'Gift Card')+'</div><div class="card-biz">'+bizName+'</div></div>'
-    +'<div class="card-bottom">'
-    +(g.recipientName?'<div class="card-recip">For: '+g.recipientName+'</div>':'')
-    +'<div class="card-code">'+g.code+'</div>'
-    +'<div class="card-balance">Balance: '+fmt$(g.balance||0)+'</div>'
-    +'</div></div></div>'
-    +'<button class="print-btn no-print" onclick="window.print()">Print Card</button>'
-    +'</div>'
-    +'<script>window.onload=function(){window.print();}<\/script>'
-    +'</body></html>';
-  var w=window.open('','_blank','width=600,height=400');
-  if(w){w.document.write(html);w.document.close();}
-}
-
-// ── POS Gift Card Apply / Remove ──
-function posApplyGiftCard(){
-  var code=document.getElementById('pos-gc-code')&&document.getElementById('pos-gc-code').value||'';
-  var errEl=document.getElementById('pos-gc-error');
-  var infoEl=document.getElementById('pos-gc-info');
-  if(errEl)errEl.classList.add('hidden');
-  if(!code.trim()){if(errEl){errEl.textContent='Enter a gift card code.';errEl.classList.remove('hidden');}return;}
-  var g=gcFind(code);
-  if(!g){if(errEl){errEl.textContent='Gift card not found.';errEl.classList.remove('hidden');}return;}
-  if(g.status==='redeemed'){if(errEl){errEl.textContent='This gift card has been fully redeemed.';errEl.classList.remove('hidden');}return;}
-  if(g.status==='refunded'){if(errEl){errEl.textContent='This gift card has been refunded.';errEl.classList.remove('hidden');}return;}
-  if((g.balance||0)<=0){if(errEl){errEl.textContent='This gift card has no remaining balance.';errEl.classList.remove('hidden');}return;}
-  // Apply
-  state.posGC={id:g.id,code:g.code,balance:g.balance};
-  var balLbl=document.getElementById('pos-gc-balance-label');
-  var namLbl=document.getElementById('pos-gc-name-label');
-  if(balLbl)balLbl.textContent='Balance: '+fmt$(g.balance);
-  if(namLbl){var prod=g.productId?(db.giftCardProducts||[]).find(function(x){return x.id===g.productId;}):null;namLbl.textContent=prod?prod.name:'Gift Card';}
-  if(infoEl)infoEl.classList.remove('hidden');
-  var entryEl=document.getElementById('pos-gc-entry');
-  if(entryEl)entryEl.style.display='none';
-  // Check if partial
-  var totals=calcTotals();
-  var total=totals.total;
-  var partialWrap=document.getElementById('pos-gc-partial-wrap');
-  if(g.balance<total){
-    if(partialWrap)partialWrap.classList.remove('hidden');
-    state.posGCRemainder=total-g.balance;
-  }else{
-    if(partialWrap)partialWrap.classList.add('hidden');
-    state.posGCRemainder=0;
-  }
-  toast('Gift card applied. Balance: '+fmt$(g.balance),'success');
-}
-
-function posClearGiftCard(){
-  state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
-  var infoEl=document.getElementById('pos-gc-info');
-  var entryEl=document.getElementById('pos-gc-entry');
-  var codeEl=document.getElementById('pos-gc-code');
-  var errEl=document.getElementById('pos-gc-error');
-  var partialWrap=document.getElementById('pos-gc-partial-wrap');
-  if(infoEl)infoEl.classList.add('hidden');
-  if(entryEl)entryEl.style.display='flex';
-  if(codeEl)codeEl.value='';
-  if(errEl)errEl.classList.add('hidden');
-  if(partialWrap)partialWrap.classList.add('hidden');
-  calcTotals();
-}
-
-function gcSetRemainder(method){
-  state.posGCRemainderMethod=method;
-  ['card','cash','other'].forEach(function(m){
-    var btn=document.getElementById('gc-rem-'+m);
-    if(btn)btn.style.background=m===method?'var(--purple)':'';
-    if(btn)btn.style.color=m===method?'#fff':'';
-    if(btn)btn.style.borderColor=m===method?'var(--purple)':'';
-  });
-  var extra=document.getElementById('gc-rem-extra');
-  if(!extra)return;
-  extra.classList.remove('hidden');
-  var remainder=state.posGCRemainder||0;
-  if(method==='card'){
-    var sq=db.settings&&db.settings.square&&db.settings.square.accessToken;
-    extra.innerHTML='<div style="margin-top:4px;font-size:12px;color:#fbbf24;margin-bottom:7px">Remainder to charge: <strong>'+fmt$(remainder)+'</strong></div>'
-      +(sq?'<div id="gc-rem-sq-container" class="sq-card-form" style="min-height:44px"></div><div id="gc-rem-sq-errors" style="color:#f87171;font-size:11px;margin-top:4px"></div>'
-        :'<div style="font-size:12px;color:var(--text-muted)">Card remainder will be recorded. Connect Square to charge live.</div>');
-    if(sq) setTimeout(gcInitRemainderCardForm,100);
-  }else if(method==='cash'){
-    extra.innerHTML='<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Cash remainder of <strong style="color:#fbbf24">'+fmt$(remainder)+'</strong> will be recorded.</div>';
-  }else if(method==='other'){
-    extra.innerHTML='<div style="margin-bottom:6px;font-size:12px;color:var(--text-muted)">Remainder: <strong style="color:#fbbf24">'+fmt$(remainder)+'</strong></div><input id="gc-rem-ref" type="text" placeholder="Reference #, Venmo, etc." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none">';
-  }
-}
-
-var gcRemCard=null;
-async function gcInitRemainderCardForm(){
-  var errEl=document.getElementById('gc-rem-sq-errors');
-  var container=document.getElementById('gc-rem-sq-container');
-  if(!container)return;
-  try{
-    var cfgRes=await fetch('/api/square/config');
-    var cfg=await cfgRes.json();
-    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
-    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
-    var payments=window.Square.payments(cfg.appId,'production');
-    gcRemCard=await payments.card();
-    await gcRemCard.attach('#gc-rem-sq-container');
-  }catch(e){
-    if(errEl)errEl.textContent='Could not load card form: '+e.message;
-  }
-}
-
-// Override processCharge to handle gift card deduction
-// GC handling merged into main processCharge
-
-// Show gc tab in POS when contact with gift cards is selected
-function updatePosGCTab(){
-  var gcTab=document.getElementById('pm-gc');if(!gcTab)return;
-  // Always show gift card tab if any active cards exist
-  var hasCards=(db.giftCards||[]).some(function(g){return g.status==='active'&&g.balance>0;});
-  gcTab.classList.toggle('hidden',!hasCards);
-}
-
-// updatePosGCTab called directly where needed
-
-
-function gcHandleBgUpload(input){
-  var file=input.files&&input.files[0];
-  if(!file)return;
-  if(file.size>2*1024*1024){toast('Image too large. Max 2MB.','error');input.value='';return;}
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var dataUrl=e.target.result;
-    var hid=document.getElementById('gcp-bgimg');
-    if(hid)hid.value=dataUrl;
-    var cur=document.getElementById('gcp-bgimg-cur');
-    if(cur){cur.textContent='Image loaded: '+file.name;cur.style.display='block';}
-    gcUpdatePreview();
-  };
-  reader.readAsDataURL(file);
-}
-
-
-// =====================================================
-// MULTI-TENANCY ROUTING
-// =====================================================
-
-function getPathSlug(){
-  var path=window.location.pathname;
-  var parts=path.split('/').filter(Boolean);
-  return parts[0]||DEFAULT_SLUG;
-}
-
-// =====================================================
-// AGENCY SESSION
-// =====================================================
-
-function loadAgencySession(){
-  try{
-    var r=localStorage.getItem(AGENCY_SESSION_KEY);
-    if(!r)return null;
-    var s=JSON.parse(r);
-    if(Date.now()-s.ts>8*3600000){localStorage.removeItem(AGENCY_SESSION_KEY);return null;}
-    return s;
-  }catch(e){return null;}
-}
-
-function saveAgencySession(user){
-  localStorage.setItem(AGENCY_SESSION_KEY,JSON.stringify({...user,ts:Date.now()}));
-}
-
-function agencyLogout(){
-  localStorage.removeItem(AGENCY_SESSION_KEY);
-  renderAgencyLogin();
-}
-
-// =====================================================
-// AGENCY LOGIN
-// =====================================================
-
-function renderAgencyLogin(){
-  var el=document.getElementById('agency-content');
-  if(!el)return;
-  el.innerHTML='<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;'
-    +'background:radial-gradient(ellipse at 25% 20%,rgba(107,33,234,.22) 0%,transparent 55%),'
-    +'radial-gradient(ellipse at 75% 80%,rgba(255,64,0,.12) 0%,transparent 50%),var(--bg)">'
-    +'<div style="background:var(--bg-panel);border:1px solid var(--purple-border);border-radius:var(--radius-lg);padding:44px 40px;width:380px;box-shadow:var(--shadow)">'
-    +'<div style="text-align:center;margin-bottom:28px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:26px;font-weight:800;color:#fff;margin-bottom:5px">MySpark<span style="color:var(--orange)">+</span></div>'
-    +'<div style="font-size:13px;color:var(--text-muted)">Agency Dashboard</div>'
-    +'<div style="font-size:11px;color:var(--text-dim);margin-top:3px">LitBiz Media</div>'
-    +'</div>'
-    +'<div id="agency-login-error" class="auth-error hidden"></div>'
-    +'<div class="form-group"><label>Username</label><input type="text" id="ag-user" autocomplete="username"></div>'
-    +'<div class="form-group"><label>Password</label><input type="password" id="ag-pass" autocomplete="current-password"></div>'
-    +'<button class="btn btn-primary btn-full" style="margin-top:4px" onclick="agencyLogin()">Sign In to Agency</button>'
-    +'</div></div>';
-  var passEl=document.getElementById('ag-pass');
-  if(passEl)passEl.addEventListener('keydown',function(e){if(e.key==='Enter')agencyLogin();});
-}
-
-async function agencyLogin(){
-  var username=(document.getElementById('ag-user')&&document.getElementById('ag-user').value||'').trim().toLowerCase();
-  var password=document.getElementById('ag-pass')&&document.getElementById('ag-pass').value||'';
-  var errEl=document.getElementById('agency-login-error');
-  var hash=await sha256(password);
-  if(username==='patrick'&&hash===ADMIN_HASH){
-    saveAgencySession({username:'patrick',name:'Patrick',role:'agency_admin'});
-    renderAgencyDashboard();
-  }else{
-    if(errEl){errEl.textContent='Invalid credentials.';errEl.classList.remove('hidden');}
-  }
-}
-
-// =====================================================
-// AGENCY DASHBOARD
-// =====================================================
-
-async function renderAgencyDashboard(){
-  var el=document.getElementById('agency-content');
-  if(!el)return;
-  el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
-    // Top bar
-    +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">MySpark<span style="color:var(--orange)">+</span> <span style="font-size:13px;font-weight:500;color:var(--text-muted)">Agency Dashboard</span></div>'
-    +'<div style="font-size:13px;color:var(--text-muted)">LitBiz Media</div>'
-    +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
-    +'</div>'
-    // Body
-    +'<div style="padding:28px 32px">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Subaccounts</div>'
-    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Manage your client CRM accounts</div></div>'
-    +'<button class="btn btn-primary" onclick="openCreateSubaccountModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subaccount</button>'
-    +'</div>'
-    +'<div id="agency-subs-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">'
-    +'<div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading subaccounts...</div>'
-    +'</div></div></div>';
-  agencyLoadSubaccounts();
-}
-
-
-// ── Agency Reset Subaccount Admin Password ──
-function agencyResetPassword(subId,slug){
-  state.modal={type:'agency-reset-pass',id:subId,extra:{slug:slug}};
-  var body='<div class="form-group"><label>New Admin Password *</label>'
-    +'<input id="agency-new-pass" type="password" placeholder="Strong password">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
-    +'<div class="form-group"><label>Confirm Password *</label>'
-    +'<input id="agency-new-pass2" type="password" placeholder="Confirm password"></div>';
-  openModal('Reset Admin Password: '+slug, body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-danger" onclick="agencyConfirmResetPassword(\''+subId+'\',\''+slug+'\')">Reset Password</button>');
-}
-
-async function agencyConfirmResetPassword(subId,slug){
-  var pass=document.getElementById('agency-new-pass')&&document.getElementById('agency-new-pass').value||'';
-  var pass2=document.getElementById('agency-new-pass2')&&document.getElementById('agency-new-pass2').value||'';
-  if(!pass||!pass2){toast('Both fields required.','error');return;}
-  if(pass!==pass2){toast('Passwords do not match.','error');return;}
-  var passErr=checkPasswordStrength(pass);
-  if(passErr){toast(passErr,'error');return;}
-  var passHash=await sha256(pass);
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-  try{
-    // Fetch current data
-    var r=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId+'&select=data',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var rows=await r.json();
-    if(!rows||!rows.length){toast('Subaccount data not found.','error');return;}
-    var data=rows[0].data||{};
-    if(!data._subaccountAdmin){toast('No admin record found for this subaccount.','error');return;}
-    data._subaccountAdmin.passwordHash=passHash;
-    await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId,{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({data:data,updated_at:new Date().toISOString()})
-    });
-    closeModal();
-    toast('Password reset for '+slug+'.','success');
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-async function agencyLoadSubaccounts(){
-  var el=document.getElementById('agency-subs-grid');if(!el)return;
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-  try{
-    var r=await fetch(url+'/rest/v1/subaccounts?select=*&order=created_at.asc',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var subs=await r.json();
-    if(!Array.isArray(subs)||!subs.length){
-      el.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:20px 0">No subaccounts yet. Create one to get started.</div>';
-      return;
-    }
-    // Load stats for each sub
-    var statsRes=await fetch(url+'/rest/v1/subaccount_data?select=subaccount_id,data',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var statsRows=await statsRes.json();
-    var statsMap={};
-    (statsRows||[]).forEach(function(row){
-      if(row.data)statsMap[row.subaccount_id]=row.data;
-    });
-    el.innerHTML=subs.map(function(sub){
-      var data=statsMap[sub.id]||{};
-      var contactCount=(data.contacts||[]).length;
-      var userCount=(data.users||[]).length+1; // +1 for admin
-      var isActive=sub.active!==false;
-      var plan=sub.plan||'starter';
-      return '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:12px">'
-        +'<div style="display:flex;align-items:flex-start;justify-content:space-between">'
-        +'<div>'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:#fff">'+esc(sub.name)+'</div>'
-        +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px;font-family:monospace">'+esc(sub.slug)+'</div>'
-        +'</div>'
-        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(isActive?'background:rgba(52,211,153,.12);color:#34d399':'background:rgba(239,68,68,.1);color:#f87171')+'">'+(isActive?'Active':'Suspended')+'</span>'
-        +'</div>'
-        +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
-        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--orange)">'+contactCount+'</div>'
-        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Contacts</div>'
-        +'</div>'
-        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--purple-light)">'+userCount+'</div>'
-        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Users</div>'
-        +'</div>'
-        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text);text-transform:capitalize">'+esc(plan)+'</div>'
-        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Plan</div>'
-        +'</div>'
-        +'</div>'
-        +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
-        +'<button class="btn btn-primary btn-sm" onclick="agencyLoginAs(\''+esc(sub.slug)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Login As</button>'
-        +'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(plan)+'\')">Edit</button>'+'<button class="btn btn-ghost btn-sm" onclick="agencyResetPassword(\''+sub.id+'\',\''+esc(sub.slug)+'\')">Reset Password</button>'
-        +(isActive
-          ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false)">Suspend</button>'
-          :'<button class="btn btn-purple btn-sm" onclick="agencyToggleSub(\''+sub.id+'\',true)">Activate</button>')
-        +'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\')">Delete</button>'
-        +'</div>'
-        +'</div>';
-    }).join('');
-  }catch(e){
-    el.innerHTML='<div style="color:#f87171;font-size:13px;padding:20px 0">Could not load subaccounts: '+e.message+'</div>';
-  }
-}
-
-// ── Login As ──
-function agencyLoginAs(slug){
-  var token=uid()+uid();
-  var exp=Date.now()+300000; // 5 min
-  localStorage.setItem(AGENCY_TOKEN_PREFIX+slug,JSON.stringify({token:token,exp:exp}));
-  var base=window.location.origin;
-  window.open(base+'/'+slug+'?at='+token,'_blank');
-}
-
-// ── Create Subaccount Modal ──
-function openCreateSubaccountModal(){
-  var body='<div class="form-group"><label>Subaccount Name *</label>'
-    +'<input id="new-sub-name" type="text" placeholder="e.g. Riverside Spa"></div>'
-    +'<div class="form-group"><label>URL Slug * <span style="font-weight:400;color:var(--text-muted)">(lowercase, no spaces)</span></label>'
-    +'<div style="display:flex;align-items:center;gap:0">'
-    +'<span style="background:var(--bg-card);border:1px solid var(--border);border-right:none;border-radius:var(--radius) 0 0 var(--radius);padding:9px 12px;font-size:13px;color:var(--text-muted);white-space:nowrap">mysparkplus.app/</span>'
-    +'<input id="new-sub-slug" type="text" placeholder="riverside-spa" style="border-radius:0 var(--radius) var(--radius) 0;flex:1" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,\'-\')"></div></div>'
-    +'<div class="form-group"><label>Plan</label>'
-    +'<select id="new-sub-plan" class="filter-sel" style="width:100%;height:38px">'
-    +'<option value="starter">Starter</option>'
-    +'<option value="pro">Pro</option>'
-    +'<option value="enterprise">Enterprise</option>'
-    +'</select></div>'
-    +'<div class="form-group"><label>Admin Username *</label>'
-    +'<input id="new-sub-user" type="text" placeholder="admin"></div>'
-    +'<div class="form-group"><label>Admin Password *</label>'
-    +'<input id="new-sub-pass" type="password" placeholder="Strong password"></div>';
-  openModal('New Subaccount',body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="createSubaccount()">Create Subaccount</button>',
-    'modal-lg');
-}
-
-async function createSubaccount(){
-  var name=(document.getElementById('new-sub-name')&&document.getElementById('new-sub-name').value||'').trim();
-  var slug=(document.getElementById('new-sub-slug')&&document.getElementById('new-sub-slug').value||'').trim().toLowerCase();
-  var plan=document.getElementById('new-sub-plan')&&document.getElementById('new-sub-plan').value||'starter';
-  var adminUser=(document.getElementById('new-sub-user')&&document.getElementById('new-sub-user').value||'').trim().toLowerCase();
-  var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
-  if(!name||!slug||!adminUser||!adminPass){toast('All fields required.','error');return;}
-  if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
-  var passErr=checkPasswordStrength(adminPass);
-  if(passErr){toast(passErr,'error');return;}
-  var passHash=await sha256(adminPass);
-  var subId='sub-'+slug;
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-  try{
-    // Create subaccount record
-    var r1=await fetch(url+'/rest/v1/subaccounts',{
-      method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({id:subId,agency_id:'agency-main',name:name,slug:slug,plan:plan,active:true})
-    });
-    if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
-    // Create initial data record with admin user
-    var initData={
-      contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],
-      tags:[],users:[],subscriptions:[],forms:[],formSubmissions:[],
-      customFieldCategories:[],customFields:[],
-      productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services'],
-      products:[],
-      settings:{
-        businessName:name,
-        supabaseUrl:SB_FALLBACK_URL,
-        supabaseKey:SB_FALLBACK_KEY,
-        businessHours:{
-          mon:{open:true,start:'08:00',end:'18:00'},tue:{open:true,start:'08:00',end:'18:00'},
-          wed:{open:true,start:'08:00',end:'18:00'},thu:{open:true,start:'08:00',end:'18:00'},
-          fri:{open:true,start:'08:00',end:'18:00'},sat:{open:false,start:'09:00',end:'14:00'},
-          sun:{open:false,start:'09:00',end:'14:00'}
-        },
-        square:{appId:'',accessToken:'',locationId:'',sandbox:true},
-        adminProfile:{},
-        notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
-      },
-      _subaccountAdmin:{
-        username:adminUser,
-        passwordHash:passHash,
-        name:adminUser,
-        color:'#6b21ea'
-      }
-    };
-    var r2=await fetch(url+'/rest/v1/subaccount_data',{
-      method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({id:'data-'+slug,subaccount_id:subId,data:initData,updated_at:new Date().toISOString()})
-    });
-    if(!r2.ok){var e2=await r2.text();toast('Subaccount created but data init failed: '+e2,'warn');}
-    closeModal();
-    toast('Subaccount "'+name+'" created. URL: mysparkplus.app/'+slug,'success');
-    agencyLoadSubaccounts();
-  }catch(e){
-    toast('Error creating subaccount: '+e.message,'error');
-  }
-}
-
-// ── Edit Subaccount Modal ──
-function openEditSubaccountModal(id,name,slug,plan){
-  var body='<div class="form-group"><label>Name</label>'
-    +'<input id="edit-sub-name" type="text" value="'+esc(name)+'"></div>'
-    +'<div class="form-group"><label>Plan</label>'
-    +'<select id="edit-sub-plan" class="filter-sel" style="width:100%;height:38px">'
-    +['starter','pro','enterprise'].map(function(p){return'<option value="'+p+'"'+(p===plan?' selected':'')+'>'+p[0].toUpperCase()+p.slice(1)+'</option>';}).join('')
-    +'</select></div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-top:4px">URL slug cannot be changed after creation.</div>';
-  state.modal={type:'edit-sub',id:id};
-  openModal('Edit: '+esc(name),body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveEditSubaccount(\''+id+'\')">Save</button>');
-}
-
-async function saveEditSubaccount(id){
-  var name=(document.getElementById('edit-sub-name')&&document.getElementById('edit-sub-name').value||'').trim();
-  var plan=document.getElementById('edit-sub-plan')&&document.getElementById('edit-sub-plan').value||'starter';
-  if(!name){toast('Name required.','error');return;}
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-  try{
-    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({name:name,plan:plan})
-    });
-    closeModal();toast('Subaccount updated.','success');agencyLoadSubaccounts();
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-// ── Suspend / Activate ──
-async function agencyToggleSub(id,active){
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-  try{
-    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({active:active})
-    });
-    toast('Subaccount '+(active?'activated':'suspended')+'.','success');
-    agencyLoadSubaccounts();
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-// ── Delete Subaccount ──
-function agencyDeleteSub(id,name){
-  state.modal={type:'del-agency-sub',id:id};
-  document.getElementById('modal-title').textContent='Delete Subaccount';
-  document.getElementById('modal-box').className='modal';
-  document.getElementById('modal-body').innerHTML='<div class="warn-box">Permanently delete <strong>'+esc(name)+'</strong>? All contacts, payments, and data for this subaccount will be removed. This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="agencyConfirmDeleteSub(\''+id+'\')">Delete Permanently</button>';
-  document.getElementById('modal-overlay').classList.add('open');
-}
-
-async function agencyConfirmDeleteSub(id){
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-  try{
-    await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+id,{
-      method:'DELETE',
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
-      method:'DELETE',
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    closeModal();toast('Subaccount deleted.','success');agencyLoadSubaccounts();
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-// ── Update auth subtitle based on subaccount ──
-function updateAuthSubtitle(){
-  var el=document.querySelector('.auth-subtitle');
-  if(el&&state.subaccountSlug&&state.subaccountSlug!==DEFAULT_SLUG){
-    el.textContent=state.subaccountSlug.charAt(0).toUpperCase()+state.subaccountSlug.slice(1).replace(/-/g,' ')+' CRM';
-  }
+// Check if user can process refunds/voids
+function canRefundVoid(){
+  return hasRole('admin','manager');
 }
 
 </script>
