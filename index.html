@@ -886,6 +886,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
   </div>
 </div>
 
+<!-- AGENCY DASHBOARD -->
+<div id="agency-screen" class="hidden" style="min-height:100vh;background:var(--bg);color:var(--text);font-family:Lato,sans-serif">
+  <div id="agency-content"></div>
+</div>
+
 <!-- APP -->
 <div id="app" class="hidden">
   <!-- SIDEBAR -->
@@ -1551,7 +1556,7 @@ CREATE POLICY "allow_all" ON crm_data FOR ALL USING (true) WITH CHECK (true);</d
 // =====================================================
 // CONSTANTS
 // =====================================================
-const SK='myspark_crm_v2',SSK='myspark_session_v1',GIST_FILE='myspark-crm-data.json';
+let SK='myspark_crm_v2';const SSK='myspark_session_v1',GIST_FILE='myspark-crm-data.json';
 // Fallback credentials - always available even if localStorage is wiped
 const SB_FALLBACK_URL='https://jytnzqaatkdtcflysadw.supabase.co';
 const SB_FALLBACK_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dG56cWFhdGtkdGNmbHlzYWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDE5NDUsImV4cCI6MjA5MjM3Nzk0NX0.znP5Tx2qU89BCuRBJZJlbmR-abde5J0NEzL0BXVi80g';
@@ -1559,6 +1564,10 @@ const SQ_FALLBACK_TOKEN='EAAAltTSKhihm6k7nQ7cvcl2k-lmi-VwJrJ-DhA6zOvW4Pt1RBN0owH
 const SQ_FALLBACK_MERCHANT='MLKQN95NEH4F8';
 const PER_PAGE=20;
 const ADMIN_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
+const AGENCY_SLUG='agency';
+const DEFAULT_SLUG='litbiz';
+const AGENCY_SESSION_KEY='myspark_agency_v1';
+const AGENCY_TOKEN_PREFIX='myspark_at_';
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DSHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DKEYS=['sun','mon','tue','wed','thu','fri','sat'];
@@ -1585,6 +1594,7 @@ const DEF_BH={
 // =====================================================
 let state={
   user:null,panel:'dashboard',
+  subaccountSlug:'litbiz',subaccountId:'sub-litbiz',agencyMode:false,
   cPage:1,cSearch:'',cType:'',cStatus:'',cTag:'',cSort:{col:'name',dir:'asc'},cSelected:new Set(),cShowArchived:false,
   drawer:null,dTab:'info',
   calView:'month',calDate:new Date(),calUser:'all',
@@ -3021,15 +3031,16 @@ function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(do
 async function doSync(){
   const url=db.settings.supabaseUrl,key=db.settings.supabaseKey;
   if(!url||!key)return;
-  // Safety check: never sync if contacts are empty and we have had contacts before
   const hasData=db.contacts.length>0||db.payments.length>0||db.tasks.length>0;
   if(!hasData){console.log('Sync skipped: no data to sync.');return;}
   setSyncSt('syncing');
+  const subId=state.subaccountId||'sub-litbiz';
+  const dataId='data-'+(state.subaccountSlug||'litbiz');
   try{
-    await fetch(url+'/rest/v1/crm_data',{
+    await fetch(url+'/rest/v1/subaccount_data',{
       method:'POST',
       headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify({id:'main',data:db,updated_at:new Date().toISOString()})
+      body:JSON.stringify({id:dataId,subaccount_id:subId,data:db,updated_at:new Date().toISOString()})
     });
     setSyncSt('synced');
   }catch(e){setSyncSt('error')}
@@ -3039,8 +3050,9 @@ async function fetchFromSupabase(){
   const url=db.settings.supabaseUrl,key=db.settings.supabaseKey;
   if(!url||!key)return false;
   setSyncSt('syncing');
+  const subId=state.subaccountId||'sub-litbiz';
   try{
-    const r=await fetch(url+'/rest/v1/crm_data?id=eq.main&select=data',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    const r=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId+'&select=data',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
     const rows=await r.json();
     if(rows&&rows.length&&rows[0].data){
       const rem=rows[0].data;
@@ -5533,10 +5545,55 @@ function fbApplyLiveStyles(){
 
 // Boot check for embed mode
 document.addEventListener('DOMContentLoaded',function(){
+  // Detect path-based routing
+  var pathSlug=getPathSlug();
+  state.subaccountSlug=pathSlug;
+  state.subaccountId='sub-'+pathSlug;
+  state.agencyMode=pathSlug===AGENCY_SLUG;
+  // Scope localStorage key per subaccount
+  SK='myspark_crm_v2_'+(state.agencyMode?'agency':pathSlug);
   loadData();
+  applyFallbackCredentials();
   if(fbCheckEmbedMode())return;
+  // Agency path
+  if(state.agencyMode){
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app').classList.add('hidden');
+    document.getElementById('agency-screen').classList.remove('hidden');
+    var asess=loadAgencySession();
+    if(asess){renderAgencyDashboard();}
+    else{renderAgencyLogin();}
+    return;
+  }
+  // Check for agency login-as token in URL
+  var urlParams=new URLSearchParams(window.location.search);
+  var agencyToken=urlParams.get('at');
+  if(agencyToken){
+    var storedToken=localStorage.getItem(AGENCY_TOKEN_PREFIX+pathSlug);
+    if(storedToken){
+      try{
+        var td=JSON.parse(storedToken);
+        if(td.token===agencyToken&&td.exp>Date.now()){
+          // Auto-login as admin for agency login-as
+          state.user={id:'admin-patrick',username:'patrick',role:'admin',name:'Patrick',color:'#ff4000'};
+          localStorage.setItem(SSK,JSON.stringify({...state.user,ts:Date.now()}));
+          history.replaceState(null,'',window.location.pathname);
+          document.getElementById('auth-screen').classList.add('hidden');
+          document.getElementById('app').classList.remove('hidden');
+          fetchFromSupabase().then(function(){initApp();});
+          return;
+        }
+      }catch(e){}
+    }
+  }
+  // Normal CRM login flow
   const sess=loadSession();
-  if(sess){state.user=sess;document.getElementById('auth-screen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');initApp();}
+  if(sess){
+    state.user=sess;
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    fetchFromSupabase().then(function(ok){initApp();});
+  }
 });
 
 
@@ -8571,6 +8628,340 @@ function gcHandleBgUpload(input){
     gcUpdatePreview();
   };
   reader.readAsDataURL(file);
+}
+
+
+// =====================================================
+// MULTI-TENANCY ROUTING
+// =====================================================
+
+function getPathSlug(){
+  var path=window.location.pathname;
+  var parts=path.split('/').filter(Boolean);
+  return parts[0]||DEFAULT_SLUG;
+}
+
+// =====================================================
+// AGENCY SESSION
+// =====================================================
+
+function loadAgencySession(){
+  try{
+    var r=localStorage.getItem(AGENCY_SESSION_KEY);
+    if(!r)return null;
+    var s=JSON.parse(r);
+    if(Date.now()-s.ts>8*3600000){localStorage.removeItem(AGENCY_SESSION_KEY);return null;}
+    return s;
+  }catch(e){return null;}
+}
+
+function saveAgencySession(user){
+  localStorage.setItem(AGENCY_SESSION_KEY,JSON.stringify({...user,ts:Date.now()}));
+}
+
+function agencyLogout(){
+  localStorage.removeItem(AGENCY_SESSION_KEY);
+  renderAgencyLogin();
+}
+
+// =====================================================
+// AGENCY LOGIN
+// =====================================================
+
+function renderAgencyLogin(){
+  var el=document.getElementById('agency-content');
+  if(!el)return;
+  el.innerHTML='<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;'
+    +'background:radial-gradient(ellipse at 25% 20%,rgba(107,33,234,.22) 0%,transparent 55%),'
+    +'radial-gradient(ellipse at 75% 80%,rgba(255,64,0,.12) 0%,transparent 50%),var(--bg)">'
+    +'<div style="background:var(--bg-panel);border:1px solid var(--purple-border);border-radius:var(--radius-lg);padding:44px 40px;width:380px;box-shadow:var(--shadow)">'
+    +'<div style="text-align:center;margin-bottom:28px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:26px;font-weight:800;color:#fff;margin-bottom:5px">MySpark<span style="color:var(--orange)">+</span></div>'
+    +'<div style="font-size:13px;color:var(--text-muted)">Agency Dashboard</div>'
+    +'<div style="font-size:11px;color:var(--text-dim);margin-top:3px">LitBiz Media</div>'
+    +'</div>'
+    +'<div id="agency-login-error" class="auth-error hidden"></div>'
+    +'<div class="form-group"><label>Username</label><input type="text" id="ag-user" autocomplete="username"></div>'
+    +'<div class="form-group"><label>Password</label><input type="password" id="ag-pass" autocomplete="current-password"></div>'
+    +'<button class="btn btn-primary btn-full" style="margin-top:4px" onclick="agencyLogin()">Sign In to Agency</button>'
+    +'</div></div>';
+  var passEl=document.getElementById('ag-pass');
+  if(passEl)passEl.addEventListener('keydown',function(e){if(e.key==='Enter')agencyLogin();});
+}
+
+async function agencyLogin(){
+  var username=(document.getElementById('ag-user')&&document.getElementById('ag-user').value||'').trim().toLowerCase();
+  var password=document.getElementById('ag-pass')&&document.getElementById('ag-pass').value||'';
+  var errEl=document.getElementById('agency-login-error');
+  var hash=await sha256(password);
+  if(username==='patrick'&&hash===ADMIN_HASH){
+    saveAgencySession({username:'patrick',name:'Patrick',role:'agency_admin'});
+    renderAgencyDashboard();
+  }else{
+    if(errEl){errEl.textContent='Invalid credentials.';errEl.classList.remove('hidden');}
+  }
+}
+
+// =====================================================
+// AGENCY DASHBOARD
+// =====================================================
+
+async function renderAgencyDashboard(){
+  var el=document.getElementById('agency-content');
+  if(!el)return;
+  el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
+    // Top bar
+    +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">MySpark<span style="color:var(--orange)">+</span> <span style="font-size:13px;font-weight:500;color:var(--text-muted)">Agency Dashboard</span></div>'
+    +'<div style="font-size:13px;color:var(--text-muted)">LitBiz Media</div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
+    +'</div>'
+    // Body
+    +'<div style="padding:28px 32px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Subaccounts</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Manage your client CRM accounts</div></div>'
+    +'<button class="btn btn-primary" onclick="openCreateSubaccountModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subaccount</button>'
+    +'</div>'
+    +'<div id="agency-subs-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">'
+    +'<div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading subaccounts...</div>'
+    +'</div></div></div>';
+  agencyLoadSubaccounts();
+}
+
+async function agencyLoadSubaccounts(){
+  var el=document.getElementById('agency-subs-grid');if(!el)return;
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var r=await fetch(url+'/rest/v1/subaccounts?select=*&order=created_at.asc',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    var subs=await r.json();
+    if(!Array.isArray(subs)||!subs.length){
+      el.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:20px 0">No subaccounts yet. Create one to get started.</div>';
+      return;
+    }
+    // Load stats for each sub
+    var statsRes=await fetch(url+'/rest/v1/subaccount_data?select=subaccount_id,data',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    var statsRows=await statsRes.json();
+    var statsMap={};
+    (statsRows||[]).forEach(function(row){
+      if(row.data)statsMap[row.subaccount_id]=row.data;
+    });
+    el.innerHTML=subs.map(function(sub){
+      var data=statsMap[sub.id]||{};
+      var contactCount=(data.contacts||[]).length;
+      var userCount=(data.users||[]).length+1; // +1 for admin
+      var isActive=sub.active!==false;
+      var plan=sub.plan||'starter';
+      return '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:12px">'
+        +'<div style="display:flex;align-items:flex-start;justify-content:space-between">'
+        +'<div>'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:#fff">'+esc(sub.name)+'</div>'
+        +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px;font-family:monospace">'+esc(sub.slug)+'</div>'
+        +'</div>'
+        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(isActive?'background:rgba(52,211,153,.12);color:#34d399':'background:rgba(239,68,68,.1);color:#f87171')+'">'+(isActive?'Active':'Suspended')+'</span>'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--orange)">'+contactCount+'</div>'
+        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Contacts</div>'
+        +'</div>'
+        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--purple-light)">'+userCount+'</div>'
+        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Users</div>'
+        +'</div>'
+        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text);text-transform:capitalize">'+esc(plan)+'</div>'
+        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Plan</div>'
+        +'</div>'
+        +'</div>'
+        +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
+        +'<button class="btn btn-primary btn-sm" onclick="agencyLoginAs(\''+esc(sub.slug)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Login As</button>'
+        +'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(plan)+'\')">Edit</button>'
+        +(isActive
+          ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false)">Suspend</button>'
+          :'<button class="btn btn-purple btn-sm" onclick="agencyToggleSub(\''+sub.id+'\',true)">Activate</button>')
+        +'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\')">Delete</button>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+  }catch(e){
+    el.innerHTML='<div style="color:#f87171;font-size:13px;padding:20px 0">Could not load subaccounts: '+e.message+'</div>';
+  }
+}
+
+// ── Login As ──
+function agencyLoginAs(slug){
+  var token=uid()+uid();
+  var exp=Date.now()+300000; // 5 min
+  localStorage.setItem(AGENCY_TOKEN_PREFIX+slug,JSON.stringify({token:token,exp:exp}));
+  var base=window.location.origin;
+  window.open(base+'/'+slug+'?at='+token,'_blank');
+}
+
+// ── Create Subaccount Modal ──
+function openCreateSubaccountModal(){
+  var body='<div class="form-group"><label>Subaccount Name *</label>'
+    +'<input id="new-sub-name" type="text" placeholder="e.g. Riverside Spa"></div>'
+    +'<div class="form-group"><label>URL Slug * <span style="font-weight:400;color:var(--text-muted)">(lowercase, no spaces)</span></label>'
+    +'<div style="display:flex;align-items:center;gap:0">'
+    +'<span style="background:var(--bg-card);border:1px solid var(--border);border-right:none;border-radius:var(--radius) 0 0 var(--radius);padding:9px 12px;font-size:13px;color:var(--text-muted);white-space:nowrap">mysparkplus.app/</span>'
+    +'<input id="new-sub-slug" type="text" placeholder="riverside-spa" style="border-radius:0 var(--radius) var(--radius) 0;flex:1" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,\'-\')"></div></div>'
+    +'<div class="form-group"><label>Plan</label>'
+    +'<select id="new-sub-plan" class="filter-sel" style="width:100%;height:38px">'
+    +'<option value="starter">Starter</option>'
+    +'<option value="pro">Pro</option>'
+    +'<option value="enterprise">Enterprise</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Admin Username *</label>'
+    +'<input id="new-sub-user" type="text" placeholder="admin"></div>'
+    +'<div class="form-group"><label>Admin Password *</label>'
+    +'<input id="new-sub-pass" type="password" placeholder="Strong password"></div>';
+  openModal('New Subaccount',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="createSubaccount()">Create Subaccount</button>',
+    'modal-lg');
+}
+
+async function createSubaccount(){
+  var name=(document.getElementById('new-sub-name')&&document.getElementById('new-sub-name').value||'').trim();
+  var slug=(document.getElementById('new-sub-slug')&&document.getElementById('new-sub-slug').value||'').trim().toLowerCase();
+  var plan=document.getElementById('new-sub-plan')&&document.getElementById('new-sub-plan').value||'starter';
+  var adminUser=(document.getElementById('new-sub-user')&&document.getElementById('new-sub-user').value||'').trim().toLowerCase();
+  var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
+  if(!name||!slug||!adminUser||!adminPass){toast('All fields required.','error');return;}
+  if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
+  var passHash=await sha256(adminPass);
+  var subId='sub-'+slug;
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    // Create subaccount record
+    var r1=await fetch(url+'/rest/v1/subaccounts',{
+      method:'POST',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({id:subId,agency_id:'agency-main',name:name,slug:slug,plan:plan,active:true})
+    });
+    if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
+    // Create initial data record with admin user
+    var initData={
+      contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],
+      tags:[],users:[],subscriptions:[],forms:[],formSubmissions:[],
+      customFieldCategories:[],customFields:[],
+      productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services'],
+      products:[],
+      settings:{
+        businessName:name,
+        supabaseUrl:SB_FALLBACK_URL,
+        supabaseKey:SB_FALLBACK_KEY,
+        businessHours:{
+          mon:{open:true,start:'08:00',end:'18:00'},tue:{open:true,start:'08:00',end:'18:00'},
+          wed:{open:true,start:'08:00',end:'18:00'},thu:{open:true,start:'08:00',end:'18:00'},
+          fri:{open:true,start:'08:00',end:'18:00'},sat:{open:false,start:'09:00',end:'14:00'},
+          sun:{open:false,start:'09:00',end:'14:00'}
+        },
+        square:{appId:'',accessToken:'',locationId:'',sandbox:true},
+        adminProfile:{},
+        notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
+      },
+      _subaccountAdmin:{
+        username:adminUser,
+        passwordHash:passHash,
+        name:adminUser,
+        color:'#6b21ea'
+      }
+    };
+    var r2=await fetch(url+'/rest/v1/subaccount_data',{
+      method:'POST',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({id:'data-'+slug,subaccount_id:subId,data:initData,updated_at:new Date().toISOString()})
+    });
+    if(!r2.ok){var e2=await r2.text();toast('Subaccount created but data init failed: '+e2,'warn');}
+    closeModal();
+    toast('Subaccount "'+name+'" created. URL: mysparkplus.app/'+slug,'success');
+    agencyLoadSubaccounts();
+  }catch(e){
+    toast('Error creating subaccount: '+e.message,'error');
+  }
+}
+
+// ── Edit Subaccount Modal ──
+function openEditSubaccountModal(id,name,slug,plan){
+  var body='<div class="form-group"><label>Name</label>'
+    +'<input id="edit-sub-name" type="text" value="'+esc(name)+'"></div>'
+    +'<div class="form-group"><label>Plan</label>'
+    +'<select id="edit-sub-plan" class="filter-sel" style="width:100%;height:38px">'
+    +['starter','pro','enterprise'].map(function(p){return'<option value="'+p+'"'+(p===plan?' selected':'')+'>'+p[0].toUpperCase()+p.slice(1)+'</option>';}).join('')
+    +'</select></div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:4px">URL slug cannot be changed after creation.</div>';
+  state.modal={type:'edit-sub',id:id};
+  openModal('Edit: '+esc(name),body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveEditSubaccount(\''+id+'\')">Save</button>');
+}
+
+async function saveEditSubaccount(id){
+  var name=(document.getElementById('edit-sub-name')&&document.getElementById('edit-sub-name').value||'').trim();
+  var plan=document.getElementById('edit-sub-plan')&&document.getElementById('edit-sub-plan').value||'starter';
+  if(!name){toast('Name required.','error');return;}
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({name:name,plan:plan})
+    });
+    closeModal();toast('Subaccount updated.','success');agencyLoadSubaccounts();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── Suspend / Activate ──
+async function agencyToggleSub(id,active){
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({active:active})
+    });
+    toast('Subaccount '+(active?'activated':'suspended')+'.','success');
+    agencyLoadSubaccounts();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── Delete Subaccount ──
+function agencyDeleteSub(id,name){
+  state.modal={type:'del-agency-sub',id:id};
+  document.getElementById('modal-title').textContent='Delete Subaccount';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">Permanently delete <strong>'+esc(name)+'</strong>? All contacts, payments, and data for this subaccount will be removed. This cannot be undone.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="agencyConfirmDeleteSub(\''+id+'\')">Delete Permanently</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function agencyConfirmDeleteSub(id){
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+id,{
+      method:'DELETE',
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
+      method:'DELETE',
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    closeModal();toast('Subaccount deleted.','success');agencyLoadSubaccounts();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── Update auth subtitle based on subaccount ──
+function updateAuthSubtitle(){
+  var el=document.querySelector('.auth-subtitle');
+  if(el&&state.subaccountSlug&&state.subaccountSlug!==DEFAULT_SLUG){
+    el.textContent=state.subaccountSlug.charAt(0).toUpperCase()+state.subaccountSlug.slice(1).replace(/-/g,' ')+' CRM';
+  }
 }
 
 </script>
