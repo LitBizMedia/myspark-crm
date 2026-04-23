@@ -1337,7 +1337,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
               <div id="pm-gc-fields" class="hidden" style="margin-top:8px">
                 <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Gift Card Code</div>
-                <div style="display:flex;gap:7px;margin-bottom:8px">
+                <div id="pos-gc-entry" style="display:flex;gap:7px;margin-bottom:8px">
                   <input id="pos-gc-code" type="text" placeholder="XXXX-XXXX-XXXX" maxlength="14" oninput="this.value=posGcFmt(this.value)" style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none;letter-spacing:.08em">
                   <button class="btn btn-purple btn-sm" onclick="posApplyGiftCard()">Apply</button>
                 </div>
@@ -8408,6 +8408,8 @@ function posApplyGiftCard(){
   if(balLbl)balLbl.textContent='Balance: '+fmt$(g.balance);
   if(namLbl){var prod=g.productId?(db.giftCardProducts||[]).find(function(x){return x.id===g.productId;}):null;namLbl.textContent=prod?prod.name:'Gift Card';}
   if(infoEl)infoEl.classList.remove('hidden');
+  var entryEl=document.getElementById('pos-gc-entry');
+  if(entryEl)entryEl.style.display='none';
   // Check if partial
   var totals=calcTotals();
   var total=totals.total;
@@ -8425,13 +8427,16 @@ function posApplyGiftCard(){
 function posClearGiftCard(){
   state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
   var infoEl=document.getElementById('pos-gc-info');
+  var entryEl=document.getElementById('pos-gc-entry');
   var codeEl=document.getElementById('pos-gc-code');
   var errEl=document.getElementById('pos-gc-error');
   var partialWrap=document.getElementById('pos-gc-partial-wrap');
   if(infoEl)infoEl.classList.add('hidden');
+  if(entryEl)entryEl.style.display='flex';
   if(codeEl)codeEl.value='';
   if(errEl)errEl.classList.add('hidden');
   if(partialWrap)partialWrap.classList.add('hidden');
+  calcTotals();
 }
 
 function gcSetRemainder(method){
@@ -8477,13 +8482,29 @@ function processCharge(){
     var tipStaffId=tipStaffRaw||staffId||null;
     var creditApplied=totals.credit||0;
     var remRef=state.posGCRemainderMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
-    db.payments.push({id:uid(),contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:creditApplied,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:state.posGCRemainderMethod||'',remainderRef:remRef,total:total,paymentMethod:'gift_card',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
+    var notes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
+    var payRecord={id:uid(),contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:creditApplied,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:state.posGCRemainderMethod||'',remainderRef:remRef,total:total,paymentMethod:'gift_card',status:'completed',notes:notes,createdAt:now_()};
+    db.payments.push(payRecord);
     saveData();
     state.posItems=[];state.posCoupon=null;state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
     renderPosItems();calcTotals();posClearGiftCard();
     document.getElementById('pos-c-id').value='';document.getElementById('pos-c-inp').value='';
     closeModal();
     toast('Payment of '+fmt$(total)+' recorded. Gift card: '+fmt$(gcApplied)+(remainder>0?', remainder: '+fmt$(remainder):''),'success');
+    // Charge remainder via Square if card selected
+    if(remainder>0&&state.posGCRemainderMethod==='card'){
+      var sq=db.settings.square||{};
+      if(sq.accessToken){
+        fetch('/api/square/charge',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({accessToken:sq.accessToken,amountCents:Math.round(remainder*100),note:'Gift card remainder - POS'})
+        }).then(function(r){return r.json();}).then(function(d){
+          if(d.error){toast('Remainder charge failed: '+d.error,'error');}
+          else{toast('Remainder of '+fmt$(remainder)+' charged to card.','success');}
+        }).catch(function(){toast('Could not reach Square for remainder charge.','error');});
+      }
+    }
     return;
   }
   _origProcessCharge();
