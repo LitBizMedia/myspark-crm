@@ -5731,6 +5731,21 @@ document.addEventListener('DOMContentLoaded',function(){
 // =====================================================
 // renderStaff merged below
 
+function renderStaff(){
+  var role=userRole();
+  var isAdm=role==='admin';
+  var isMgr=role==='manager';
+  var settingBtn=document.getElementById('stt-settings');
+  var reportBtn=document.getElementById('stt-reporting');
+  var teamBtn=document.getElementById('stt-team');
+  if(settingBtn)settingBtn.classList.toggle('hidden',!isAdm);
+  if(reportBtn)reportBtn.classList.toggle('hidden',!isAdm&&!isMgr);
+  if(teamBtn)teamBtn.classList.remove('hidden');
+  var tab=state.staffTab||'team';
+  if(!isAdm&&tab==='settings') tab='team';
+  switchStaffTab(tab);
+}
+
 function switchStaffTab(tab){
   state.staffTab=tab;
   ['team','resources','settings','reporting'].forEach(function(t){
