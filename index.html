@@ -5946,11 +5946,10 @@ function renderStaffTeam(){
       +'<div class="staff-card-role">'+esc(u.role)+'</div>'
       +'<div class="staff-card-sched">'+todayAppts.length+' appt'+(todayAppts.length!==1?'s':'')+' today</div>'
       +'<div class="staff-card-sched" style="margin-top:2px">'+schedLabel+'</div>'
-      +(isAdmin?'<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">'
+      +(isAdminOrManager()?'<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">'
         +'<button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button>'
-        +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="openUserSchedModal(\''+u.id+'\')">Schedule</button>':'')
-        +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button>':'')
-        +(u.id!=='admin-patrick'&&isAdminOrManager()&&userRole()==='admin'?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')
+        +'<button class="btn btn-ghost btn-sm" onclick="openUserSchedModal(\''+u.id+'\')">Schedule</button>'
+        +(u.id!=='admin-patrick'&&userRole()==='admin'?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')
         +'</div>':'')
       +'</div>';
   });
