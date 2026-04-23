@@ -6445,7 +6445,7 @@ function setPM(m){
     const f=document.getElementById('pm-'+x+'-fields');
     if(f)f.classList.toggle('hidden',x!==m);
   });
-  if(m!=='gc') posClearGiftCard();
+  if(m!=='gc'&&!state.posGC) posClearGiftCard();
 }
 
 // =====================================================
@@ -8449,11 +8449,36 @@ function gcSetRemainder(method){
   });
   var extra=document.getElementById('gc-rem-extra');
   if(!extra)return;
-  if(method==='other'){
-    extra.classList.remove('hidden');
-    extra.innerHTML='<input id="gc-rem-ref" type="text" placeholder="Reference #, Venmo, etc." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none">';
-  }else{
-    extra.classList.add('hidden');
+  extra.classList.remove('hidden');
+  var remainder=state.posGCRemainder||0;
+  if(method==='card'){
+    var sq=db.settings&&db.settings.square&&db.settings.square.accessToken;
+    extra.innerHTML='<div style="margin-top:4px;font-size:12px;color:#fbbf24;margin-bottom:7px">Remainder to charge: <strong>'+fmt$(remainder)+'</strong></div>'
+      +(sq?'<div id="gc-rem-sq-container" class="sq-card-form" style="min-height:44px"></div><div id="gc-rem-sq-errors" style="color:#f87171;font-size:11px;margin-top:4px"></div>'
+        :'<div style="font-size:12px;color:var(--text-muted)">Card remainder will be recorded. Connect Square to charge live.</div>');
+    if(sq) setTimeout(gcInitRemainderCardForm,100);
+  }else if(method==='cash'){
+    extra.innerHTML='<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Cash remainder of <strong style="color:#fbbf24">'+fmt$(remainder)+'</strong> will be recorded.</div>';
+  }else if(method==='other'){
+    extra.innerHTML='<div style="margin-bottom:6px;font-size:12px;color:var(--text-muted)">Remainder: <strong style="color:#fbbf24">'+fmt$(remainder)+'</strong></div><input id="gc-rem-ref" type="text" placeholder="Reference #, Venmo, etc." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none">';
+  }
+}
+
+var gcRemCard=null;
+async function gcInitRemainderCardForm(){
+  var errEl=document.getElementById('gc-rem-sq-errors');
+  var container=document.getElementById('gc-rem-sq-container');
+  if(!container)return;
+  try{
+    var cfgRes=await fetch('/api/square/config');
+    var cfg=await cfgRes.json();
+    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
+    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
+    var payments=window.Square.payments(cfg.appId,'production');
+    gcRemCard=await payments.card();
+    await gcRemCard.attach('#gc-rem-sq-container');
+  }catch(e){
+    if(errEl)errEl.textContent='Could not load card form: '+e.message;
   }
 }
 
@@ -8494,15 +8519,26 @@ function processCharge(){
     // Charge remainder via Square if card selected
     if(remainder>0&&state.posGCRemainderMethod==='card'){
       var sq=db.settings.square||{};
-      if(sq.accessToken){
-        fetch('/api/square/charge',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({accessToken:sq.accessToken,amountCents:Math.round(remainder*100),note:'Gift card remainder - POS'})
-        }).then(function(r){return r.json();}).then(function(d){
+      if(sq.accessToken&&gcRemCard){
+        gcRemCard.tokenize().then(function(result){
+          if(result.status!=='OK'){
+            var msgs=(result.errors||[]).map(function(e){return e.message;}).join(', ');
+            toast('Remainder card error: '+(msgs||'Unknown error'),'error');
+            return;
+          }
+          return fetch('/api/square/charge',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({accessToken:sq.accessToken,sourceId:result.token,amountCents:Math.round(remainder*100),note:'Gift card remainder - POS'})
+          });
+        }).then(function(r){if(r)return r.json();}).then(function(d){
+          if(!d)return;
+          gcRemCard=null;
           if(d.error){toast('Remainder charge failed: '+d.error,'error');}
           else{toast('Remainder of '+fmt$(remainder)+' charged to card.','success');}
-        }).catch(function(){toast('Could not reach Square for remainder charge.','error');});
+        }).catch(function(e){toast('Square error: '+e.message,'error');});
+      }else if(sq.accessToken&&!gcRemCard){
+        toast('Card form not ready. Payment recorded but remainder not charged.','warn');
       }
     }
     return;
