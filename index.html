@@ -1239,10 +1239,29 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             </div>
             <div class="pos-card">
               <div class="pos-card-title" style="display:flex;align-items:center;justify-content:space-between">
-                Discount
-                <button class="btn btn-ghost btn-sm" id="pos-discount-toggle" onclick="togglePosDiscount()" style="font-size:11px">+ Add Discount</button>
+                Coupon &amp; Discount
+                <div style="display:flex;gap:6px">
+                  <button class="btn btn-ghost btn-sm" id="pos-coupon-toggle" onclick="togglePosCoupon()" style="font-size:11px">+ Coupon</button>
+                  <button class="btn btn-ghost btn-sm" id="pos-discount-toggle" onclick="togglePosDiscount()" style="font-size:11px">+ Discount</button>
+                </div>
+              </div>
+              <div id="pos-coupon-wrap" class="hidden" style="margin-bottom:10px">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);margin-bottom:5px">Coupon Code</div>
+                <div id="pos-coupon-entry" style="display:flex;gap:7px">
+                  <input id="pos-coupon-inp" type="text" placeholder="Enter code..." style="flex:1;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+                  <button class="btn btn-purple btn-sm" onclick="posApplyCoupon()">Apply</button>
+                </div>
+                <div id="pos-coupon-applied" class="hidden" style="background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25);border-radius:var(--radius);padding:9px 12px;display:flex;align-items:center;justify-content:space-between">
+                  <div>
+                    <div style="font-size:13px;font-weight:700;color:#34d399" id="pos-coupon-name"></div>
+                    <div style="font-size:11px;color:var(--main-text-muted)" id="pos-coupon-desc"></div>
+                  </div>
+                  <button class="btn btn-danger btn-sm" onclick="posRemoveCoupon()" style="flex-shrink:0">Remove</button>
+                </div>
+                <div id="pos-coupon-error" class="hidden" style="font-size:12px;color:#f87171;margin-top:5px"></div>
               </div>
               <div id="pos-discount-wrap" class="hidden">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);margin-bottom:5px">Manual Discount</div>
                 <div style="display:flex;gap:8px;margin-bottom:8px">
                   <select id="pos-discount-type" class="filter-sel" style="height:36px;width:130px" onchange="calcTotals()">
                     <option value="flat">$ Amount</option>
@@ -1267,8 +1286,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
               <div class="pos-totals">
                 <div class="pos-tr"><span>Subtotal</span><span id="pos-subtotal">$0.00</span></div>
-                <div class="pos-tr hidden" id="pos-discount-row"><span id="pos-discount-label" style="color:#34d399">Discount</span><span id="pos-discount-amt" style="color:#34d399">-$0.00</span></div>
-                <div class="pos-tr" id="pos-after-row"><span>After Discount</span><span id="pos-after-discount">$0.00</span></div>
+                <div class="pos-tr hidden" id="pos-coupon-row"><span id="pos-coupon-row-label" style="color:#34d399">Coupon</span><span id="pos-coupon-row-amt" style="color:#34d399">-$0.00</span></div>
+                <div class="pos-tr hidden" id="pos-discount-row"><span id="pos-discount-label" style="color:#a78bfa">Discount</span><span id="pos-discount-amt" style="color:#a78bfa">-$0.00</span></div>
+                <div class="pos-tr" id="pos-after-row"><span>After Discounts</span><span id="pos-after-discount">$0.00</span></div>
                 <div class="pos-tr"><span>Tip</span><span id="pos-tip-amt">$0.00</span></div>
                 <div class="pos-tr" id="pos-credit-row" style="display:none;align-items:center;justify-content:space-between">
                   <span style="display:flex;align-items:center;gap:8px">Credits
@@ -1360,14 +1380,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <p>View and manage all orders. Sync with Square or your e-commerce platform to track order status and fulfillment.</p>
           </div>
         </div>
-        <div id="pay-coupons-view" class="hidden">
-          <div class="coming-soon-wrap">
-            <span class="coming-soon-badge">Coming Soon</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M12 4v16M8 12h.01M16 12h.01"/></svg>
-            <h3>Coupons</h3>
-            <p>Create discount codes and coupons for your services. Set percentage or fixed-amount discounts with expiration dates.</p>
-          </div>
-        </div>
+        <div id="pay-coupons-view" class="hidden"></div>
         <div id="pay-giftcards-view" class="hidden">
           <div class="coming-soon-wrap">
             <span class="coming-soon-badge">Coming Soon</span>
@@ -1569,7 +1582,7 @@ let state={
 // DB
 // =====================================================
 let db={
-  contacts:[],appointments:[],tasks:[],payments:[],
+  contacts:[],appointments:[],tasks:[],payments:[],coupons:[],
   tags:[
     {id:'tag-hotlead',name:'Hot Lead',color:'#ff4000'},
     {id:'tag-vip',name:'VIP Client',color:'#6b21ea'},
@@ -2359,6 +2372,8 @@ function switchPayTab(tab){
     renderSubscriptions();
   }else if(tab==='transactions'){
     renderTransactions();
+  }else if(tab==='coupons'){
+    renderCoupons();
   }
 }
 
@@ -2410,12 +2425,22 @@ function setTip(v){
 
 function calcTotals(){
   const sub=state.posItems.reduce((s,i)=>s+i.price,0);
+  // Step 1: Coupon discount (applied to original subtotal)
+  let couponDiscount=0;
+  const appliedCoupon=state.posCoupon||null;
+  if(appliedCoupon){
+    if(appliedCoupon.discountType==='pct') couponDiscount=Math.min(sub,sub*(appliedCoupon.discountValue/100));
+    else couponDiscount=Math.min(sub,appliedCoupon.discountValue);
+  }
+  const afterCoupon=sub-couponDiscount;
+  // Step 2: Manual discount (applied to post-coupon amount)
   let discount=0;
   const discType=document.getElementById('pos-discount-type')&&document.getElementById('pos-discount-type').value||'flat';
   const discVal=parseFloat(document.getElementById('pos-discount-val')&&document.getElementById('pos-discount-val').value)||0;
   const discNote=document.getElementById('pos-discount-note')&&document.getElementById('pos-discount-note').value||'';
-  if(discVal>0){if(discType==='pct')discount=Math.min(sub,sub*(discVal/100));else discount=Math.min(sub,discVal);}
-  const afterDiscount=sub-discount;
+  if(discVal>0){if(discType==='pct')discount=Math.min(afterCoupon,afterCoupon*(discVal/100));else discount=Math.min(afterCoupon,discVal);}
+  const afterDiscount=afterCoupon-discount;
+  const totalDiscountAmt=couponDiscount+discount;
   let tip=0;
   if(state.posTip==='10')tip=afterDiscount*.1;
   else if(state.posTip==='15')tip=afterDiscount*.15;
@@ -2423,6 +2448,7 @@ function calcTotals(){
   else if(state.posTip==='custom')tip=parseFloat(document.getElementById('pos-custom-tip')&&document.getElementById('pos-custom-tip').value)||0;
   const credit=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
   const total=Math.max(0,afterDiscount+tip-credit);
+  // Update DOM
   const es=document.getElementById('pos-subtotal');
   const ead=document.getElementById('pos-after-discount');
   const ear=document.getElementById('pos-after-row');
@@ -2431,15 +2457,21 @@ function calcTotals(){
   const edr=document.getElementById('pos-discount-row');
   const eda=document.getElementById('pos-discount-amt');
   const edl=document.getElementById('pos-discount-label');
+  const ecr=document.getElementById('pos-coupon-row');
+  const ecra=document.getElementById('pos-coupon-row-amt');
+  const ecrl=document.getElementById('pos-coupon-row-label');
   if(es)es.textContent=fmt$(sub);
+  if(ecr)ecr.classList.toggle('hidden',couponDiscount<=0);
+  if(ecra)ecra.textContent='-'+fmt$(couponDiscount);
+  if(ecrl)ecrl.textContent='Coupon'+(appliedCoupon?' ('+appliedCoupon.code+')':'');
   if(ead)ead.textContent=fmt$(afterDiscount);
-  if(ear)ear.style.display=discount>0?'flex':'none';
+  if(ear)ear.style.display=totalDiscountAmt>0?'flex':'none';
   if(et)et.textContent=fmt$(tip);
   if(etot)etot.textContent=fmt$(total)+(credit>0?' ('+fmt$(credit)+' credit applied)':'');
   if(edr)edr.classList.toggle('hidden',discount<=0);
   if(eda)eda.textContent='-'+fmt$(discount);
   if(edl)edl.textContent='Discount'+(discType==='pct'&&discVal?' ('+discVal+'%)':'');
-  return{sub,discount,discountType:discType,discountVal:discVal,discountNote:discNote,afterDiscount,tip,credit,total};
+  return{sub,couponDiscount,couponCode:appliedCoupon?appliedCoupon.code:'',couponId:appliedCoupon?appliedCoupon.id:'',discount,discountType:discType,discountVal:discVal,discountNote:discNote,afterCoupon,afterDiscount,tip,credit,total};
 }
 
 function setPM(v){
@@ -2453,22 +2485,32 @@ function setPM(v){
 function reviewCharge(){
   if(state.posPM==='cof'){chargeCardOnFile();return}
   if(!state.posItems.length){toast('Add at least one item.','error');return}
-  const{sub,discount,discountType,discountVal,discountNote,afterDiscount,tip,credit:creditCalc,total}=calcTotals();
+  const{sub,couponDiscount,couponCode,couponId,discount,discountType,discountVal,discountNote,afterDiscount,tip,credit:creditCalc,total}=calcTotals();
   const cid=document.getElementById('pos-c-id').value,c=cid?getContact(cid):null;
   const staffId=document.getElementById('pos-staff').value,staff=staffId?getUserById(staffId):null;
   const cardNum=document.getElementById('pos-card-num')&&document.getElementById('pos-card-num').value||'';
   const last4=cardNum.replace(/\s/g,'').slice(-4);
   const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+(last4?' \u00b7 \u2022\u2022\u2022\u2022 '+last4:'')+'</div></div><p style="font-size:13px;color:var(--text-muted)">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems]}};
+  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems]}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="processCharge()">Process Payment</button>');
 }
 
 function processCharge(){
-  const{cid,staffId,sub,discount,discountType,discountNote,afterDiscount,tip,total,pm,last4,items}=state.modal.extra;
+  const{cid,staffId,sub,couponDiscount,couponCode,couponId,discount,discountType,discountNote,afterDiscount,tip,total,pm,last4,items}=state.modal.extra;
   const tipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;const tipStaffId=tipStaffRaw||staffId||null;
   const creditApplied=state.modal.extra&&state.modal.extra.credit||0;
-  db.payments.push({id:uid(),contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
+  const payId=uid();
+  db.payments.push({id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
+  // Log coupon usage
+  if(couponId){
+    const cpn=(db.coupons||[]).find(function(x){return x.id===couponId;});
+    if(cpn){
+      if(!cpn.usageLog)cpn.usageLog=[];
+      cpn.usageLog.push({id:uid(),contactId:cid||null,paymentId:payId,amountSaved:couponDiscount,date:now_(),staffId:staffId||null});
+      cpn.usageCount=(cpn.usageCount||0)+1;
+    }
+  }
   // Deduct credits from contact balance
   if(cid&&creditApplied>0){
     const cc=db.contacts.find(function(x){return x.id===cid;});
@@ -2479,8 +2521,9 @@ function processCharge(){
     }
   }
   saveData();closeModal();
-  state.posItems=[];renderPosItems();calcTotals();
+  state.posItems=[];state.posCoupon=null;renderPosItems();calcTotals();
   document.getElementById('pos-c-id').value='';document.getElementById('pos-c-inp').value='';
+  posRemoveCoupon();
   toast('Payment of '+fmt$(total)+' recorded.','success');
 }
 
@@ -2926,7 +2969,7 @@ function loadData(){
       db={...db,...p,
         tags:p.tags&&p.tags.length?p.tags:db.tags,
         users:p.users||[],payments:p.payments||[],
-        products:p.products||[],readNotifs:p.readNotifs||[],
+        products:p.products||[],readNotifs:p.readNotifs||[],coupons:p.coupons||[],
         subscriptions:p.subscriptions||[],
         forms:p.forms||[],
         formSubmissions:p.formSubmissions||[],
@@ -6475,7 +6518,7 @@ async function confirmChargeCoF(){
 function posUpdateTotals(){calcTotals();}
 
 function resetPos(){
-  state.posItems=[];state.posTip='15';state.posPM='card';
+  state.posItems=[];state.posTip='15';state.posPM='card';state.posCoupon=null;
   const fields=['pos-c-inp','pos-desc','pos-price','pos-notes','pos-card-num','pos-exp','pos-cvv','pos-zip','pos-other-ref'];
   fields.forEach(function(id){const el=document.getElementById(id);if(el)el.value=''});
   const cid=document.getElementById('pos-c-id');if(cid)cid.value='';
@@ -7318,6 +7361,316 @@ function txnExportCSV(){
   toast(filtered.length+' transactions exported.','success');
 }
 
+
+
+// =====================================================
+// COUPONS TAB
+// =====================================================
+
+function renderCoupons(){
+  var el=document.getElementById('pay-coupons-view');
+  if(!el)return;
+  if(!db.coupons)db.coupons=[];
+  var coupons=db.coupons;
+  var activeCount=coupons.filter(function(c){return c.status==='active';}).length;
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Coupons</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">'+activeCount+' active &bull; '+coupons.length+' total</div></div>'
+    +'<button class="btn btn-primary" onclick="openCouponModal(null)">'
+    +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Coupon</button></div>';
+  if(!coupons.length){
+    h+='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M12 4v16M8 12h.01M16 12h.01"/></svg><h3>No coupons yet</h3><p>Create your first coupon code to offer discounts in the POS.</p></div>';
+  }else{
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">';
+    coupons.forEach(function(cpn){
+      var isExpired=cpn.expiryDate&&cpn.expiryDate<todayStr();
+      var isMaxed=cpn.maxUses&&cpn.usageCount>=(cpn.maxUses||0);
+      var effectiveStatus=isExpired?'expired':isMaxed?'maxed':cpn.status;
+      var statusColors={active:{bg:'rgba(52,211,153,.12)',color:'#34d399',label:'Active'},inactive:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Inactive'},expired:{bg:'rgba(239,68,68,.12)',color:'#f87171',label:'Expired'},maxed:{bg:'rgba(245,158,11,.12)',color:'#fbbf24',label:'Max Uses Reached'}};
+      var sc=statusColors[effectiveStatus]||statusColors.inactive;
+      var discLabel=cpn.discountType==='pct'?cpn.discountValue+'% Off':'$'+parseFloat(cpn.discountValue||0).toFixed(2)+' Off';
+      var usageLabel=(cpn.usageCount||0)+(cpn.maxUses?' / '+cpn.maxUses:'')+' use'+(cpn.usageCount!==1?'s':'');
+      h+='<div class="prod-card" style="cursor:default">'
+        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">'
+        +'<div><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;letter-spacing:.04em;color:var(--main-text);background:var(--main-bg);border:1px dashed var(--main-border);padding:4px 10px;border-radius:6px;display:inline-block">'+esc(cpn.code)+'</div>'
+        +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">'+esc(cpn.name||'')+'</div></div>'
+        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;background:'+sc.bg+';color:'+sc.color+';white-space:nowrap">'+sc.label+'</span>'
+        +'</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+        +'<span style="font-size:13px;font-weight:700;color:var(--orange)">'+discLabel+'</span>'
+        +(cpn.expiryDate?'<span style="font-size:12px;color:var(--main-text-muted)">&bull; Expires '+fmtDate(cpn.expiryDate)+'</span>':'')
+        +'</div>'
+        +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap">'
+        +'<span>'+usageLabel+'</span>'
+        +(cpn.oncePerCustomer?'<span>Once per customer</span>':'')
+        +(cpn.productIds&&cpn.productIds.length?'<span>'+cpn.productIds.length+' product limit'+(cpn.productIds.length!==1?'s':'')+'</span>':'')
+        +(cpn.appliesTo?'<span>'+cpnAppliesToLabel(cpn.appliesTo)+'</span>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:6px;border-top:1px solid var(--main-border);padding-top:9px;margin-top:auto">'
+        +'<button class="btn btn-ghost btn-sm" onclick="openCouponModal(\''+cpn.id+'\')">Edit</button>'
+        +'<button class="btn btn-ghost btn-sm" onclick="openCouponUsageLog(\''+cpn.id+'\')">Usage ('+( cpn.usageCount||0)+')</button>'
+        +(cpn.status==='active'&&!isExpired&&!isMaxed
+          ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.12);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="toggleCouponStatus(\''+cpn.id+'\')">Deactivate</button>'
+          :(effectiveStatus==='inactive'?'<button class="btn btn-purple btn-sm" onclick="toggleCouponStatus(\''+cpn.id+'\')">Activate</button>':''))
+        +'<button class="btn btn-danger btn-sm" onclick="deleteCoupon(\''+cpn.id+'\')">Delete</button>'
+        +'</div>'
+        +'</div>';
+    });
+    h+='</div>';
+  }
+  el.innerHTML=h;
+}
+
+function cpnAppliesToLabel(v){
+  return{pos:'POS Only',invoices:'Invoices',subscriptions:'Subscriptions',all:'All Channels'}[v]||v;
+}
+
+function toggleCouponStatus(id){
+  var cpn=(db.coupons||[]).find(function(x){return x.id===id;});
+  if(!cpn)return;
+  cpn.status=cpn.status==='active'?'inactive':'active';
+  saveData();renderCoupons();
+  toast('Coupon '+(cpn.status==='active'?'activated':'deactivated')+'.','success');
+}
+
+function deleteCoupon(id){
+  var cpn=(db.coupons||[]).find(function(x){return x.id===id;});
+  state.modal={type:'del-coupon',id:id};
+  document.getElementById('modal-title').textContent='Delete Coupon';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete coupon <strong>'+esc(cpn?cpn.code:'this coupon')+'</strong>? Usage history will be lost. This cannot be undone.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDeleteCoupon()">Delete</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function confirmDeleteCoupon(){
+  var id=state.modal&&state.modal.id;if(!id)return;
+  db.coupons=(db.coupons||[]).filter(function(x){return x.id!==id;});
+  saveData();closeModal();renderCoupons();toast('Coupon deleted.','success');
+}
+
+function openCouponUsageLog(id){
+  var cpn=(db.coupons||[]).find(function(x){return x.id===id;});if(!cpn)return;
+  var log=cpn.usageLog||[];
+  var body='<div style="font-size:13px;font-weight:600;margin-bottom:12px">'+esc(cpn.code)+' &bull; '+(cpn.usageCount||0)+' total use'+(cpn.usageCount!==1?'s':'')+'</div>';
+  if(!log.length){
+    body+='<div style="font-size:13px;color:var(--text-muted);padding:12px 0">No uses recorded yet.</div>';
+  }else{
+    body+='<div style="max-height:360px;overflow-y:auto">';
+    [...log].reverse().forEach(function(entry){
+      var c=entry.contactId?db.contacts.find(function(x){return x.id===entry.contactId;}):null;
+      var staff=entry.staffId?getUserById(entry.staffId):null;
+      body+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">'
+        +'<div><div style="font-size:13px;font-weight:500">'+esc(c?c.name:'Walk-in')+'</div>'
+        +'<div style="font-size:11px;color:var(--text-muted)">'+fmtDate((entry.date||'').split('T')[0])+(staff?' &bull; '+esc(staff.name||staff.username):'')+'</div></div>'
+        +'<div style="font-size:13px;font-weight:700;color:#34d399">-'+fmt$(entry.amountSaved||0)+'</div>'
+        +'</div>';
+    });
+    body+='</div>';
+  }
+  openModal('Coupon Usage: '+esc(cpn.code),body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>');
+}
+
+// ─── Coupon Modal ───
+function openCouponModal(id){
+  var cpn=id?(db.coupons||[]).find(function(x){return x.id===id;}):null;
+  state.modal={type:'coupon',id:id||null};
+  var prodOpts=(db.products||[]).filter(function(p){return p.active;}).map(function(p){
+    var sel=cpn&&cpn.productIds&&cpn.productIds.includes(p.id);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0">'
+      +'<input type="checkbox" id="cpn-prod-'+p.id+'" value="'+p.id+'" '+(sel?'checked':'')+' style="accent-color:var(--purple);width:14px;height:14px">'
+      +'<label for="cpn-prod-'+p.id+'" style="font-size:13px;cursor:pointer">'+esc(p.name)+(p.category?' <span style="color:var(--text-muted);font-size:11px">('+esc(p.category)+')</span>':'')+'</label>'
+      +'</div>';
+  }).join('');
+  var appliesTo=cpn&&cpn.appliesTo||'pos';
+  var body='<div class="form-row">'
+    +'<div class="form-group"><label>Coupon Code *</label>'
+    +'<div style="display:flex;gap:7px"><input id="cpn-code" type="text" value="'+esc(cpn&&cpn.code||'')+'" placeholder="SUMMER20" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">'
+    +'<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'cpn-code\').value=cpnGenCode()" style="white-space:nowrap;flex-shrink:0">Generate</button></div></div>'
+    +'<div class="form-group"><label>Name / Description</label>'
+    +'<input id="cpn-name" type="text" value="'+esc(cpn&&cpn.name||'')+'" placeholder="Summer sale, VIP offer..."></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Discount Type</label>'
+    +'<select id="cpn-type" onchange="cpnUpdatePreview()">'
+    +'<option value="pct"'+((!cpn||cpn.discountType==='pct')?' selected':'')+'>% Percentage</option>'
+    +'<option value="flat"'+(cpn&&cpn.discountType==='flat'?' selected':'')+'>$ Flat Amount</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Discount Value *</label>'
+    +'<input id="cpn-val" type="number" min="0" step="0.01" value="'+esc(cpn&&cpn.discountValue||'')+'" placeholder="e.g. 20" oninput="cpnUpdatePreview()"></div>'
+    +'</div>'
+    +'<div id="cpn-preview" style="background:var(--orange-dim);border:1px solid var(--orange-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-weight:600;color:var(--orange);margin-bottom:14px;display:none"></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Status</label>'
+    +'<select id="cpn-status">'
+    +'<option value="active"'+((!cpn||cpn.status==='active')?' selected':'')+'>Active</option>'
+    +'<option value="inactive"'+(cpn&&cpn.status==='inactive'?' selected':'')+'>Inactive</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Applies To</label>'
+    +'<select id="cpn-applies">'
+    +'<option value="all"'+(appliesTo==='all'?' selected':'')+'>All Channels</option>'
+    +'<option value="pos"'+(appliesTo==='pos'?' selected':'')+'>Point of Sale Only</option>'
+    +'<option value="invoices"'+(appliesTo==='invoices'?' selected':'')+'>Invoices Only</option>'
+    +'<option value="subscriptions"'+(appliesTo==='subscriptions'?' selected':'')+'>Subscriptions Only</option>'
+    +'</select></div>'
+    +'</div>'
+    +'<div class="divider"></div>'
+    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Usage Rules &amp; Restrictions</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+    +'<div class="form-group" style="margin:0"><label>Expiry Date <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
+    +'<input id="cpn-expiry" type="date" value="'+esc(cpn&&cpn.expiryDate||'')+'"></div>'
+    +'<div class="form-group" style="margin:0"><label>Max Uses <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
+    +'<input id="cpn-maxuses" type="number" min="1" step="1" value="'+esc(cpn&&cpn.maxUses||'')+'" placeholder="Unlimited"></div>'
+    +'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'
+    +'<label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:13px">'
+    +'<input type="checkbox" id="cpn-onceper" '+(cpn&&cpn.oncePerCustomer?'checked':'')+' style="accent-color:var(--purple);width:15px;height:15px;flex-shrink:0;margin-top:1px">'
+    +'<span>Limit use to once per customer</span></label>'
+    +'<label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:13px" id="cpn-recurring-wrap">'
+    +'<input type="checkbox" id="cpn-recurring" '+(cpn&&cpn.recurringFirstOnly?'checked':'')+' style="accent-color:var(--purple);width:15px;height:15px;flex-shrink:0;margin-top:1px">'
+    +'<span>Recurring payment: apply to first cycle only</span></label>'
+    +'</div>'
+    +'<div class="form-group">'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">'
+    +'<input type="checkbox" id="cpn-prod-limit-chk" '+(cpn&&cpn.productIds&&cpn.productIds.length?'checked':'')+' onchange="document.getElementById(\'cpn-prod-list\').style.display=this.checked?\'block\':\'none\'" style="accent-color:var(--purple);width:15px;height:15px">'
+    +'<span style="font-size:13px">Limit to selected products</span></label>'
+    +'<div id="cpn-prod-list" style="display:'+(cpn&&cpn.productIds&&cpn.productIds.length?'block':'none')+';max-height:180px;overflow-y:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">'
+    +(prodOpts||'<div style="font-size:12px;color:var(--text-muted)">No active products. Add products first.</div>')
+    +'</div></div>';
+  openModal(cpn?'Edit Coupon':'New Coupon',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCoupon()">Save Coupon</button>',
+    'modal-lg');
+  setTimeout(cpnUpdatePreview,50);
+}
+
+function cpnGenCode(){
+  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var code='';
+  for(var i=0;i<8;i++) code+=chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
+function cpnUpdatePreview(){
+  var type=document.getElementById('cpn-type')&&document.getElementById('cpn-type').value||'pct';
+  var val=parseFloat(document.getElementById('cpn-val')&&document.getElementById('cpn-val').value)||0;
+  var el=document.getElementById('cpn-preview');
+  if(!el)return;
+  if(val>0){
+    el.style.display='block';
+    el.textContent=type==='pct'?val+'% off the subtotal':'$'+val.toFixed(2)+' off the subtotal';
+  }else{
+    el.style.display='none';
+  }
+}
+
+function saveCoupon(){
+  var code=(document.getElementById('cpn-code')&&document.getElementById('cpn-code').value||'').trim().toUpperCase();
+  var val=parseFloat(document.getElementById('cpn-val')&&document.getElementById('cpn-val').value)||0;
+  if(!code){toast('Coupon code required.','error');return;}
+  if(val<=0){toast('Discount value must be greater than 0.','error');return;}
+  // Check for duplicate code (excluding current if editing)
+  var existing=(db.coupons||[]).find(function(x){return x.code===code&&x.id!==state.modal.id;});
+  if(existing){toast('That code is already in use.','error');return;}
+  // Collect selected product IDs
+  var prodLimitOn=document.getElementById('cpn-prod-limit-chk')&&document.getElementById('cpn-prod-limit-chk').checked;
+  var productIds=[];
+  if(prodLimitOn){
+    (db.products||[]).filter(function(p){return p.active;}).forEach(function(p){
+      var chk=document.getElementById('cpn-prod-'+p.id);
+      if(chk&&chk.checked)productIds.push(p.id);
+    });
+  }
+  var data={
+    code:code,
+    name:(document.getElementById('cpn-name')&&document.getElementById('cpn-name').value||'').trim(),
+    discountType:document.getElementById('cpn-type')&&document.getElementById('cpn-type').value||'pct',
+    discountValue:val,
+    status:document.getElementById('cpn-status')&&document.getElementById('cpn-status').value||'active',
+    appliesTo:document.getElementById('cpn-applies')&&document.getElementById('cpn-applies').value||'pos',
+    expiryDate:document.getElementById('cpn-expiry')&&document.getElementById('cpn-expiry').value||null,
+    maxUses:parseInt(document.getElementById('cpn-maxuses')&&document.getElementById('cpn-maxuses').value)||null,
+    oncePerCustomer:!!(document.getElementById('cpn-onceper')&&document.getElementById('cpn-onceper').checked),
+    recurringFirstOnly:!!(document.getElementById('cpn-recurring')&&document.getElementById('cpn-recurring').checked),
+    productIds:productIds,
+    updatedAt:now_()
+  };
+  if(!db.coupons)db.coupons=[];
+  if(state.modal.id){
+    var existing2=db.coupons.find(function(x){return x.id===state.modal.id;});
+    if(existing2)Object.assign(existing2,data);
+  }else{
+    db.coupons.push(Object.assign({id:'cpn-'+uid(),usageCount:0,usageLog:[],createdAt:now_()},data));
+  }
+  saveData();closeModal();renderCoupons();
+  toast(state.modal.id?'Coupon updated.':'Coupon created.','success');
+}
+
+// ─── POS Coupon Apply / Remove ───
+function togglePosCoupon(){
+  var wrap=document.getElementById('pos-coupon-wrap');
+  var btn=document.getElementById('pos-coupon-toggle');
+  if(!wrap)return;
+  var hidden=wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden',!hidden);
+  if(btn)btn.textContent=hidden?'- Coupon':'+ Coupon';
+  if(!hidden) posRemoveCoupon();
+}
+
+function posApplyCoupon(){
+  var code=(document.getElementById('pos-coupon-inp')&&document.getElementById('pos-coupon-inp').value||'').trim().toUpperCase();
+  var errEl=document.getElementById('pos-coupon-error');
+  var entryEl=document.getElementById('pos-coupon-entry');
+  var appliedEl=document.getElementById('pos-coupon-applied');
+  if(!code){if(errEl){errEl.textContent='Enter a coupon code.';errEl.classList.remove('hidden');}return;}
+  if(!db.coupons||!db.coupons.length){if(errEl){errEl.textContent='No coupons found.';errEl.classList.remove('hidden');}return;}
+  var cpn=db.coupons.find(function(x){return x.code===code;});
+  if(!cpn){if(errEl){errEl.textContent='Code not found.';errEl.classList.remove('hidden');}return;}
+  // Status check
+  if(cpn.status!=='active'){if(errEl){errEl.textContent='This coupon is inactive.';errEl.classList.remove('hidden');}return;}
+  // Expiry check
+  if(cpn.expiryDate&&cpn.expiryDate<todayStr()){if(errEl){errEl.textContent='This coupon has expired.';errEl.classList.remove('hidden');}return;}
+  // Max uses check
+  if(cpn.maxUses&&(cpn.usageCount||0)>=(cpn.maxUses)){if(errEl){errEl.textContent='This coupon has reached its maximum uses.';errEl.classList.remove('hidden');}return;}
+  // Once per customer check
+  if(cpn.oncePerCustomer){
+    var cid=document.getElementById('pos-c-id')&&document.getElementById('pos-c-id').value||'';
+    if(!cid){if(errEl){errEl.textContent='Select a customer first. This coupon is limited to once per customer.';errEl.classList.remove('hidden');}return;}
+    var alreadyUsed=(cpn.usageLog||[]).some(function(entry){return entry.contactId===cid;});
+    if(alreadyUsed){if(errEl){errEl.textContent='This customer has already used this coupon.';errEl.classList.remove('hidden');}return;}
+  }
+  // Product restriction check
+  if(cpn.productIds&&cpn.productIds.length){
+    var hasMatchingProduct=state.posItems.some(function(item){return item.productId&&cpn.productIds.includes(item.productId);});
+    if(!hasMatchingProduct){
+      var prodNames=(cpn.productIds.map(function(pid){var p=(db.products||[]).find(function(x){return x.id===pid;});return p?p.name:'';}).filter(Boolean).join(', '));
+      if(errEl){errEl.textContent='This coupon only applies to: '+prodNames;errEl.classList.remove('hidden');}return;
+    }
+  }
+  // All good - apply
+  state.posCoupon={id:cpn.id,code:cpn.code,discountType:cpn.discountType,discountValue:cpn.discountValue};
+  if(errEl)errEl.classList.add('hidden');
+  if(entryEl)entryEl.classList.add('hidden');
+  var discLabel=cpn.discountType==='pct'?cpn.discountValue+'% off':'$'+parseFloat(cpn.discountValue||0).toFixed(2)+' off';
+  var nameEl=document.getElementById('pos-coupon-name');
+  var descEl=document.getElementById('pos-coupon-desc');
+  if(nameEl)nameEl.textContent=cpn.code+(cpn.name?' - '+cpn.name:'');
+  if(descEl)descEl.textContent=discLabel+(cpn.expiryDate?' - Expires '+fmtDate(cpn.expiryDate):'');
+  if(appliedEl)appliedEl.classList.remove('hidden');
+  calcTotals();
+  toast('Coupon applied: '+discLabel,'success');
+}
+
+function posRemoveCoupon(){
+  state.posCoupon=null;
+  var entryEl=document.getElementById('pos-coupon-entry');
+  var appliedEl=document.getElementById('pos-coupon-applied');
+  var errEl=document.getElementById('pos-coupon-error');
+  var inp=document.getElementById('pos-coupon-inp');
+  if(entryEl)entryEl.classList.remove('hidden');
+  if(appliedEl)appliedEl.classList.add('hidden');
+  if(errEl)errEl.classList.add('hidden');
+  if(inp)inp.value='';
+  calcTotals();
+}
 
 </script>
 </body>
