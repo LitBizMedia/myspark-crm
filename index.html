@@ -1322,8 +1322,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <button class="pay-tab hidden" id="pm-gc" onclick="setPM('gc')">Gift Card</button>
               </div>
               <div id="pm-card-fields">
-                <div id="pos-sq-card-container" class="sq-card-form"></div>
-                <div id="pos-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>
+                <div style="font-size:12px;color:var(--text-muted);padding:6px 0">Card details collected securely at checkout.</div>
                 <input id="pos-card-num" type="hidden"><input id="pos-exp" type="hidden"><input id="pos-cvv" type="hidden"><input id="pos-zip" type="hidden">
               </div>
               <div id="pm-cash-fields" class="hidden" style="font-size:13px;color:var(--text-muted);padding:6px 0">Record cash payment. Amount will be logged.</div>
@@ -2376,7 +2375,7 @@ function switchPayTab(tab){
     if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
     renderPosItems();calcTotals();
     setTimeout(updatePosGCTab,100);
-    if(!posSqCard&&db.settings&&db.settings.square&&db.settings.square.accessToken) setTimeout(initPosSquareCardForm,300);
+    // Square form initialized fresh per transaction in review modal
   }else if(tab==='subs'){
     renderSubscriptions();
   }else if(tab==='transactions'){
@@ -2507,19 +2506,23 @@ async function reviewCharge(){
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
   state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="processCharge()">Process Payment</button>');
-  // Move the existing Square form DOM node into the modal slot - preserves iframe state
-  if(useSquare){
-    const slot=document.getElementById('pos-sq-modal-slot');
-    const sqNode=document.getElementById('pos-sq-card-container');
-    if(slot&&sqNode) slot.appendChild(sqNode);
-  }
+  // Init fresh Square form in modal
+  if(useSquare) setTimeout(initPosSquareCardForm,150);
 }
 
 let posSqCard=null;
 async function initPosSquareCardForm(){
   const errEl=document.getElementById('pos-sq-card-errors');
-  const container=document.getElementById('pos-sq-card-container');
+  const container=document.getElementById('pos-sq-modal-slot');
   if(!container)return;
+  // Destroy previous instance
+  if(posSqCard){try{await posSqCard.destroy();}catch(e){}posSqCard=null;}
+  // Create fresh card input element inside modal slot
+  const cardDiv=document.createElement('div');
+  cardDiv.id='pos-sq-card-container';
+  cardDiv.className='sq-card-form';
+  container.innerHTML='';
+  container.appendChild(cardDiv);
   try{
     const cfgRes=await fetch('/api/square/config');
     const cfg=await cfgRes.json();
