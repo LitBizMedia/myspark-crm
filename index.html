@@ -1596,7 +1596,7 @@ let state={
   selTagColor:TAG_COLORS[0],selUserColor:USER_COLORS[0],
   posItems:[],posTip:'15',posPM:'card',
   paymentsTab:'pos',subsPage:1,subsSearch:'',subsStatusFilter:'',subsCycleFilter:'',
-  calTab:'calendar',formsTab:'forms',tMyTasks:true
+  calTab:'calendar',formsTab:'',tMyTasks:true
 };
 
 // =====================================================
@@ -2789,7 +2789,14 @@ async function linkContactToSquare(contactId){
   }catch(e){console.error('Square link error:',e);}
 }
 
-function confirmDelContact(id){if(!canDeleteContact()){archiveContact(id);return;}const c=getContact(id);openModal(canDeleteContact()?'Delete Contact':'Archive Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+(canDeleteContact()?'<button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>':'<button class="btn btn-warning" onclick="archiveContact(\''+id+'\')">Archive</button>'))}
+function confirmDelContact(id){
+  if(!canDeleteContact()){
+    var ct=db.contacts.find(function(x){return x.id===id;});
+    openModal('Archive Contact',
+      '<p style="color:var(--text-muted)">Archive <strong style="color:var(--text)">'+esc(ct&&ct.name)+'</strong>? They can be restored from the archive later.</p>',
+      '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="archiveContact(\''+id+'\');closeModal()">Archive</button>');
+    return;
+  }const c=getContact(id);openModal(canDeleteContact()?'Delete Contact':'Archive Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+(canDeleteContact()?'<button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>':'<button class="btn btn-warning" onclick="archiveContact(\''+id+'\')">Archive</button>'))}
 function delContact(id){db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);saveData();closeModal();closeDrawer();renderContacts();toast('Contact deleted.','success')}
 
 // APPOINTMENT MODAL
@@ -3984,9 +3991,11 @@ function renderApptList(){
 // FORMS PANEL
 // =====================================================
 function renderForms(){
-  var defaultTab=isAdminOrManager()&&state.user&&state.user.role==='admin'?'forms':'contracts';
+  var role=userRole();
+  var defaultTab=role==='admin'?'forms':'contracts';
   var tab=state.formsTab||defaultTab;
-  if(tab==='forms'&&state.user&&state.user.role!=='admin') tab='contracts';
+  if(tab==='forms'&&role!=='admin') tab='contracts';
+  state.formsTab=tab;
   switchFormsTab(tab);
   if(tab==='forms')renderFormsList();
 }
@@ -4142,12 +4151,7 @@ function fbNewForm(){
 // =====================================================
 // FORM BUILDER - Render Entry & List
 // =====================================================
-function renderForms(){
-  if(fbState.view==='list')renderFormsList();
-  else if(fbState.view==='builder')fbShowBuilder();
-  else if(fbState.view==='submissions')fbShowSubmissions();
-  else if(fbState.view==='embed')fbShowEmbed();
-}
+
 
 function renderFormsList(){
   fbHideOverlay();
@@ -6000,11 +6004,7 @@ function switchStaffTab(tab){
   if(tab==='reporting')renderStaffReporting();
 }
 
-function renderStaff(){
-  const isAdmin=state.user&&state.user.role==='admin';
-  const defaultTab=isAdmin?'team':'resources';
-  switchStaffTab(state.staffTab||defaultTab);
-}
+
 
 // =====================================================
 // STAFF REPORTING DRILL-DOWN
@@ -7589,8 +7589,7 @@ function renderCoupons(){
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Coupons</div>'
     +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">'+activeCount+' active &bull; '+coupons.length+' total</div></div>'
-    +'<button class="btn btn-primary" onclick="openCouponModal(null)">'
-    +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Coupon</button></div>';
+    +(canManageCoupons()?'<button class="btn btn-primary" onclick="openCouponModal(null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Coupon</button>':'')+'</div>';
   if(!coupons.length){
     h+='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M12 4v16M8 12h.01M16 12h.01"/></svg><h3>No coupons yet</h3><p>Create your first coupon code to offer discounts in the POS.</p></div>';
   }else{
