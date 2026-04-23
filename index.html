@@ -2062,6 +2062,9 @@ function renderDrawer(){
 // CALENDAR
 // =====================================================
 function renderCal(){
+  if(userRole()==='practitioner'&&state.user&&state.user.id){
+    state.calStaffFilter=state.user.id;
+  }
   renderCalLegend();
   if(state.calView==='month')renderMonthCal();
   else if(state.calView==='week')renderWeekCal();
@@ -2782,7 +2785,7 @@ async function linkContactToSquare(contactId){
   }catch(e){console.error('Square link error:',e);}
 }
 
-function confirmDelContact(id){const c=getContact(id);openModal('Delete Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>')}
+function confirmDelContact(id){if(!canDeleteContact()){toast('You do not have permission to delete contacts.','error');return;}const c=getContact(id);openModal('Delete Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>')}
 function delContact(id){db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);saveData();closeModal();closeDrawer();renderContacts();toast('Contact deleted.','success')}
 
 // APPOINTMENT MODAL
@@ -3213,7 +3216,7 @@ function openProfileModal(){
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+(curColor===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   state.modal={type:'profile',id:u.id};
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="pf-name" type="text" value="'+esc(eff&&eff.name||'')+'"></div><div class="form-group"><label>Username</label><input id="pf-user" type="text" value="'+esc(eff&&eff.username||'')+'" '+(isAdmin?'disabled':'')+'></div></div>'
-    +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
+    +(isAdminOrManager()?'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>':'')
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
     +'<div class="form-group"><label>Current Password <span style=\"font-weight:400;color:var(--text-muted)\">(required to change password)</span></label><input id="pf-old-pass" type="password" placeholder="Enter current password"></div>'
     +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="Leave blank to keep current"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>'
@@ -5739,6 +5742,12 @@ function switchStaffTab(tab){
 }
 
 function renderStaffTeam(){
+  // Hide add user button for managers
+  setTimeout(function(){
+    var addBtn=document.getElementById('add-user-btn');
+    if(addBtn&&!isAdminOrManager())addBtn.style.display='none';
+    if(addBtn&&isAdminOrManager()&&userRole()!=='admin')addBtn.style.display='none';
+  },100);
   const el=document.getElementById('staff-team-view');if(!el)return;
   const users=allUsers();
   const today=todayStr();
@@ -7160,7 +7169,9 @@ function txnGetFiltered(){
   var from = r.from; var to = r.to;
   var staff = state.txnStaff || '';
   var method = state.txnMethod || '';
+  var ownOnly = !txnCanSeeAll();
   return (db.payments || []).filter(function(p){
+    if(ownOnly && p.staffId !== (state.user&&state.user.id)) return false;
     var date = (p.createdAt || '').split('T')[0];
     if(date < from || date > to) return false;
     if(staff && p.staffId !== staff) return false;
@@ -7416,8 +7427,8 @@ function txnOpenDetail(id){
     +(t.notes?'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(t.notes)+'</div></div>':'')
     +'</div>';
   var footBtns = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
-  if(canVoid) footBtns += '<button class="btn btn-danger" onclick="txnVoid(\''+id+'\')">Void</button>';
-  if(canRefund) footBtns += '<button class="btn btn-purple" onclick="txnRefund(\''+id+'\')">Refund</button>';
+  if(canVoid&&canRefundVoid()) footBtns += '<button class="btn btn-danger" onclick="txnVoid(\''+id+'\')">Void</button>';
+  if(canRefund&&canRefundVoid()) footBtns += '<button class="btn btn-purple" onclick="txnRefund(\''+id+'\')">Refund</button>';
   state.modal = {type:'txn-detail', id: id};
   openModal('Transaction Details', body, footBtns, 'modal-lg');
 }
@@ -7964,9 +7975,9 @@ function gcRenderProducts(){
       +'<div style="display:flex;gap:6px;border-top:1px solid var(--main-border);padding-top:9px;flex-wrap:wrap">'
       +'<button class="btn btn-ghost btn-sm" onclick="openGcProductModal(\''+prod.id+'\')">Edit</button>'
       +'<button class="btn btn-primary btn-sm" onclick="gcOpenSell(\''+prod.id+'\')">Sell</button>'+'<button class="btn btn-ghost btn-sm" onclick="gcShowEmbed(\''+prod.id+'\')">Embed</button>'
-      +(isActive?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="gcToggleProduct(\''+prod.id+'\')">Deactivate</button>'
-        :'<button class="btn btn-purple btn-sm" onclick="gcToggleProduct(\''+prod.id+'\')">Activate</button>')
-      +'<button class="btn btn-danger btn-sm" onclick="gcDeleteProduct(\''+prod.id+'\')">Delete</button>'
+      +(canManageGiftCards()?(isActive?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="gcToggleProduct(\''+prod.id+'\')">Deactivate</button>'
+        :'<button class="btn btn-purple btn-sm" onclick="gcToggleProduct(\''+prod.id+'\')">Activate</button>'):'')
+      +(canManageGiftCards()?'<button class="btn btn-danger btn-sm" onclick="gcDeleteProduct(\''+prod.id+'\')">Delete</button>':'')
       +'</div></div>';
   });
   h+='</div>';
@@ -9088,7 +9099,7 @@ function applyRolePermissions(){
   hide('sb-payments',   prac);
   hide('sb-products',   !am);
   hide('sb-forms',      !am);
-  hide('sb-staff',      !am);
+  hide('sb-staff',      !am); // managers can see staff panel to edit schedules
   hide('sb-settings',   !adm);
   var bk=document.getElementById('cpt-booking');if(bk)bk.classList.toggle('hidden',!adm);
   hide('ppt-subs',      !am);
