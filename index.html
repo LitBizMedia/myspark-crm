@@ -5973,10 +5973,11 @@ function switchStaffTab(tab){
     if(btn)btn.classList.toggle('active',t===tab);
     if(view)view.classList.toggle('hidden',t!==tab);
   });
-  // Hide admin-only tabs for non-admin
+  // Show team and reporting for admin and manager
+  var isMgr=state.user&&state.user.role==='manager';
   ['team','reporting'].forEach(function(t){
     const btn=document.getElementById('stt-'+t);
-    if(btn)btn.classList.toggle('hidden',!isAdmin);
+    if(btn)btn.classList.toggle('hidden',!isAdmin&&!isMgr);
   });
   if(tab==='team')renderStaffTeam();
   if(tab==='reporting')renderStaffReporting();
