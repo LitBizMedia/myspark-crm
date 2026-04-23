@@ -1928,8 +1928,7 @@ function renderDash(){
 // CONTACTS
 // =====================================================
 function filteredContacts(){
-  if(state.cShowArchived){return _filteredContacts().filter(c=>c.archived)}
-  return _filteredContacts().filter(c=>!c.archived)
+  if(!state.cShowArchived&&db.contacts.some(c=>c.archived)){return _filteredContacts().filter(c=>!c.archived)}
   return _filteredContacts();
 }
 function _filteredContacts(){
