@@ -1825,7 +1825,8 @@ function switchPanel(name){
   var _r=state.user&&state.user.role||'user';
   var _am=_r==='admin'||_r==='manager';
   if(name==='settings'&&_r!=='admin'){toast('Access denied.','error');return;}
-  if((name==='products'||name==='forms'||name==='staff')&&!_am){toast('Access denied.','error');return;}
+  if((name==='products'||name==='staff')&&!_am){toast('Access denied.','error');return;}
+  if(name==='forms'&&_r==='practitioner'){toast('Access denied.','error');return;}
   if((name==='tasks'||name==='payments')&&_r==='practitioner'){toast('Access denied.','error');return;}
   if(name==='payments'&&_r==='user'){
     // Users can access payments but not transactions tab - handled via tab hide
@@ -2788,7 +2789,7 @@ async function linkContactToSquare(contactId){
   }catch(e){console.error('Square link error:',e);}
 }
 
-function confirmDelContact(id){if(!canDeleteContact()){archiveContact(id);return;}const c=getContact(id);openModal('Delete Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>')}
+function confirmDelContact(id){if(!canDeleteContact()){archiveContact(id);return;}const c=getContact(id);openModal(canDeleteContact()?'Delete Contact':'Archive Contact','<p style="color:var(--text-muted)">Delete <strong style="color:var(--text)">'+esc(c&&c.name)+'</strong>? All linked appointments and tasks will also be removed.</p>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+(canDeleteContact()?'<button class="btn btn-danger" onclick="delContact(\''+id+'\')">Delete</button>':'<button class="btn btn-warning" onclick="archiveContact(\''+id+'\')">Archive</button>'))}
 function delContact(id){db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);saveData();closeModal();closeDrawer();renderContacts();toast('Contact deleted.','success')}
 
 // APPOINTMENT MODAL
@@ -3983,8 +3984,11 @@ function renderApptList(){
 // FORMS PANEL
 // =====================================================
 function renderForms(){
-  switchFormsTab(state.formsTab||'forms');
-  if(state.formsTab==='forms')renderFormsList();
+  var defaultTab=isAdminOrManager()&&state.user&&state.user.role==='admin'?'forms':'contracts';
+  var tab=state.formsTab||defaultTab;
+  if(tab==='forms'&&state.user&&state.user.role!=='admin') tab='contracts';
+  switchFormsTab(tab);
+  if(tab==='forms')renderFormsList();
 }
 
 function switchFormsTab(tab){
@@ -5726,7 +5730,7 @@ function renderStaff(){
   const settingBtn=document.getElementById('stt-settings');
   const reportBtn=document.getElementById('stt-reporting');
   if(settingBtn)settingBtn.classList.toggle('hidden',!isAdmin);
-  if(reportBtn)reportBtn.classList.toggle('hidden',!isAdmin);
+  if(reportBtn)reportBtn.classList.toggle('hidden',!(isAdmin||(state.user&&state.user.role==='manager')));
   const tab=state.staffTab||'team';
   switchStaffTab(tab);
 }
@@ -7621,7 +7625,7 @@ function renderCoupons(){
         +(canManageCoupons()&&cpn.status==='active'&&!isExpired&&!isMaxed
           ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.12);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="toggleCouponStatus(\''+cpn.id+'\')">Deactivate</button>'
           :(effectiveStatus==='inactive'?'<button class="btn btn-purple btn-sm" onclick="toggleCouponStatus(\''+cpn.id+'\')">Activate</button>':''))
-        +'<button class="btn btn-danger btn-sm" onclick="deleteCoupon(\''+cpn.id+'\')">Delete</button>'
+        +(canManageCoupons()?'<button class="btn btn-danger btn-sm" onclick="deleteCoupon(\''+cpn.id+'\')">Delete</button>':'')
         +'</div>'
         +'</div>';
     });
@@ -9103,7 +9107,7 @@ function applyRolePermissions(){
   // Hide transactions tab for users and practitioners
   hide('ppt-transactions', !am);
   var bk=document.getElementById('cpt-booking');if(bk)bk.classList.toggle('hidden',!adm);
-  var svc=document.getElementById('cpt-service');if(svc)svc.classList.toggle('hidden',prac);
+  var svc=document.getElementById('cpt-service');if(svc)svc.classList.toggle('hidden',prac||r==='user');
   hide('ppt-subs',      !am);
   hide('ppt-invoices',  !am);
   hide('ppt-orders',    !am);
