@@ -1304,15 +1304,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <div class="pos-tr grand"><span>Total</span><span id="pos-total" style="color:var(--orange)">$0.00</span></div>
               </div>
             </div>
-          </div>
-          <div>
-            <div class="pos-card">
-              <div class="pos-card-title">Staff</div>
-              <select id="pos-staff" class="filter-sel" style="width:100%;height:38px"></select>
-              <label class="sec-label" style="margin-top:10px">Tip Goes To (optional)</label>
-              <select id="pos-tip-staff" class="filter-sel" style="width:100%;height:38px"><option value="">Same as Staff</option></select>
-            </div>
-            <div class="pos-card">
+<div class="pos-card">
               <div class="pos-card-title">Payment Method</div>
               <div class="pay-tabs">
                 <button class="pay-tab active" id="pm-card" onclick="setPM('card')">Card</button>
@@ -1364,13 +1356,22 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <div id="pos-gc-error" class="hidden" style="font-size:12px;color:#f87171;margin-top:5px"></div>
               </div>
             </div>
+          </div>
+          <div>
+            <div class="pos-card">
+              <div class="pos-card-title">Staff</div>
+              <select id="pos-staff" class="filter-sel" style="width:100%;height:38px"></select>
+              <label class="sec-label" style="margin-top:10px">Tip Goes To (optional)</label>
+              <select id="pos-tip-staff" class="filter-sel" style="width:100%;height:38px"><option value="">Same as Staff</option></select>
+            </div>
+            
             <div class="pos-card">
               <div class="pos-card-title">Notes</div>
               <textarea id="pos-notes" rows="2" placeholder="Order notes..." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none;resize:vertical"></textarea>
               <button class="btn btn-primary btn-full" style="margin-top:10px;font-size:14px;padding:12px" onclick="reviewCharge()">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Review &amp; Charge
               </button>
-              <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:7px">Square integration ready. Connect in Settings.</div>
+              <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:7px" id="sq-status-label">Checking Square status...</div>
             </div>
           </div>
         </div>
@@ -2503,7 +2504,7 @@ async function reviewCharge(){
   const sqConnected=db.settings&&db.settings.square&&db.settings.square.accessToken;
   const useSquare=state.posPM==='card'&&sqConnected;
   const last4='';
-  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+(useSquare?' · Card on form':''  )+'</div></div><p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
+  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;color:var(--text)"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+(useSquare?' · Card on form':''  )+'</div></div><p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
   state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="processCharge()">Process Payment</button>');
@@ -2515,6 +2516,7 @@ async function initPosSquareCardForm(){
   const container=document.getElementById('pos-sq-card-container');
   if(!container){console.log('Square container not found');return;}
   if(posSqCard)return; // Already initialized, don't re-init
+  container.innerHTML='';
   try{
     const cfgRes=await fetch('/api/square/config');
     const cfg=await cfgRes.json();
@@ -3175,6 +3177,8 @@ function initApp(){
   handleSquareHash();
   var sbCard=document.getElementById('supabase-card');
   if(sbCard)sbCard.style.display='none';
+  var sqLbl=document.getElementById('sq-status-label');
+  if(sqLbl)sqLbl.textContent=db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
   var sqLbl=document.getElementById('sq-status-label');
   if(sqLbl)sqLbl.textContent=db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
 }
