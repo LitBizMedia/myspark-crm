@@ -7768,7 +7768,32 @@ function enforceRoleInPanel(panel){
   }
 }
 
-// switchPanel permission check handled inline in renderPanel
+// Override switchPanel to enforce permissions
+var _origSwitchPanel=switchPanel;
+function switchPanel(name){
+  var role=userRole();
+  var admMgr=role==='admin'||role==='manager';
+  var isAdm=role==='admin';
+  var isPrac=role==='practitioner';
+  var isRec=role==='receptionist';
+
+  // Block access to restricted panels
+  var blocked=false;
+  if(name==='settings'&&!isAdm) blocked=true;
+  if(name==='products'&&!admMgr) blocked=true;
+  if(name==='forms'&&!admMgr) blocked=true;
+  if(name==='staff'&&!admMgr) blocked=true;
+  if(name==='tasks'&&(isRec||isPrac)) blocked=true;
+  if(name==='payments'&&isPrac) blocked=true;
+  if(name==='contacts'&&isPrac) blocked=true;
+
+  if(blocked){
+    toast('You do not have permission to access this area.','error');
+    return;
+  }
+  _origSwitchPanel(name);
+  setTimeout(function(){enforceRoleInPanel(name);},100);
+}
 
 // Filter transactions by role
 function txnCanSeeAll(){
