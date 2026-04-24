@@ -1,49 +1,71 @@
-module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { accessToken } = req.body || {};
-  if (!accessToken) return res.status(400).json({ error: 'No access token provided' });
-  const base = 'https://connect.squareup.com';
-  const hdrs = { 'Authorization': 'Bearer ' + accessToken, 'Square-Version': '2025-01-23', 'Content-Type': 'application/json' };
+// api/square/customers.js
+// Lists Square customers and their cards on file for a workspace.
+// Used by the Import from Square feature.
+
+const { getSquareCreds, squareHost, squareHeaders, sendError } = require('../../lib/square');
+
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
+
+  const body = req.body || {};
+  const slug = (body.slug || '').toString().trim().toLowerCase();
+  if (!slug) return sendError(res, 400, 'Missing slug');
+
+  const creds = await getSquareCreds(slug);
+  if (!creds || !creds.access_token) {
+    return sendError(res, 400, 'Square is not connected for this workspace');
+  }
+
+  const host = squareHost(creds.sandbox);
+  const headers = squareHeaders(creds.access_token);
+
   try {
-    const cr = await fetch(base + '/v2/customers?limit=100', { headers: hdrs });
-    const cd = await cr.json();
-    if (!cr.ok) return res.status(400).json({ error: (cd.errors&&cd.errors[0]&&cd.errors[0].detail)||'Failed' });
-    const customers = cd.customers || [];
-    const kr = await fetch(base + '/v2/cards?limit=100&include_disabled=false', { headers: hdrs });
-    const kd = await kr.json();
-    const allCards = kd.cards || [];
-    const byCustomer = {};
-    allCards.forEach(function(c) {
-      if(c.customer_id){
-        if(!byCustomer[c.customer_id]) byCustomer[c.customer_id]=[];
-        byCustomer[c.customer_id].push({
-          id: c.id,
-          brand: c.card_brand || 'Card',
-          last4: c.last_4 || null,
-          expMonth: c.exp_month || null,
-          expYear: c.exp_year || null,
-          cardholderName: c.cardholder_name || null
-        });
+    // Paginate through all customers. Cap at 5 pages to stay within serverless timeout.
+    const customers = [];
+    let cursor = null;
+    for (let i = 0; i < 5; i++) {
+      const url = 'https://' + host + '/v2/customers?sort_field=DEFAULT&sort_order=ASC&limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+      const listRes = await fetch(url, { headers: headers });
+      const listData = await listRes.json();
+      if (!listRes.ok) {
+        const msg = (listData.errors && listData.errors[0] && listData.errors[0].detail) || 'Square API error';
+        return sendError(res, listRes.status, msg, listData.errors);
       }
-    });
-    // Also check customer.cards array from the customer list response
-    const out = customers.map(function(c){
-      let cards = byCustomer[c.id] || [];
-      // Fallback: use cards embedded in customer object if available
-      if(!cards.length && c.cards && c.cards.length) {
-        cards = c.cards.map(function(card) {
-          return {
-            id: card.id,
-            brand: card.card_brand || 'Card',
-            last4: card.last_4 || null,
-            expMonth: card.exp_month || null,
-            expYear: card.exp_year || null,
-            cardholderName: card.cardholder_name || null
-          };
-        });
+      if (Array.isArray(listData.customers)) customers.push(...listData.customers);
+      cursor = listData.cursor || null;
+      if (!cursor) break;
+    }
+
+    // Enrich each customer with their saved cards.
+    const enriched = [];
+    for (const c of customers) {
+      let cards = [];
+      try {
+        const cardsRes = await fetch('https://' + host + '/v2/cards?customer_id=' + encodeURIComponent(c.id), { headers: headers });
+        const cardsData = await cardsRes.json();
+        if (cardsRes.ok && Array.isArray(cardsData.cards)) cards = cardsData.cards;
+      } catch (e) {
+        console.warn('Failed to fetch cards for customer', c.id, e.message);
       }
-      return Object.assign({}, c, { cards: cards });
-    });
-    return res.status(200).json({ customers: out, total: out.length });
-  } catch(e) { console.error(e); return res.status(500).json({ error: 'Server error', detail: e.message }); }
+      enriched.push({
+        id: c.id,
+        given_name: c.given_name || '',
+        family_name: c.family_name || '',
+        email_address: c.email_address || '',
+        phone_number: c.phone_number || '',
+        cards: cards.map(k => ({
+          id: k.id,
+          brand: k.card_brand,
+          last4: k.last_4,
+          exp_month: k.exp_month,
+          exp_year: k.exp_year
+        }))
+      });
+    }
+
+    return res.status(200).json({ customers: enriched });
+  } catch (err) {
+    console.error('customers.js error:', err);
+    return sendError(res, 500, err.message || 'Customer list failed');
+  }
 };

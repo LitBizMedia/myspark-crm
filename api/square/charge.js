@@ -1,73 +1,57 @@
 // api/square/charge.js
-// Processes a payment against a saved card on file
-// All sensitive operations happen server-side
+// Charges a card (via Web Payments nonce OR saved card id) for the given workspace.
+// Credentials are looked up from square_credentials by slug. Client-supplied tokens are ignored.
 
-module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+const { getSquareCreds, squareHost, squareHeaders, sendError } = require('../../lib/square');
+
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
+
+  const body = req.body || {};
+  const slug = (body.slug || '').toString().trim().toLowerCase();
+  const sourceId = body.sourceId;              // Either a one-time card nonce OR a card-on-file id
+  const cardId = body.cardId;                  // Saved card id (alternative to sourceId)
+  const customerId = body.customerId || null;  // Required when charging a saved card
+  const amountCents = parseInt(body.amountCents, 10);
+  const note = (body.note || 'MySpark+ payment').toString().slice(0, 500);
+
+  if (!slug) return sendError(res, 400, 'Missing slug');
+  if (!sourceId && !cardId) return sendError(res, 400, 'Missing sourceId or cardId');
+  if (cardId && !customerId) return sendError(res, 400, 'customerId is required when charging a saved card');
+  if (!amountCents || amountCents < 1) return sendError(res, 400, 'Invalid amountCents');
+
+  const creds = await getSquareCreds(slug);
+  if (!creds || !creds.access_token) {
+    return sendError(res, 400, 'Square is not connected for this workspace');
   }
 
-  const { accessToken, cardId, sourceId, customerId, amountCents, note } = req.body || {};
-  const sourceIdFinal = sourceId || cardId;
-
-  if (!accessToken || !sourceIdFinal || !amountCents) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
+  const idempotencyKey = slug + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+  const payload = {
+    source_id: cardId || sourceId,
+    idempotency_key: idempotencyKey,
+    amount_money: { amount: amountCents, currency: 'USD' },
+    note: note
+  };
+  if (customerId) payload.customer_id = customerId;
+  if (creds.location_id) payload.location_id = creds.location_id;
 
   try {
-    // Fetch location automatically
-    const locRes = await fetch('https://connect.squareup.com/v2/locations', {
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-        'Square-Version': '2025-01-23'
-      }
-    });
-    const locData = await locRes.json();
-    const locations = locData.locations || [];
-    const active = locations.find(function(l) { return l.status === 'ACTIVE'; }) || locations[0];
-
-    if (!active) {
-      return res.status(400).json({ error: 'No active Square location found' });
-    }
-
-    const idempotencyKey = Date.now().toString(36) + Math.random().toString(36).slice(2);
-
-    const body = {
-      idempotency_key: idempotencyKey,
-      source_id: sourceIdFinal,
-      amount_money: {
-        amount: amountCents,
-        currency: 'USD'
-      },
-      location_id: active.id,
-      note: note || 'MySpark+ CRM charge'
-    };
-
-    if (customerId) {
-      body.customer_id = customerId;
-    }
-
-    const r = await fetch('https://connect.squareup.com/v2/payments', {
+    const response = await fetch('https://' + squareHost(creds.sandbox) + '/v2/payments', {
       method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-        'Square-Version': '2025-01-23',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
+      headers: squareHeaders(creds.access_token),
+      body: JSON.stringify(payload)
     });
-
-    const data = await r.json();
-
-    if (!r.ok) {
-      const msg = data.errors && data.errors[0] && data.errors[0].detail;
-      return res.status(400).json({ error: msg || 'Payment failed', errors: data.errors || [] });
+    const data = await response.json();
+    if (!response.ok) {
+      const msg = (data.errors && data.errors[0] && data.errors[0].detail) || 'Square API error';
+      return sendError(res, response.status, msg, data.errors);
     }
-
-    return res.status(200).json({ payment: data.payment });
-
-  } catch (e) {
-    console.error('Charge error:', e);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(200).json({
+      success: true,
+      payment: data.payment ? { id: data.payment.id, status: data.payment.status, receiptUrl: data.payment.receipt_url } : null
+    });
+  } catch (err) {
+    console.error('charge.js error:', err);
+    return sendError(res, 500, err.message || 'Charge failed');
   }
 };

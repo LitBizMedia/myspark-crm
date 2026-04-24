@@ -2566,7 +2566,7 @@ async function processCharge(){
       if(gcSq.accessToken&&gcRemCard){
         gcRemCard.tokenize().then(function(res){
           if(res.status!=='OK'){toast('Remainder card error.','error');return;}
-          return fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessToken:gcSq.accessToken,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
+          return fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
         }).then(function(r){if(r)return r.json();}).then(function(d){
           if(!d)return;gcRemCard=null;
           if(d.error)toast('Remainder charge failed: '+d.error,'error');
@@ -2601,7 +2601,7 @@ async function processCharge(){
       const chargeRes=await fetch('/api/square/charge',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({accessToken:sq.accessToken,sourceId:result.token,amountCents:amtCents,note:'POS Sale'})
+        body:JSON.stringify({slug:state.subaccountSlug,sourceId:result.token,amountCents:amtCents,note:'POS Sale'})
       });
       const chargeData=await chargeRes.json();
       if(chargeData.error){
@@ -2762,7 +2762,7 @@ async function linkContactToSquare(contactId){
     const r=await fetch('/api/square/find-or-create-customer',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accessToken:sq.accessToken,name:c.name,email:c.email||'',phone:c.phone||''})
+      body:JSON.stringify({slug:state.subaccountSlug,name:c.name,email:c.email||'',phone:c.phone||''})
     });
     const d=await r.json();
     if(d.customerId){
@@ -6372,7 +6372,8 @@ function calSelectAllStaff(show){
 // SQUARE OAUTH
 // =====================================================
 function connectSquare(){
-  window.location.href='/api/square/connect';
+  var slug=state.subaccountSlug||DEFAULT_SLUG;
+  window.location.href='/api/square/connect?slug='+encodeURIComponent(slug);
 }
 
 function disconnectSquare(){
@@ -6383,7 +6384,14 @@ function disconnectSquare(){
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDisconnectSquare()">Disconnect</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDisconnectSquare(){
+async function confirmDisconnectSquare(){
+  try{
+    await fetch('/api/square/disconnect',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({slug:state.subaccountSlug||DEFAULT_SLUG})
+    });
+  }catch(e){console.warn('Disconnect server call failed, clearing client state anyway:',e);}
   const prev=db.settings.square||{};
   db.settings.square={appId:prev.appId||'',accessToken:'',merchantId:'',sandbox:true};
   localStorage.removeItem(sqStorageKey());
@@ -6394,6 +6402,17 @@ function handleSquareHash(){
   const hash=window.location.hash.slice(1);
   if(!hash)return;
   const p=new URLSearchParams(hash);
+  // New callback flow: callback.js wrote creds to square_credentials and a marker to subaccount_data.
+  // Client just needs to refresh from Supabase to see the updated connection state.
+  if(p.get('sq_connected')==='1'){
+    history.replaceState(null,'',window.location.pathname);
+    toast('Square connected successfully.','success');
+    fetchFromSupabase().then(function(){
+      if(state.panel==='settings')renderSquareCard();
+    });
+    return;
+  }
+  // Legacy flow: callback returned the access token in the hash. Kept for backward compat.
   if(p.get('sq_token')){
     const prev=db.settings.square||{};
     db.settings.square={
@@ -6448,7 +6467,7 @@ async function importFromSquare(){
     const r=await fetch('/api/square/customers',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accessToken:sq.accessToken})
+      body:JSON.stringify({slug:state.subaccountSlug})
     });
     const data=await r.json();
     if(data.error){toast('Sync failed: '+data.error,'error');return}
@@ -6604,7 +6623,7 @@ async function submitAddCard(){
     const saveRes=await fetch('/api/square/save-card',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accessToken:sq.accessToken,customerId:contact.squareCustomerId,sourceId:result.token,cardholderName:contact.name||''})
+      body:JSON.stringify({slug:state.subaccountSlug,customerId:contact.squareCustomerId,sourceId:result.token,cardholderName:contact.name||''})
     });
     const saveData2=await saveRes.json();
     if(saveData2.error){if(errEl)errEl.textContent=saveData2.error;if(btn){btn.disabled=false;btn.textContent='Save Card'}return}
@@ -6727,7 +6746,7 @@ async function confirmChargeCoF(){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        accessToken:sq.accessToken,
+        slug:state.subaccountSlug,
         cardId:d.card.id,
         customerId:d.contact.squareCustomerId||'',
         amountCents:d.amountCents,
@@ -7502,7 +7521,7 @@ async function txnConfirmVoid(id){
         var r = await fetch('/api/square/void',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({accessToken: sq.accessToken, paymentId: t.squarePaymentId})
+          body: JSON.stringify({slug: state.subaccountSlug, paymentId: t.squarePaymentId})
         });
         var d = await r.json();
         if(d.error) toast('Square void error: '+d.error+'. Local record updated.','warn');
@@ -7552,7 +7571,7 @@ async function txnConfirmRefund(id){
         var r = await fetch('/api/square/refund',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({accessToken: sq.accessToken, paymentId: t.squarePaymentId, amountCents: Math.round(amt*100), reason: reason})
+          body: JSON.stringify({slug: state.subaccountSlug, paymentId: t.squarePaymentId, amountCents: Math.round(amt*100), reason: reason})
         });
         var d = await r.json();
         if(d.error) toast('Square refund error: '+d.error+'. Local record updated.','warn');
@@ -8313,7 +8332,7 @@ async function gcProcessSale(){
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          accessToken:sq.accessToken,
+          slug:state.subaccountSlug,
           sourceId:result.token,
           amountCents:amtCents,
           note:'Gift Card: '+prod.name
