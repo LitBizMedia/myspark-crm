@@ -899,6 +899,10 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <img src="MySpark+.png" width="32" height="32" style="border-radius:6px;object-fit:contain" onerror="this.style.display='none'">
       <span class="sb-logo-text">MySpark<span>+</span></span>
     </div>
+    <div id="sb-workspace-pill" style="margin:0 14px 10px;padding:7px 10px;border-radius:6px;font-size:11px;line-height:1.3;background:rgba(107,33,234,.14);color:#c7b8ff;border:1px solid rgba(107,33,234,.3);display:none">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;opacity:.75;margin-bottom:2px" id="sb-workspace-label">Workspace</div>
+      <div id="sb-workspace-name" style="font-weight:600;word-break:break-word"></div>
+    </div>
     <nav class="sb-nav">
       <button class="sb-item active" data-panel="dashboard" onclick="switchPanel('dashboard')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard
@@ -1555,6 +1559,9 @@ const AGENCY_SLUG='agency';
 const DEFAULT_SLUG='litbiz';
 const AGENCY_SESSION_KEY='myspark_agency_v1';
 const AGENCY_TOKEN_PREFIX='myspark_at_';
+// Fallback agency credentials - used if agency_users table is unreachable
+const AGENCY_FALLBACK_USER='admin';
+const AGENCY_FALLBACK_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DSHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DKEYS=['sun','mon','tue','wed','thu','fri','sat'];
@@ -3160,10 +3167,11 @@ function initApp(){
   document.getElementById('sb-role').textContent=_roleLabels[u.role]||u.role;
   const av=document.getElementById('sb-avatar');
   av.textContent=initials(u.name||u.username);av.style.background=u.color||'#6b21ea';
+  renderWorkspacePill();
   if(db.settings.supabaseUrl&&db.settings.supabaseKey)setSyncSt('synced');
   applyRolePermissions();
   updateNotifBadge();renderPanel();
-  fetchFromSupabase().then(ok=>{if(ok)renderPanel()});
+  fetchFromSupabase().then(ok=>{if(ok){renderPanel();renderWorkspacePill();}});
   handleSquareHash();
   var sbCard=document.getElementById('supabase-card');
   if(sbCard)sbCard.style.display='none';
@@ -3173,6 +3181,29 @@ function initApp(){
   if(!state._dashTimer){
     state._dashTimer=setInterval(function(){if(state.panel==='dashboard')renderDash();},30000);
   }
+}
+
+function renderWorkspacePill(){
+  var pill=document.getElementById('sb-workspace-pill');
+  if(!pill)return;
+  var nameEl=document.getElementById('sb-workspace-name');
+  var labelEl=document.getElementById('sb-workspace-label');
+  if(!nameEl||!labelEl)return;
+  var wsName=(db&&db.settings&&db.settings.businessName)||(state.subaccountSlug?state.subaccountSlug.charAt(0).toUpperCase()+state.subaccountSlug.slice(1).replace(/-/g,' '):'Workspace');
+  var isAgencyView=state.user&&state.user.agencyView;
+  if(isAgencyView){
+    pill.style.background='rgba(255,64,0,.14)';
+    pill.style.borderColor='rgba(255,64,0,.4)';
+    pill.style.color='#ffb199';
+    labelEl.textContent='Agency View';
+  }else{
+    pill.style.background='rgba(107,33,234,.14)';
+    pill.style.borderColor='rgba(107,33,234,.3)';
+    pill.style.color='#c7b8ff';
+    labelEl.textContent='Workspace';
+  }
+  nameEl.textContent=wsName;
+  pill.style.display='block';
 }
 
 // =====================================================
@@ -5684,13 +5715,24 @@ document.addEventListener('DOMContentLoaded',function(){
       try{
         var td=JSON.parse(storedToken);
         if(td.token===agencyToken&&td.exp>Date.now()){
-          // Auto-login as admin for agency login-as
-          state.user={id:'admin-patrick',username:'patrick',role:'admin',name:'Patrick',color:'#ff4000'};
-          localStorage.setItem(SSK,JSON.stringify({...state.user,ts:Date.now()}));
           history.replaceState(null,'',window.location.pathname);
           document.getElementById('auth-screen').classList.add('hidden');
           document.getElementById('app').classList.remove('hidden');
-          fetchFromSupabase().then(function(){initApp();});
+          // Fetch data first so _subaccountAdmin is available, then log in as that actual admin
+          fetchFromSupabase().then(function(){
+            var sa=db&&db._subaccountAdmin;
+            if(sa&&sa.username){
+              state.user={id:'admin-'+pathSlug,username:sa.username,role:'admin',name:sa.name||sa.username,color:sa.color||'#6b21ea',agencyView:true};
+            }else if(pathSlug===DEFAULT_SLUG){
+              // LitBiz case - Patrick is the admin
+              state.user={id:'admin-patrick',username:'patrick',role:'admin',name:'Patrick',color:'#ff4000',agencyView:true};
+            }else{
+              // Subaccount has no admin defined - fall back to read-only display
+              state.user={id:'agency-viewer',username:'agency',role:'admin',name:'Agency Viewer',color:'#ff4000',agencyView:true};
+            }
+            localStorage.setItem(SSK,JSON.stringify({...state.user,ts:Date.now()}));
+            initApp();
+          });
           return;
         }
       }catch(e){}
@@ -8723,13 +8765,39 @@ async function agencyLogin(){
   var username=(document.getElementById('ag-user')&&document.getElementById('ag-user').value||'').trim().toLowerCase();
   var password=document.getElementById('ag-pass')&&document.getElementById('ag-pass').value||'';
   var errEl=document.getElementById('agency-login-error');
-  var hash=await sha256(password);
-  if(username==='patrick'&&hash===ADMIN_HASH){
-    saveAgencySession({username:'patrick',name:'Patrick',role:'agency_admin'});
-    renderAgencyDashboard();
-  }else{
-    if(errEl){errEl.textContent='Invalid credentials.';errEl.classList.remove('hidden');}
+  if(!username||!password){
+    if(errEl){errEl.textContent='Username and password required.';errEl.classList.remove('hidden');}
+    return;
   }
+  var hash=await sha256(password);
+  // Try database first
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var r=await fetch(url+'/rest/v1/agency_users?username=eq.'+encodeURIComponent(username)+'&active=eq.true&select=*',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    if(r.ok){
+      var rows=await r.json();
+      if(rows&&rows.length&&rows[0].password_hash===hash){
+        var u=rows[0];
+        saveAgencySession({id:u.id,username:u.username,name:u.name||u.username,role:u.role||'admin'});
+        renderAgencyDashboard();
+        return;
+      }
+      // Table reachable but no match - reject even if fallback would work
+      if(errEl){errEl.textContent='Invalid credentials.';errEl.classList.remove('hidden');}
+      return;
+    }
+  }catch(e){
+    console.warn('Agency users table unreachable, trying fallback:',e);
+  }
+  // Fallback for disaster recovery only
+  if(username===AGENCY_FALLBACK_USER&&hash===AGENCY_FALLBACK_HASH){
+    saveAgencySession({id:'agency-admin-primary',username:AGENCY_FALLBACK_USER,name:'Admin',role:'super_admin'});
+    renderAgencyDashboard();
+    return;
+  }
+  if(errEl){errEl.textContent='Invalid credentials.';errEl.classList.remove('hidden');}
 }
 
 // =====================================================
@@ -8739,11 +8807,14 @@ async function agencyLogin(){
 async function renderAgencyDashboard(){
   var el=document.getElementById('agency-content');
   if(!el)return;
+  var sess=loadAgencySession()||{};
+  var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[sess.role]||(sess.role||'');
   el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
     // Top bar
     +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
     +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">MySpark<span style="color:var(--orange)">+</span> <span style="font-size:13px;font-weight:500;color:var(--text-muted)">Agency Dashboard</span></div>'
-    +'<div style="font-size:13px;color:var(--text-muted)">LitBiz Media</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);text-align:right;line-height:1.3"><div style="font-weight:600;color:var(--text)">'+esc(sess.name||sess.username||'')+'</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em">'+esc(roleLbl)+'</div></div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="renderAgencySettings()" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
     +'</div>'
     // Body
@@ -8751,7 +8822,7 @@ async function renderAgencyDashboard(){
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Subaccounts</div>'
     +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Manage your client CRM accounts</div></div>'
-    +'<button class="btn btn-primary" onclick="openCreateSubaccountModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subaccount</button>'
+    +(agencyCanManageSubaccounts()?'<button class="btn btn-primary" onclick="openCreateSubaccountModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subaccount</button>':'')
     +'</div>'
     +'<div id="agency-subs-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">'
     +'<div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading subaccounts...</div>'
@@ -8759,9 +8830,20 @@ async function renderAgencyDashboard(){
   agencyLoadSubaccounts();
 }
 
+// =====================================================
+// AGENCY PERMISSIONS
+// =====================================================
+function agencyCurrentRole(){var s=loadAgencySession();return s&&s.role||'';}
+function agencyHasRole(){var r=agencyCurrentRole();for(var i=0;i<arguments.length;i++){if(arguments[i]===r)return true;}return false;}
+function agencyCanManageSubaccounts(){return agencyHasRole('super_admin','admin');}
+function agencyCanManageUsers(){return agencyHasRole('super_admin');}
+function agencyCanLoginAs(){return agencyHasRole('super_admin','admin','support');}
+function agencyCurrentUserId(){var s=loadAgencySession();return s&&s.id||'';}
+
 
 // ── Agency Reset Subaccount Admin Password ──
 function agencyResetPassword(subId,slug){
+  if(!agencyCanManageSubaccounts()){toast('You do not have permission to reset passwords.','error');return;}
   state.modal={type:'agency-reset-pass',id:subId,extra:{slug:slug}};
   var body='<div class="form-group"><label>New Admin Password *</label>'
     +'<input id="agency-new-pass" type="password" placeholder="Strong password">'
@@ -8852,12 +8934,12 @@ async function agencyLoadSubaccounts(){
         +'</div>'
         +'</div>'
         +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
-        +'<button class="btn btn-primary btn-sm" onclick="agencyLoginAs(\''+esc(sub.slug)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Login As</button>'
-        +'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(plan)+'\')">Edit</button>'+'<button class="btn btn-ghost btn-sm" onclick="agencyResetPassword(\''+sub.id+'\',\''+esc(sub.slug)+'\')">Reset Password</button>'
-        +(isActive
-          ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false)">Suspend</button>'
-          :'<button class="btn btn-purple btn-sm" onclick="agencyToggleSub(\''+sub.id+'\',true)">Activate</button>')
-        +'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\')">Delete</button>'
+        +(agencyCanLoginAs()?'<button class="btn btn-primary btn-sm" onclick="agencyLoginAs(\''+esc(sub.slug)+'\',\''+esc(sub.name)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Login As</button>':'')
+        +(agencyCanManageSubaccounts()?'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(plan)+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="agencyResetPassword(\''+sub.id+'\',\''+esc(sub.slug)+'\')">Reset Password</button>':'')
+        +(agencyCanManageSubaccounts()?(isActive
+          ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false,\''+esc(sub.name)+'\')">Suspend</button>'
+          :'<button class="btn btn-purple btn-sm" onclick="agencyToggleSub(\''+sub.id+'\',true,\''+esc(sub.name)+'\')">Activate</button>'):'')
+        +(agencyCanManageSubaccounts()?'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\')">Delete</button>':'')
         +'</div>'
         +'</div>';
     }).join('');
@@ -8867,7 +8949,18 @@ async function agencyLoadSubaccounts(){
 }
 
 // ── Login As ──
-function agencyLoginAs(slug){
+function agencyLoginAs(slug,name){
+  if(!agencyCanLoginAs()){toast('You do not have permission to log in as subaccounts.','error');return;}
+  state.modal={type:'agency-login-as',extra:{slug:slug}};
+  var body='<div style="font-size:13px;line-height:1.5">You are about to log in to the workspace for <strong>'+esc(name||slug)+'</strong> as their admin user. This opens in a new tab. You will have full access to their contacts, payments, and settings.</div>'
+    +'<div style="margin-top:10px;padding:10px 12px;background:rgba(255,64,0,.08);border:1px solid rgba(255,64,0,.2);border-radius:6px;font-size:12px;color:#ffb199">Use only for legitimate support. Client data access is sensitive.</div>';
+  openModal('Log in as '+esc(name||slug)+'?', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="agencyConfirmLoginAs(\''+esc(slug)+'\')">Open Workspace</button>');
+}
+
+function agencyConfirmLoginAs(slug){
+  closeModal();
   var token=uid()+uid();
   var exp=Date.now()+300000; // 5 min
   localStorage.setItem(AGENCY_TOKEN_PREFIX+slug,JSON.stringify({token:token,exp:exp}));
@@ -8877,6 +8970,7 @@ function agencyLoginAs(slug){
 
 // ── Create Subaccount Modal ──
 function openCreateSubaccountModal(){
+  if(!agencyCanManageSubaccounts()){toast('You do not have permission to create subaccounts.','error');return;}
   var body='<div class="form-group"><label>Subaccount Name *</label>'
     +'<input id="new-sub-name" type="text" placeholder="e.g. Riverside Spa"></div>'
     +'<div class="form-group"><label>URL Slug * <span style="font-weight:400;color:var(--text-muted)">(lowercase, no spaces)</span></label>'
@@ -8993,7 +9087,20 @@ async function saveEditSubaccount(id){
 }
 
 // ── Suspend / Activate ──
-async function agencyToggleSub(id,active){
+async function agencyToggleSub(id,active,name){
+  if(!agencyCanManageSubaccounts()){toast('You do not have permission to change subaccount status.','error');return;}
+  var verb=active?'activate':'suspend';
+  var warn=active
+    ?'Users in <strong>'+esc(name||'')+'</strong> will regain access to their workspace.'
+    :'Users in <strong>'+esc(name||'')+'</strong> will be unable to log in or use their workspace until reactivated.';
+  state.modal={type:'agency-toggle-sub',id:id,extra:{active:active}};
+  openModal((active?'Activate':'Suspend')+' Subaccount?',
+    '<div style="font-size:13px;line-height:1.5">'+warn+'</div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn '+(active?'btn-purple':'btn-primary')+'" onclick="agencyConfirmToggleSub(\''+id+'\','+(active?'true':'false')+')">Confirm '+(active?'Activate':'Suspend')+'</button>');
+}
+
+async function agencyConfirmToggleSub(id,active){
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
     await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
@@ -9001,6 +9108,7 @@ async function agencyToggleSub(id,active){
       headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
       body:JSON.stringify({active:active})
     });
+    closeModal();
     toast('Subaccount '+(active?'activated':'suspended')+'.','success');
     agencyLoadSubaccounts();
   }catch(e){toast('Error: '+e.message,'error');}
@@ -9008,6 +9116,7 @@ async function agencyToggleSub(id,active){
 
 // ── Delete Subaccount ──
 function agencyDeleteSub(id,name){
+  if(!agencyCanManageSubaccounts()){toast('You do not have permission to delete subaccounts.','error');return;}
   state.modal={type:'del-agency-sub',id:id};
   document.getElementById('modal-title').textContent='Delete Subaccount';
   document.getElementById('modal-box').className='modal';
@@ -9028,6 +9137,327 @@ async function agencyConfirmDeleteSub(id){
       headers:{'apikey':key,'Authorization':'Bearer '+key}
     });
     closeModal();toast('Subaccount deleted.','success');agencyLoadSubaccounts();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// =====================================================
+// AGENCY SETTINGS PANEL
+// =====================================================
+function renderAgencySettings(){
+  var el=document.getElementById('agency-content');
+  if(!el)return;
+  var sess=loadAgencySession()||{};
+  var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[sess.role]||(sess.role||'');
+  var canManageUsers=agencyCanManageUsers();
+  el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
+    // Top bar
+    +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="renderAgencyDashboard()" title="Back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back</button>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">Agency Settings</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);text-align:right;line-height:1.3"><div style="font-weight:600;color:var(--text)">'+esc(sess.name||sess.username||'')+'</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em">'+esc(roleLbl)+'</div></div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
+    +'</div>'
+    // Body
+    +'<div style="padding:28px 32px;max-width:920px">'
+    // My Profile section
+    +'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700;margin-bottom:4px">My Profile</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:18px">Your agency account details</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">'
+    +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">Username</div><div style="font-size:14px;font-weight:600">'+esc(sess.username||'')+'</div></div>'
+    +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">Role</div><div style="font-size:14px;font-weight:600">'+esc(roleLbl)+'</div></div>'
+    +'</div>'
+    +'<button class="btn btn-primary btn-sm" onclick="openAgencyChangePasswordModal()">Change Password</button>'
+    +'</div>'
+    // Agency Users section (super_admin only)
+    +(canManageUsers
+      ?'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px">'
+        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px">'
+        +'<div><div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700">Agency Users</div>'
+        +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Manage who can access the agency dashboard</div></div>'
+        +'<button class="btn btn-primary btn-sm" onclick="openAgencyAddUserModal()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add User</button>'
+        +'</div>'
+        +'<div id="agency-users-list"><div style="color:var(--text-muted);font-size:13px;padding:12px 0">Loading agency users...</div></div>'
+        +'</div>'
+      :'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px;opacity:.7">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700;margin-bottom:4px">Agency Users</div>'
+        +'<div style="font-size:13px;color:var(--text-muted)">Only Super Admins can manage agency users.</div>'
+        +'</div>')
+    +'</div></div>';
+  if(canManageUsers)agencyLoadUsers();
+}
+
+async function agencyLoadUsers(){
+  var listEl=document.getElementById('agency-users-list');
+  if(!listEl)return;
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var r=await fetch(url+'/rest/v1/agency_users?select=*&order=created_at.asc',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    if(!r.ok){
+      listEl.innerHTML='<div style="color:#f87171;font-size:13px;padding:12px 0">Could not load users. Make sure the agency_users table exists in Supabase.</div>';
+      return;
+    }
+    var users=await r.json();
+    if(!Array.isArray(users)||!users.length){
+      listEl.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:12px 0">No agency users yet.</div>';
+      return;
+    }
+    // Count super admins for guard logic
+    var superCount=users.filter(function(u){return u.role==='super_admin'&&u.active!==false;}).length;
+    var currentId=agencyCurrentUserId();
+    listEl.innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'
+      +users.map(function(u){
+        var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[u.role]||u.role;
+        var roleColor=u.role==='super_admin'?'#ff4000':u.role==='admin'?'#6b21ea':'#7a8599';
+        var isLastSuper=u.role==='super_admin'&&superCount<=1&&u.active!==false;
+        var isSelf=u.id===currentId;
+        var canDelete=!isLastSuper&&!isSelf;
+        return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius)">'
+          +'<div style="width:32px;height:32px;border-radius:50%;background:'+roleColor+';display:flex;align-items:center;justify-content:center;font-family:Exo 2,sans-serif;font-weight:700;font-size:12px;color:#fff;flex-shrink:0">'+esc(initials(u.name||u.username))+'</div>'
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+(isSelf?' <span style="font-size:10px;color:var(--text-muted);font-weight:400">(you)</span>':'')+'</div>'
+          +'<div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div>'
+          +'</div>'
+          +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;background:'+roleColor+'22;color:'+roleColor+';border:1px solid '+roleColor+'44">'+esc(roleLbl)+'</span>'
+          +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(u.active!==false?'background:rgba(52,211,153,.12);color:#34d399':'background:rgba(239,68,68,.1);color:#f87171')+'">'+(u.active!==false?'Active':'Inactive')+'</span>'
+          +'<button class="btn btn-ghost btn-sm" onclick="openAgencyEditUserModal(\''+esc(u.id)+'\')">Edit</button>'
+          +(canDelete
+            ?'<button class="btn btn-danger btn-sm" onclick="agencyDeleteUser(\''+esc(u.id)+'\',\''+esc(u.name||u.username)+'\')">Remove</button>'
+            :'<button class="btn btn-ghost btn-sm" disabled style="opacity:.4;cursor:not-allowed" title="'+(isSelf?'You cannot remove yourself.':'Cannot remove the last Super Admin.')+'">Remove</button>')
+          +'</div>';
+      }).join('')
+      +'</div>';
+  }catch(e){
+    listEl.innerHTML='<div style="color:#f87171;font-size:13px;padding:12px 0">Error loading users: '+esc(e.message)+'</div>';
+  }
+}
+
+// ── Add Agency User ──
+function openAgencyAddUserModal(){
+  if(!agencyCanManageUsers()){toast('Only Super Admins can add agency users.','error');return;}
+  var body='<div class="form-group"><label>Full Name *</label>'
+    +'<input id="ag-new-name" type="text" placeholder="Jane Doe"></div>'
+    +'<div class="form-group"><label>Username *</label>'
+    +'<input id="ag-new-user" type="text" placeholder="jane" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_-]/g,\'\')"></div>'
+    +'<div class="form-group"><label>Password *</label>'
+    +'<input id="ag-new-pass" type="password" placeholder="Strong password">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
+    +'<div class="form-group"><label>Confirm Password *</label>'
+    +'<input id="ag-new-pass2" type="password" placeholder="Confirm password"></div>'
+    +'<div class="form-group"><label>Role *</label>'
+    +'<select id="ag-new-role" class="filter-sel" style="width:100%;height:38px">'
+    +'<option value="support">Support (view + login as only)</option>'
+    +'<option value="admin" selected>Admin (manage subaccounts)</option>'
+    +'<option value="super_admin">Super Admin (full control)</option>'
+    +'</select></div>';
+  openModal('Add Agency User', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="agencyCreateUser()">Create User</button>',
+    'modal-lg');
+}
+
+async function agencyCreateUser(){
+  if(!agencyCanManageUsers()){toast('Permission denied.','error');return;}
+  var name=(document.getElementById('ag-new-name')&&document.getElementById('ag-new-name').value||'').trim();
+  var username=(document.getElementById('ag-new-user')&&document.getElementById('ag-new-user').value||'').trim().toLowerCase();
+  var pass=document.getElementById('ag-new-pass')&&document.getElementById('ag-new-pass').value||'';
+  var pass2=document.getElementById('ag-new-pass2')&&document.getElementById('ag-new-pass2').value||'';
+  var role=document.getElementById('ag-new-role')&&document.getElementById('ag-new-role').value||'admin';
+  if(!name||!username||!pass){toast('All fields required.','error');return;}
+  if(pass!==pass2){toast('Passwords do not match.','error');return;}
+  var passErr=checkPasswordStrength(pass);
+  if(passErr){toast(passErr,'error');return;}
+  var hash=await sha256(pass);
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    // Check username uniqueness
+    var chk=await fetch(url+'/rest/v1/agency_users?username=eq.'+encodeURIComponent(username)+'&select=id',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    var existing=await chk.json();
+    if(Array.isArray(existing)&&existing.length){toast('Username already exists.','error');return;}
+    var newId='ag-'+uid();
+    var r=await fetch(url+'/rest/v1/agency_users',{
+      method:'POST',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({id:newId,username:username,password_hash:hash,name:name,role:role,active:true})
+    });
+    if(!r.ok){var err=await r.text();toast('Could not create user: '+err,'error');return;}
+    closeModal();
+    toast('Agency user "'+name+'" created.','success');
+    agencyLoadUsers();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── Edit Agency User ──
+async function openAgencyEditUserModal(userId){
+  if(!agencyCanManageUsers()){toast('Only Super Admins can edit agency users.','error');return;}
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId)+'&select=*',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    var rows=await r.json();
+    if(!rows||!rows.length){toast('User not found.','error');return;}
+    var u=rows[0];
+    // Count super admins to determine if this user's role can be changed
+    var rAll=await fetch(url+'/rest/v1/agency_users?select=id,role,active',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    var all=await rAll.json();
+    var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
+    var isLastSuper=u.role==='super_admin'&&superCount<=1&&u.active!==false;
+    var isSelf=u.id===agencyCurrentUserId();
+    state.modal={type:'agency-edit-user',id:userId};
+    var body='<div class="form-group"><label>Full Name</label>'
+      +'<input id="ag-edit-name" type="text" value="'+esc(u.name||'')+'"></div>'
+      +'<div class="form-group"><label>Username</label>'
+      +'<input type="text" value="'+esc(u.username)+'" disabled style="opacity:.6">'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Username cannot be changed.</div></div>'
+      +'<div class="form-group"><label>Role</label>'
+      +'<select id="ag-edit-role" class="filter-sel" style="width:100%;height:38px"'+(isLastSuper?' disabled':'')+'>'
+      +'<option value="support"'+(u.role==='support'?' selected':'')+'>Support</option>'
+      +'<option value="admin"'+(u.role==='admin'?' selected':'')+'>Admin</option>'
+      +'<option value="super_admin"'+(u.role==='super_admin'?' selected':'')+'>Super Admin</option>'
+      +'</select>'
+      +(isLastSuper?'<div style="font-size:11px;color:#fbbf24;margin-top:4px">Cannot change role of the last Super Admin.</div>':'')+'</div>'
+      +'<div class="form-group"><label>Status</label>'
+      +'<select id="ag-edit-active" class="filter-sel" style="width:100%;height:38px"'+((isLastSuper||isSelf)?' disabled':'')+'>'
+      +'<option value="true"'+(u.active!==false?' selected':'')+'>Active</option>'
+      +'<option value="false"'+(u.active===false?' selected':'')+'>Inactive</option>'
+      +'</select>'
+      +(isSelf?'<div style="font-size:11px;color:#fbbf24;margin-top:4px">You cannot deactivate yourself.</div>':isLastSuper?'<div style="font-size:11px;color:#fbbf24;margin-top:4px">Cannot deactivate the last Super Admin.</div>':'')+'</div>'
+      +'<div class="form-group"><label>Reset Password <span style="font-weight:400;color:var(--text-muted)">(leave blank to keep current)</span></label>'
+      +'<input id="ag-edit-pass" type="password" placeholder="New password (optional)">'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>';
+    openModal('Edit Agency User', body,
+      '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+      +'<button class="btn btn-primary" onclick="agencySaveEditUser(\''+esc(userId)+'\')">Save Changes</button>',
+      'modal-lg');
+  }catch(e){toast('Error loading user: '+e.message,'error');}
+}
+
+async function agencySaveEditUser(userId){
+  if(!agencyCanManageUsers()){toast('Permission denied.','error');return;}
+  var name=(document.getElementById('ag-edit-name')&&document.getElementById('ag-edit-name').value||'').trim();
+  var roleEl=document.getElementById('ag-edit-role');
+  var activeEl=document.getElementById('ag-edit-active');
+  var pass=document.getElementById('ag-edit-pass')&&document.getElementById('ag-edit-pass').value||'';
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  var updates={name:name,updated_at:new Date().toISOString()};
+  if(roleEl&&!roleEl.disabled)updates.role=roleEl.value;
+  if(activeEl&&!activeEl.disabled)updates.active=activeEl.value==='true';
+  // Re-validate last super admin guard server-side-ish
+  try{
+    if(updates.role&&updates.role!=='super_admin'){
+      var rAll=await fetch(url+'/rest/v1/agency_users?select=id,role,active',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+      var all=await rAll.json();
+      var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
+      var target=(all||[]).filter(function(x){return x.id===userId;})[0];
+      if(target&&target.role==='super_admin'&&superCount<=1){
+        toast('Cannot change role of the last active Super Admin.','error');return;
+      }
+    }
+    if(pass){
+      var passErr=checkPasswordStrength(pass);
+      if(passErr){toast(passErr,'error');return;}
+      updates.password_hash=await sha256(pass);
+    }
+    var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId),{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify(updates)
+    });
+    if(!r.ok){var err=await r.text();toast('Could not save: '+err,'error');return;}
+    closeModal();
+    toast('Agency user updated.','success');
+    agencyLoadUsers();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── Delete Agency User ──
+async function agencyDeleteUser(userId,userName){
+  if(!agencyCanManageUsers()){toast('Permission denied.','error');return;}
+  if(userId===agencyCurrentUserId()){toast('You cannot remove yourself.','error');return;}
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  // Server-side-ish check: is this user the last active super admin?
+  try{
+    var rAll=await fetch(url+'/rest/v1/agency_users?select=id,role,active',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    var all=await rAll.json();
+    var target=(all||[]).filter(function(x){return x.id===userId;})[0];
+    if(target&&target.role==='super_admin'){
+      var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
+      if(superCount<=1){toast('Cannot remove the last Super Admin.','error');return;}
+    }
+  }catch(e){toast('Error verifying user: '+e.message,'error');return;}
+  state.modal={type:'agency-del-user',id:userId};
+  openModal('Remove Agency User?',
+    '<div class="warn-box">Permanently remove <strong>'+esc(userName)+'</strong> from agency access? This cannot be undone.</div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-danger" onclick="agencyConfirmDeleteUser(\''+esc(userId)+'\')">Remove</button>');
+}
+
+async function agencyConfirmDeleteUser(userId){
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId),{
+      method:'DELETE',
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    if(!r.ok){var err=await r.text();toast('Could not remove: '+err,'error');return;}
+    closeModal();
+    toast('Agency user removed.','success');
+    agencyLoadUsers();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// ── Change Own Password ──
+function openAgencyChangePasswordModal(){
+  var body='<div class="form-group"><label>Current Password *</label>'
+    +'<input id="ag-cp-old" type="password" autocomplete="current-password"></div>'
+    +'<div class="form-group"><label>New Password *</label>'
+    +'<input id="ag-cp-new" type="password" autocomplete="new-password">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
+    +'<div class="form-group"><label>Confirm New Password *</label>'
+    +'<input id="ag-cp-new2" type="password" autocomplete="new-password"></div>';
+  openModal('Change Password', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="agencySaveOwnPassword()">Update Password</button>',
+    'modal-lg');
+}
+
+async function agencySaveOwnPassword(){
+  var oldPass=document.getElementById('ag-cp-old')&&document.getElementById('ag-cp-old').value||'';
+  var newPass=document.getElementById('ag-cp-new')&&document.getElementById('ag-cp-new').value||'';
+  var newPass2=document.getElementById('ag-cp-new2')&&document.getElementById('ag-cp-new2').value||'';
+  if(!oldPass||!newPass){toast('All fields required.','error');return;}
+  if(newPass!==newPass2){toast('New passwords do not match.','error');return;}
+  if(newPass===oldPass){toast('New password must be different from current password.','error');return;}
+  var passErr=checkPasswordStrength(newPass);
+  if(passErr){toast(passErr,'error');return;}
+  var sess=loadAgencySession();
+  if(!sess||!sess.id){toast('Session expired. Please sign in again.','error');return;}
+  var oldHash=await sha256(oldPass);
+  var newHash=await sha256(newPass);
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    // Verify current password against database record
+    var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(sess.id)+'&select=password_hash',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    var rows=await r.json();
+    var storedHash=rows&&rows.length?rows[0].password_hash:null;
+    // Allow fallback hash match if DB record missing (disaster recovery bootstrap)
+    var okOld=(storedHash&&oldHash===storedHash)||(sess.id==='agency-admin-primary'&&!storedHash&&oldHash===AGENCY_FALLBACK_HASH);
+    if(!okOld){toast('Current password is incorrect.','error');return;}
+    var r2=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(sess.id),{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({password_hash:newHash,updated_at:new Date().toISOString()})
+    });
+    if(!r2.ok){var err=await r2.text();toast('Could not update password: '+err,'error');return;}
+    closeModal();
+    toast('Password updated successfully.','success');
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
