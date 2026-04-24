@@ -8892,15 +8892,11 @@ function posApplyGiftCard(){
   if((g.balance||0)<=0){if(errEl){errEl.textContent='This gift card has no remaining balance.';errEl.classList.remove('hidden');}return;}
   // Apply
   state.posGC={id:g.id,code:g.code,balance:g.balance};
-  // Reset any stale remainder state from previous applications
-  state.posGCRemainderMethod=null;
-  gcRemCard=null;
-  var staleExtra=document.getElementById('gc-rem-extra');
-  if(staleExtra){staleExtra.innerHTML='';staleExtra.classList.add('hidden');}
-  ['card','cash','other'].forEach(function(m){
-    var btn=document.getElementById('gc-rem-'+m);
-    if(btn){btn.style.background='';btn.style.color='';btn.style.borderColor='';}
-  });
+  // Note: we intentionally do NOT reset state.posGCRemainderMethod or gcRemCard here.
+  // The remainder method (card/cash/other) and the initialized Square card form
+  // are preserved across gift card changes. If the user has already entered card
+  // details for a remainder, they stay entered. The amount to charge is
+  // recalculated fresh at process time from the current cart and gift card balance.
   var balLbl=document.getElementById('pos-gc-balance-label');
   var namLbl=document.getElementById('pos-gc-name-label');
   if(balLbl)balLbl.textContent='Balance: '+fmt$(g.balance);
@@ -8918,6 +8914,22 @@ function posApplyGiftCard(){
   }else{
     if(partialWrap)partialWrap.classList.add('hidden');
     state.posGCRemainder=0;
+  }
+  // If user had already picked a remainder method before changing the gift card,
+  // re-render the display so the shown remainder amount reflects the new math.
+  // For 'card', only update the displayed amount text (do not reinitialize the form).
+  if(state.posGCRemainderMethod){
+    var extraEl=document.getElementById('gc-rem-extra');
+    if(extraEl){
+      if(state.posGCRemainderMethod==='card'){
+        // Find the existing "Remainder to charge" line and update just the amount.
+        var amtDisplay=extraEl.querySelector('strong');
+        if(amtDisplay)amtDisplay.textContent=fmt$(state.posGCRemainder);
+      } else {
+        // For cash/other, safe to re-render the whole block.
+        gcSetRemainder(state.posGCRemainderMethod);
+      }
+    }
   }
   toast('Gift card applied. Balance: '+fmt$(g.balance),'success');
 }
