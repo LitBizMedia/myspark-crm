@@ -1732,9 +1732,7 @@ function sqStorageKey(){return 'myspark_sq_v1_'+(state.subaccountSlug||DEFAULT_S
 function applyFallbackCredentials(){
   if(!db.settings.supabaseUrl||!db.settings.supabaseKey){
     db.settings.supabaseUrl=SB_FALLBACK_URL;
-    db.settings.supabaseKey=SB_FALLBACK_KEY;
-    console.log('Applied Supabase fallback credentials.');
-  }
+    db.settings.supabaseKey=SB_FALLBACK_KEY;  }
   // Square credentials come from Supabase (subaccount_data.settings.square) after fetchFromSupabase.
   // Before the fetch completes, try the browser cache as a fast-path.
   var sqStored=localStorage.getItem(sqStorageKey());
@@ -2565,7 +2563,7 @@ let posSqCard=null;
 async function initPosSquareCardForm(){
   const errEl=document.getElementById('pos-sq-card-errors');
   const container=document.getElementById('pos-sq-card-container');
-  if(!container){console.log('Square container not found');return;}
+  if(!container){return;}
   if(posSqCard)return; // Already initialized, don't re-init
   container.innerHTML='';
   try{
@@ -2583,22 +2581,17 @@ async function initPosSquareCardForm(){
   }
 }
 
-async function processCharge(){
-  console.log('[GC-REM] processCharge START. posPM:',state.posPM,'posGC:',!!state.posGC,'posGCRemainderMethod:',state.posGCRemainderMethod);
-  // ── Gift Card payment path ──
+async function processCharge(){  // ── Gift Card payment path ──
   var gc=state.posGC;
-  if(state.posPM==='gc'&&gc){
-    console.log('[GC-REM] entered GC branch');
-    var gObj=(db.giftCards||[]).find(function(x){return x.id===gc.id;});
+  if(state.posPM==='gc'&&gc){    var gObj=(db.giftCards||[]).find(function(x){return x.id===gc.id;});
     if(!gObj){toast('Gift card not found.','error');return;}
     var totals=calcTotals();
     var gcTotal=totals.total;
     var gcApplied=Math.min(gObj.balance,gcTotal);
     var remainder=Math.max(0,gcTotal-gcApplied);
-    if(remainder>0&&!state.posGCRemainderMethod){console.log('[GC-REM] EXIT: no remainder method chosen');toast('Choose a payment method for the remaining '+fmt$(remainder)+'.','error');return;}
+    if(remainder>0&&!state.posGCRemainderMethod){toast('Choose a payment method for the remaining '+fmt$(remainder)+'.','error');return;}
     // Capture remainder method BEFORE the state reset below, otherwise the Square charge branch below reads null.
     var gcRemMethod=state.posGCRemainderMethod;
-    console.log('[GC-REM] captured gcRemMethod:',gcRemMethod,'remainder:',remainder);
     gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
     if(gObj.balance<=0)gObj.status='redeemed';
     else if(gcApplied>0)gObj.status='partial';
@@ -2625,7 +2618,6 @@ async function processCharge(){
     };
     if(remainder>0&&gcRemMethod==='card'){
       var gcSq=db.settings.square||{};
-      console.log('[GC-REM] remainder path triggered. remainder:',remainder,'accessToken:',!!gcSq.accessToken,'gcRemCard:',!!gcRemCard);
       if(!gcSq.accessToken){
         toast('Square not connected. Card remainder not charged.','error');
         var prec=db.payments.find(function(x){return x.id===gcPayId;});
@@ -2641,9 +2633,7 @@ async function processCharge(){
         return;
       }
       if(gcSq.accessToken&&gcRemCard){
-        console.log('[GC-REM] firing tokenize...');
         gcRemCard.tokenize().then(function(res){
-          console.log('[GC-REM] tokenize result:',res.status,res);
           if(res.status!=='OK'){
             var prec=db.payments.find(function(x){return x.id===gcPayId;});
             var errDetails=res.errors?res.errors.map(function(e){return e.message||e.detail||e.code;}).join(', '):'Unknown tokenize error';
@@ -2652,11 +2642,9 @@ async function processCharge(){
             finishGcFlow();
             return;
           }
-          console.log('[GC-REM] firing /api/square/charge for',remainder);
           return fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
         }).then(function(r){if(r)return r.json();}).then(function(d){
-          if(!d){console.log('[GC-REM] no response received');return;}
-          console.log('[GC-REM] charge response:',d);
+          if(!d)return;
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
           if(d.error){
             if(prec){prec.remainderStatus='failed';prec.remainderError=d.error;saveData();}
@@ -2671,7 +2659,7 @@ async function processCharge(){
           }
           finishGcFlow();
         }).catch(function(e){
-          console.error('[GC-REM] catch:',e);
+          console.error('Square remainder charge error:',e);
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
           if(prec){prec.remainderStatus='failed';prec.remainderError=e.message;saveData();}
           toast('Square error: '+e.message+'. Transaction flagged.','error');
@@ -2875,9 +2863,7 @@ async function linkContactToSquare(contactId){
     const d=await r.json();
     if(d.customerId){
       c.squareCustomerId=d.customerId;
-      saveData();
-      console.log('Square link:',d.action,'customerId:',d.customerId);
-    }
+      saveData();    }
   }catch(e){console.error('Square link error:',e);}
 }
 
@@ -3258,7 +3244,7 @@ async function doSync(){
   const url=db.settings.supabaseUrl,key=db.settings.supabaseKey;
   if(!url||!key)return;
   const hasData=db.contacts.length>0||db.payments.length>0||db.tasks.length>0;
-  if(!hasData){console.log('Sync skipped: no data to sync.');return;}
+  if(!hasData){return;}
   setSyncSt('syncing');
   const subId=state.subaccountId||'sub-litbiz';
   const dataId='data-'+(state.subaccountSlug||'litbiz');
@@ -6560,9 +6546,7 @@ function renderSquareCard(){
     const senv=document.getElementById('sq-env');
     if(aid)aid.value=sq.appId||'';
     if(senv)senv.value=sq.sandbox===false?'production':'sandbox';
-  }
-  console.log('renderSquareCard connected:',connected,'token:',!!(sq.accessToken));
-}
+  }}
 
 
 // =====================================================
@@ -7688,37 +7672,58 @@ function txnRefund(id){
   var hasGC = gcAmt > 0;
   var remainderAmt = Math.max(0, t.total - gcAmt);
   var remainderMethod = t.remainderMethod || '';
+  // Sum previously refunded amounts per source so max values cannot exceed what is left.
+  var refunded = {gc:0, rem:0, total:0};
+  (p.refundLog||[]).forEach(function(r){
+    refunded.gc += (r.giftCardPortion||0);
+    refunded.rem += (r.cardPortion||0);
+    refunded.total += (r.total||0);
+  });
+  var gcLeft = Math.max(0, gcAmt - refunded.gc);
+  var remLeft = Math.max(0, remainderAmt - refunded.rem);
+  var totalLeft = Math.max(0, t.total - refunded.total);
+  if(totalLeft <= 0.005){
+    toast('This transaction has already been fully refunded.','warn');
+    return;
+  }
   var body;
+  var refundedBanner = refunded.total > 0
+    ? '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--orange)">'+fmt$(refunded.total)+'</strong> already refunded from this transaction. '+fmt$(totalLeft)+' remains refundable.</div>'
+    : '';
   if(hasGC){
     // Split or gift-card-only payment.
     var gcCodeDisplay = t.giftCardCode ? ' ('+esc(t.giftCardCode)+')' : '';
-    body = '<div style="background:var(--bg-card);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-muted)">'
+    body = refundedBanner
+      +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-muted)">'
       +'<div style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text);margin-bottom:6px;font-size:10px">Original payment</div>'
-      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Gift Card'+gcCodeDisplay+'</span><span>'+fmt$(gcAmt)+'</span></div>'
-      +(remainderAmt>0?'<div style="display:flex;justify-content:space-between;padding:2px 0"><span>'+esc(remainderMethod||'Other')+'</span><span>'+fmt$(remainderAmt)+'</span></div>':'')
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Gift Card'+gcCodeDisplay+'</span><span>'+fmt$(gcAmt)+(refunded.gc>0?' <span style="color:var(--orange)">(-'+fmt$(refunded.gc)+' refunded)</span>':'')+'</span></div>'
+      +(remainderAmt>0?'<div style="display:flex;justify-content:space-between;padding:2px 0"><span>'+esc(remainderMethod||'Other')+'</span><span>'+fmt$(remainderAmt)+(refunded.rem>0?' <span style="color:var(--orange)">(-'+fmt$(refunded.rem)+' refunded)</span>':'')+'</span></div>':'')
       +'</div>'
-      +'<div class="form-group"><label>Refund to Gift Card'+gcCodeDisplay+'</label>'
-      +'<input id="refund-gc-amt" type="number" min="0" max="'+gcAmt.toFixed(2)+'" step="0.01" value="'+gcAmt.toFixed(2)+'" oninput="refundUpdateTotal()">'
-      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Max: '+fmt$(gcAmt)+'. Balance will be restored to the gift card.</div></div>'
-      +(remainderAmt>0
+      +(gcLeft>0
+        ?'<div class="form-group"><label>Refund to Gift Card'+gcCodeDisplay+'</label>'
+          +'<input id="refund-gc-amt" type="number" min="0" max="'+gcLeft.toFixed(2)+'" step="0.01" value="'+gcLeft.toFixed(2)+'" oninput="refundUpdateTotal()">'
+          +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Max: '+fmt$(gcLeft)+'. Balance will be restored to the gift card.</div></div>'
+        :'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text-muted)">Gift card portion fully refunded.</div>')
+      +(remLeft>0
         ?'<div class="form-group"><label>Refund to '+esc(remainderMethod||'Other')+'</label>'
-          +'<input id="refund-rem-amt" type="number" min="0" max="'+remainderAmt.toFixed(2)+'" step="0.01" value="'+remainderAmt.toFixed(2)+'" oninput="refundUpdateTotal()">'
-          +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Max: '+fmt$(remainderAmt)+'.'
+          +'<input id="refund-rem-amt" type="number" min="0" max="'+remLeft.toFixed(2)+'" step="0.01" value="'+remLeft.toFixed(2)+'" oninput="refundUpdateTotal()">'
+          +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Max: '+fmt$(remLeft)+'.'
           +(remainderMethod==='card'&&hasSquare?' Will be refunded through Square.':(remainderMethod==='card'&&!hasSquare?' Warning: no Square payment ID on file, manual refund required.':' No automated refund; update the '+(remainderMethod||'external')+' side yourself.'))
           +'</div></div>'
-        :'')
+        :(remainderAmt>0?'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text-muted)">'+esc(remainderMethod||'Other')+' portion fully refunded.</div>':''))
       +'<div class="form-group"><label>Reason</label><input id="refund-reason" type="text" placeholder="Customer request, billing error..."></div>'
-      +'<div id="refund-total-display" style="background:var(--bg-card);border-radius:var(--radius);padding:10px 14px;display:flex;justify-content:space-between;font-size:14px;font-weight:700"><span>Total refund</span><span style="color:var(--orange)" id="refund-total-val">'+fmt$(t.total)+'</span></div>';
+      +'<div id="refund-total-display" style="background:var(--bg-card);border-radius:var(--radius);padding:10px 14px;display:flex;justify-content:space-between;font-size:14px;font-weight:700"><span>Total refund</span><span style="color:var(--orange)" id="refund-total-val">'+fmt$(gcLeft+remLeft)+'</span></div>';
   } else {
-    // Card or cash only. Original UI.
-    body = '<div class="form-group"><label>Refund Amount ($)</label>'
-      +'<input id="refund-amt" type="number" min="0.01" max="'+t.total.toFixed(2)+'" step="0.01" value="'+t.total.toFixed(2)+'">'
-      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Maximum: '+fmt$(t.total)+'</div></div>'
+    // Card or cash only. Original UI, but respecting what's been refunded.
+    body = refundedBanner
+      +'<div class="form-group"><label>Refund Amount ($)</label>'
+      +'<input id="refund-amt" type="number" min="0.01" max="'+totalLeft.toFixed(2)+'" step="0.01" value="'+totalLeft.toFixed(2)+'">'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Maximum: '+fmt$(totalLeft)+'</div></div>'
       +'<div class="form-group"><label>Reason</label><input id="refund-reason" type="text" placeholder="Customer request, billing error..."></div>'
       +(hasSquare?'<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--purple-light)">Square payment detected. Refund will be processed through Square automatically.</div>'
       :'<div class="warn-box" style="margin-bottom:0">No Square payment ID found. Only the local record will be updated.</div>');
   }
-  state.modal = {type:'txn-refund', id: id, extra:{hasGC:hasGC,gcAmt:gcAmt,remainderAmt:remainderAmt,hasSquare:hasSquare}};
+  state.modal = {type:'txn-refund', id: id, extra:{hasGC:hasGC,gcAmt:gcLeft,remainderAmt:remLeft,hasSquare:hasSquare,totalLeft:totalLeft}};
   openModal('Refund Transaction', body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-purple" onclick="txnConfirmRefund(\''+id+'\')">Process Refund</button>',
@@ -7750,8 +7755,8 @@ async function txnConfirmRefund(id){
     gcRefund = parseFloat(gcEl && gcEl.value) || 0;
     remRefund = parseFloat(remEl && remEl.value) || 0;
     if(gcRefund < 0 || remRefund < 0){ toast('Refund amounts cannot be negative.','error'); return; }
-    if(gcRefund > extra.gcAmt + 0.001){ toast('Gift card refund exceeds original amount.','error'); return; }
-    if(remRefund > extra.remainderAmt + 0.001){ toast('Remainder refund exceeds original amount.','error'); return; }
+    if(gcRefund > extra.gcAmt + 0.001){ toast('Gift card refund exceeds amount refundable ('+fmt$(extra.gcAmt)+' remaining).','error'); return; }
+    if(remRefund > extra.remainderAmt + 0.001){ toast('Remainder refund exceeds amount refundable ('+fmt$(extra.remainderAmt)+' remaining).','error'); return; }
     totalRefund = gcRefund + remRefund;
     if(totalRefund <= 0){ toast('Enter an amount to refund.','error'); return; }
   } else {
@@ -7759,7 +7764,8 @@ async function txnConfirmRefund(id){
     totalRefund = parseFloat(amtEl && amtEl.value) || 0;
     remRefund = totalRefund;
     if(totalRefund <= 0){ toast('Enter a valid amount.','error'); return; }
-    if(totalRefund > t.total + 0.001){ toast('Refund cannot exceed original total.','error'); return; }
+    var maxAllowed = (extra.totalLeft != null) ? extra.totalLeft : t.total;
+    if(totalRefund > maxAllowed + 0.001){ toast('Refund cannot exceed '+fmt$(maxAllowed)+' (remaining refundable).','error'); return; }
   }
   // --- Step 1: Gift card restoration (if applicable) ---
   var gcRestored = false;
@@ -8985,21 +8991,17 @@ function gcSetRemainder(method){
 var gcRemCard=null;
 async function gcInitRemainderCardForm(){
   var errEl=document.getElementById('gc-rem-sq-errors');
-  var container=document.getElementById('gc-rem-sq-container');
-  console.log('[GC-REM] initRemainderCardForm called. container:',!!container);
-  if(!container){console.log('[GC-REM] container missing, aborting');return;}
+  var container=document.getElementById('gc-rem-sq-container');  if(!container){return;}
   try{
     var cfgRes=await fetch('/api/square/config');
     var cfg=await cfgRes.json();
-    console.log('[GC-REM] config:',cfg);
-    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';console.log('[GC-REM] no appId');return;}
-    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';console.log('[GC-REM] no window.Square');return;}
+    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
+    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
     var payments=window.Square.payments(cfg.appId,'production');
     gcRemCard=await payments.card();
     await gcRemCard.attach('#gc-rem-sq-container');
-    console.log('[GC-REM] card form attached. gcRemCard:',!!gcRemCard);
   }catch(e){
-    console.error('[GC-REM] init error:',e);
+    console.error('Gift card remainder form init error:',e);
     if(errEl)errEl.textContent='Could not load card form: '+e.message;
   }
 }
