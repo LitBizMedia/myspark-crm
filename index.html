@@ -7574,7 +7574,9 @@ function txnOpenDetail(id){
   var dt = new Date(t.createdAt);
   var dtFull = dt.toLocaleString('en-US', {month:'long', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
   var canVoid = t.status === 'completed';
-  var canRefund = t.status === 'completed' && t.total > 0;
+  var refundedSoFar = (p.refundLog||[]).reduce(function(sum, r){ return sum + (r.total||0); }, 0);
+  var refundable = Math.max(0, t.total - refundedSoFar);
+  var canRefund = (t.status === 'completed' || t.status === 'partial_refund') && refundable > 0.005;
   var hasSquare = !!(t.squarePaymentId);
   var staffColor = t.staffId ? getUserColor(t.staffId) : 'var(--text-muted)';
   var itemsHTML = '';
