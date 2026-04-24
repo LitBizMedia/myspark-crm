@@ -1719,19 +1719,7 @@ function layoutOverlap(events){
 // =====================================================
 // DATA
 // =====================================================
-function loadData(){
-  try{
-    const r=localStorage.getItem(SK);
-    if(r){const p=JSON.parse(r);
-      db={...db,...p,tags:p.tags&&p.tags.length?p.tags:db.tags,users:p.users||[],payments:p.payments||[],
-        settings:{...db.settings,...p.settings,
-          businessHours:p.settings&&p.settings.businessHours||JSON.parse(JSON.stringify(DEF_BH)),
-          square:p.settings&&p.settings.square||{appId:'',accessToken:'',locationId:'',sandbox:true}
-        }
-      };
-    }
-  }catch(e){}
-}
+// loadData defined below (Supabase-aware version at line ~3100)
 
 function applyFallbackCredentials(){
   if(!db.settings.supabaseUrl||!db.settings.supabaseKey){
@@ -1742,7 +1730,7 @@ function applyFallbackCredentials(){
   const sqStored=localStorage.getItem('myspark_sq_v1');
   if(!db.settings.square||!db.settings.square.accessToken){
     if(sqStored){
-      try{const sq=JSON.parse(sqStored);db.settings.square={...db.settings.square,...sq};}catch(e){}
+      try{const sq=JSON.parse(sqStored);db.settings.square={...db.settings.square,...sq};}catch(e){console.warn('Stored Square credentials corrupt, falling back:',e);}
     } else {
       db.settings.square={appId:'',sandbox:false,merchantId:SQ_FALLBACK_MERCHANT,accessToken:SQ_FALLBACK_TOKEN};
       localStorage.setItem('myspark_sq_v1',JSON.stringify({accessToken:SQ_FALLBACK_TOKEN,merchantId:SQ_FALLBACK_MERCHANT,sandbox:false}));
@@ -1751,7 +1739,7 @@ function applyFallbackCredentials(){
   }
 }
 function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
-function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(doSync,2200)}
+// schedSync defined below (line ~3130)
 
 // Legacy Gist sync removed - using Supabase subaccount_data
 
@@ -1797,19 +1785,7 @@ function handleLogout(){localStorage.removeItem(SSK);location.reload()}
 // =====================================================
 // INIT
 // =====================================================
-function initApp(){
-  const u=state.user;
-  document.getElementById('sb-name').textContent=u.name||u.username;
-  var _roleLabels={admin:'Admin',manager:'Manager',user:'Staff',practitioner:'Practitioner'};
-  document.getElementById('sb-role').textContent=_roleLabels[u.role]||u.role;
-  const av=document.getElementById('sb-avatar');
-  av.textContent=initials(u.name||u.username);av.style.background=u.color||'#6b21ea';
-  if(u.role!=='admin')document.getElementById('sb-settings').classList.add('hidden');
-  if(db.settings.gistToken)setSyncSt('synced');
-  updateNotifBadge();renderPanel();
-  fetchGist().then(ok=>{if(ok)renderPanel()});
-  setInterval(()=>{if(state.panel==='dashboard')renderDash()},30000);
-}
+// initApp defined below (Supabase-aware version at line ~3180)
 
 const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',staff:'Staff',settings:'Settings'};
 function renderPanel(){
@@ -3183,7 +3159,8 @@ async function pullFromSupabase(){
 function initApp(){
   const u=state.user;
   document.getElementById('sb-name').textContent=u.name||u.username;
-  document.getElementById('sb-role').textContent=u.role;
+  var _roleLabels={admin:'Admin',manager:'Manager',user:'Staff',practitioner:'Practitioner'};
+  document.getElementById('sb-role').textContent=_roleLabels[u.role]||u.role;
   const av=document.getElementById('sb-avatar');
   av.textContent=initials(u.name||u.username);av.style.background=u.color||'#6b21ea';
   if(db.settings.supabaseUrl&&db.settings.supabaseKey)setSyncSt('synced');
@@ -3195,8 +3172,10 @@ function initApp(){
   if(sbCard)sbCard.style.display='none';
   var sqLbl=document.getElementById('sq-status-label');
   if(sqLbl)sqLbl.textContent=db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
-  var sqLbl=document.getElementById('sq-status-label');
-  if(sqLbl)sqLbl.textContent=db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
+  // Dashboard auto-refresh every 30 seconds. Guard prevents double-binding if initApp runs twice.
+  if(!state._dashTimer){
+    state._dashTimer=setInterval(function(){if(state.panel==='dashboard')renderDash();},30000);
+  }
 }
 
 // =====================================================
