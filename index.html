@@ -2614,18 +2614,37 @@ async function processCharge(){
     toast('Payment of '+fmt$(gcTotal)+' recorded. Gift card: '+fmt$(gcApplied)+(remainder>0?', remainder: '+fmt$(remainder):''),'success');
     if(remainder>0&&state.posGCRemainderMethod==='card'){
       var gcSq=db.settings.square||{};
+      console.log('[GC-REM] remainder path triggered. remainder:',remainder,'accessToken:',!!gcSq.accessToken,'gcRemCard:',!!gcRemCard);
+      if(!gcSq.accessToken){
+        toast('Square not connected. Card remainder not charged.','error');
+        var prec=db.payments.find(function(x){return x.id===gcPayId;});
+        if(prec){prec.remainderStatus='failed';prec.remainderError='Square not connected';saveData();}
+        return;
+      }
+      if(!gcRemCard){
+        toast('Card form not ready. Remainder not charged. Click the Card button again and re-enter card info.','error');
+        var prec2=db.payments.find(function(x){return x.id===gcPayId;});
+        if(prec2){prec2.remainderStatus='failed';prec2.remainderError='Card form not initialized';saveData();}
+        return;
+      }
       if(gcSq.accessToken&&gcRemCard){
+        console.log('[GC-REM] firing tokenize...');
         gcRemCard.tokenize().then(function(res){
+          console.log('[GC-REM] tokenize result:',res.status,res);
           if(res.status!=='OK'){
             // Square tokenization failed. Mark transaction with payment issue.
             var prec=db.payments.find(function(x){return x.id===gcPayId;});
-            if(prec){prec.remainderStatus='failed';prec.remainderError='Card tokenization failed';saveData();}
-            toast('Remainder card error. Transaction flagged. Please retry remainder payment.','error');
+            var errDetails=res.errors?res.errors.map(function(e){return e.message||e.detail||e.code;}).join(', '):'Unknown tokenize error';
+            if(prec){prec.remainderStatus='failed';prec.remainderError='Tokenize: '+errDetails;saveData();}
+            toast('Remainder card error: '+errDetails+'. Transaction flagged.','error');
             return;
           }
+          console.log('[GC-REM] firing /api/square/charge for',remainder);
           return fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
         }).then(function(r){if(r)return r.json();}).then(function(d){
-          if(!d)return;gcRemCard=null;
+          if(!d){console.log('[GC-REM] no response received');return;}
+          console.log('[GC-REM] charge response:',d);
+          gcRemCard=null;
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
           if(d.error){
             if(prec){prec.remainderStatus='failed';prec.remainderError=d.error;saveData();}
@@ -2640,6 +2659,7 @@ async function processCharge(){
             toast('Remainder of '+fmt$(remainder)+' charged.','success');
           }
         }).catch(function(e){
+          console.error('[GC-REM] catch:',e);
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
           if(prec){prec.remainderStatus='failed';prec.remainderError=e.message;saveData();}
           toast('Square error: '+e.message+'. Transaction flagged.','error');
@@ -8856,6 +8876,15 @@ function posApplyGiftCard(){
   if((g.balance||0)<=0){if(errEl){errEl.textContent='This gift card has no remaining balance.';errEl.classList.remove('hidden');}return;}
   // Apply
   state.posGC={id:g.id,code:g.code,balance:g.balance};
+  // Reset any stale remainder state from previous applications
+  state.posGCRemainderMethod=null;
+  gcRemCard=null;
+  var staleExtra=document.getElementById('gc-rem-extra');
+  if(staleExtra){staleExtra.innerHTML='';staleExtra.classList.add('hidden');}
+  ['card','cash','other'].forEach(function(m){
+    var btn=document.getElementById('gc-rem-'+m);
+    if(btn){btn.style.background='';btn.style.color='';btn.style.borderColor='';}
+  });
   var balLbl=document.getElementById('pos-gc-balance-label');
   var namLbl=document.getElementById('pos-gc-name-label');
   if(balLbl)balLbl.textContent='Balance: '+fmt$(g.balance);
@@ -8879,16 +8908,24 @@ function posApplyGiftCard(){
 
 function posClearGiftCard(){
   state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
+  gcRemCard=null;
   var infoEl=document.getElementById('pos-gc-info');
   var entryEl=document.getElementById('pos-gc-entry');
   var codeEl=document.getElementById('pos-gc-code');
   var errEl=document.getElementById('pos-gc-error');
   var partialWrap=document.getElementById('pos-gc-partial-wrap');
+  var extra=document.getElementById('gc-rem-extra');
   if(infoEl)infoEl.classList.add('hidden');
   if(entryEl)entryEl.style.display='flex';
   if(codeEl)codeEl.value='';
   if(errEl)errEl.classList.add('hidden');
   if(partialWrap)partialWrap.classList.add('hidden');
+  if(extra){extra.innerHTML='';extra.classList.add('hidden');}
+  // Clear any active state on the remainder method buttons
+  ['card','cash','other'].forEach(function(m){
+    var btn=document.getElementById('gc-rem-'+m);
+    if(btn){btn.style.background='';btn.style.color='';btn.style.borderColor='';}
+  });
   calcTotals();
 }
 
@@ -8921,16 +8958,20 @@ var gcRemCard=null;
 async function gcInitRemainderCardForm(){
   var errEl=document.getElementById('gc-rem-sq-errors');
   var container=document.getElementById('gc-rem-sq-container');
-  if(!container)return;
+  console.log('[GC-REM] initRemainderCardForm called. container:',!!container);
+  if(!container){console.log('[GC-REM] container missing, aborting');return;}
   try{
     var cfgRes=await fetch('/api/square/config');
     var cfg=await cfgRes.json();
-    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
-    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
+    console.log('[GC-REM] config:',cfg);
+    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';console.log('[GC-REM] no appId');return;}
+    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';console.log('[GC-REM] no window.Square');return;}
     var payments=window.Square.payments(cfg.appId,'production');
     gcRemCard=await payments.card();
     await gcRemCard.attach('#gc-rem-sq-container');
+    console.log('[GC-REM] card form attached. gcRemCard:',!!gcRemCard);
   }catch(e){
+    console.error('[GC-REM] init error:',e);
     if(errEl)errEl.textContent='Could not load card form: '+e.message;
   }
 }
