@@ -1548,11 +1548,10 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 // CONSTANTS
 // =====================================================
 let SK='myspark_crm_v2';const SSK='myspark_session_v1';
-// Fallback credentials - always available even if localStorage is wiped
+// Fallback Supabase credentials - always available even if localStorage is wiped
 const SB_FALLBACK_URL='https://jytnzqaatkdtcflysadw.supabase.co';
 const SB_FALLBACK_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dG56cWFhdGtkdGNmbHlzYWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDE5NDUsImV4cCI6MjA5MjM3Nzk0NX0.znP5Tx2qU89BCuRBJZJlbmR-abde5J0NEzL0BXVi80g';
-const SQ_FALLBACK_TOKEN='EAAAltTSKhihm6k7nQ7cvcl2k-lmi-VwJrJ-DhA6zOvW4Pt1RBN0owHAhAUXHiZn';
-const SQ_FALLBACK_MERCHANT='MLKQN95NEH4F8';
+// Square credentials now live in Supabase only. No hardcoded token in source.
 const PER_PAGE=20;
 const ADMIN_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
 const AGENCY_SLUG='agency';
@@ -1736,20 +1735,21 @@ function applyFallbackCredentials(){
     db.settings.supabaseKey=SB_FALLBACK_KEY;
     console.log('Applied Supabase fallback credentials.');
   }
-  var isLitBiz=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug);
+  // Square credentials come from Supabase (subaccount_data.settings.square) after fetchFromSupabase.
+  // Before the fetch completes, try the browser cache as a fast-path.
   var sqStored=localStorage.getItem(sqStorageKey());
-  if(!db.settings.square||!db.settings.square.accessToken){
-    if(sqStored){
-      try{var sq=JSON.parse(sqStored);db.settings.square={...db.settings.square,...sq};}catch(e){console.warn('Stored Square credentials corrupt, clearing:',e);localStorage.removeItem(sqStorageKey());}
-    } else if(isLitBiz){
-      // Hardcoded Square fallback only applies at the LitBiz workspace
-      db.settings.square={appId:'',sandbox:false,merchantId:SQ_FALLBACK_MERCHANT,accessToken:SQ_FALLBACK_TOKEN};
-      localStorage.setItem(sqStorageKey(),JSON.stringify({accessToken:SQ_FALLBACK_TOKEN,merchantId:SQ_FALLBACK_MERCHANT,sandbox:false}));
-      console.log('Applied Square fallback credentials for LitBiz.');
-    } else {
-      // Other workspaces start with blank Square; they connect their own
-      db.settings.square={appId:'',accessToken:'',locationId:'',sandbox:true};
+  if((!db.settings.square||!db.settings.square.accessToken)&&sqStored){
+    try{
+      var sq=JSON.parse(sqStored);
+      db.settings.square={...db.settings.square,...sq};
+    }catch(e){
+      console.warn('Stored Square credentials corrupt, clearing:',e);
+      localStorage.removeItem(sqStorageKey());
     }
+  }
+  // Ensure Square object always exists so nothing blows up before the remote fetch.
+  if(!db.settings.square){
+    db.settings.square={appId:'',accessToken:'',locationId:'',sandbox:true};
   }
 }
 function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
@@ -8948,13 +8948,17 @@ async function agencyLoadSubaccounts(){
       var userCount=(data.users||[]).length+1; // +1 for admin
       var isActive=sub.active!==false;
       var plan=sub.plan||'starter';
+      var hasSquare=!!(data.settings&&data.settings.square&&data.settings.square.accessToken);
       return '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:12px">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between">'
         +'<div>'
         +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:#fff">'+esc(sub.name)+'</div>'
         +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px;font-family:monospace">'+esc(sub.slug)+'</div>'
         +'</div>'
+        +'<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">'
         +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(isActive?'background:rgba(52,211,153,.12);color:#34d399':'background:rgba(239,68,68,.1);color:#f87171')+'">'+(isActive?'Active':'Suspended')+'</span>'
+        +'<span title="'+(hasSquare?'Square connected':'Square not connected')+'" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;'+(hasSquare?'background:rgba(107,33,234,.15);color:#c7b8ff':'background:rgba(122,133,153,.12);color:#7a8599')+'">'+(hasSquare?'◆ Square':'○ No Square')+'</span>'
+        +'</div>'
         +'</div>'
         +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
         +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
