@@ -1543,7 +1543,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 // =====================================================
 // CONSTANTS
 // =====================================================
-let SK='myspark_crm_v2';const SSK='myspark_session_v1',GIST_FILE='myspark-crm-data.json';
+let SK='myspark_crm_v2';const SSK='myspark_session_v1';
 // Fallback credentials - always available even if localStorage is wiped
 const SB_FALLBACK_URL='https://jytnzqaatkdtcflysadw.supabase.co';
 const SB_FALLBACK_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dG56cWFhdGtkdGNmbHlzYWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDE5NDUsImV4cCI6MjA5MjM3Nzk0NX0.znP5Tx2qU89BCuRBJZJlbmR-abde5J0NEzL0BXVi80g';
@@ -1615,7 +1615,7 @@ let db={
   customFieldCategories:[],
   customFields:[],
   productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'],
-  settings:{gistToken:'',gistId:'',
+  settings:{
     businessHours:JSON.parse(JSON.stringify(DEF_BH)),
     square:{appId:'',accessToken:'',locationId:'',sandbox:true},
     supabaseUrl:'',supabaseKey:'',
@@ -1741,7 +1741,7 @@ function applyFallbackCredentials(){
 function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
 // schedSync defined below (line ~3130)
 
-// Legacy Gist sync removed - using Supabase subaccount_data
+// Legacy sync code removed - using Supabase subaccount_data
 
 function setSyncSt(s){
   ['','2'].forEach(x=>{
@@ -2638,8 +2638,6 @@ async function processCharge(){
 function renderSettings(){renderSquareCard();
   renderUserList();renderTagMgr();renderBH();
   const s=db.settings;
-  const gt=document.getElementById('gist-token');if(gt&&s.gistToken)gt.value=s.gistToken;
-  const gi=document.getElementById('gist-id');if(gi&&s.gistId)gi.value=s.gistId;
   if(s.square){
     const sq=s.square;
     const ai=document.getElementById('sq-app-id');if(ai&&sq.appId)ai.value=sq.appId;
@@ -2664,7 +2662,6 @@ function renderUserList(){
 }
 
 function renderTagMgr(){const el=document.getElementById('tag-mgr');if(!el)return;el.innerHTML=db.tags.map(t=>'<div class="tag-manage-item" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'<button class="tag-rm" onclick="delTag(\''+t.id+'\')">×</button></div>').join('')}
-function saveGist(){db.settings.gistToken=document.getElementById('gist-token').value.trim();db.settings.gistId=document.getElementById('gist-id').value.trim();saveData();toast('Gist settings saved. Syncing...','success')}
 function saveSquare(){db.settings.square={appId:document.getElementById('sq-app-id').value.trim(),accessToken:document.getElementById('sq-token').value.trim(),locationId:document.getElementById('sq-loc').value.trim(),sandbox:document.getElementById('sq-env').value==='true'};saveData();toast('Square settings saved.','success')}
 
 // =====================================================
@@ -3101,7 +3098,7 @@ function loadData(){
 }
 
 // =====================================================
-// SUPABASE SYNC (replaces Gist)
+// SUPABASE SYNC
 // =====================================================
 function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(doSync,2200)}
 
@@ -3154,7 +3151,7 @@ async function pullFromSupabase(){
 }
 
 // =====================================================
-// OVERRIDE: initApp — use Supabase instead of Gist
+// initApp - Supabase-aware
 // =====================================================
 function initApp(){
   const u=state.user;
