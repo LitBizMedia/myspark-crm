@@ -1728,6 +1728,16 @@ function layoutOverlap(events){
 // loadData defined below (Supabase-aware version at line ~3100)
 
 function sqStorageKey(){return 'myspark_sq_v1_'+(state.subaccountSlug||DEFAULT_SLUG);}
+// Returns true if Square is connected for the current workspace.
+// Checks either the clean `connected` flag (Phase 4+) or the legacy `accessToken` field
+// (backward compat for workspaces connected before Phase 4).
+function sqIsConnected(){
+  var sq=db&&db.settings&&db.settings.square;
+  if(!sq)return false;
+  if(sq.connected===true)return true;
+  if(sq.accessToken&&sq.accessToken!=='')return true;
+  return false;
+}
 
 function applyFallbackCredentials(){
   if(!db.settings.supabaseUrl||!db.settings.supabaseKey){
@@ -1736,7 +1746,7 @@ function applyFallbackCredentials(){
   // Square credentials come from Supabase (subaccount_data.settings.square) after fetchFromSupabase.
   // Before the fetch completes, try the browser cache as a fast-path.
   var sqStored=localStorage.getItem(sqStorageKey());
-  if((!db.settings.square||!db.settings.square.accessToken)&&sqStored){
+  if(!sqIsConnected()&&sqStored){
     try{
       var sq=JSON.parse(sqStored);
       db.settings.square={...db.settings.square,...sq};
@@ -2376,7 +2386,7 @@ function switchPayTab(tab){
     if(s){s.innerHTML=allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('')}
     renderPosItems();calcTotals();
     setTimeout(updatePosGCTab,100);
-    if(db.settings&&db.settings.square&&db.settings.square.accessToken){if(!posSqCard)setTimeout(initPosSquareCardForm,400);}
+    if(sqIsConnected()){if(!posSqCard)setTimeout(initPosSquareCardForm,400);}
   }else if(tab==='subs'){
     renderSubscriptions();
   }else if(tab==='transactions'){
@@ -2500,7 +2510,7 @@ async function reviewCharge(){
   const{sub,couponDiscount,couponCode,couponId,discount,discountType,discountVal,discountNote,afterDiscount,tip,credit:creditCalc,total}=calcTotals();
   const cid=document.getElementById('pos-c-id').value,c=cid?getContact(cid):null;
   const staffId=document.getElementById('pos-staff').value,staff=staffId?getUserById(staffId):null;
-  const sqConnected=db.settings&&db.settings.square&&db.settings.square.accessToken;
+  const sqConnected=sqIsConnected();
   const useSquare=state.posPM==='card'&&sqConnected;
   const last4='';
   // Gift card calculations for review
@@ -2851,7 +2861,7 @@ async function saveContact(){
 
 async function linkContactToSquare(contactId){
   const sq=db.settings.square||{};
-  if(!sq.accessToken)return;
+  if(!sqIsConnected())return;
   const c=db.contacts.find(function(x){return x.id===contactId});
   if(!c||c.squareCustomerId)return;
   try{
@@ -3307,7 +3317,7 @@ function initApp(){
   var sbCard=document.getElementById('supabase-card');
   if(sbCard)sbCard.style.display='none';
   var sqLbl=document.getElementById('sq-status-label');
-  if(sqLbl)sqLbl.textContent=db.settings&&db.settings.square&&db.settings.square.accessToken?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
+  if(sqLbl)sqLbl.textContent=sqIsConnected()?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
   // Dashboard auto-refresh every 30 seconds. Guard prevents double-binding if initApp runs twice.
   if(!state._dashTimer){
     state._dashTimer=setInterval(function(){if(state.panel==='dashboard')renderDash();},30000);
@@ -6530,7 +6540,7 @@ function handleSquareHash(){
 function renderSquareCard(){
   try{const _sq=localStorage.getItem(sqStorageKey());if(_sq){const _d=JSON.parse(_sq);if(_d&&_d.accessToken){db.settings.square={...db.settings.square,..._d};}}}catch(e){}
   const sq=db.settings.square||{};
-  const connected=!!(sq.accessToken);
+  const connected=sqIsConnected();
   const cp=document.getElementById('sq-connected-panel');
   const np=document.getElementById('sq-connect-panel');
   if(!cp||!np)return;
@@ -6554,7 +6564,7 @@ function renderSquareCard(){
 // =====================================================
 async function importFromSquare(){
   const sq=db.settings.square||{};
-  if(!sq.accessToken){toast('Square not connected.','error');return}
+  if(!sqIsConnected()){toast('Square not connected.','error');return}
   toast('Syncing cards from Square...','warn');
   try{
     const r=await fetch('/api/square/customers',{
@@ -6798,7 +6808,7 @@ async function chargeCardOnFile(){
   const cards=(contact&&contact.squareCards)||[];
   if(!cards.length){toast('No card on file for this contact.','error');return}
   const sq=db.settings.square||{};
-  if(!sq.accessToken){toast('Square not connected.','error');return}
+  if(!sqIsConnected()){toast('Square not connected.','error');return}
   const total=parseFloat((document.getElementById('pos-total').textContent||'0').replace('$',''))||0;
   if(total<=0){toast('Total must be greater than $0.','error');return}
   const card=cards[state.posCOFIndex||0]||cards[0];
@@ -7643,7 +7653,7 @@ async function txnConfirmVoid(id){
   var t = txnNorm(p);
   if(t.squarePaymentId){
     var sq = db.settings.square || {};
-    if(sq.accessToken){
+    if(sqIsConnected()){
       try{
         var r = await fetch('/api/square/void',{
           method:'POST',
@@ -8475,7 +8485,7 @@ function gcOpenSell(prodId){
     +'<button class="pay-tab" id="gc-pm-cash" onclick="gcSellSetPM(\'cash\')">Cash</button>'
     +'<button class="pay-tab" id="gc-pm-other" onclick="gcSellSetPM(\'other\')">Other</button>'
     +'</div>'
-    +'<div id="gc-pm-card-fields">'+(db.settings&&db.settings.square&&db.settings.square.accessToken?'<div id="gc-sq-card-container" class="sq-card-form" style="min-height:44px"></div><div id="gc-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>':'<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.</div>')+'</div>'
+    +'<div id="gc-pm-card-fields">'+(sqIsConnected()?'<div id="gc-sq-card-container" class="sq-card-form" style="min-height:44px"></div><div id="gc-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>':'<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.</div>')+'</div>'
     +'<div id="gc-pm-cash-fields" class="hidden"><div style="font-size:12px;color:var(--text-muted);padding:4px 0">Cash payment will be recorded.</div></div>'
     +'<div id="gc-pm-other-fields" class="hidden"><input id="gc-sell-ref" type="text" placeholder="Reference # (Venmo, check, etc.)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:13px;outline:none"></div>'
     +'</div>'
@@ -8487,7 +8497,7 @@ function gcOpenSell(prodId){
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" id="gc-sell-btn" onclick="gcProcessSale()">Process & Issue Card</button>',
     'modal-lg');
-  if(db.settings&&db.settings.square&&db.settings.square.accessToken){
+  if(sqIsConnected()){
     setTimeout(gcInitSellCardForm,100);
   }
 }
@@ -8565,7 +8575,7 @@ async function gcProcessSale(){
   var btn=document.getElementById('gc-sell-btn');
 
   // If card + Square connected, tokenize and charge
-  if(pm==='card'&&db.settings&&db.settings.square&&db.settings.square.accessToken){
+  if(pm==='card'&&sqIsConnected()){
     if(!gcSellCard){toast('Card form not ready. Please wait.','error');return;}
     if(btn){btn.disabled=true;btn.textContent='Processing...';}
     var errEl=document.getElementById('gc-sq-card-errors');
@@ -8978,7 +8988,7 @@ function gcSetRemainder(method){
   extra.classList.remove('hidden');
   var remainder=state.posGCRemainder||0;
   if(method==='card'){
-    var sq=db.settings&&db.settings.square&&db.settings.square.accessToken;
+    var sq=sqIsConnected();
     extra.innerHTML='<div style="margin-top:4px;font-size:12px;color:#fbbf24;margin-bottom:7px">Remainder to charge: <strong>'+fmt$(remainder)+'</strong></div>'
       +(sq?'<div id="gc-rem-sq-container" class="sq-card-form" style="min-height:44px"></div><div id="gc-rem-sq-errors" style="color:#f87171;font-size:11px;margin-top:4px"></div>'
         :'<div style="font-size:12px;color:var(--text-muted)">Card remainder will be recorded. Connect Square to charge live.</div>');
@@ -9247,7 +9257,7 @@ async function agencyLoadSubaccounts(){
       var userCount=(data.users||[]).length+1; // +1 for admin
       var isActive=sub.active!==false;
       var plan=sub.plan||'starter';
-      var hasSquare=!!(data.settings&&data.settings.square&&data.settings.square.accessToken);
+      var hasSquare=!!(data.settings&&data.settings.square&&(data.settings.square.connected===true||data.settings.square.accessToken));
       return '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:12px">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between">'
         +'<div>'

@@ -19,7 +19,7 @@ async function clearSubaccountDataMarker(slug) {
   if (!Array.isArray(rows) || !rows.length) return;
   const data = rows[0].data || {};
   data.settings = data.settings || {};
-  data.settings.square = { appId: '', accessToken: '', merchantId: '', locationId: '', sandbox: true };
+  data.settings.square = { appId: '', connected: false, accessToken: '', merchantId: '', locationId: '', sandbox: true };
   await fetch(SUPABASE_URL + '/rest/v1/subaccount_data?subaccount_id=eq.' + encodeURIComponent(subaccountId), {
     method: 'PATCH',
     headers: Object.assign({}, headers, { 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }),

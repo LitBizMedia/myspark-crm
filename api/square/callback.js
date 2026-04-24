@@ -55,7 +55,8 @@ async function markConnectedInSubaccountData(slug, merchantId, sandbox) {
   const data = rows[0].data || {};
   data.settings = data.settings || {};
   data.settings.square = Object.assign({}, data.settings.square || {}, {
-    accessToken: 'stored-in-square-credentials',
+    connected: true,
+    accessToken: '',  // intentionally empty; real token lives only in square_credentials
     merchantId: merchantId || '',
     sandbox: !!sandbox,
     connectedAt: new Date().toISOString()
