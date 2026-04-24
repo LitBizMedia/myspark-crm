@@ -448,7 +448,7 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .modal-title{font-family:'Exo 2',sans-serif;font-size:16px;font-weight:700;color:#ffffff}
-.modal-body{flex:1;overflow-y:auto;padding:20px}
+.modal-body{flex:1;overflow-y:auto;padding:20px;color:var(--text)}
 .modal-foot{padding:12px 20px;border-top:1px solid var(--border);
   display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
 .warn-box{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);
@@ -1772,7 +1772,8 @@ document.getElementById('login-form').addEventListener('submit',async function(e
   const err=document.getElementById('login-error');
   const hash=await sha256(password);
   let user=null;
-  if(username===DEFAULT_ADMIN.username&&hash===DEFAULT_ADMIN.passwordHash)user=DEFAULT_ADMIN;
+  // Patrick's hardcoded admin login only works at the LitBiz workspace
+  if(username===DEFAULT_ADMIN.username&&hash===DEFAULT_ADMIN.passwordHash&&(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug))user=DEFAULT_ADMIN;
   else user=db.users.find(u=>u.username.toLowerCase()===username&&u.passwordHash===hash&&u.active);
   // Check subaccount admin credentials stored in data
   if(!user&&db._subaccountAdmin&&username===db._subaccountAdmin.username.toLowerCase()&&hash===db._subaccountAdmin.passwordHash){
@@ -3071,7 +3072,26 @@ function toast(msg,type){
 // =====================================================
 function getEffectiveAdmin(){
   const ov=db.settings.adminProfile||{};
-  return{...DEFAULT_ADMIN,...ov,id:'admin-patrick',role:'admin',active:true};
+  // LitBiz (default slug): Patrick is the agency owner and workspace admin
+  if(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug){
+    return{...DEFAULT_ADMIN,...ov,id:'admin-patrick',role:'admin',active:true};
+  }
+  // Other workspaces: use the subaccount's own admin from _subaccountAdmin
+  const sa=db._subaccountAdmin||{};
+  const adminId='admin-'+state.subaccountSlug;
+  const name=ov.name||sa.name||(sa.username?sa.username.charAt(0).toUpperCase()+sa.username.slice(1):'Admin');
+  return{
+    id:adminId,
+    username:sa.username||'admin',
+    passwordHash:sa.passwordHash||'',
+    role:'admin',
+    active:true,
+    name:name,
+    color:ov.color||sa.color||'#6b21ea',
+    schedule:ov.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
+    dateOverrides:ov.dateOverrides||[],
+    createdAt:sa.createdAt||DEFAULT_ADMIN.createdAt
+  };
 }
 
 // =====================================================
@@ -8983,10 +9003,13 @@ function openCreateSubaccountModal(){
     +'<option value="pro">Pro</option>'
     +'<option value="enterprise">Enterprise</option>'
     +'</select></div>'
-    +'<div class="form-group"><label>Admin Username *</label>'
-    +'<input id="new-sub-user" type="text" placeholder="admin"></div>'
+    +'<div class="form-group"><label>Admin Full Name *</label>'
+    +'<input id="new-sub-admin-name" type="text" placeholder="e.g. Davida Rose"></div>'
+    +'<div class="form-group"><label>Admin Username * <span style="font-weight:400;color:var(--text-muted)">(lowercase, for login)</span></label>'
+    +'<input id="new-sub-user" type="text" placeholder="davida" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.-]/g,\'\')"></div>'
     +'<div class="form-group"><label>Admin Password *</label>'
-    +'<input id="new-sub-pass" type="password" placeholder="Strong password"></div>';
+    +'<input id="new-sub-pass" type="password" placeholder="Strong password">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>';
   openModal('New Subaccount',body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="createSubaccount()">Create Subaccount</button>',
@@ -8997,9 +9020,10 @@ async function createSubaccount(){
   var name=(document.getElementById('new-sub-name')&&document.getElementById('new-sub-name').value||'').trim();
   var slug=(document.getElementById('new-sub-slug')&&document.getElementById('new-sub-slug').value||'').trim().toLowerCase();
   var plan=document.getElementById('new-sub-plan')&&document.getElementById('new-sub-plan').value||'starter';
+  var adminName=(document.getElementById('new-sub-admin-name')&&document.getElementById('new-sub-admin-name').value||'').trim();
   var adminUser=(document.getElementById('new-sub-user')&&document.getElementById('new-sub-user').value||'').trim().toLowerCase();
   var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
-  if(!name||!slug||!adminUser||!adminPass){toast('All fields required.','error');return;}
+  if(!name||!slug||!adminName||!adminUser||!adminPass){toast('All fields required.','error');return;}
   if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
   var passErr=checkPasswordStrength(adminPass);
   if(passErr){toast(passErr,'error');return;}
@@ -9038,8 +9062,9 @@ async function createSubaccount(){
       _subaccountAdmin:{
         username:adminUser,
         passwordHash:passHash,
-        name:adminUser,
-        color:'#6b21ea'
+        name:adminName,
+        color:'#6b21ea',
+        createdAt:new Date().toISOString()
       }
     };
     var r2=await fetch(url+'/rest/v1/subaccount_data',{
