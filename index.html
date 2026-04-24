@@ -1728,20 +1728,27 @@ function layoutOverlap(events){
 // =====================================================
 // loadData defined below (Supabase-aware version at line ~3100)
 
+function sqStorageKey(){return 'myspark_sq_v1_'+(state.subaccountSlug||DEFAULT_SLUG);}
+
 function applyFallbackCredentials(){
   if(!db.settings.supabaseUrl||!db.settings.supabaseKey){
     db.settings.supabaseUrl=SB_FALLBACK_URL;
     db.settings.supabaseKey=SB_FALLBACK_KEY;
     console.log('Applied Supabase fallback credentials.');
   }
-  const sqStored=localStorage.getItem('myspark_sq_v1');
+  var isLitBiz=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug);
+  var sqStored=localStorage.getItem(sqStorageKey());
   if(!db.settings.square||!db.settings.square.accessToken){
     if(sqStored){
-      try{const sq=JSON.parse(sqStored);db.settings.square={...db.settings.square,...sq};}catch(e){console.warn('Stored Square credentials corrupt, falling back:',e);}
-    } else {
+      try{var sq=JSON.parse(sqStored);db.settings.square={...db.settings.square,...sq};}catch(e){console.warn('Stored Square credentials corrupt, clearing:',e);localStorage.removeItem(sqStorageKey());}
+    } else if(isLitBiz){
+      // Hardcoded Square fallback only applies at the LitBiz workspace
       db.settings.square={appId:'',sandbox:false,merchantId:SQ_FALLBACK_MERCHANT,accessToken:SQ_FALLBACK_TOKEN};
-      localStorage.setItem('myspark_sq_v1',JSON.stringify({accessToken:SQ_FALLBACK_TOKEN,merchantId:SQ_FALLBACK_MERCHANT,sandbox:false}));
-      console.log('Applied Square fallback credentials.');
+      localStorage.setItem(sqStorageKey(),JSON.stringify({accessToken:SQ_FALLBACK_TOKEN,merchantId:SQ_FALLBACK_MERCHANT,sandbox:false}));
+      console.log('Applied Square fallback credentials for LitBiz.');
+    } else {
+      // Other workspaces start with blank Square; they connect their own
+      db.settings.square={appId:'',accessToken:'',locationId:'',sandbox:true};
     }
   }
 }
@@ -2666,7 +2673,7 @@ function saveBH(){const bh=db.settings.businessHours;DKEYS.forEach(dk=>{const s=
 
 function renderUserList(){
   const el=document.getElementById('user-list');if(!el)return;
-  el.innerHTML=allUsers().map(u=>'<div class="user-row"><div class="user-color-dot" style="background:'+(u.color||'#6b21ea')+'"></div><div style="width:28px;height:28px;border-radius:50%;background:'+(u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-family:\'Syne\',sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">'+initials(u.name||u.username)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div><span class="role-badge role-'+u.role+'">'+u.role+'</span>'+(u.id!=='admin-patrick'?'<button class="icon-btn-xs" onclick="openUserSchedModal(\''+u.id+'\')" title="Edit Schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button><button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')+'</div>').join('');
+  el.innerHTML=allUsers().map(u=>'<div class="user-row"><div class="user-color-dot" style="background:'+(u.color||'#6b21ea')+'"></div><div style="width:28px;height:28px;border-radius:50%;background:'+(u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-family:\'Syne\',sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">'+initials(u.name||u.username)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div><span class="role-badge role-'+u.role+'">'+u.role+'</span>'+(!isPrimaryAdmin(u.id)?'<button class="icon-btn-xs" onclick="openUserSchedModal(\''+u.id+'\')" title="Edit Schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button><button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')+'</div>').join('');
 }
 
 function renderTagMgr(){const el=document.getElementById('tag-mgr');if(!el)return;el.innerHTML=db.tags.map(t=>'<div class="tag-manage-item" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'<button class="tag-rm" onclick="delTag(\''+t.id+'\')">×</button></div>').join('')}
@@ -2999,7 +3006,7 @@ function saveUserSched(){
   const uid=state.modal.id;
   const sched=JSON.parse(JSON.stringify(editSched));
   DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
-  if(uid==='admin-patrick'){
+  if(isPrimaryAdmin(uid)){
     // Admin stored in db.settings.adminProfile
     if(!db.settings.adminProfile)db.settings.adminProfile={};
     db.settings.adminProfile.schedule=sched;
@@ -3013,6 +3020,7 @@ function saveUserSched(){
 }
 
 function delUser(id){
+  if(isPrimaryAdmin(id)){toast('The primary workspace admin cannot be removed.','error');return;}
   const u=db.users.find(x=>x.id===id);
   state.modal={type:'del-user',id:id};
   document.getElementById('modal-title').textContent='Remove User';
@@ -3021,7 +3029,7 @@ function delUser(id){
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelUser()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelUser(){const id=state.modal&&state.modal.id;if(!id)return;db.users=db.users.filter(u=>u.id!==id);saveData();closeModal();renderUserList();typeof renderStaffUserList==='function'&&renderStaffUserList();toast('User removed.','success')}
+function confirmDelUser(){const id=state.modal&&state.modal.id;if(!id)return;if(isPrimaryAdmin(id)){toast('The primary workspace admin cannot be removed.','error');closeModal();return;}db.users=db.users.filter(u=>u.id!==id);saveData();closeModal();renderUserList();typeof renderStaffUserList==='function'&&renderStaffUserList();toast('User removed.','success')}
 
 // TAG MODAL
 function openTagModal(){
@@ -3092,6 +3100,15 @@ function getEffectiveAdmin(){
     dateOverrides:ov.dateOverrides||[],
     createdAt:sa.createdAt||DEFAULT_ADMIN.createdAt
   };
+}
+
+// Returns true if the given user id is the primary admin of the current workspace.
+// The primary admin cannot be removed, demoted, or have their schedule deleted.
+function isPrimaryAdmin(id){
+  if(!id)return false;
+  if(id==='admin-patrick')return true;
+  if(state.subaccountSlug&&id==='admin-'+state.subaccountSlug)return true;
+  return false;
 }
 
 // =====================================================
@@ -3242,7 +3259,7 @@ function toggleUserMenu(e){
 function openProfileModal(){
   const m=document.getElementById('user-menu');if(m)m.classList.add('hidden');
   const u=state.user;
-  const isAdmin=u.id==='admin-patrick';
+  const isAdmin=isPrimaryAdmin(u.id);
   const eff=isAdmin?getEffectiveAdmin():getUserById(u.id);
   const curColor=(eff&&eff.color)||USER_COLORS[0];
   state.selUserColor=curColor;
@@ -3262,7 +3279,7 @@ async function saveProfile(){
   const pass=document.getElementById('pf-pass').value;
   const pass2=document.getElementById('pf-pass2').value;
   if(pass&&pass!==pass2){toast('Passwords do not match.','error');return}
-  const u=state.user,isAdmin=u.id==='admin-patrick';
+  const u=state.user,isAdmin=isPrimaryAdmin(u.id);
   if(pass){
     const oldPass=document.getElementById('pf-old-pass')&&document.getElementById('pf-old-pass').value||'';
     if(!oldPass){toast('Enter your current password to change it.','error');return;}
@@ -3304,7 +3321,7 @@ async function saveProfile(){
 // EDIT EXISTING USER
 // =====================================================
 function openEditUserModal(userId){
-  const isAdmin=userId==='admin-patrick';
+  const isAdmin=isPrimaryAdmin(userId);
   const u=isAdmin?getEffectiveAdmin():getUserById(userId);
   if(!u)return;
   editSched=JSON.parse(JSON.stringify(u.schedule||DEF_SCHED));
@@ -3322,7 +3339,7 @@ function openEditUserModal(userId){
 }
 
 async function saveEditUser(){
-  const userId=state.modal.id,isAdmin=userId==='admin-patrick';
+  const userId=state.modal.id,isAdmin=isPrimaryAdmin(userId);
   const name=document.getElementById('eu-name').value.trim();
   const pass=document.getElementById('eu-pass').value;
   const role=!isAdmin&&document.getElementById('eu-role')?document.getElementById('eu-role').value:null;
@@ -3347,7 +3364,7 @@ async function saveEditUser(){
 // =====================================================
 function renderUserList(){
   const el=document.getElementById('user-list');if(!el)return;
-  el.innerHTML=allUsers().map(u=>'<div class="user-row"><div class="user-color-dot" style="background:'+(u.color||'#6b21ea')+'"></div><div style="width:28px;height:28px;border-radius:50%;background:'+(u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-family:\'Syne\',sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">'+initials(u.name||u.username)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div><span class="role-badge role-'+u.role+'">'+u.role+'</span><button class="icon-btn-xs" onclick="openEditUserModal(\''+u.id+'\')" title="Edit User"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+(u.id!=='admin-patrick'?'<button class="icon-btn-xs" onclick="openUserSchedModal(\''+u.id+'\')" title="Edit Schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button><button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')+'</div>').join('');
+  el.innerHTML=allUsers().map(u=>'<div class="user-row"><div class="user-color-dot" style="background:'+(u.color||'#6b21ea')+'"></div><div style="width:28px;height:28px;border-radius:50%;background:'+(u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-family:\'Syne\',sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">'+initials(u.name||u.username)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div><span class="role-badge role-'+u.role+'">'+u.role+'</span><button class="icon-btn-xs" onclick="openEditUserModal(\''+u.id+'\')" title="Edit User"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+(!isPrimaryAdmin(u.id)?'<button class="icon-btn-xs" onclick="openUserSchedModal(\''+u.id+'\')" title="Edit Schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button><button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')+'</div>').join('');
 }
 
 // =====================================================
@@ -5812,7 +5829,7 @@ function renderStaffUserList(){
       +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div>'
       +'<span class="role-badge role-'+u.role+'">'+u.role+'</span>'
       +'<button class="icon-btn-xs" onclick="openEditUserModal(\''+u.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="12" height="12"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
-      +(u.id!=='admin-patrick'?'<button class="icon-btn-xs" onclick="delUser(\''+u.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>':'')
+      +(!isPrimaryAdmin(u.id)?'<button class="icon-btn-xs" onclick="delUser(\''+u.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>':'')
       +'</div>';
   }).join('');
 }
@@ -5994,7 +6011,7 @@ function renderStaffTeam(){
       +(isAdminOrManager()?'<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">'
         +'<button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button>'
         +'<button class="btn btn-ghost btn-sm" onclick="openUserSchedModal(\''+u.id+'\')">Schedule</button>'
-        +(u.id!=='admin-patrick'&&userRole()==='admin'?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')
+        +(!isPrimaryAdmin(u.id)&&userRole()==='admin'?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')
         +'</div>':'')
       +'</div>';
   });
@@ -6369,7 +6386,7 @@ function disconnectSquare(){
 function confirmDisconnectSquare(){
   const prev=db.settings.square||{};
   db.settings.square={appId:prev.appId||'',accessToken:'',merchantId:'',sandbox:true};
-  localStorage.removeItem('myspark_sq_v1');
+  localStorage.removeItem(sqStorageKey());
   saveData();closeModal();renderSquareCard();toast('Square disconnected.','warn');
 }
 
@@ -6386,7 +6403,7 @@ function handleSquareHash(){
       sandbox:p.get('sq_env')!=='production'
     };
     saveData();
-    localStorage.setItem('myspark_sq_v1',JSON.stringify({accessToken:db.settings.square.accessToken,merchantId:db.settings.square.merchantId,sandbox:db.settings.square.sandbox}));
+    localStorage.setItem(sqStorageKey(),JSON.stringify({accessToken:db.settings.square.accessToken,merchantId:db.settings.square.merchantId,sandbox:db.settings.square.sandbox}));
     history.replaceState(null,'',window.location.pathname);
     toast('Square connected successfully.','success');
     if(state.panel==='settings')renderSquareCard();
@@ -6397,7 +6414,7 @@ function handleSquareHash(){
 }
 
 function renderSquareCard(){
-  try{const _sq=localStorage.getItem('myspark_sq_v1');if(_sq){const _d=JSON.parse(_sq);if(_d&&_d.accessToken){db.settings.square={...db.settings.square,..._d};}}}catch(e){}
+  try{const _sq=localStorage.getItem(sqStorageKey());if(_sq){const _d=JSON.parse(_sq);if(_d&&_d.accessToken){db.settings.square={...db.settings.square,..._d};}}}catch(e){}
   const sq=db.settings.square||{};
   const connected=!!(sq.accessToken);
   const cp=document.getElementById('sq-connected-panel');
@@ -9082,18 +9099,45 @@ async function createSubaccount(){
 }
 
 // ── Edit Subaccount Modal ──
-function openEditSubaccountModal(id,name,slug,plan){
-  var body='<div class="form-group"><label>Name</label>'
+async function openEditSubaccountModal(id,name,slug,plan){
+  // Fetch the subaccount's data blob to read current admin info
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  var adminName='',adminUser='';
+  try{
+    var r=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+encodeURIComponent(id)+'&select=data',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    if(r.ok){
+      var rows=await r.json();
+      if(rows&&rows.length&&rows[0].data&&rows[0].data._subaccountAdmin){
+        adminName=rows[0].data._subaccountAdmin.name||'';
+        adminUser=rows[0].data._subaccountAdmin.username||'';
+      }
+    }
+  }catch(e){console.warn('Could not load admin info:',e);}
+  var isLitBiz=slug===DEFAULT_SLUG;
+  var adminSection=isLitBiz
+    ?'<div style="font-size:12px;color:var(--text-muted);padding:10px 12px;background:var(--bg-card);border-radius:var(--radius);margin-bottom:12px">The LitBiz workspace admin is managed separately through Patrick\'s profile.</div>'
+    :'<div class="form-group"><label>Admin Full Name</label>'
+      +'<input id="edit-sub-admin-name" type="text" value="'+esc(adminName)+'" placeholder="e.g. Davida Rose"></div>'
+      +'<div class="form-group"><label>Admin Username <span style="font-weight:400;color:var(--text-muted)">(lowercase, for login)</span></label>'
+      +'<input id="edit-sub-admin-user" type="text" value="'+esc(adminUser)+'" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.-]/g,\'\')">'
+      +'<div style="font-size:11px;color:#fbbf24;margin-top:4px">Changing the username means the admin must use the new username on their next login. Existing sessions stay valid.</div></div>';
+  var body='<div class="form-group"><label>Subaccount Name</label>'
     +'<input id="edit-sub-name" type="text" value="'+esc(name)+'"></div>'
     +'<div class="form-group"><label>Plan</label>'
     +'<select id="edit-sub-plan" class="filter-sel" style="width:100%;height:38px">'
     +['starter','pro','enterprise'].map(function(p){return'<option value="'+p+'"'+(p===plan?' selected':'')+'>'+p[0].toUpperCase()+p.slice(1)+'</option>';}).join('')
     +'</select></div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-top:4px">URL slug cannot be changed after creation.</div>';
-  state.modal={type:'edit-sub',id:id};
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">URL slug cannot be changed after creation.</div>'
+    +'<div class="divider" style="margin:10px 0"></div>'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Workspace Admin</div>'
+    +adminSection;
+  state.modal={type:'edit-sub',id:id,extra:{slug:slug,origAdminUser:adminUser}};
   openModal('Edit: '+esc(name),body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveEditSubaccount(\''+id+'\')">Save</button>');
+    +'<button class="btn btn-primary" onclick="saveEditSubaccount(\''+id+'\')">Save Changes</button>',
+    'modal-lg');
 }
 
 async function saveEditSubaccount(id){
@@ -9101,13 +9145,54 @@ async function saveEditSubaccount(id){
   var plan=document.getElementById('edit-sub-plan')&&document.getElementById('edit-sub-plan').value||'starter';
   if(!name){toast('Name required.','error');return;}
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  var slug=state.modal&&state.modal.extra&&state.modal.extra.slug||'';
+  var origAdminUser=state.modal&&state.modal.extra&&state.modal.extra.origAdminUser||'';
+  var isLitBiz=slug===DEFAULT_SLUG;
+  var adminNameEl=document.getElementById('edit-sub-admin-name');
+  var adminUserEl=document.getElementById('edit-sub-admin-user');
+  var newAdminName=adminNameEl?adminNameEl.value.trim():'';
+  var newAdminUser=adminUserEl?adminUserEl.value.trim().toLowerCase():'';
+  if(!isLitBiz){
+    if(!newAdminName){toast('Admin full name required.','error');return;}
+    if(!newAdminUser){toast('Admin username required.','error');return;}
+  }
   try{
-    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
+    // Patch the subaccounts table (name + plan)
+    var r1=await fetch(url+'/rest/v1/subaccounts?id=eq.'+encodeURIComponent(id),{
       method:'PATCH',
       headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
       body:JSON.stringify({name:name,plan:plan})
     });
-    closeModal();toast('Subaccount updated.','success');agencyLoadSubaccounts();
+    if(!r1.ok){var e1=await r1.text();toast('Could not update subaccount: '+e1,'error');return;}
+    // Patch the _subaccountAdmin inside subaccount_data (non-LitBiz only)
+    if(!isLitBiz){
+      var rGet=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+encodeURIComponent(id)+'&select=data',{
+        headers:{'apikey':key,'Authorization':'Bearer '+key}
+      });
+      if(rGet.ok){
+        var rows=await rGet.json();
+        if(rows&&rows.length&&rows[0].data){
+          var data=rows[0].data;
+          data._subaccountAdmin=data._subaccountAdmin||{};
+          data._subaccountAdmin.name=newAdminName;
+          data._subaccountAdmin.username=newAdminUser;
+          // Also update business name in settings so it matches
+          if(data.settings)data.settings.businessName=name;
+          var r2=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+encodeURIComponent(id),{
+            method:'PATCH',
+            headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+            body:JSON.stringify({data:data,updated_at:new Date().toISOString()})
+          });
+          if(!r2.ok){var e2=await r2.text();toast('Subaccount name updated, but admin update failed: '+e2,'warn');}
+        }
+      }
+    }
+    closeModal();
+    var msg=(!isLitBiz&&origAdminUser&&origAdminUser!==newAdminUser)
+      ?'Subaccount updated. Admin must now log in with "'+newAdminUser+'".'
+      :'Subaccount updated.';
+    toast(msg,'success');
+    agencyLoadSubaccounts();
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
