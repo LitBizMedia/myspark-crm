@@ -2584,16 +2584,21 @@ async function initPosSquareCardForm(){
 }
 
 async function processCharge(){
+  console.log('[GC-REM] processCharge START. posPM:',state.posPM,'posGC:',!!state.posGC,'posGCRemainderMethod:',state.posGCRemainderMethod);
   // ── Gift Card payment path ──
   var gc=state.posGC;
   if(state.posPM==='gc'&&gc){
+    console.log('[GC-REM] entered GC branch');
     var gObj=(db.giftCards||[]).find(function(x){return x.id===gc.id;});
     if(!gObj){toast('Gift card not found.','error');return;}
     var totals=calcTotals();
     var gcTotal=totals.total;
     var gcApplied=Math.min(gObj.balance,gcTotal);
     var remainder=Math.max(0,gcTotal-gcApplied);
-    if(remainder>0&&!state.posGCRemainderMethod){toast('Choose a payment method for the remaining '+fmt$(remainder)+'.','error');return;}
+    if(remainder>0&&!state.posGCRemainderMethod){console.log('[GC-REM] EXIT: no remainder method chosen');toast('Choose a payment method for the remaining '+fmt$(remainder)+'.','error');return;}
+    // Capture remainder method BEFORE the state reset below, otherwise the Square charge branch below reads null.
+    var gcRemMethod=state.posGCRemainderMethod;
+    console.log('[GC-REM] captured gcRemMethod:',gcRemMethod,'remainder:',remainder);
     gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
     if(gObj.balance<=0)gObj.status='redeemed';
     else if(gcApplied>0)gObj.status='partial';
@@ -2601,30 +2606,38 @@ async function processCharge(){
     var gcCid=document.getElementById('pos-c-id')&&document.getElementById('pos-c-id').value||'';
     var gcStaffId=document.getElementById('pos-staff')&&document.getElementById('pos-staff').value||'';
     var gcTipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;
-    gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at POS'+(remainder>0?' + '+fmt$(remainder)+' '+state.posGCRemainderMethod:''),date:now_(),contactId:gcCid||null});
-    var gcRemRef=state.posGCRemainderMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
+    gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at POS'+(remainder>0?' + '+fmt$(remainder)+' '+gcRemMethod:''),date:now_(),contactId:gcCid||null});
+    var gcRemRef=gcRemMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
     var gcNotes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
     var gcPayId=uid();
-    db.payments.push({id:gcPayId,contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:state.posGCRemainderMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()});
+    db.payments.push({id:gcPayId,contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:gcRemMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()});
     saveData();
-    state.posItems=[];state.posCoupon=null;state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
-    renderPosItems();calcTotals();posClearGiftCard();
+    // Clear cart + coupon + contact. DO NOT yet call posClearGiftCard() — that nulls gcRemCard before we tokenize.
+    state.posItems=[];state.posCoupon=null;
+    renderPosItems();calcTotals();
     document.getElementById('pos-c-id').value='';document.getElementById('pos-c-inp').value='';
     closeModal();
     toast('Payment of '+fmt$(gcTotal)+' recorded. Gift card: '+fmt$(gcApplied)+(remainder>0?', remainder: '+fmt$(remainder):''),'success');
-    if(remainder>0&&state.posGCRemainderMethod==='card'){
+    // Helper: called at every exit of the remainder flow to wipe stale gift card state.
+    var finishGcFlow=function(){
+      state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
+      posClearGiftCard();
+    };
+    if(remainder>0&&gcRemMethod==='card'){
       var gcSq=db.settings.square||{};
       console.log('[GC-REM] remainder path triggered. remainder:',remainder,'accessToken:',!!gcSq.accessToken,'gcRemCard:',!!gcRemCard);
       if(!gcSq.accessToken){
         toast('Square not connected. Card remainder not charged.','error');
         var prec=db.payments.find(function(x){return x.id===gcPayId;});
         if(prec){prec.remainderStatus='failed';prec.remainderError='Square not connected';saveData();}
+        finishGcFlow();
         return;
       }
       if(!gcRemCard){
         toast('Card form not ready. Remainder not charged. Click the Card button again and re-enter card info.','error');
         var prec2=db.payments.find(function(x){return x.id===gcPayId;});
         if(prec2){prec2.remainderStatus='failed';prec2.remainderError='Card form not initialized';saveData();}
+        finishGcFlow();
         return;
       }
       if(gcSq.accessToken&&gcRemCard){
@@ -2632,11 +2645,11 @@ async function processCharge(){
         gcRemCard.tokenize().then(function(res){
           console.log('[GC-REM] tokenize result:',res.status,res);
           if(res.status!=='OK'){
-            // Square tokenization failed. Mark transaction with payment issue.
             var prec=db.payments.find(function(x){return x.id===gcPayId;});
             var errDetails=res.errors?res.errors.map(function(e){return e.message||e.detail||e.code;}).join(', '):'Unknown tokenize error';
             if(prec){prec.remainderStatus='failed';prec.remainderError='Tokenize: '+errDetails;saveData();}
             toast('Remainder card error: '+errDetails+'. Transaction flagged.','error');
+            finishGcFlow();
             return;
           }
           console.log('[GC-REM] firing /api/square/charge for',remainder);
@@ -2644,13 +2657,11 @@ async function processCharge(){
         }).then(function(r){if(r)return r.json();}).then(function(d){
           if(!d){console.log('[GC-REM] no response received');return;}
           console.log('[GC-REM] charge response:',d);
-          gcRemCard=null;
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
           if(d.error){
             if(prec){prec.remainderStatus='failed';prec.remainderError=d.error;saveData();}
             toast('Remainder charge failed: '+d.error+'. Transaction flagged.','error');
           }else{
-            // Capture Square payment ID so refunds can reach the card portion later.
             if(prec&&d.payment&&d.payment.id){
               prec.squarePaymentId=d.payment.id;
               prec.remainderStatus='completed';
@@ -2658,13 +2669,18 @@ async function processCharge(){
             }
             toast('Remainder of '+fmt$(remainder)+' charged.','success');
           }
+          finishGcFlow();
         }).catch(function(e){
           console.error('[GC-REM] catch:',e);
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
           if(prec){prec.remainderStatus='failed';prec.remainderError=e.message;saveData();}
           toast('Square error: '+e.message+'. Transaction flagged.','error');
+          finishGcFlow();
         });
       }
+    } else {
+      // Cash, other, or full-gift-card-coverage path. No async work, clean up now.
+      finishGcFlow();
     }
     return;
   }
