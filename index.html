@@ -1547,7 +1547,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 // =====================================================
 // CONSTANTS
 // =====================================================
-let SK='myspark_crm_v2';const SSK='myspark_session_v1';
+let SK='myspark_crm_v2';let SSK='myspark_session_v1';
 // Fallback Supabase credentials - always available even if localStorage is wiped
 const SB_FALLBACK_URL='https://jytnzqaatkdtcflysadw.supabase.co';
 const SB_FALLBACK_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dG56cWFhdGtkdGNmbHlzYWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDE5NDUsImV4cCI6MjA5MjM3Nzk0NX0.znP5Tx2qU89BCuRBJZJlbmR-abde5J0NEzL0BXVi80g';
@@ -2604,7 +2604,8 @@ async function processCharge(){
     gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at POS'+(remainder>0?' + '+fmt$(remainder)+' '+state.posGCRemainderMethod:''),date:now_(),contactId:gcCid||null});
     var gcRemRef=state.posGCRemainderMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
     var gcNotes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
-    db.payments.push({id:uid(),contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:state.posGCRemainderMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()});
+    var gcPayId=uid();
+    db.payments.push({id:gcPayId,contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:state.posGCRemainderMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()});
     saveData();
     state.posItems=[];state.posCoupon=null;state.posGC=null;state.posGCRemainder=0;state.posGCRemainderMethod=null;
     renderPosItems();calcTotals();posClearGiftCard();
@@ -2615,13 +2616,34 @@ async function processCharge(){
       var gcSq=db.settings.square||{};
       if(gcSq.accessToken&&gcRemCard){
         gcRemCard.tokenize().then(function(res){
-          if(res.status!=='OK'){toast('Remainder card error.','error');return;}
+          if(res.status!=='OK'){
+            // Square tokenization failed. Mark transaction with payment issue.
+            var prec=db.payments.find(function(x){return x.id===gcPayId;});
+            if(prec){prec.remainderStatus='failed';prec.remainderError='Card tokenization failed';saveData();}
+            toast('Remainder card error. Transaction flagged. Please retry remainder payment.','error');
+            return;
+          }
           return fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
         }).then(function(r){if(r)return r.json();}).then(function(d){
           if(!d)return;gcRemCard=null;
-          if(d.error)toast('Remainder charge failed: '+d.error,'error');
-          else toast('Remainder of '+fmt$(remainder)+' charged.','success');
-        }).catch(function(e){toast('Square error: '+e.message,'error');});
+          var prec=db.payments.find(function(x){return x.id===gcPayId;});
+          if(d.error){
+            if(prec){prec.remainderStatus='failed';prec.remainderError=d.error;saveData();}
+            toast('Remainder charge failed: '+d.error+'. Transaction flagged.','error');
+          }else{
+            // Capture Square payment ID so refunds can reach the card portion later.
+            if(prec&&d.payment&&d.payment.id){
+              prec.squarePaymentId=d.payment.id;
+              prec.remainderStatus='completed';
+              saveData();
+            }
+            toast('Remainder of '+fmt$(remainder)+' charged.','success');
+          }
+        }).catch(function(e){
+          var prec=db.payments.find(function(x){return x.id===gcPayId;});
+          if(prec){prec.remainderStatus='failed';prec.remainderError=e.message;saveData();}
+          toast('Square error: '+e.message+'. Transaction flagged.','error');
+        });
       }
     }
     return;
@@ -5778,6 +5800,7 @@ document.addEventListener('DOMContentLoaded',function(){
   state.agencyMode=pathSlug===AGENCY_SLUG;
   // Scope localStorage key per subaccount
   SK='myspark_crm_v2_'+(state.agencyMode?'agency':pathSlug);
+  SSK='myspark_session_v1_'+(state.agencyMode?'agency':pathSlug);
   loadData();
   applyFallbackCredentials();
   if(fbCheckEmbedMode())return;
@@ -7625,52 +7648,154 @@ function txnRefund(id){
   if(!p) return;
   var t = txnNorm(p);
   var hasSquare = !!(t.squarePaymentId);
-  var body = '<div class="form-group"><label>Refund Amount ($)</label>'
-    +'<input id="refund-amt" type="number" min="0.01" max="'+t.total.toFixed(2)+'" step="0.01" value="'+t.total.toFixed(2)+'">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Maximum: '+fmt$(t.total)+'</div></div>'
-    +'<div class="form-group"><label>Reason</label><input id="refund-reason" type="text" placeholder="Customer request, billing error..."></div>'
-    +(hasSquare?'<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--purple-light)">Square payment detected. Refund will be processed through Square automatically.</div>'
-    :'<div class="warn-box" style="margin-bottom:0">No Square payment ID found. Only the local record will be updated.</div>');
-  state.modal = {type:'txn-refund', id: id};
+  var gcAmt = t.giftCardApplied || 0;
+  var hasGC = gcAmt > 0;
+  var remainderAmt = Math.max(0, t.total - gcAmt);
+  var remainderMethod = t.remainderMethod || '';
+  var body;
+  if(hasGC){
+    // Split or gift-card-only payment.
+    var gcCodeDisplay = t.giftCardCode ? ' ('+esc(t.giftCardCode)+')' : '';
+    body = '<div style="background:var(--bg-card);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-muted)">'
+      +'<div style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text);margin-bottom:6px;font-size:10px">Original payment</div>'
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Gift Card'+gcCodeDisplay+'</span><span>'+fmt$(gcAmt)+'</span></div>'
+      +(remainderAmt>0?'<div style="display:flex;justify-content:space-between;padding:2px 0"><span>'+esc(remainderMethod||'Other')+'</span><span>'+fmt$(remainderAmt)+'</span></div>':'')
+      +'</div>'
+      +'<div class="form-group"><label>Refund to Gift Card'+gcCodeDisplay+'</label>'
+      +'<input id="refund-gc-amt" type="number" min="0" max="'+gcAmt.toFixed(2)+'" step="0.01" value="'+gcAmt.toFixed(2)+'" oninput="refundUpdateTotal()">'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Max: '+fmt$(gcAmt)+'. Balance will be restored to the gift card.</div></div>'
+      +(remainderAmt>0
+        ?'<div class="form-group"><label>Refund to '+esc(remainderMethod||'Other')+'</label>'
+          +'<input id="refund-rem-amt" type="number" min="0" max="'+remainderAmt.toFixed(2)+'" step="0.01" value="'+remainderAmt.toFixed(2)+'" oninput="refundUpdateTotal()">'
+          +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Max: '+fmt$(remainderAmt)+'.'
+          +(remainderMethod==='card'&&hasSquare?' Will be refunded through Square.':(remainderMethod==='card'&&!hasSquare?' Warning: no Square payment ID on file, manual refund required.':' No automated refund; update the '+(remainderMethod||'external')+' side yourself.'))
+          +'</div></div>'
+        :'')
+      +'<div class="form-group"><label>Reason</label><input id="refund-reason" type="text" placeholder="Customer request, billing error..."></div>'
+      +'<div id="refund-total-display" style="background:var(--bg-card);border-radius:var(--radius);padding:10px 14px;display:flex;justify-content:space-between;font-size:14px;font-weight:700"><span>Total refund</span><span style="color:var(--orange)" id="refund-total-val">'+fmt$(t.total)+'</span></div>';
+  } else {
+    // Card or cash only. Original UI.
+    body = '<div class="form-group"><label>Refund Amount ($)</label>'
+      +'<input id="refund-amt" type="number" min="0.01" max="'+t.total.toFixed(2)+'" step="0.01" value="'+t.total.toFixed(2)+'">'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Maximum: '+fmt$(t.total)+'</div></div>'
+      +'<div class="form-group"><label>Reason</label><input id="refund-reason" type="text" placeholder="Customer request, billing error..."></div>'
+      +(hasSquare?'<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--purple-light)">Square payment detected. Refund will be processed through Square automatically.</div>'
+      :'<div class="warn-box" style="margin-bottom:0">No Square payment ID found. Only the local record will be updated.</div>');
+  }
+  state.modal = {type:'txn-refund', id: id, extra:{hasGC:hasGC,gcAmt:gcAmt,remainderAmt:remainderAmt,hasSquare:hasSquare}};
   openModal('Refund Transaction', body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-purple" onclick="txnConfirmRefund(\''+id+'\')">Process Refund</button>');
+    +'<button class="btn btn-purple" onclick="txnConfirmRefund(\''+id+'\')">Process Refund</button>',
+    'modal-lg');
+}
+
+function refundUpdateTotal(){
+  var gcEl=document.getElementById('refund-gc-amt');
+  var remEl=document.getElementById('refund-rem-amt');
+  var totEl=document.getElementById('refund-total-val');
+  if(!totEl)return;
+  var gc=parseFloat(gcEl&&gcEl.value)||0;
+  var rem=parseFloat(remEl&&remEl.value)||0;
+  totEl.textContent=fmt$(gc+rem);
 }
 
 async function txnConfirmRefund(id){
-  var amtEl = document.getElementById('refund-amt');
-  var amt = parseFloat(amtEl && amtEl.value) || 0;
   var reason = (document.getElementById('refund-reason') && document.getElementById('refund-reason').value) || '';
-  if(amt <= 0){ toast('Enter a valid amount.','error'); return; }
   var p = (db.payments||[]).find(function(x){ return x.id===id; });
   if(!p){ closeModal(); return; }
   var t = txnNorm(p);
-  if(amt > t.total){ toast('Refund cannot exceed original total.','error'); return; }
-  if(t.squarePaymentId){
-    var sq = db.settings.square || {};
-    if(sq.accessToken){
-      try{
-        var r = await fetch('/api/square/refund',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({slug: state.subaccountSlug, paymentId: t.squarePaymentId, amountCents: Math.round(amt*100), reason: reason})
-        });
-        var d = await r.json();
-        if(d.error) toast('Square refund error: '+d.error+'. Local record updated.','warn');
-        else toast('Refund of '+fmt$(amt)+' processed in Square.','success');
-      }catch(e){ toast('Square unreachable. Local record updated.','warn'); }
+  var extra = state.modal && state.modal.extra || {};
+  var gcRefund = 0;
+  var remRefund = 0;
+  var totalRefund = 0;
+  if(extra.hasGC){
+    var gcEl = document.getElementById('refund-gc-amt');
+    var remEl = document.getElementById('refund-rem-amt');
+    gcRefund = parseFloat(gcEl && gcEl.value) || 0;
+    remRefund = parseFloat(remEl && remEl.value) || 0;
+    if(gcRefund < 0 || remRefund < 0){ toast('Refund amounts cannot be negative.','error'); return; }
+    if(gcRefund > extra.gcAmt + 0.001){ toast('Gift card refund exceeds original amount.','error'); return; }
+    if(remRefund > extra.remainderAmt + 0.001){ toast('Remainder refund exceeds original amount.','error'); return; }
+    totalRefund = gcRefund + remRefund;
+    if(totalRefund <= 0){ toast('Enter an amount to refund.','error'); return; }
+  } else {
+    var amtEl = document.getElementById('refund-amt');
+    totalRefund = parseFloat(amtEl && amtEl.value) || 0;
+    remRefund = totalRefund;
+    if(totalRefund <= 0){ toast('Enter a valid amount.','error'); return; }
+    if(totalRefund > t.total + 0.001){ toast('Refund cannot exceed original total.','error'); return; }
+  }
+  // --- Step 1: Gift card restoration (if applicable) ---
+  var gcRestored = false;
+  if(gcRefund > 0 && t.giftCardCode){
+    var gObj = (db.giftCards||[]).find(function(x){ return x.code === t.giftCardCode; });
+    if(!gObj){
+      toast('Gift card '+t.giftCardCode+' not found. Refund cancelled.','error');
+      return;
+    }
+    gObj.balance = (gObj.balance||0) + gcRefund;
+    gObj.status = 'active';
+    if(!gObj.log) gObj.log = [];
+    gObj.log.push({
+      type:'refund',
+      amount: gcRefund,
+      note: 'Refunded from transaction'+(reason?' - '+reason:''),
+      date: now_(),
+      contactId: t.contactId || null,
+      paymentId: id
+    });
+    gcRestored = true;
+  }
+  // --- Step 2: Square refund (if card portion has a Square payment ID) ---
+  var squareRefundSucceeded = false;
+  var squareRefundAttempted = false;
+  if(remRefund > 0 && t.squarePaymentId){
+    squareRefundAttempted = true;
+    try{
+      var r = await fetch('/api/square/refund',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({slug: state.subaccountSlug, paymentId: t.squarePaymentId, amountCents: Math.round(remRefund*100), reason: reason})
+      });
+      var d = await r.json();
+      if(d.error){
+        toast('Square refund error: '+d.error+'.'+(gcRestored?' Gift card was restored.':' No refund issued.'),'warn');
+      } else {
+        squareRefundSucceeded = true;
+      }
+    }catch(e){
+      toast('Square unreachable.'+(gcRestored?' Gift card was restored, card refund pending.':''),'warn');
     }
   }
-  var isFull = Math.abs(amt - t.total) < 0.01;
+  // --- Step 3: Update local transaction record ---
+  var prevRefunded = p.refundedAmount || 0;
+  var newRefundedTotal = prevRefunded + totalRefund;
+  var isFull = Math.abs(newRefundedTotal - t.total) < 0.01;
   p.status = isFull ? 'refunded' : 'partial_refund';
-  p.refundedAmount = amt;
+  p.refundedAmount = newRefundedTotal;
   p.refundReason = reason;
   p.refundedAt = now_();
+  if(!p.refundLog) p.refundLog = [];
+  p.refundLog.push({
+    date: now_(),
+    total: totalRefund,
+    giftCardPortion: gcRefund,
+    cardPortion: remRefund,
+    reason: reason,
+    squareRefunded: squareRefundSucceeded,
+    gcRestored: gcRestored
+  });
   saveData();
   closeModal();
   txnRenderSummary();
   txnRenderTable();
-  if(!t.squarePaymentId) toast('Refund of '+fmt$(amt)+' recorded.','success');
+  // --- Success message ---
+  var parts = [];
+  if(gcRestored) parts.push(fmt$(gcRefund)+' to gift card');
+  if(squareRefundSucceeded) parts.push(fmt$(remRefund)+' refunded via Square');
+  else if(remRefund > 0 && !squareRefundAttempted) parts.push(fmt$(remRefund)+' marked refunded (external '+t.remainderMethod+')');
+  if(parts.length) toast('Refund processed: '+parts.join(', '),'success');
+  else if(!squareRefundAttempted) toast('Refund of '+fmt$(totalRefund)+' recorded.','success');
 }
 
 function txnExportCSV(){
