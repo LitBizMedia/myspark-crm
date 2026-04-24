@@ -2505,7 +2505,57 @@ async function reviewCharge(){
   const sqConnected=db.settings&&db.settings.square&&db.settings.square.accessToken;
   const useSquare=state.posPM==='card'&&sqConnected;
   const last4='';
-  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'+(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600;color:var(--text)">'+esc(c.name)+'</div></div>':'')+'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'+state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;color:var(--text)"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')+'</div><div style="border-top:1px solid var(--border);padding-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div><div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div></div><div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+state.posPM+(useSquare?' · Card on form':''  )+'</div></div><p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
+  // Gift card calculations for review
+  const gc=state.posGC;
+  const isGC=state.posPM==='gc'&&gc;
+  const gcApplied=isGC?Math.min(gc.balance||0,total):0;
+  const gcRemainder=isGC?Math.max(0,total-gcApplied):0;
+  const remMethod=isGC?(state.posGCRemainderMethod||''):'';
+  // Build payment breakdown rows
+  var breakdown='';
+  breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div>';
+  if(couponDiscount>0){
+    breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:2px 0"><span>Coupon'+(couponCode?' ('+esc(couponCode)+')':'')+'</span><span>-'+fmt$(couponDiscount)+'</span></div>';
+  }
+  if(discount>0){
+    breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:2px 0"><span>Discount'+(discountType==='pct'&&discountVal?' ('+discountVal+'%)':'')+'</span><span>-'+fmt$(discount)+'</span></div>';
+  }
+  if(tip>0){
+    breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div>';
+  }
+  if(creditCalc>0){
+    breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--purple-light);padding:2px 0"><span>Account credit applied</span><span>-'+fmt$(creditCalc)+'</span></div>';
+  }
+  breakdown+='<div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:7px 0;border-top:1px solid var(--border);margin-top:5px"><span>Total</span><span style="color:var(--orange)">'+fmt$(total)+'</span></div>';
+  // Gift card split (if applicable)
+  if(isGC){
+    breakdown+='<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">';
+    breakdown+='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Payment breakdown</div>';
+    breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--purple-light);padding:2px 0"><span>Gift Card'+(gc.code?' ('+esc(gc.code)+')':'')+'</span><span>-'+fmt$(gcApplied)+'</span></div>';
+    if(gcRemainder>0){
+      var remLbl=remMethod==='card'?'Card':(remMethod==='cash'?'Cash':(remMethod==='other'?'Other':'Remaining'));
+      breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text);font-weight:600;padding:2px 0"><span>'+remLbl+' payment</span><span>'+fmt$(gcRemainder)+'</span></div>';
+    } else {
+      breakdown+='<div style="font-size:12px;color:#34d399;margin-top:4px">Gift card covers the full amount.</div>';
+    }
+    breakdown+='</div>';
+  }
+  // Method label for footer
+  var methodTxt;
+  if(isGC){
+    methodTxt='Gift Card'+(gcRemainder>0?' + '+(remMethod||'remainder'):'');
+  } else {
+    methodTxt=state.posPM+(useSquare?' (Square)':'');
+  }
+  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
+    +(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600;color:var(--text)">'+esc(c.name)+'</div></div>':'')
+    +'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'
+    +state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;color:var(--text)"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')
+    +'</div>'
+    +'<div style="border-top:1px solid var(--border);padding-top:8px">'+breakdown+'</div>'
+    +'<div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+esc(methodTxt)+'</div>'
+    +'</div>'
+    +'<p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
   state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="processCharge()">Process Payment</button>');
@@ -7191,6 +7241,10 @@ function txnNorm(p){
     paymentMethod: p.paymentMethod || p.method || 'card',
     cardLast4: p.cardLast4 || '',
     cardBrand: p.cardBrand || '',
+    giftCardApplied: p.giftCardApplied || 0,
+    giftCardCode: p.giftCardCode || '',
+    remainderMethod: p.remainderMethod || '',
+    remainderRef: p.remainderRef || '',
     status: p.status || 'completed',
     notes: p.notes || '',
     squarePaymentId: p.squarePaymentId || ''
@@ -7389,7 +7443,7 @@ function txnRenderTable(){
     var firstItem = t.items.length ? esc(t.items[0].desc || t.items[0].name || '') : 'Payment';
     var moreItems = t.items.length > 1 ? ' <span style="color:var(--main-text-muted);font-size:11px">+' + (t.items.length - 1) + ' more</span>' : '';
     var itemLabel = firstItem + moreItems;
-    var methodLabel = txnMethodLabel(t.paymentMethod, t.cardLast4, t.cardBrand);
+    var methodLabel = txnMethodLabel(t);
     var statusBadge = txnStatusBadge(t.status);
     var dt = new Date(t.createdAt);
     var dtLabel = dt.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + '<br><span style="font-size:10px;color:var(--main-text-muted)">' + dt.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) + '</span>';
@@ -7414,10 +7468,38 @@ function txnRenderTable(){
 
 function txnPg(p){ state.txnPage = p; txnRenderTable(); }
 
-function txnMethodLabel(method, last4, brand){
+function txnMethodLabel(t){
+  // Accepts a full normalized transaction. Preserves backward compatibility: if called with just a method string, wraps it.
+  if(typeof t === 'string') t = {paymentMethod:t, cardLast4:arguments[1]||'', cardBrand:arguments[2]||''};
+  var method = t.paymentMethod || 'card';
+  var last4 = t.cardLast4 || '';
+  var brand = t.cardBrand || '';
+  var gcAmt = t.giftCardApplied || 0;
+  var remMethod = t.remainderMethod || '';
+  var total = t.total || 0;
   var cardIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
   var cashIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><rect x="1" y="6" width="22" height="13" rx="2"/><circle cx="12" cy="12" r="3"/></svg>';
   var otherIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+  var gcIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:4px"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4a2 2 0 0 0-4 0"/><path d="M12 8V4a2 2 0 0 1 4 0"/></svg>';
+  // Split payment: gift card covered part, another method covered the rest.
+  if(method === 'gift_card' && gcAmt > 0 && remMethod && remMethod !== '' && total > gcAmt){
+    var remainder = Math.max(0, total - gcAmt);
+    var remLabel;
+    if(remMethod === 'card') remLabel = 'Card' + (last4 ? ' \u00b7\u00b7\u00b7\u00b7 '+esc(last4) : '');
+    else if(remMethod === 'cash') remLabel = 'Cash';
+    else remLabel = esc(remMethod.charAt(0).toUpperCase() + remMethod.slice(1));
+    var remIconChoice = remMethod === 'cash' ? cashIcon : (remMethod === 'other' ? otherIcon : cardIcon);
+    return '<span style="display:inline-flex;align-items:center;gap:4px;color:var(--main-text-muted);flex-wrap:wrap">'
+      + '<span style="display:inline-flex;align-items:center">'+gcIcon+'Gift Card ('+fmt$(gcAmt)+')</span>'
+      + '<span style="color:var(--main-text-muted);opacity:.5">+</span>'
+      + '<span style="display:inline-flex;align-items:center">'+remIconChoice+remLabel+' ('+fmt$(remainder)+')</span>'
+      + '</span>';
+  }
+  // Pure gift card (no remainder)
+  if(method === 'gift_card'){
+    return '<span style="display:inline-flex;align-items:center;color:var(--main-text-muted)">'+gcIcon+'Gift Card'+(gcAmt>0?' ('+fmt$(gcAmt)+')':'')+'</span>';
+  }
+  // Standard methods
   var icon = method==='cash' ? cashIcon : (method==='other' ? otherIcon : cardIcon);
   var label = '';
   if(method === 'card_on_file') label = (brand ? esc(brand) : 'Card on File') + (last4 ? ' \u00b7\u00b7\u00b7\u00b7 '+esc(last4) : '');
@@ -7475,7 +7557,7 @@ function txnOpenDetail(id){
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Staff</div>'
     +'<div style="font-size:13px;font-weight:600;color:'+staffColor+'">'+esc(staff?(staff.name||staff.username):'Unassigned')+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Payment Method</div>'
-    +'<div style="font-size:13px;color:var(--text)">'+txnMethodLabel(t.paymentMethod, t.cardLast4, t.cardBrand)+'</div></div>'
+    +'<div style="font-size:13px;color:var(--text)">'+txnMethodLabel(t)+'</div></div>'
     +(hasSquare?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Square Payment ID</div><div style="font-size:11px;font-family:monospace;color:var(--text-muted);word-break:break-all">'+esc(t.squarePaymentId)+'</div></div>':'')
     +'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">'
