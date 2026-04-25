@@ -865,6 +865,23 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-manage-btn.active{background:var(--purple-dim);border-color:var(--purple-border);color:var(--purple-light)}
 .cal-body-outer{display:block} /* unused */
 .cal-appt-count{font-size:10px;font-weight:600;color:var(--orange);margin-top:1px}
+.tpl-list{display:flex;flex-direction:column;gap:8px;margin-bottom:24px;max-width:700px}
+.tpl-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:8px;cursor:pointer;transition:border-color .15s}
+.tpl-row:hover{border-color:#6b21ea}
+.tpl-row.active{border-color:#6b21ea;background:#faf8ff}
+.tpl-row-name{flex:1;font-size:14px;font-weight:600;color:var(--main-text,#1a1030)}
+.tpl-row-sub{font-size:12px;color:var(--main-text-muted,#5a4d7a);margin-top:2px}
+.tpl-editor{max-width:700px}
+.tpl-toolbar{display:flex;gap:4px;padding:6px 8px;background:var(--main-bg,#f2f0f8);border:1px solid var(--main-border,rgba(107,33,234,.12));border-bottom:none;border-radius:6px 6px 0 0;flex-wrap:wrap;align-items:center}
+.tpl-tb-btn{background:none;border:1px solid transparent;border-radius:4px;padding:3px 7px;font-size:12px;cursor:pointer;color:var(--main-text,#1a1030);font-family:inherit;transition:background .15s}
+.tpl-tb-btn:hover{background:#6b21ea22;border-color:#6b21ea;color:#6b21ea}
+.tpl-tb-sep{width:1px;height:18px;background:var(--main-border,rgba(107,33,234,.12));margin:0 4px}
+.tpl-body{min-height:220px;padding:12px;border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:0 0 6px 6px;background:#fff;font-size:14px;line-height:1.6;color:var(--main-text,#1a1030);outline:none;font-family:Arial,sans-serif}
+.tpl-preview{background:#fff;border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:6px;padding:20px;font-size:14px;line-height:1.6;color:#1a1030;margin-top:16px;max-width:700px}
+.tpl-preview-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted,#5a4d7a);margin-bottom:8px}
+.var-picker{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 16px}
+.var-chip{background:#6b21ea15;color:#6b21ea;border:1px solid #6b21ea33;border-radius:4px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:monospace;transition:background .15s}
+.var-chip:hover{background:#6b21ea30}
 .settings-tab-bar{display:flex;gap:2px;margin-bottom:20px;border-bottom:2px solid var(--main-border,rgba(107,33,234,.12))}
 .stab{background:none;border:none;border-bottom:3px solid transparent;padding:10px 18px;color:var(--main-text-muted,#5a4d7a);font-size:13px;font-weight:600;cursor:pointer;margin-bottom:-2px;transition:color .15s,border-color .15s;font-family:inherit;letter-spacing:.01em}
 .stab:hover{color:var(--main-text,#1a1030)}
@@ -1465,7 +1482,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <button class="stab active" id="stab-general" onclick="switchSettingsTab('general')">General</button>
           <button class="stab" id="stab-email" onclick="switchSettingsTab('email')">Email</button>
         </div>
-        <div id="stab-content-email" class="hidden" style="padding-top:4px"><div id="email-domain-container"></div></div>
+        <div id="stab-content-email" class="hidden" style="padding-top:4px"><div id="email-domain-container"></div><div id="email-templates-container" style="margin-top:32px"></div></div>
         <div class="settings-grid" id="stab-content-general">
 
           <div class="s-card">
@@ -3551,6 +3568,242 @@ function renderSettings(){
   }
 }
 
+// EMAIL TEMPLATES
+
+const TPL_TYPES=[
+  {type:'appt-confirmation',name:'Appointment Confirmation',desc:'Sent when a new appointment is created'},
+  {type:'appt-cancellation',name:'Appointment Cancellation',desc:'Sent when an appointment is deleted'},
+  {type:'appt-reminder',name:'Appointment Reminder',desc:'Sent 24 hours before an appointment'},
+  {type:'welcome',name:'Welcome Email',desc:'Sent when a new workspace is created'},
+  {type:'password-reset',name:'Password Reset',desc:'Sent when an admin requests a password reset'}
+];
+
+const TPL_VARS=[
+  '{{contact_name}}','{{contact_email}}','{{contact_phone}}',
+  '{{appointment_date}}','{{appointment_time}}','{{appointment_service}}',
+  '{{staff_name}}','{{business_name}}','{{business_phone}}','{{login_url}}'
+];
+
+const TPL_DEFAULTS={
+  'appt-confirmation':{
+    subject:'Appointment Confirmed: {{appointment_service}} on {{appointment_date}}',
+    body_html:'<p>Hi {{contact_name}},</p><p>Your appointment has been confirmed.</p><p><strong>Service:</strong> {{appointment_service}}<br><strong>Date:</strong> {{appointment_date}}<br><strong>Time:</strong> {{appointment_time}}<br><strong>With:</strong> {{staff_name}}</p><p>Need to reschedule? Reply to this email or give us a call.</p><p>{{business_name}}</p>'
+  },
+  'appt-cancellation':{
+    subject:'Appointment Cancelled: {{appointment_service}} on {{appointment_date}}',
+    body_html:'<p>Hi {{contact_name}},</p><p>Your appointment has been cancelled.</p><p><strong>Service:</strong> {{appointment_service}}<br><strong>Date:</strong> {{appointment_date}}<br><strong>Time:</strong> {{appointment_time}}</p><p>To reschedule, reply to this email or give us a call.</p><p>{{business_name}}</p>'
+  },
+  'appt-reminder':{
+    subject:'Reminder: {{appointment_service}} tomorrow at {{appointment_time}}',
+    body_html:'<p>Hi {{contact_name}},</p><p>This is a reminder about your appointment tomorrow.</p><p><strong>Service:</strong> {{appointment_service}}<br><strong>Date:</strong> {{appointment_date}}<br><strong>Time:</strong> {{appointment_time}}<br><strong>With:</strong> {{staff_name}}</p><p>See you soon.</p><p>{{business_name}}</p>'
+  },
+  'welcome':{
+    subject:'Your MySpark+ workspace is ready',
+    body_html:'<p>Hi {{contact_name}},</p><p>Your workspace is ready. Log in at {{login_url}}.</p><p>If you have any questions, reply to this email.</p><p>MySpark+</p>'
+  },
+  'password-reset':{
+    subject:'Password Reset Request',
+    body_html:'<p>Hi {{contact_name}},</p><p>A password reset was requested for your account.</p><p>If you did not request this, you can ignore this email.</p><p>{{business_name}}</p>'
+  }
+};
+
+const TPL_SAMPLE={
+  '{{contact_name}}':'Jane Smith',
+  '{{contact_email}}':'jane@example.com',
+  '{{contact_phone}}':'(555) 123-4567',
+  '{{appointment_date}}':'May 15, 2026',
+  '{{appointment_time}}':'10:00 AM',
+  '{{appointment_service}}':'Deep Tissue Massage',
+  '{{staff_name}}':'Mara Johnson',
+  '{{business_name}}':'Riverside Spa',
+  '{{business_phone}}':'(555) 987-6543',
+  '{{login_url}}':'https://mysparkplus.app/riverside'
+};
+
+var _tplCache={};
+var _tplActive=null;
+
+async function loadEmailTemplates(){
+  var slug=state.subaccountSlug||'litbiz';
+  var subId='sub-'+slug;
+  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/email_templates?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*';
+  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  try{
+    var res=await fetch(url,{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    if(!res.ok)return;
+    var rows=await res.json();
+    _tplCache={};
+    if(rows&&rows.length)rows.forEach(function(r){_tplCache[r.template_type]=r;});
+  }catch(e){console.error('loadEmailTemplates:',e.message);}
+}
+
+function renderEmailTemplatesSection(){
+  var el=document.getElementById('email-templates-container');
+  if(!el)return;
+  el.innerHTML='<div style="border-top:1px solid var(--main-border);padding-top:28px">'
+    +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">Email Templates</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Customize the emails your contacts receive. Click a template to edit it.</div>'
+    +'<div class="tpl-list">'+TPL_TYPES.map(function(t){
+      var saved=_tplCache[t.type];
+      var isCustom=!!saved&&!saved.is_default;
+      return'<div class="tpl-row'+((_tplActive===t.type)?' active':'')+'" onclick="openTplEditor(''+t.type+'')">'
+        +'<div style="flex:1"><div class="tpl-row-name">'+t.name+(isCustom?'<span style="margin-left:8px;font-size:10px;font-weight:700;background:#6b21ea22;color:#6b21ea;border-radius:3px;padding:1px 6px">Custom</span>':'')+'</div>'
+        +'<div class="tpl-row-sub">'+t.desc+'</div></div>'
+        +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 18 15 12 9 6"/></svg>'
+        +'</div>';
+    }).join('')+'</div>'
+    +'<div id="tpl-editor-area"></div>'
+    +'</div>';
+}
+
+function openTplEditor(type){
+  _tplActive=type;
+  renderEmailTemplatesSection();
+  var saved=_tplCache[type];
+  var def=TPL_DEFAULTS[type]||{subject:'',body_html:''};
+  var subject=saved?saved.subject:def.subject;
+  var bodyHtml=saved?saved.body_html:def.body_html;
+  var tdef=TPL_TYPES.find(function(t){return t.type===type;})||{};
+  var el=document.getElementById('tpl-editor-area');
+  if(!el)return;
+  el.innerHTML='<div class="tpl-editor" style="margin-top:16px">'
+    +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:14px">'+tdef.name+'</div>'
+    +'<div class="form-group" style="margin-bottom:14px">'
+    +'<label style="color:var(--main-text);font-weight:600;font-size:13px">Subject Line</label>'
+    +'<input id="tpl-subject" type="text" value="'+esc(subject)+'" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px" oninput="updateTplPreview()">'
+    +'</div>'
+    +'<label style="color:var(--main-text);font-weight:600;font-size:13px;display:block;margin-bottom:6px">Email Body</label>'
+    +'<div class="tpl-toolbar">'
+    +'<button class="tpl-tb-btn" onclick="tplExec('bold')" title="Bold"><strong>B</strong></button>'
+    +'<button class="tpl-tb-btn" onclick="tplExec('italic')" title="Italic"><em>I</em></button>'
+    +'<button class="tpl-tb-btn" onclick="tplExec('underline')" title="Underline"><u>U</u></button>'
+    +'<div class="tpl-tb-sep"></div>'
+    +'<button class="tpl-tb-btn" onclick="tplInsertLink()" title="Link">Link</button>'
+    +'<div class="tpl-tb-sep"></div>'
+    +'<span style="font-size:11px;color:var(--main-text-muted);padding:0 4px">Insert variable:</span>'
+    +'</div>'
+    +'<div class="var-picker" style="padding:6px 8px;background:var(--main-bg);border:1px solid var(--main-border);border-top:none;border-bottom:none">'+TPL_VARS.map(function(v){return'<span class="var-chip" onclick="tplInsertVar(''+v+'')">'+v+'</span>';}).join('')+'</div>'
+    +'<div id="tpl-body-editor" class="tpl-body" contenteditable="true" oninput="updateTplPreview()" onpaste="tplOnPaste(event)">'+bodyHtml+'</div>'
+    +'<div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">'
+    +'<button class="btn btn-primary" onclick="saveTpl(''+type+'')">Save Template</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="resetTpl(''+type+'')">Reset to Default</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="closeTplEditor()">Cancel</button>'
+    +'</div>'
+    +'<div class="tpl-preview-label" style="margin-top:20px">Preview</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:6px">Subject: <span id="tpl-preview-subject" style="color:var(--main-text);font-weight:600"></span></div>'
+    +'<div class="tpl-preview" id="tpl-preview-body"></div>'
+    +'</div>';
+  updateTplPreview();
+}
+
+function closeTplEditor(){
+  _tplActive=null;
+  renderEmailTemplatesSection();
+}
+
+function tplExec(cmd){
+  var ed=document.getElementById('tpl-body-editor');
+  if(ed)ed.focus();
+  document.execCommand(cmd,false,null);
+  updateTplPreview();
+}
+
+function tplInsertVar(v){
+  var ed=document.getElementById('tpl-body-editor');
+  if(!ed)return;
+  ed.focus();
+  document.execCommand('insertText',false,v);
+  updateTplPreview();
+}
+
+function tplInsertLink(){
+  var url=prompt('Enter URL:');
+  if(!url)return;
+  var ed=document.getElementById('tpl-body-editor');
+  if(ed)ed.focus();
+  document.execCommand('createLink',false,url);
+  updateTplPreview();
+}
+
+function tplOnPaste(e){
+  e.preventDefault();
+  var text=e.clipboardData.getData('text/plain');
+  document.execCommand('insertText',false,text);
+  updateTplPreview();
+}
+
+function applyTplVars(str){
+  var result=str;
+  Object.keys(TPL_SAMPLE).forEach(function(k){
+    result=result.replace(new RegExp(k.replace(/\{/g,'\{').replace(/\}/g,'\}'),'g'),TPL_SAMPLE[k]);
+  });
+  return result;
+}
+
+function updateTplPreview(){
+  var subEl=document.getElementById('tpl-subject');
+  var bodyEl=document.getElementById('tpl-body-editor');
+  var prevSub=document.getElementById('tpl-preview-subject');
+  var prevBody=document.getElementById('tpl-preview-body');
+  if(!subEl||!bodyEl||!prevSub||!prevBody)return;
+  prevSub.textContent=applyTplVars(subEl.value);
+  prevBody.innerHTML=applyTplVars(bodyEl.innerHTML);
+}
+
+async function saveTpl(type){
+  var subEl=document.getElementById('tpl-subject');
+  var bodyEl=document.getElementById('tpl-body-editor');
+  if(!subEl||!bodyEl){toast('Editor not found.','error');return;}
+  var subject=subEl.value.trim();
+  var bodyHtml=bodyEl.innerHTML.trim();
+  if(!subject||!bodyHtml){toast('Subject and body are required.','error');return;}
+  var slug=state.subaccountSlug||'litbiz';
+  var subId='sub-'+slug;
+  var tname=TPL_TYPES.find(function(t){return t.type===type;});
+  var row={subaccount_id:subId,template_type:type,name:tname?tname.name:type,subject:subject,body_html:bodyHtml,is_default:false,enabled:true,updated_at:new Date().toISOString()};
+  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/email_templates';
+  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  try{
+    var res=await fetch(url,{
+      method:'POST',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=representation'},
+      body:JSON.stringify(row)
+    });
+    if(!res.ok){var err=await res.text();toast('Save failed: '+err,'error');return;}
+    var saved=await res.json();
+    _tplCache[type]=(saved&&saved.length)?saved[0]:row;
+    toast('Template saved.','success');
+    renderEmailTemplatesSection();
+    openTplEditor(type);
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function resetTpl(type){
+  state.modal={type:'reset-tpl',extra:type};
+  document.getElementById('modal-title').textContent='Reset Template';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">Reset to default? Your custom version will be lost.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmResetTpl()">Reset</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function confirmResetTpl(){
+  var type=state.modal&&state.modal.extra;
+  if(!type)return;
+  closeModal();
+  var slug=state.subaccountSlug||'litbiz';
+  var subId='sub-'+slug;
+  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/email_templates?subaccount_id=eq.'+encodeURIComponent(subId)+'&template_type=eq.'+encodeURIComponent(type);
+  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  try{
+    await fetch(url,{method:'DELETE',headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    delete _tplCache[type];
+    _tplActive=null;
+    toast('Template reset to default.','success');
+    renderEmailTemplatesSection();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
 function switchSettingsTab(tab){
   ['general','email'].forEach(function(t){
     var btn=document.getElementById('stab-'+t);
@@ -3564,6 +3817,9 @@ function switchSettingsTab(tab){
     loadEmailDomainStatus().then(function(record){
       state.emailDomain=record||null;
       renderEmailDomainSettings();
+    });
+    loadEmailTemplates().then(function(){
+      renderEmailTemplatesSection();
     });
   }
 }
