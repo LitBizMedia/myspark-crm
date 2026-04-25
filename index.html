@@ -3646,7 +3646,7 @@ function renderEmailTemplatesSection(){
     +'<div class="tpl-list">'+TPL_TYPES.map(function(t){
       var saved=_tplCache[t.type];
       var isCustom=!!saved&&!saved.is_default;
-      return'<div class="tpl-row'+((_tplActive===t.type)?' active':'')+'" onclick="openTplEditor(''+t.type+'')">'
+      return'<div class="tpl-row'+((_tplActive===t.type)?' active':'')+'" onclick="openTplEditor(\''+t.type+'\')">'+
         +'<div style="flex:1"><div class="tpl-row-name">'+t.name+(isCustom?'<span style="margin-left:8px;font-size:10px;font-weight:700;background:#6b21ea22;color:#6b21ea;border-radius:3px;padding:1px 6px">Custom</span>':'')+'</div>'
         +'<div class="tpl-row-sub">'+t.desc+'</div></div>'
         +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 18 15 12 9 6"/></svg>'
@@ -3685,8 +3685,8 @@ function openTplEditor(type){
     +'<div class="var-picker" style="padding:6px 8px;background:var(--main-bg);border:1px solid var(--main-border);border-top:none;border-bottom:none">'+TPL_VARS.map(function(v){return'<span class="var-chip" onclick="tplInsertVar(''+v+'')">'+v+'</span>';}).join('')+'</div>'
     +'<div id="tpl-body-editor" class="tpl-body" contenteditable="true" oninput="updateTplPreview()" onpaste="tplOnPaste(event)">'+bodyHtml+'</div>'
     +'<div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">'
-    +'<button class="btn btn-primary" onclick="saveTpl(''+type+'')">Save Template</button>'
-    +'<button class="btn btn-ghost btn-sm" onclick="resetTpl(''+type+'')">Reset to Default</button>'
+    +'<button class="btn btn-primary" onclick="saveTpl(\''+type+'\')"  >Save Template</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="resetTpl(\''+type+'\')"  >Reset to Default</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="closeTplEditor()">Cancel</button>'
     +'</div>'
     +'<div class="tpl-preview-label" style="margin-top:20px">Preview</div>'
