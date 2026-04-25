@@ -865,7 +865,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-manage-btn.active{background:var(--purple-dim);border-color:var(--purple-border);color:var(--purple-light)}
 .cal-body-outer{display:block} /* unused */
 .cal-appt-count{font-size:10px;font-weight:600;color:var(--orange);margin-top:1px}
-.tpl-list{display:flex;flex-direction:column;gap:8px;margin-bottom:24px;max-width:700px}
+.tpl-list{display:flex;flex-direction:column;gap:8px}
 .tpl-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:8px;cursor:pointer;transition:border-color .15s}
 .tpl-row:hover{border-color:#6b21ea}
 .tpl-row.active{border-color:#6b21ea;background:#faf8ff}
@@ -3643,7 +3643,8 @@ function renderEmailTemplatesSection(){
   el.innerHTML='<div style="border-top:1px solid var(--main-border);padding-top:28px">'
     +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">Email Templates</div>'
     +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Customize the emails your contacts receive. Click a template to edit it.</div>'
-    +'<div class="tpl-list">'+TPL_TYPES.map(function(t){
+    +'<div style="display:flex;gap:24px;align-items:flex-start">'
+    +'<div style="flex:0 0 260px"><div class="tpl-list">'+TPL_TYPES.map(function(t){
       var saved=_tplCache[t.type];
       var isCustom=!!saved&&!saved.is_default;
       return'<div class="tpl-row'+((_tplActive===t.type)?' active':'')+'" onclick="openTplEditor(\''+t.type+'\')">'
@@ -3651,8 +3652,8 @@ function renderEmailTemplatesSection(){
         +'<div class="tpl-row-sub">'+t.desc+'</div></div>'
         +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 18 15 12 9 6"/></svg>'
         +'</div>';
-    }).join('')+'</div>'
-    +'<div id="tpl-editor-area"></div>'
+    }).join('')+'</div></div>'
+    +'<div style="flex:1;min-width:0"><div id="tpl-editor-area"></div></div>'
     +'</div>';
 }
 
