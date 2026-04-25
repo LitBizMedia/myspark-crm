@@ -3655,6 +3655,7 @@ function renderEmailTemplatesSection(){
     }).join('')+'</div></div>'
     +'<div style="flex:1;min-width:0"><div id="tpl-editor-area">'
     +(_tplActive?'':'<div style="padding:20px 0;color:var(--main-text-muted);font-size:13px">Select a template on the left to edit it.</div>')+'</div></div>'
+    +'<div style="flex:0 0 280px;min-width:0"><div id="tpl-preview-area"></div></div>'
     +'</div>';
 }
 
@@ -3691,10 +3692,13 @@ function openTplEditor(type){
     +'<button class="btn btn-ghost btn-sm" onclick="resetTpl(\''+type+'\')"  >Reset to Default</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="closeTplEditor()">Cancel</button>'
     +'</div>'
-    +'<div class="tpl-preview-label" style="margin-top:20px">Preview</div>'
-    +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:6px">Subject: <span id="tpl-preview-subject" style="color:var(--main-text);font-weight:600"></span></div>'
-    +'<div class="tpl-preview" id="tpl-preview-body"></div>'
     +'</div>';
+  var pv=document.getElementById('tpl-preview-area');
+  if(pv){pv.innerHTML='<div style="padding-top:0">'
+    +'<div class="tpl-preview-label">Live Preview</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:8px">Subject: <span id="tpl-preview-subject" style="color:var(--main-text);font-weight:600"></span></div>'
+    +'<div class="tpl-preview" id="tpl-preview-body" style="max-height:520px;overflow-y:auto"></div>'
+    +'</div>';}
   updateTplPreview();
 }
 
