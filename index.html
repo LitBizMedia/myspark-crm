@@ -3015,7 +3015,7 @@ function sendApptConfirmation(data){
     +'<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">Need to reschedule? Reply to this email or give us a call.</p>'
     +'<p style="color:#5a4d7a;font-size:14px;margin:0">'+bizName+'</p>'
     +'</div>';
-  fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Confirmed: '+data.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-confirmation',contactId:contact.id})}).catch(function(){});
+  fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Confirmed: '+data.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-confirmation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:data.title,staff_name:staffName,business_name:bizName}})}).catch(function(){});
 }
 
 function saveAppt(){
@@ -3054,7 +3054,7 @@ function sendApptCancellation(a){
     +'<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">To reschedule, reply to this email or give us a call.</p>'
     +'<p style="color:#5a4d7a;font-size:14px;margin:0">'+bizName+'</p>'
     +'</div>';
-  fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Cancelled: '+a.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-cancellation',contactId:contact.id})}).catch(function(){});
+  fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Cancelled: '+a.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-cancellation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:a.title,business_name:bizName}})}).catch(function(){});
 }
 function confirmDelAppt(){const id=state.modal&&state.modal.id;if(!id)return;const appt=db.appointments.find(a=>a.id===id);db.appointments=db.appointments.filter(a=>a.id!==id);sendApptCancellation(appt);saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();typeof renderApptList==='function'&&renderApptList();toast('Appointment removed.','success')}
 
