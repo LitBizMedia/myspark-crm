@@ -865,6 +865,19 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-manage-btn.active{background:var(--purple-dim);border-color:var(--purple-border);color:var(--purple-light)}
 .cal-body-outer{display:block} /* unused */
 .cal-appt-count{font-size:10px;font-weight:600;color:var(--orange);margin-top:1px}
+.settings-tab-bar{display:flex;gap:2px;margin-bottom:20px;border-bottom:2px solid var(--main-border,rgba(107,33,234,.12))}
+.stab{background:none;border:none;border-bottom:3px solid transparent;padding:10px 18px;color:var(--main-text-muted,#5a4d7a);font-size:13px;font-weight:600;cursor:pointer;margin-bottom:-2px;transition:color .15s,border-color .15s;font-family:inherit;letter-spacing:.01em}
+.stab:hover{color:var(--main-text,#1a1030)}
+.stab.active{color:#6b21ea;border-bottom-color:#6b21ea}
+.email-wizard{max-width:560px}
+.dns-rec-row{background:var(--main-bg,#f2f0f8);border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:6px;padding:12px 14px;margin-bottom:10px}
+.dns-rec-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted,#5a4d7a);margin-bottom:3px}
+.dns-rec-meta{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.dns-rec-type{font-size:10px;font-weight:700;background:#6b21ea22;color:#6b21ea;border-radius:3px;padding:1px 6px;letter-spacing:.04em}
+.dns-rec-val{font-family:monospace;font-size:12px;color:var(--main-text,#1a1030);word-break:break-all;line-height:1.5;flex:1}
+.dns-rec-copy{flex-shrink:0;background:none;border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--main-text-muted,#5a4d7a);transition:background .15s;font-family:inherit}
+.dns-rec-copy:hover{background:#6b21ea22;color:#6b21ea;border-color:#6b21ea}
+.domain-verified-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(52,211,153,.12);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;margin-bottom:16px}
 </style>
 </head>
 <body>
@@ -1448,7 +1461,12 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <!-- SETTINGS -->
       <div id="panel-settings" class="panel hidden">
         <div class="page-header"><div><div class="page-title">Settings</div></div></div>
-        <div class="settings-grid">
+        <div class="settings-tab-bar">
+          <button class="stab active" id="stab-general" onclick="switchSettingsTab('general')">General</button>
+          <button class="stab" id="stab-email" onclick="switchSettingsTab('email')">Email</button>
+        </div>
+        <div id="stab-content-email" class="hidden" style="padding-top:4px"><div id="email-domain-container"></div></div>
+        <div class="settings-grid" id="stab-content-general">
 
           <div class="s-card">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Business Hours</div>
@@ -3531,6 +3549,169 @@ function renderSettings(){
     const li=document.getElementById('sq-loc');if(li&&s.square.locationId)li.value=s.square.locationId;
     const se=document.getElementById('sq-env');if(se)se.value=String(s.square.sandbox);
   }
+}
+
+function switchSettingsTab(tab){
+  ['general','email'].forEach(function(t){
+    var btn=document.getElementById('stab-'+t);
+    var content=document.getElementById('stab-content-'+t);
+    if(btn)btn.classList.toggle('active',t===tab);
+    if(content)content.classList.toggle('hidden',t!==tab);
+  });
+  if(tab==='email'){
+    state.emailDomain=undefined;
+    renderEmailDomainSettings();
+    loadEmailDomainStatus().then(function(record){
+      state.emailDomain=record||null;
+      renderEmailDomainSettings();
+    });
+  }
+}
+
+async function loadEmailDomainStatus(){
+  var slug=state.subaccountSlug||'litbiz';
+  var subId='sub-'+slug;
+  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/subaccount_email_domains?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*&limit=1';
+  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  try{
+    var res=await fetch(url,{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    if(!res.ok)return null;
+    var rows=await res.json();
+    return(rows&&rows.length)?rows[0]:null;
+  }catch(e){return null;}
+}
+
+function renderEmailDomainSettings(){
+  var el=document.getElementById('email-domain-container');
+  if(!el)return;
+  var record=state.emailDomain;
+  if(record===undefined){
+    el.innerHTML='<div style="color:var(--main-text-muted);font-size:14px;padding:20px 0">Loading...</div>';
+    return;
+  }
+  if(!record){
+    el.innerHTML='<div class="email-wizard">'
+      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">Connect Your Sending Domain</div>'
+      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Emails send from your own domain instead of mysparkplus.app. This improves deliverability and trust. You will need to add a few DNS records to your domain host.</div>'
+      +'<div class="form-group" style="max-width:400px">'
+      +'<label style="color:var(--main-text);font-weight:600">Your Domain</label>'
+      +'<input id="email-domain-input" type="text" placeholder="yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px">'
+      +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:5px">Enter the root domain only. Example: yourbusiness.com, not mail.yourbusiness.com.</div>'
+      +'</div>'
+      +'<button class="btn btn-primary" onclick="submitEmailDomain()" style="margin-top:12px">Continue</button>'
+      +'</div>';
+    return;
+  }
+  if(record.status==='verified'){
+    var recRows=buildDnsRecordRows(record.dkim_records||[]);
+    el.innerHTML='<div class="email-wizard">'
+      +'<div class="domain-verified-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>Domain Verified</div>'
+      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">'+esc(record.domain)+'</div>'
+      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px">Emails send from noreply@'+esc(record.domain)+'. Your DNS records are active.</div>'
+      +recRows
+      +'<button class="btn btn-ghost btn-sm" style="margin-top:16px" onclick="removeEmailDomain(''+record.resend_domain_id+'')">Remove Domain</button>'
+      +'</div>';
+    return;
+  }
+  var recRows=buildDnsRecordRows(record.dkim_records||[]);
+  el.innerHTML='<div class="email-wizard">'
+    +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">Add DNS Records for '+esc(record.domain)+'</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Log in to your domain DNS host and add these records. Once added, click Check Verification. DNS changes can take a few minutes to propagate.</div>'
+    +recRows
+    +'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">'
+    +'<button class="btn btn-primary" onclick="verifyEmailDomain(''+record.resend_domain_id+'')">Check Verification</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="removeEmailDomain(''+record.resend_domain_id+'')">Start Over</button>'
+    +'</div>'
+    +'</div>';
+}
+
+function buildDnsRecordRows(records){
+  if(!records||!records.length)return'<div style="color:var(--main-text-muted);font-size:13px">No DNS records found. Try removing and re-adding the domain.</div>';
+  return records.map(function(r){
+    var name=String(r.name||'');
+    var val=String(r.value||'');
+    var type=String(r.type||'');
+    var rec=String(r.record||type);
+    var priority=r.priority?'<span style="font-size:11px;color:var(--main-text-muted)">Priority: '+r.priority+'</span>':'';
+    return'<div class="dns-rec-row">'
+      +'<div class="dns-rec-meta"><span class="dns-rec-type">'+esc(type)+'</span><span style="font-size:11px;font-weight:600;color:var(--main-text-muted)">'+esc(rec)+'</span>'+priority+'</div>'
+      +'<div class="dns-rec-label">Name / Host</div>'
+      +'<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px">'
+      +'<div class="dns-rec-val">'+esc(name)+'</div>'
+      +'<button class="dns-rec-copy" onclick="copyDnsVal(this,decodeURIComponent(''+encodeURIComponent(name)+''))">Copy</button></div>'
+      +'<div class="dns-rec-label">Value</div>'
+      +'<div style="display:flex;align-items:flex-start;gap:8px">'
+      +'<div class="dns-rec-val">'+esc(val)+'</div>'
+      +'<button class="dns-rec-copy" onclick="copyDnsVal(this,decodeURIComponent(''+encodeURIComponent(val)+''))">Copy</button></div>'
+      +'</div>';
+  }).join('');
+}
+
+function copyDnsVal(btn,val){
+  navigator.clipboard.writeText(val).then(function(){
+    var orig=btn.textContent;
+    btn.textContent='Copied!';
+    setTimeout(function(){btn.textContent=orig;},1500);
+  }).catch(function(){toast('Copy failed. Select and copy manually.','warn');});
+}
+
+async function submitEmailDomain(){
+  var input=document.getElementById('email-domain-input');
+  if(!input)return;
+  var domain=input.value.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'');
+  if(!domain||!domain.includes('.')){toast('Enter a valid domain name.','error');return;}
+  var slug=state.subaccountSlug||'litbiz';
+  var btn=document.querySelector('#email-domain-container .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='Adding domain...';}
+  try{
+    var res=await fetch('/api/email/domains/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domain:domain})});
+    var data=await res.json();
+    if(!res.ok){toast(data.error||'Failed to add domain.','error');if(btn){btn.disabled=false;btn.textContent='Continue';}return;}
+    state.emailDomain=data.domain;
+    if(data.records&&data.records.length)state.emailDomain.dkim_records=data.records;
+    renderEmailDomainSettings();
+  }catch(e){toast('Error: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='Continue';}}
+}
+
+async function verifyEmailDomain(domainId){
+  var slug=state.subaccountSlug||'litbiz';
+  var btn=document.querySelector('#email-domain-container .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='Checking...';}
+  try{
+    var res=await fetch('/api/email/domains/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})});
+    var data=await res.json();
+    if(!res.ok){toast(data.error||'Verification check failed.','error');if(btn){btn.disabled=false;btn.textContent='Check Verification';}return;}
+    if(data.status==='verified'){
+      if(state.emailDomain)state.emailDomain.status='verified';
+      toast('Domain verified. Emails will now send from your domain.','success');
+    }else{
+      toast('Not verified yet. Make sure your DNS records are saved and try again in a few minutes.','warn');
+      if(btn){btn.disabled=false;btn.textContent='Check Verification';}
+    }
+    renderEmailDomainSettings();
+  }catch(e){toast('Error: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='Check Verification';}}
+}
+
+function removeEmailDomain(domainId){
+  state.modal={type:'remove-email-domain',extra:domainId};
+  document.getElementById('modal-title').textContent='Remove Email Domain';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove this sending domain? Emails will fall back to noreply@mysparkplus.app until you connect a new one.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmRemoveEmailDomain()">Remove Domain</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function confirmRemoveEmailDomain(){
+  var domainId=state.modal&&state.modal.extra;
+  if(!domainId)return;
+  var slug=state.subaccountSlug||'litbiz';
+  closeModal();
+  try{
+    await fetch('/api/email/domains/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})});
+    state.emailDomain=null;
+    renderEmailDomainSettings();
+    toast('Domain removed. Emails will send from mysparkplus.app.','success');
+  }catch(e){toast('Error removing domain: '+e.message,'error');}
 }
 
 function renderNotifSettings(){
