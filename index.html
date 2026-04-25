@@ -9383,6 +9383,8 @@ function openCreateSubaccountModal(){
     +'<input id="new-sub-admin-name" type="text" placeholder="e.g. Davida Rose"></div>'
     +'<div class="form-group"><label>Admin Username * <span style="font-weight:400;color:var(--text-muted)">(lowercase, for login)</span></label>'
     +'<input id="new-sub-user" type="text" placeholder="davida" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.-]/g,\'\')"></div>'
+    +'<div class="form-group"><label>Admin Email * <span style="font-weight:400;color:var(--text-muted)">(for login notifications)</span></label>'
+    +'<input id="new-sub-email" type="email" placeholder="admin@theirbusiness.com"></div>'
     +'<div class="form-group"><label>Admin Password *</label>'
     +'<input id="new-sub-pass" type="password" placeholder="Strong password">'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>';
@@ -9399,7 +9401,9 @@ async function createSubaccount(){
   var adminName=(document.getElementById('new-sub-admin-name')&&document.getElementById('new-sub-admin-name').value||'').trim();
   var adminUser=(document.getElementById('new-sub-user')&&document.getElementById('new-sub-user').value||'').trim().toLowerCase();
   var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
-  if(!name||!slug||!adminName||!adminUser||!adminPass){toast('All fields required.','error');return;}
+  var adminEmail=(document.getElementById('new-sub-email')&&document.getElementById('new-sub-email').value||'').trim().toLowerCase();
+  if(!name||!slug||!adminName||!adminUser||!adminPass||!adminEmail){toast('All fields required.','error');return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)){toast('Enter a valid admin email.','error');return;}
   if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
   var passErr=checkPasswordStrength(adminPass);
   if(passErr){toast(passErr,'error');return;}
@@ -9452,6 +9456,19 @@ async function createSubaccount(){
     closeModal();
     toast('Subaccount "'+name+'" created. URL: mysparkplus.app/'+slug,'success');
     agencyLoadSubaccounts();
+    // Fire welcome email to new admin
+    var welcomeHtml='<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
+      +'<h2 style="color:#6b21ea;margin:0 0 8px">Welcome to MySpark+</h2>'
+      +'<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">Hi '+adminName+', your workspace is ready.</p>'
+      +'<table style="width:100%;border-collapse:collapse;margin:0 0 24px">'
+      +'<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:120px">Workspace</td><td style="padding:8px 0;font-weight:600">'+name+'</td></tr>'
+      +'<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:120px">Login URL</td><td style="padding:8px 0;font-weight:600"><a href="https://mysparkplus.app/'+slug+'" style="color:#6b21ea">mysparkplus.app/'+slug+'</a></td></tr>'
+      +'<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:120px">Username</td><td style="padding:8px 0;font-weight:600">'+adminUser+'</td></tr>'
+      +'</table>'
+      +'<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">Log in with the password you were given. You can change it in your settings.</p>'
+      +'<p style="color:#5a4d7a;font-size:14px;margin:0">MySpark+</p>'
+      +'</div>';
+    fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:'litbiz',to:adminEmail,subject:'Your MySpark+ workspace is ready: '+name,html:welcomeHtml,fromName:'MySpark+',templateType:'welcome'})}).catch(function(){});
   }catch(e){
     toast('Error creating subaccount: '+e.message,'error');
   }
