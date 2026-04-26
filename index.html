@@ -9839,6 +9839,7 @@ async function renderAgencyDashboard(){
     +'</div>'
     // Body
     +'<div style="padding:28px 32px">'
+    +'<div id="agency-sms-requests-section"></div>'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Subaccounts</div>'
     +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Manage your client CRM accounts</div></div>'
@@ -9848,6 +9849,7 @@ async function renderAgencyDashboard(){
     +'<div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading subaccounts...</div>'
     +'</div></div></div>';
   agencyLoadSubaccounts();
+  agencyLoadSmsRequests();
 }
 
 // =====================================================
@@ -9901,6 +9903,92 @@ async function agencyConfirmResetPassword(subId,slug){
     });
     closeModal();
     toast('Password reset for '+slug+'.','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function agencyLoadSmsRequests(){
+  var el=document.getElementById('agency-sms-requests-section');
+  if(!el)return;
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var res=await fetch(url+'/rest/v1/sms_registration_requests?status=in.(requested,in_progress)&order=created_at.asc&select=*',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    if(!res.ok){el.innerHTML='';return;}
+    var rows=await res.json();
+    if(!rows||!rows.length){el.innerHTML='';return;}
+    var statusColor={requested:'#f59e0b',in_progress:'#6b21ea'};
+    var statusLabel={requested:'New Request',in_progress:'In Progress'};
+    el.innerHTML='<div style="margin-bottom:28px">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800">SMS Requests</div>'
+      +'<div style="background:#f59e0b;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:2px 8px">'+rows.length+'</div>'
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;gap:10px">'+rows.map(function(r){
+        return'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px">'
+          +'<div style="flex:1">'
+          +'<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+esc(r.subaccount_name||r.subaccount_id)+'</div>'
+          +'<div style="font-size:12px;color:var(--text-muted)">'+esc(r.legal_business_name)+' &middot; '+esc(r.contact_name)+' &middot; '+esc(r.contact_phone)+'</div>'
+          +'</div>'
+          +'<div style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:'+statusColor[r.status]+'22;color:'+statusColor[r.status]+';border:1px solid '+statusColor[r.status]+'44">'
+          +'<div style="width:6px;height:6px;border-radius:50%;background:'+statusColor[r.status]+'"></div>'
+          +statusLabel[r.status]
+          +'</div>'
+          +'<button class="btn btn-primary btn-sm" onclick="openAgencySmsProvision(\''+r.subaccount_id+'\',\''+r.id+'\')">Provision</button>'
+          +'</div>';
+      }).join('')+'</div></div>';
+  }catch(e){el.innerHTML='';}
+}
+
+function openAgencySmsProvision(subaccountId,requestId){
+  state.modal={type:'agency-sms-provision',id:requestId,extra:{subaccountId:subaccountId}};
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">Enter the Twilio phone number and SID for this subaccount. Purchase the number in the Twilio console first, then enter the details below.</div>'
+    +'<div class="form-group"><label>Twilio Phone Number *</label>'
+    +'<input id="prov-number" type="text" placeholder="+15551234567" style="font-family:monospace"></div>'
+    +'<div class="form-group"><label>Twilio Number SID *</label>'
+    +'<input id="prov-sid" type="text" placeholder="PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="font-family:monospace"></div>'
+    +'<div class="form-group"><label>Campaign Status</label>'
+    +'<select id="prov-status" class="filter-sel" style="width:100%;height:38px">'
+    +'<option value="pending">Pending Approval</option>'
+    +'<option value="approved">Approved</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Notes (internal)</label>'
+    +'<textarea id="prov-notes" rows="3" placeholder="Optional internal notes about this provisioning..."></textarea></div>';
+  openModal('Provision SMS Number',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="confirmAgencySmsProvision()">Provision Number</button>',
+    'modal-lg');
+}
+
+async function confirmAgencySmsProvision(){
+  var number=(document.getElementById('prov-number')&&document.getElementById('prov-number').value||'').trim();
+  var sid=(document.getElementById('prov-sid')&&document.getElementById('prov-sid').value||'').trim();
+  var status=document.getElementById('prov-status')&&document.getElementById('prov-status').value||'pending';
+  var notes=(document.getElementById('prov-notes')&&document.getElementById('prov-notes').value||'').trim();
+  if(!number||!sid){toast('Phone number and SID are required.','error');return;}
+  if(!number.startsWith('+')){toast('Phone number must be in E.164 format: +15551234567','error');return;}
+  var requestId=state.modal&&state.modal.id;
+  var subaccountId=state.modal&&state.modal.extra&&state.modal.extra.subaccountId;
+  if(!requestId||!subaccountId){toast('Missing request data.','error');return;}
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    // Upsert sms_settings for the subaccount
+    var r1=await fetch(url+'/rest/v1/sms_settings',{
+      method:'POST',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({subaccount_id:subaccountId,twilio_number:number,twilio_number_sid:sid,campaign_status:status,enabled:status==='approved',updated_at:new Date().toISOString()})
+    });
+    if(!r1.ok){var e1=await r1.text();toast('Failed to save SMS settings: '+e1,'error');return;}
+    // Update request status to provisioned
+    var r2=await fetch(url+'/rest/v1/sms_registration_requests?id=eq.'+encodeURIComponent(requestId),{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({status:'provisioned',notes:notes||null,updated_at:new Date().toISOString()})
+    });
+    if(!r2.ok){toast('SMS settings saved but failed to update request status.','warn');}
+    closeModal();
+    toast('SMS number provisioned for '+subaccountId+'.','success');
+    agencyLoadSmsRequests();
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
