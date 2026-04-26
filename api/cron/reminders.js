@@ -127,8 +127,6 @@ module.exports = async (req, res) => {
   const startDate = windowStart.toISOString().split('T')[0];
   const endDate = windowEnd.toISOString().split('T')[0];
 
-  console.log('Checking appointments between ' + startDate + ' and ' + endDate);
-
   const apptRes = await fetch(
     SUPABASE_URL + '/rest/v1/appointments?status=eq.scheduled&date=gte.' + startDate + '&date=lte.' + endDate + '&select=*',
     { headers: svcHeaders() }
@@ -139,7 +137,6 @@ module.exports = async (req, res) => {
   }
 
   const appointments = await apptRes.json();
-  console.log('Found ' + appointments.length + ' upcoming appointments.');
 
   let emailsSent = 0;
   let smsSent = 0;
@@ -158,15 +155,15 @@ module.exports = async (req, res) => {
     }
 
     const alreadySent = await reminderAlreadySent(appt.subaccount_id, appt.id);
-    if (alreadySent) { console.log('SKIP already sent:', appt.id); skipped++; continue; }
+    if (alreadySent) { skipped++; continue; }
 
     const data = await getSubaccountData(appt.subaccount_id);
-    if (!data) { console.log('SKIP no data:', appt.subaccount_id); skipped++; continue; }
+    if (!data) { skipped++; continue; }
 
     const contact = appt.contact_id
       ? (data.contacts || []).find(c => c.id === appt.contact_id)
       : null;
-    if (!contact) { console.log('SKIP no contact:', appt.contact_id, 'for appt:', appt.id); skipped++; continue; }
+    if (!contact) { skipped++; continue; }
 
     const bizName = (data.settings && data.settings.businessName) || 'MySpark+';
     const staff = appt.assigned_to
