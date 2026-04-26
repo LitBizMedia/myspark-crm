@@ -1481,8 +1481,10 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="settings-tab-bar">
           <button class="stab active" id="stab-general" onclick="switchSettingsTab('general')">General</button>
           <button class="stab" id="stab-email" onclick="switchSettingsTab('email')">Email</button>
+          <button class="stab" id="stab-sms" onclick="switchSettingsTab('sms')">SMS</button>
         </div>
         <div id="stab-content-email" class="hidden" style="padding-top:4px"><div id="email-domain-container"></div><div id="email-templates-container" style="margin-top:32px"></div></div>
+        <div id="stab-content-sms" class="hidden" style="padding-top:4px"><div id="sms-settings-container"></div></div>
         <div class="settings-grid" id="stab-content-general">
 
           <div class="s-card">
@@ -3808,8 +3810,117 @@ async function confirmResetTpl(){
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
+// SMS SETTINGS
+
+async function loadSmsSettings(){
+  var slug=state.subaccountSlug||'litbiz';
+  var subId='sub-'+slug;
+  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/sms_settings?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*&limit=1';
+  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  try{
+    var res=await fetch(url,{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    if(!res.ok)return null;
+    var rows=await res.json();
+    return(rows&&rows.length)?rows[0]:null;
+  }catch(e){return null;}
+}
+
+function renderSmsSettings(){
+  var el=document.getElementById('sms-settings-container');
+  if(!el)return;
+  var s=state.smsSettings;
+  var statusColor={not_registered:'var(--main-text-muted)',pending:'#f59e0b',approved:'#059669',rejected:'#ef4444'};
+  var statusLabel={not_registered:'Not Registered',pending:'Pending Approval',approved:'Active',rejected:'Rejected'};
+
+  var statusBadge=s
+    ?'<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:'+statusColor[s.campaign_status]+'18;color:'+statusColor[s.campaign_status]+';border:1px solid '+statusColor[s.campaign_status]+'44;margin-bottom:16px">'
+      +'<div style="width:7px;height:7px;border-radius:50%;background:'+statusColor[s.campaign_status]+'"></div>'
+      +statusLabel[s.campaign_status]
+      +'</div>'
+    :'';
+
+  var numberRow=s&&s.twilio_number
+    ?'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:16px">SMS number: <span style="font-weight:700;color:var(--main-text);font-family:monospace">'+s.twilio_number+'</span></div>'
+    :'';
+
+  if(!s||s.campaign_status==='not_registered'){
+    el.innerHTML='<div style="max-width:560px">'
+      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">SMS Messaging</div>'
+      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Send appointment confirmations, reminders, and cancellation notices by text. Each workspace gets its own dedicated phone number. Contact your agency to get started.</div>'
+      +'<div style="padding:16px;background:#6b21ea0a;border:1px solid #6b21ea22;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6">'
+      +'<strong style="color:var(--main-text);display:block;margin-bottom:6px">How it works</strong>'
+      +'Your agency provisions a dedicated local phone number for your business. Once your SMS campaign is approved by carriers (3 to 7 business days), texting activates automatically. There are no extra steps on your end.'
+      +'</div>'
+      +'</div>';
+    return;
+  }
+
+  if(s.campaign_status==='pending'){
+    el.innerHTML='<div style="max-width:560px">'
+      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:12px">SMS Messaging</div>'
+      +statusBadge
+      +numberRow
+      +'<div style="padding:16px;background:#f59e0b0a;border:1px solid #f59e0b22;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6">'
+      +'Your SMS campaign is pending carrier approval. This typically takes 3 to 7 business days. You will be notified once approved and texting will activate automatically.'
+      +'</div>'
+      +'</div>';
+    return;
+  }
+
+  if(s.campaign_status==='rejected'){
+    el.innerHTML='<div style="max-width:560px">'
+      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:12px">SMS Messaging</div>'
+      +statusBadge
+      +numberRow
+      +'<div style="padding:16px;background:#ef44440a;border:1px solid #ef444422;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6">'
+      +'Your SMS campaign registration was rejected. Please contact your agency to resolve this.'
+      +'</div>'
+      +'</div>';
+    return;
+  }
+
+  // Approved state
+  var enabledToggle='<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">'
+    +'<button class="ns-sw'+(s.enabled?' on':'')+'" id="sms-enabled-sw" onclick="toggleSmsEnabled()"></button>'
+    +'<span style="font-size:13px;color:var(--main-text);font-weight:600">'+(s.enabled?'SMS Enabled':'SMS Disabled')+'</span>'
+    +'</div>';
+
+  el.innerHTML='<div style="max-width:560px">'
+    +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:12px">SMS Messaging</div>'
+    +statusBadge
+    +numberRow
+    +enabledToggle
+    +'<div style="font-size:13px;color:var(--main-text-muted);line-height:1.6">'
+    +(s.enabled
+      ?'SMS is active. Appointment confirmations, reminders, and cancellation notices will be sent automatically to contacts with a phone number on file.'
+      :'SMS is disabled. Enable it to start sending appointment notifications by text.')
+    +'</div>'
+    +'</div>';
+}
+
+async function toggleSmsEnabled(){
+  var s=state.smsSettings;
+  if(!s)return;
+  var newVal=!s.enabled;
+  var slug=state.subaccountSlug||'litbiz';
+  var subId='sub-'+slug;
+  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/sms_settings?subaccount_id=eq.'+encodeURIComponent(subId);
+  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  try{
+    var res=await fetch(url,{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({enabled:newVal,updated_at:new Date().toISOString()})
+    });
+    if(!res.ok){toast('Failed to update SMS settings.','error');return;}
+    state.smsSettings.enabled=newVal;
+    renderSmsSettings();
+    toast(newVal?'SMS enabled.':'SMS disabled.','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
 function switchSettingsTab(tab){
-  ['general','email'].forEach(function(t){
+  ['general','email','sms'].forEach(function(t){
     var btn=document.getElementById('stab-'+t);
     var content=document.getElementById('stab-content-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
@@ -3824,6 +3935,12 @@ function switchSettingsTab(tab){
     });
     loadEmailTemplates().then(function(){
       renderEmailTemplatesSection();
+    });
+  }
+  if(tab==='sms'){
+    loadSmsSettings().then(function(settings){
+      state.smsSettings=settings||null;
+      renderSmsSettings();
     });
   }
 }
