@@ -3815,13 +3815,17 @@ async function confirmResetTpl(){
 async function loadSmsSettings(){
   var slug=state.subaccountSlug||'litbiz';
   var subId='sub-'+slug;
-  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/sms_settings?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*&limit=1';
   var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  var baseUrl=db.settings.supabaseUrl||SB_FALLBACK_URL;
   try{
-    var res=await fetch(url,{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    var res=await fetch(baseUrl+'/rest/v1/sms_settings?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*&limit=1',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
     if(!res.ok)return null;
     var rows=await res.json();
-    return(rows&&rows.length)?rows[0]:null;
+    var settings=(rows&&rows.length)?rows[0]:null;
+    var res2=await fetch(baseUrl+'/rest/v1/sms_registration_requests?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*&limit=1',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    var rows2=res2.ok?await res2.json():[];
+    var request=(rows2&&rows2.length)?rows2[0]:null;
+    return{settings:settings,request:request};
   }catch(e){return null;}
 }
 
@@ -3843,14 +3847,49 @@ function renderSmsSettings(){
     ?'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:16px">SMS number: <span style="font-weight:700;color:var(--main-text);font-family:monospace">'+s.twilio_number+'</span></div>'
     :'';
 
+  var req=state.smsRequest;
   if(!s||s.campaign_status==='not_registered'){
+    if(req){
+      var reqStatusColor={requested:'#f59e0b',in_progress:'#6b21ea',provisioned:'#059669',rejected:'#ef4444'};
+      var reqStatusLabel={requested:'Request Received',in_progress:'In Progress',provisioned:'Provisioned',rejected:'Rejected'};
+      el.innerHTML='<div style="max-width:560px">'
+        +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:12px">SMS Messaging</div>'
+        +'<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:'+reqStatusColor[req.status]+'18;color:'+reqStatusColor[req.status]+';border:1px solid '+reqStatusColor[req.status]+'44;margin-bottom:16px">'
+        +'<div style="width:7px;height:7px;border-radius:50%;background:'+reqStatusColor[req.status]+'"></div>'
+        +reqStatusLabel[req.status]
+        +'</div>'
+        +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:16px;line-height:1.6">Your SMS setup request has been received. Your agency is working on it. You will be notified once your number is provisioned and approved.</div>'
+        +'<div style="padding:14px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:8px;font-size:13px;line-height:1.8">'
+        +'<div><span style="color:var(--main-text-muted)">Business:</span> <strong>'+esc(req.legal_business_name)+'</strong></div>'
+        +'<div><span style="color:var(--main-text-muted)">Contact:</span> <strong>'+esc(req.contact_name)+'</strong></div>'
+        +'<div><span style="color:var(--main-text-muted)">Submitted:</span> <strong>'+fmtDate((req.created_at||'').split('T')[0])+'</strong></div>'
+        +'</div>'
+        +'</div>';
+      return;
+    }
     el.innerHTML='<div style="max-width:560px">'
       +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">SMS Messaging</div>'
-      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Send appointment confirmations, reminders, and cancellation notices by text. Each workspace gets its own dedicated phone number. Contact your agency to get started.</div>'
-      +'<div style="padding:16px;background:#6b21ea0a;border:1px solid #6b21ea22;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6">'
+      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Send appointment confirmations, reminders, and cancellation notices by text. Each workspace gets its own dedicated phone number.</div>'
+      +'<div style="padding:16px;background:#6b21ea0a;border:1px solid #6b21ea22;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6;margin-bottom:20px">'
       +'<strong style="color:var(--main-text);display:block;margin-bottom:6px">How it works</strong>'
-      +'Your agency provisions a dedicated local phone number for your business. Once your SMS campaign is approved by carriers (3 to 7 business days), texting activates automatically. There are no extra steps on your end.'
+      +'Your agency provisions a dedicated local phone number for your business. Once your SMS campaign is approved by carriers (3 to 7 business days), texting activates automatically.'
       +'</div>'
+      +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:14px">Request SMS Setup</div>'
+      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Legal Business Name *</label>'
+      +'<input id="sms-req-biz" type="text" placeholder="As it appears on your EIN documents" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
+      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">EIN / Tax ID *</label>'
+      +'<input id="sms-req-ein" type="text" placeholder="XX-XXXXXXX" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
+      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Business Website</label>'
+      +'<input id="sms-req-web" type="text" placeholder="https://yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
+      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Contact Name *</label>'
+      +'<input id="sms-req-name" type="text" placeholder="Primary contact for SMS registration" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
+      +'<div class="form-row">'
+      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Contact Phone *</label>'
+      +'<input id="sms-req-phone" type="tel" placeholder="(555) 123-4567" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
+      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Contact Email</label>'
+      +'<input id="sms-req-email" type="email" placeholder="contact@yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
+      +'</div>'
+      +'<button class="btn btn-primary" onclick="submitSmsRequest()" style="margin-top:8px">Submit Request</button>'
       +'</div>';
     return;
   }
@@ -3898,6 +3937,36 @@ function renderSmsSettings(){
     +'</div>';
 }
 
+async function submitSmsRequest(){
+  var biz=(document.getElementById('sms-req-biz')&&document.getElementById('sms-req-biz').value||'').trim();
+  var ein=(document.getElementById('sms-req-ein')&&document.getElementById('sms-req-ein').value||'').trim();
+  var web=(document.getElementById('sms-req-web')&&document.getElementById('sms-req-web').value||'').trim();
+  var name=(document.getElementById('sms-req-name')&&document.getElementById('sms-req-name').value||'').trim();
+  var phone=(document.getElementById('sms-req-phone')&&document.getElementById('sms-req-phone').value||'').trim();
+  var email=(document.getElementById('sms-req-email')&&document.getElementById('sms-req-email').value||'').trim();
+  if(!biz||!ein||!name||!phone){toast('Please fill in all required fields.','error');return;}
+  var slug=state.subaccountSlug||'litbiz';
+  var subId='sub-'+slug;
+  var bizName=(db.settings&&db.settings.businessName)||slug;
+  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/sms_registration_requests';
+  var row={subaccount_id:subId,subaccount_name:bizName,legal_business_name:biz,ein:ein,website:web||null,contact_name:name,contact_phone:phone,contact_email:email||null,status:'requested'};
+  var btn=document.querySelector('#sms-settings-container .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='Submitting...';}
+  try{
+    var res=await fetch(url,{
+      method:'POST',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=representation'},
+      body:JSON.stringify(row)
+    });
+    if(!res.ok){var e=await res.text();toast('Submission failed: '+e,'error');if(btn){btn.disabled=false;btn.textContent='Submit Request';}return;}
+    var saved=await res.json();
+    state.smsRequest=(saved&&saved.length)?saved[0]:row;
+    toast('SMS setup request submitted.','success');
+    renderSmsSettings();
+  }catch(e){toast('Error: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='Submit Request';}}
+}
+
 async function toggleSmsEnabled(){
   var s=state.smsSettings;
   if(!s)return;
@@ -3938,8 +4007,9 @@ function switchSettingsTab(tab){
     });
   }
   if(tab==='sms'){
-    loadSmsSettings().then(function(settings){
-      state.smsSettings=settings||null;
+    loadSmsSettings().then(function(data){
+      state.smsSettings=data&&data.settings||null;
+      state.smsRequest=data&&data.request||null;
       renderSmsSettings();
     });
   }
