@@ -9914,30 +9914,93 @@ async function agencyLoadSmsRequests(){
     var res=await fetch(url+'/rest/v1/sms_registration_requests?status=in.(requested,in_progress)&order=created_at.asc&select=*',{
       headers:{'apikey':key,'Authorization':'Bearer '+key}
     });
-    if(!res.ok){el.innerHTML='';return;}
-    var rows=await res.json();
-    if(!rows||!rows.length){el.innerHTML='';return;}
-    var statusColor={requested:'#f59e0b',in_progress:'#6b21ea'};
-    var statusLabel={requested:'New Request',in_progress:'In Progress'};
-    el.innerHTML='<div style="margin-bottom:28px">'
-      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
-      +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800">SMS Requests</div>'
-      +'<div style="background:#f59e0b;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:2px 8px">'+rows.length+'</div>'
-      +'</div>'
-      +'<div style="display:flex;flex-direction:column;gap:10px">'+rows.map(function(r){
-        return'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px">'
-          +'<div style="flex:1">'
-          +'<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+esc(r.subaccount_name||r.subaccount_id)+'</div>'
-          +'<div style="font-size:12px;color:var(--text-muted)">'+esc(r.legal_business_name)+' &middot; '+esc(r.contact_name)+' &middot; '+esc(r.contact_phone)+'</div>'
-          +'</div>'
-          +'<div style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:'+statusColor[r.status]+'22;color:'+statusColor[r.status]+';border:1px solid '+statusColor[r.status]+'44">'
-          +'<div style="width:6px;height:6px;border-radius:50%;background:'+statusColor[r.status]+'"></div>'
-          +statusLabel[r.status]
-          +'</div>'
-          +'<button class="btn btn-primary btn-sm" onclick="openAgencySmsProvision(\''+r.subaccount_id+'\',\''+r.id+'\')">Provision</button>'
-          +'</div>';
-      }).join('')+'</div></div>';
+    var pending=res.ok?await res.json():[];
+    var res2=await fetch(url+'/rest/v1/sms_settings?select=*&order=created_at.asc',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    var provisioned=res2.ok?await res2.json():[];
+    var out='';
+    if(pending&&pending.length){
+      var sColor={requested:'#f59e0b',in_progress:'#6b21ea'};
+      var sLabel={requested:'New Request',in_progress:'In Progress'};
+      out+='<div style="margin-bottom:28px">'
+        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800">SMS Requests</div>'
+        +'<div style="background:#f59e0b;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:2px 8px">'+pending.length+'</div>'
+        +'</div>'
+        +'<div style="display:flex;flex-direction:column;gap:10px">'+pending.map(function(r){
+          return'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px">'
+            +'<div style="flex:1">'
+            +'<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+esc(r.subaccount_name||r.subaccount_id)+'</div>'
+            +'<div style="font-size:12px;color:var(--text-muted)">'+esc(r.legal_business_name)+' &middot; '+esc(r.contact_name)+' &middot; '+esc(r.contact_phone)+'</div>'
+            +'</div>'
+            +'<div style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:'+sColor[r.status]+'22;color:'+sColor[r.status]+';border:1px solid '+sColor[r.status]+'44">'
+            +'<div style="width:6px;height:6px;border-radius:50%;background:'+sColor[r.status]+'"></div>'
+            +sLabel[r.status]
+            +'</div>'
+            +'<button class="btn btn-primary btn-sm" onclick="openAgencySmsProvision(\''+r.subaccount_id+'\',\''+r.id+'\')">Provision</button>'
+            +'</div>';
+        }).join('')+'</div></div>';
+    }
+    if(provisioned&&provisioned.length){
+      var cColor={pending:'#f59e0b',approved:'#059669',rejected:'#ef4444',not_registered:'var(--text-muted)'};
+      var cLabel={pending:'Pending Approval',approved:'Approved',rejected:'Rejected',not_registered:'Not Registered'};
+      out+='<div style="margin-bottom:28px">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;margin-bottom:14px">SMS Numbers</div>'
+        +'<div style="display:flex;flex-direction:column;gap:10px">'+provisioned.map(function(s){
+          return'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px">'
+            +'<div style="flex:1">'
+            +'<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+esc(s.subaccount_id)+'</div>'
+            +'<div style="font-size:12px;color:var(--text-muted);font-family:monospace">'+esc(s.twilio_number||'No number')+'</div>'
+            +'</div>'
+            +'<div style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:'+cColor[s.campaign_status]+'22;color:'+cColor[s.campaign_status]+';border:1px solid '+cColor[s.campaign_status]+'44">'
+            +'<div style="width:6px;height:6px;border-radius:50%;background:'+cColor[s.campaign_status]+'"></div>'
+            +(cLabel[s.campaign_status]||s.campaign_status)
+            +'</div>'
+            +'<button class="btn btn-ghost btn-sm" onclick="openAgencyUpdateSmsStatus(\''+s.subaccount_id+'\')">Update Status</button>'
+            +'</div>';
+        }).join('')+'</div></div>';
+    }
+    el.innerHTML=out||'';
   }catch(e){el.innerHTML='';}
+}
+
+function openAgencyUpdateSmsStatus(subaccountId){
+  state.modal={type:'agency-update-sms-status',extra:{subaccountId:subaccountId}};
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">Update the SMS campaign status for this subaccount. Set to Approved once Twilio confirms carrier approval.</div>'
+    +'<div class="form-group"><label>Campaign Status</label>'
+    +'<select id="update-sms-status" class="filter-sel" style="width:100%;height:38px">'
+    +'<option value="pending">Pending Approval</option>'
+    +'<option value="approved">Approved</option>'
+    +'<option value="rejected">Rejected</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Enable SMS</label>'
+    +'<select id="update-sms-enabled" class="filter-sel" style="width:100%;height:38px">'
+    +'<option value="true">Enabled</option>'
+    +'<option value="false">Disabled</option>'
+    +'</select></div>';
+  openModal('Update SMS Status: '+subaccountId,body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="confirmAgencyUpdateSmsStatus()">Save</button>');
+}
+
+async function confirmAgencyUpdateSmsStatus(){
+  var subaccountId=state.modal&&state.modal.extra&&state.modal.extra.subaccountId;
+  if(!subaccountId){toast('Missing subaccount.','error');return;}
+  var status=document.getElementById('update-sms-status')&&document.getElementById('update-sms-status').value;
+  var enabled=document.getElementById('update-sms-enabled')&&document.getElementById('update-sms-enabled').value==='true';
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var res=await fetch(url+'/rest/v1/sms_settings?subaccount_id=eq.'+encodeURIComponent(subaccountId),{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({campaign_status:status,enabled:enabled,updated_at:new Date().toISOString()})
+    });
+    if(!res.ok){var e=await res.text();toast('Update failed: '+e,'error');return;}
+    closeModal();
+    toast('SMS status updated for '+subaccountId+'.','success');
+    agencyLoadSmsRequests();
+  }catch(e){toast('Error: '+e.message,'error');}
 }
 
 function openAgencySmsProvision(subaccountId,requestId){
