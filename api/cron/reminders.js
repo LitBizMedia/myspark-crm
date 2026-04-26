@@ -146,15 +146,15 @@ module.exports = async (req, res) => {
   let skipped = 0;
 
   for (const appt of appointments) {
-    if (appt.time) {
-      const apptDateTime = new Date(appt.date + 'T' + appt.time);
-      const hoursUntil = (apptDateTime - now) / 3600000;
-      console.log('Appt:', appt.id, 'hoursUntil:', hoursUntil.toFixed(2));
-      if (hoursUntil < 22 || hoursUntil > 26) {
-        console.log('SKIP window:', hoursUntil.toFixed(2));
-        skipped++;
-        continue;
-      }
+    // Use date only for window check to avoid timezone issues
+    // The cron runs hourly so appointments on the right date within a generous window are included
+    const apptDate = new Date(appt.date + 'T12:00:00Z');
+    const hoursUntilDate = (apptDate - now) / 3600000;
+    console.log('Appt:', appt.id, 'date:', appt.date, 'hoursUntilDate:', hoursUntilDate.toFixed(2));
+    if (hoursUntilDate < 12 || hoursUntilDate > 36) {
+      console.log('SKIP date window:', hoursUntilDate.toFixed(2));
+      skipped++;
+      continue;
     }
 
     const alreadySent = await reminderAlreadySent(appt.subaccount_id, appt.id);
