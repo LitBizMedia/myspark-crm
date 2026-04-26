@@ -9856,6 +9856,72 @@ async function agencyLogin(){
 }
 
 // =====================================================
+// =====================================================
+// PLAN MANAGEMENT - CONSTANTS & HELPERS
+// =====================================================
+const PLAN_LIMITS = {
+  starter:      {staff:7,  contacts:10000, emails:2000,   sms:300},
+  professional: {staff:15, contacts:20000, emails:15000,  sms:1000},
+  business:     {staff:40, contacts:40000, emails:75000,  sms:4000},
+  enterprise:   {staff:-1, contacts:-1,    emails:100000, sms:8000}
+};
+const PLAN_PRICES = {
+  starter:      {monthly:29,  annual:290},
+  professional: {monthly:79,  annual:790},
+  business:     {monthly:149, annual:1490},
+  enterprise:   {monthly:349, annual:3490}
+};
+const HIPAA_ADDON_PRICES = {monthly:50, annual:500};
+const USAGE_PACKS = {
+  email_500:   {units:500,   priceCents:500,  type:'email', label:'500 emails'},
+  email_2000:  {units:2000,  priceCents:1500, type:'email', label:'2,000 emails'},
+  email_10000: {units:10000, priceCents:5000, type:'email', label:'10,000 emails'},
+  sms_100:     {units:100,   priceCents:700,  type:'sms',   label:'100 SMS'},
+  sms_500:     {units:500,   priceCents:2500, type:'sms',   label:'500 SMS'},
+  sms_2000:    {units:2000,  priceCents:8000, type:'sms',   label:'2,000 SMS'}
+};
+const PLAN_TIER_LABELS = {starter:'Starter',professional:'Professional',business:'Business',enterprise:'Enterprise'};
+const PLAN_STATUS_LABELS = {trialing:'Trial',active:'Active',past_due:'Past Due',cancelled:'Cancelled',exempt:'Exempt'};
+const PLAN_STATUS_COLORS = {
+  trialing:  {bg:'rgba(245,158,11,.12)', fg:'#fbbf24'},
+  active:    {bg:'rgba(52,211,153,.12)', fg:'#34d399'},
+  past_due:  {bg:'rgba(239,68,68,.12)',  fg:'#f87171'},
+  cancelled: {bg:'rgba(122,133,153,.12)',fg:'#7a8599'},
+  exempt:    {bg:'rgba(107,33,234,.15)', fg:'#c7b8ff'}
+};
+
+async function loadAllPlans(){
+  // Returns {subaccountId: planRecord}
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var r=await fetch(url+'/rest/v1/subaccount_plans?select=*',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    if(!r.ok)return{};
+    var rows=await r.json();
+    var map={};
+    (rows||[]).forEach(function(row){map[row.subaccount_id]=row;});
+    return map;
+  }catch(e){return{};}
+}
+
+function planTierLabel(tier){return PLAN_TIER_LABELS[tier]||tier||'Starter';}
+function planStatusLabel(status){return PLAN_STATUS_LABELS[status]||status||'';}
+function planStatusColors(status){return PLAN_STATUS_COLORS[status]||PLAN_STATUS_COLORS.trialing;}
+
+function planMonthlyPrice(tier,billingPeriod,hipaaAddon){
+  var p=PLAN_PRICES[tier];if(!p)return 0;
+  var base=billingPeriod==='annual'?p.annual:p.monthly;
+  var addon=hipaaAddon?(billingPeriod==='annual'?HIPAA_ADDON_PRICES.annual:HIPAA_ADDON_PRICES.monthly):0;
+  return base+addon;
+}
+
+function planTrialDaysRemaining(plan){
+  if(!plan||plan.status!=='trialing'||!plan.trial_ends_at)return 0;
+  var ms=new Date(plan.trial_ends_at).getTime()-Date.now();
+  return Math.max(0,Math.ceil(ms/86400000));
+}
+
 // AGENCY DASHBOARD
 // =====================================================
 
@@ -9885,6 +9951,151 @@ async function renderAgencyDashboard(){
     +'</div></div></div>';
   agencyLoadSubaccounts();
   agencyLoadSmsRequests();
+}
+
+// =====================================================
+// PLAN MANAGEMENT MODAL
+// =====================================================
+async function openManagePlanModal(subId,subName){
+  if(!agencyCanManageSubaccounts()){toast('You do not have permission to manage plans.','error');return;}
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  var plan=null;
+  try{
+    var r=await fetch(url+'/rest/v1/subaccount_plans?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    if(r.ok){var rows=await r.json();if(rows&&rows.length)plan=rows[0];}
+  }catch(e){console.warn('Could not load plan:',e);}
+  // Default values if no plan record exists yet
+  var curTier=(plan&&plan.plan_tier)||'starter';
+  var curPeriod=(plan&&plan.billing_period)||'monthly';
+  var curHipaa=!!(plan&&plan.hipaa_addon);
+  var curStatus=(plan&&plan.status)||'trialing';
+  var isExempt=!!(plan&&plan.exempt_from_billing);
+  var isProtected=!!(plan&&plan.protected_from_deletion);
+  state.modal={type:'manage-plan',id:subId,extra:{subName:subName,plan:plan}};
+
+  var exemptBanner=isExempt
+    ?'<div style="padding:12px 14px;background:rgba(107,33,234,.1);border:1px solid rgba(107,33,234,.3);border-radius:var(--radius);margin-bottom:14px;font-size:13px;color:#c7b8ff"><strong>Exempt workspace.</strong> This workspace does not get billed. Plan tier sets feature limits only.</div>'
+    :'';
+
+  var tierOpts=Object.keys(PLAN_TIER_LABELS).map(function(tier){
+    var p=PLAN_PRICES[tier];
+    var price=curPeriod==='annual'?p.annual:p.monthly;
+    var per=curPeriod==='annual'?'/yr':'/mo';
+    return '<option value="'+tier+'"'+(tier===curTier?' selected':'')+'>'+PLAN_TIER_LABELS[tier]+' — $'+price+per+'</option>';
+  }).join('');
+
+  var statusOpts=['trialing','active','past_due','cancelled','exempt'].map(function(st){
+    return '<option value="'+st+'"'+(st===curStatus?' selected':'')+'>'+PLAN_STATUS_LABELS[st]+'</option>';
+  }).join('');
+
+  var summary=isExempt?'No charge':'$'+planMonthlyPrice(curTier,curPeriod,curHipaa)+(curPeriod==='annual'?'/yr':'/mo');
+
+  var body=exemptBanner
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Plan Tier</label>'
+    +'<select id="mp-tier" class="filter-sel" style="width:100%;height:38px" onchange="updatePlanSummary()">'+tierOpts+'</select></div>'
+    +'<div class="form-group"><label>Billing Period</label>'
+    +'<select id="mp-period" class="filter-sel" style="width:100%;height:38px" onchange="refreshTierPrices();updatePlanSummary()">'
+    +'<option value="monthly"'+(curPeriod==='monthly'?' selected':'')+'>Monthly</option>'
+    +'<option value="annual"'+(curPeriod==='annual'?' selected':'')+'>Annual (2 months free)</option>'
+    +'</select></div>'
+    +'</div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
+    +'<input type="checkbox" id="mp-hipaa" '+(curHipaa?'checked':'')+' onchange="updatePlanSummary()" style="width:auto;margin:0">'
+    +'<span>HIPAA Compliance Add-on (+$50/mo or $500/yr)</span></label>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:24px">Includes BAA agreement and HIPAA-aware notification handling. Always on for Enterprise tier.</div>'
+    +'</div>'
+    +'<div class="form-group"><label>Status</label>'
+    +'<select id="mp-status" class="filter-sel" style="width:100%;height:38px">'+statusOpts+'</select>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Manual status override. Square subscription will manage this automatically once Phase B is wired.</div>'
+    +'</div>'
+    +'<div style="margin-top:18px;padding:14px 16px;background:var(--bg-card);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
+    +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Effective Charge</div>'
+    +'<div id="mp-summary" style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--orange);margin-top:2px">'+summary+'</div></div>'
+    +'<div style="font-size:11px;color:var(--text-muted);text-align:right;line-height:1.5">'+esc(subName)+'</div>'
+    +'</div>';
+
+  openModal('Manage Plan',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveManagePlan(\''+subId+'\')">Save Plan</button>',
+    'modal-lg');
+}
+
+function refreshTierPrices(){
+  var period=document.getElementById('mp-period');
+  var tierSel=document.getElementById('mp-tier');
+  if(!period||!tierSel)return;
+  var p=period.value;
+  var cur=tierSel.value;
+  tierSel.innerHTML=Object.keys(PLAN_TIER_LABELS).map(function(tier){
+    var pp=PLAN_PRICES[tier];
+    var price=p==='annual'?pp.annual:pp.monthly;
+    var per=p==='annual'?'/yr':'/mo';
+    return '<option value="'+tier+'"'+(tier===cur?' selected':'')+'>'+PLAN_TIER_LABELS[tier]+' — $'+price+per+'</option>';
+  }).join('');
+}
+
+function updatePlanSummary(){
+  var tier=document.getElementById('mp-tier');
+  var period=document.getElementById('mp-period');
+  var hipaa=document.getElementById('mp-hipaa');
+  var sum=document.getElementById('mp-summary');
+  if(!tier||!period||!sum)return;
+  var extra=state.modal&&state.modal.extra||{};
+  var isExempt=!!(extra.plan&&extra.plan.exempt_from_billing);
+  if(isExempt){sum.textContent='No charge';return;}
+  var price=planMonthlyPrice(tier.value,period.value,hipaa&&hipaa.checked);
+  sum.textContent='$'+price+(period.value==='annual'?'/yr':'/mo');
+}
+
+async function saveManagePlan(subId){
+  var tier=document.getElementById('mp-tier')&&document.getElementById('mp-tier').value;
+  var period=document.getElementById('mp-period')&&document.getElementById('mp-period').value;
+  var hipaa=document.getElementById('mp-hipaa')&&document.getElementById('mp-hipaa').checked;
+  var status=document.getElementById('mp-status')&&document.getElementById('mp-status').value;
+  if(!tier||!period||!status){toast('All fields required.','error');return;}
+  var extra=state.modal&&state.modal.extra||{};
+  var existing=extra.plan;
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  try{
+    var payload={
+      plan_tier:tier,
+      billing_period:period,
+      hipaa_addon:!!hipaa,
+      status:status,
+      updated_at:new Date().toISOString()
+    };
+    var r;
+    if(existing){
+      // PATCH existing record
+      r=await fetch(url+'/rest/v1/subaccount_plans?subaccount_id=eq.'+encodeURIComponent(subId),{
+        method:'PATCH',
+        headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+    } else {
+      // INSERT new record
+      payload.subaccount_id=subId;
+      payload.created_at=new Date().toISOString();
+      r=await fetch(url+'/rest/v1/subaccount_plans',{
+        method:'POST',
+        headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
+        body:JSON.stringify(payload)
+      });
+    }
+    if(!r.ok){var t=await r.text();toast('Could not save plan: '+t,'error');return;}
+    // Also keep the legacy `plan` column on subaccounts in sync for older code paths
+    fetch(url+'/rest/v1/subaccounts?id=eq.'+encodeURIComponent(subId),{
+      method:'PATCH',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({plan:tier})
+    }).catch(function(){});
+    closeModal();
+    toast('Plan updated.','success');
+    agencyLoadSubaccounts();
+  }catch(e){toast('Error saving plan: '+e.message,'error');}
 }
 
 // =====================================================
@@ -10111,12 +10322,22 @@ async function agencyLoadSubaccounts(){
     (statsRows||[]).forEach(function(row){
       if(row.data)statsMap[row.subaccount_id]=row.data;
     });
+    // Load plan records for all subaccounts
+    var plansMap=await loadAllPlans();
     el.innerHTML=subs.map(function(sub){
       var data=statsMap[sub.id]||{};
       var contactCount=(data.contacts||[]).length;
       var userCount=(data.users||[]).length+1; // +1 for admin
       var isActive=sub.active!==false;
-      var plan=sub.plan||'starter';
+      var planRecord=plansMap[sub.id]||null;
+      var planTier=(planRecord&&planRecord.plan_tier)||sub.plan||'starter';
+      var planStatus=(planRecord&&planRecord.status)||'trialing';
+      var hipaaOn=!!(planRecord&&planRecord.hipaa_addon);
+      var billingPeriod=(planRecord&&planRecord.billing_period)||'monthly';
+      var isProtected=!!(planRecord&&planRecord.protected_from_deletion);
+      var isExempt=!!(planRecord&&planRecord.exempt_from_billing);
+      var trialDays=planTrialDaysRemaining(planRecord);
+      var statusCol=planStatusColors(planStatus);
       var hasSquare=!!(data.settings&&data.settings.square&&(data.settings.square.connected===true||data.settings.square.accessToken));
       return '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:12px">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between">'
@@ -10126,6 +10347,7 @@ async function agencyLoadSubaccounts(){
         +'</div>'
         +'<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">'
         +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(isActive?'background:rgba(52,211,153,.12);color:#34d399':'background:rgba(239,68,68,.1);color:#f87171')+'">'+(isActive?'Active':'Suspended')+'</span>'
+        +'<span title="Billing status" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;background:'+statusCol.bg+';color:'+statusCol.fg+'">'+esc(planStatusLabel(planStatus))+(trialDays>0?' '+trialDays+'d':'')+'</span>'
         +'<span title="'+(hasSquare?'Square connected':'Square not connected')+'" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;'+(hasSquare?'background:rgba(107,33,234,.15);color:#c7b8ff':'background:rgba(122,133,153,.12);color:#7a8599')+'">'+(hasSquare?'◆ Square':'○ No Square')+'</span>'
         +'</div>'
         +'</div>'
@@ -10139,17 +10361,20 @@ async function agencyLoadSubaccounts(){
         +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Users</div>'
         +'</div>'
         +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text);text-transform:capitalize">'+esc(plan)+'</div>'
-        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Plan</div>'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text)">'+esc(planTierLabel(planTier))+'</div>'
+        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">'+(billingPeriod==='annual'?'Annual':'Monthly')+(hipaaOn?' + HIPAA':'')+'</div>'
         +'</div>'
         +'</div>'
         +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
         +(agencyCanLoginAs()?'<button class="btn btn-primary btn-sm" onclick="agencyLoginAs(\''+esc(sub.slug)+'\',\''+esc(sub.name)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Login As</button>':'')
-        +(agencyCanManageSubaccounts()?'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(plan)+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="agencyResetPassword(\''+sub.id+'\',\''+esc(sub.slug)+'\')">Reset Password</button>':'')
-        +(agencyCanManageSubaccounts()?(isActive
+        +(agencyCanManageSubaccounts()?'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(planTier)+'\')">Edit</button>':'')
+        +(agencyCanManageSubaccounts()?'<button class="btn btn-purple btn-sm" onclick="openManagePlanModal(\''+sub.id+'\',\''+esc(sub.name)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Manage Plan</button>':'')
+        +(agencyCanManageSubaccounts()?'<button class="btn btn-ghost btn-sm" onclick="agencyResetPassword(\''+sub.id+'\',\''+esc(sub.slug)+'\')">Reset Password</button>':'')
+        +(agencyCanManageSubaccounts()&&!isProtected?(isActive
           ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false,\''+esc(sub.name)+'\')">Suspend</button>'
           :'<button class="btn btn-purple btn-sm" onclick="agencyToggleSub(\''+sub.id+'\',true,\''+esc(sub.name)+'\')">Activate</button>'):'')
-        +(agencyCanManageSubaccounts()?'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\')">Delete</button>':'')
+        +(agencyCanManageSubaccounts()&&!isProtected?'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\')">Delete</button>':'')
+        +(isProtected?'<span title="This workspace is protected and cannot be suspended or deleted." style="font-size:10px;color:var(--text-muted);padding:6px 0;display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected</span>':'')
         +'</div>'
         +'</div>';
     }).join('');
