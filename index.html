@@ -3020,12 +3020,47 @@ function sendApptConfirmation(data){
   fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Confirmed: '+data.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-confirmation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:data.title,staff_name:staffName,business_name:bizName}})}).catch(function(){});
 }
 
+function syncApptToSupabase(appt,deleted){
+  var slug=state.subaccountSlug||'litbiz';
+  var subId='sub-'+slug;
+  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  var baseUrl=db.settings.supabaseUrl||SB_FALLBACK_URL;
+  var url=baseUrl+'/rest/v1/appointments';
+  if(deleted){
+    fetch(url+'?id=eq.'+encodeURIComponent(appt.id)+'&subaccount_id=eq.'+encodeURIComponent(subId),{
+      method:'DELETE',
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    }).catch(function(){});
+    return;
+  }
+  var row={
+    id:appt.id,
+    subaccount_id:subId,
+    title:appt.title||'Untitled',
+    contact_id:appt.contactId||null,
+    assigned_to:appt.assignedTo||null,
+    date:appt.date,
+    time:appt.time||null,
+    duration:parseInt(appt.duration)||60,
+    status:appt.status||'scheduled',
+    location:appt.location||null,
+    notes:appt.notes||null,
+    updated_at:new Date().toISOString()
+  };
+  fetch(url,{
+    method:'POST',
+    headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify(row)
+  }).catch(function(){});
+}
+
 function saveAppt(){
   const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
   if(!title||!date){toast('Title and date required.','error');return}
   const data={title,contactId:document.getElementById('af-cv').value||null,date,time:document.getElementById('af-time').value,duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim()};
   if(state.modal.id){const a=getAppt(state.modal.id);if(a)Object.assign(a,data)}
-  else{db.appointments.push({id:uid(),...data,createdAt:now_()});sendApptConfirmation(data);}
+  else{var newAppt={id:uid(),...data,createdAt:now_()};db.appointments.push(newAppt);sendApptConfirmation(data);syncApptToSupabase(newAppt,false);}
+  if(state.modal.id){const updated=getAppt(state.modal.id);if(updated)syncApptToSupabase(updated,false);}
   saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();updateNotifBadge();toast(state.modal.id?'Appointment updated.':'Appointment saved.','success');
 }
 
@@ -3058,7 +3093,7 @@ function sendApptCancellation(a){
     +'</div>';
   fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Cancelled: '+a.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-cancellation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:a.title,business_name:bizName}})}).catch(function(){});
 }
-function confirmDelAppt(){const id=state.modal&&state.modal.id;if(!id)return;const appt=db.appointments.find(a=>a.id===id);db.appointments=db.appointments.filter(a=>a.id!==id);sendApptCancellation(appt);saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();typeof renderApptList==='function'&&renderApptList();toast('Appointment removed.','success')}
+function confirmDelAppt(){const id=state.modal&&state.modal.id;if(!id)return;const appt=db.appointments.find(a=>a.id===id);db.appointments=db.appointments.filter(a=>a.id!==id);sendApptCancellation(appt);if(appt)syncApptToSupabase(appt,true);saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();typeof renderApptList==='function'&&renderApptList();toast('Appointment removed.','success')}
 
 // TASK MODAL
 function openTaskModal(contactId,taskId){
