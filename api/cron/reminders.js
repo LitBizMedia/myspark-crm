@@ -2,6 +2,9 @@
 // Runs hourly via Vercel cron.
 // Sends 24-hour appointment reminders via email and SMS.
 
+const { sendEmail } = require('../../lib/resend');
+const { sendSms } = require('../../lib/twilio');
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -109,7 +112,6 @@ async function reminderAlreadySent(subaccountId, appointmentId) {
 }
 
 module.exports = async (req, res) => {
-  // Verify cron secret to prevent unauthorized calls
   const authHeader = req.headers['authorization'];
   if (CRON_SECRET && authHeader !== 'Bearer ' + CRON_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -119,7 +121,6 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Supabase not configured' });
   }
 
-  // Find appointments happening in the next 24-48 hours
   const now = new Date();
   const windowStart = new Date(now.getTime() + 23 * 3600000);
   const windowEnd = new Date(now.getTime() + 25 * 3600000);
@@ -145,7 +146,6 @@ module.exports = async (req, res) => {
   let skipped = 0;
 
   for (const appt of appointments) {
-    // Check if appointment is actually in the 24hr window based on time
     if (appt.time) {
       const apptDateTime = new Date(appt.date + 'T' + appt.time);
       const hoursUntil = (apptDateTime - now) / 3600000;
@@ -155,21 +155,15 @@ module.exports = async (req, res) => {
       }
     }
 
-    // Skip if already sent
     const alreadySent = await reminderAlreadySent(appt.subaccount_id, appt.id);
-    if (alreadySent) {
-      skipped++;
-      continue;
-    }
+    if (alreadySent) { skipped++; continue; }
 
-    // Get subaccount data for contact info and business name
     const data = await getSubaccountData(appt.subaccount_id);
     if (!data) { skipped++; continue; }
 
     const contact = appt.contact_id
       ? (data.contacts || []).find(c => c.id === appt.contact_id)
       : null;
-
     if (!contact) { skipped++; continue; }
 
     const bizName = (data.settings && data.settings.businessName) || 'MySpark+';
@@ -179,6 +173,7 @@ module.exports = async (req, res) => {
     const staffName = staff ? (staff.name || staff.username) : '';
     const dateStr = fmtDate(appt.date);
     const timeStr = appt.time ? fmtTime(appt.time) : '';
+    const slug = appt.subaccount_id.replace('sub-', '');
 
     const vars = {
       contact_name: contact.name || '',
@@ -194,7 +189,7 @@ module.exports = async (req, res) => {
     let emailSentFlag = false;
     let smsSentFlag = false;
 
-    // Send email reminder
+    // Email reminder
     if (contact.email) {
       try {
         const tpl = await getTemplate(appt.subaccount_id, 'appt-reminder');
@@ -203,7 +198,7 @@ module.exports = async (req, res) => {
           subject = applyVars(tpl.subject, vars);
           html = applyVars(tpl.body_html, vars);
         } else {
-          subject = 'Reminder: ' + appt.title + ' tomorrow at ' + timeStr;
+          subject = 'Reminder: ' + appt.title + ' tomorrow' + (timeStr ? ' at ' + timeStr : '');
           html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
             + '<h2 style="color:#6b21ea;margin:0 0 8px">Appointment Reminder</h2>'
             + '<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">Hi ' + contact.name + ', this is a reminder about your appointment tomorrow.</p>'
@@ -217,52 +212,34 @@ module.exports = async (req, res) => {
             + '<p style="color:#5a4d7a;font-size:14px;margin:0">' + bizName + '</p>'
             + '</div>';
         }
-
-        const emailRes = await fetch('https://' + req.headers.host + '/api/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            slug: appt.subaccount_id.replace('sub-', ''),
-            to: contact.email,
-            subject: subject,
-            html: html,
-            fromName: bizName,
-            templateType: 'appt-reminder',
-            contactId: contact.id
-          })
+        const result = await sendEmail(slug, {
+          to: contact.email,
+          subject: subject,
+          html: html,
+          fromName: bizName,
+          templateType: 'appt-reminder',
+          contactId: contact.id
         });
-
-        if (emailRes.ok) {
-          emailSentFlag = true;
-          emailsSent++;
-        }
+        if (result.ok) { emailSentFlag = true; emailsSent++; }
       } catch (e) {
         console.error('Email reminder error:', e.message);
       }
     }
 
-    // Send SMS reminder
+    // SMS reminder
     if (contact.phone) {
       try {
         const smsSettings = await getSmsSettings(appt.subaccount_id);
         if (smsSettings && smsSettings.enabled && smsSettings.campaign_status === 'approved') {
-          const smsBody = 'Reminder: your ' + appt.title + ' appointment is tomorrow'
+          const smsBody = 'Reminder: your ' + appt.title + ' is tomorrow'
             + (timeStr ? ' at ' + timeStr : '') + '. Reply STOP to opt out.';
-          const smsRes = await fetch('https://' + req.headers.host + '/api/sms/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              slug: appt.subaccount_id.replace('sub-', ''),
-              to: contact.phone,
-              body: smsBody,
-              templateType: 'appt-reminder',
-              contactId: contact.id
-            })
+          const result = await sendSms(slug, {
+            to: contact.phone,
+            body: smsBody,
+            templateType: 'appt-reminder',
+            contactId: contact.id
           });
-          if (smsRes.ok) {
-            smsSentFlag = true;
-            smsSent++;
-          }
+          if (result.ok) { smsSentFlag = true; smsSent++; }
         }
       } catch (e) {
         console.error('SMS reminder error:', e.message);
@@ -272,6 +249,5 @@ module.exports = async (req, res) => {
     await logReminder(appt.subaccount_id, appt.id, emailSentFlag, smsSentFlag);
   }
 
-  console.log('Reminders complete. Emails: ' + emailsSent + ', SMS: ' + smsSent + ', Skipped: ' + skipped);
   return res.status(200).json({ success: true, emailsSent, smsSent, skipped });
 };
