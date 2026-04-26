@@ -149,22 +149,24 @@ module.exports = async (req, res) => {
     if (appt.time) {
       const apptDateTime = new Date(appt.date + 'T' + appt.time);
       const hoursUntil = (apptDateTime - now) / 3600000;
+      console.log('Appt:', appt.id, 'hoursUntil:', hoursUntil.toFixed(2));
       if (hoursUntil < 22 || hoursUntil > 26) {
+        console.log('SKIP window:', hoursUntil.toFixed(2));
         skipped++;
         continue;
       }
     }
 
     const alreadySent = await reminderAlreadySent(appt.subaccount_id, appt.id);
-    if (alreadySent) { skipped++; continue; }
+    if (alreadySent) { console.log('SKIP already sent:', appt.id); skipped++; continue; }
 
     const data = await getSubaccountData(appt.subaccount_id);
-    if (!data) { skipped++; continue; }
+    if (!data) { console.log('SKIP no data:', appt.subaccount_id); skipped++; continue; }
 
     const contact = appt.contact_id
       ? (data.contacts || []).find(c => c.id === appt.contact_id)
       : null;
-    if (!contact) { skipped++; continue; }
+    if (!contact) { console.log('SKIP no contact:', appt.contact_id, 'for appt:', appt.id); skipped++; continue; }
 
     const bizName = (data.settings && data.settings.businessName) || 'MySpark+';
     const staff = appt.assigned_to
