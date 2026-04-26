@@ -122,8 +122,8 @@ module.exports = async (req, res) => {
   }
 
   const now = new Date();
-  const windowStart = new Date(now.getTime() + 23 * 3600000);
-  const windowEnd = new Date(now.getTime() + 25 * 3600000);
+  const windowStart = new Date(now.getTime() + 22 * 3600000);
+  const windowEnd = new Date(now.getTime() + 26 * 3600000);
   const startDate = windowStart.toISOString().split('T')[0];
   const endDate = windowEnd.toISOString().split('T')[0];
 
@@ -149,7 +149,7 @@ module.exports = async (req, res) => {
     if (appt.time) {
       const apptDateTime = new Date(appt.date + 'T' + appt.time);
       const hoursUntil = (apptDateTime - now) / 3600000;
-      if (hoursUntil < 23 || hoursUntil > 25) {
+      if (hoursUntil < 22 || hoursUntil > 26) {
         skipped++;
         continue;
       }
