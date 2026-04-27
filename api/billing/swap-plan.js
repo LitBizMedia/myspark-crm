@@ -35,7 +35,7 @@ function calcProration(oldTier, newTier, billingPeriod, hipaaAddon, nextBillingD
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
 
-  const { subaccountId, newTier, newPeriod, newHipaa } = req.body || {};
+  const { subaccountId, newTier, newPeriod, newHipaa, newExempt } = req.body || {};
 
   if (!subaccountId || !newTier || !newPeriod) {
     return sendError(res, 400, 'Missing required fields');
@@ -54,7 +54,19 @@ module.exports = async function handler(req, res) {
     if (!plans || !plans.length) return sendError(res, 404, 'No plan found for ' + subaccountId);
     const plan = plans[0];
 
-    if (plan.exempt_from_billing) {
+    // Handle exempt flag changes
+    if (newExempt !== undefined && !!newExempt !== !!plan.exempt_from_billing) {
+      await updatePlan(subaccountId, {
+        plan_tier: newTier,
+        billing_period: newPeriod,
+        hipaa_addon: !!newHipaa,
+        exempt_from_billing: !!newExempt,
+        status: newExempt ? 'exempt' : 'trialing'
+      });
+      return res.status(200).json({ success: true, action: 'exempt_changed' });
+    }
+
+    if (plan.exempt_from_billing || newExempt) {
       // Exempt accounts: just update the DB record, no billing
       await updatePlan(subaccountId, {
         plan_tier: newTier,

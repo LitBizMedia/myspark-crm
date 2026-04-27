@@ -10031,6 +10031,9 @@ async function openManagePlanModal(subId,subName){
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="mp-hipaa" '+(curHipaa?'checked':'')+' onchange="updatePlanSummary()" style="width:auto;margin:0">'
     +'<span>HIPAA Compliance Add-on (+$50/mo or $500/yr)</span></label></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
+    +'<input type="checkbox" id="mp-exempt" '+(isExempt?'checked':'')+' style="width:auto;margin:0">'
+    +'<span>Exempt from billing (test workspace, partner, internal)</span></label></div>'
     +'<div style="margin-top:14px;padding:14px 16px;background:var(--bg-card);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
     +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Effective Charge</div>'
     +'<div id="mp-summary" style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--orange);margin-top:2px">'+summary+'</div></div>'
@@ -10047,7 +10050,7 @@ async function openManagePlanModal(subId,subName){
 
   openModal('Manage Plan: '+esc(subName),body,
     '<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
-    +((!isExempt&&curStatus!=='cancelled'&&curStatus!=='suspended')?'<button class="btn btn-primary" onclick="saveManagePlan(\''+subId+'\')">Save Plan</button>':''),
+    +'<button class="btn btn-primary" onclick="saveManagePlan(\''+subId+'\')">Save Plan</button>',
     'modal-lg');
 }
 
@@ -10082,10 +10085,11 @@ async function saveManagePlan(subId){
   var tier=document.getElementById('mp-tier')&&document.getElementById('mp-tier').value;
   var period=document.getElementById('mp-period')&&document.getElementById('mp-period').value;
   var hipaa=document.getElementById('mp-hipaa')&&document.getElementById('mp-hipaa').checked;
+  var exemptChecked=!!(document.getElementById('mp-exempt')&&document.getElementById('mp-exempt').checked);
   if(!tier||!period){toast('All fields required.','error');return;}
   var extra=state.modal&&state.modal.extra||{};
   var existing=extra.plan;
-  var isExempt=!!(existing&&existing.exempt_from_billing);
+  var isExempt=exemptChecked;
   var tierOrder={starter:1,professional:2,business:3,enterprise:4};
   var oldTier=existing&&existing.plan_tier||tier;
   var isUpgrade=!isExempt&&(tierOrder[tier]||1)>(tierOrder[oldTier]||1);
@@ -10106,21 +10110,21 @@ async function saveManagePlan(subId){
       +(nextDate?'<p style="margin-top:6px;font-size:12px;color:var(--text-muted)">Next full charge on '+nextDate+' at $'+newPrice+(period==='annual'?'/yr':'/mo')+'.</p>':'')
       +'</div>',
       '<button class="btn btn-ghost" onclick="openManagePlanModal(\''+subId+'\',\''+esc(extra.subName||'')+'\')">Go Back</button>'
-      +'<button class="btn btn-primary" onclick="confirmSwapPlan(\''+subId+'\',\''+tier+'\',\''+period+'\','+(hipaa?'true':'false')+')">Confirm Upgrade</button>',
+      +'<button class="btn btn-primary" onclick="confirmSwapPlan(\''+subId+'\',\''+tier+'\',\''+period+'\','+(hipaa?'true':'false')+','+(exemptChecked?'true':'false')+')">Confirm Upgrade</button>',
       'modal-sm');
     return;
   }
 
   // Downgrade, period change, or exempt: call swap-plan (no charge)
-  await confirmSwapPlan(subId,tier,period,hipaa,true);
+  await confirmSwapPlan(subId,tier,period,hipaa,exemptChecked,true);
 }
 
-async function confirmSwapPlan(subId,tier,period,hipaa,silent){
+async function confirmSwapPlan(subId,tier,period,hipaa,exempt,silent){
   try{
     var r=await fetch('/api/billing/swap-plan',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa})
+      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt})
     });
     if(!r.ok){var t=await r.text();toast('Plan change failed: '+t,'error');return;}
     var data=await r.json();
