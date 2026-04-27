@@ -10654,7 +10654,7 @@ async function createSubaccount(){
     var r1=await fetch(url+'/rest/v1/subaccounts',{
       method:'POST',
       headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({id:subId,agency_id:'agency-main',name:name,slug:slug,plan:tier,active:true,admin_email:adminEmail})
+      body:JSON.stringify({id:subId,agency_id:'agency-main',name:name,slug:slug,plan:tier,active:true,admin_email:adminEmail,admin_username:adminUser})
     });
     if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
     // Create initial data record with admin user

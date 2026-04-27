@@ -89,6 +89,19 @@ module.exports = async function handler(req, res) {
                 }
               }
             }
+            // Fallback: check admin_username column on subaccounts table
+            if (!adminUsername) {
+              const rSub2 = await fetch(
+                SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + encodeURIComponent(subId) + '&select=admin_username',
+                { headers: sbHeaders() }
+              );
+              if (rSub2.ok) {
+                const sub2Rows = await rSub2.json();
+                if (sub2Rows && sub2Rows.length && sub2Rows[0].admin_username) {
+                  adminUsername = sub2Rows[0].admin_username;
+                }
+              }
+            }
           } catch (e) {}
           userType = 'subaccount_admin';
           // Store subId:username so reset-password can create _subaccountAdmin if needed
