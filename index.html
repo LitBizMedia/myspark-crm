@@ -3634,7 +3634,14 @@ function openEditUserModal(userId){
   const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Username</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
     +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(for password recovery)</span></label><input id="eu-email" type="email" value="'+esc(u.email||u.emailAddress||'')+'" placeholder="email@example.com"></div>'
-    +'<div class="form-row"><div class="form-group"><label>New Password <span style="font-weight:400;color:var(--text-muted)">(blank to keep)</span></label><input id="eu-pass" type="password" placeholder=""></div>'+roleField+'</div>'
+    +(state.user&&state.user.id===userId
+      ?'<div class="form-group"><label>Current Password <span style="font-weight:400;color:var(--text-muted)">(required to change password)</span></label>'
+      +'<input id="eu-old-pass" type="password" autocomplete="current-password" placeholder="Your current password"></div>'
+      :'')
+    +'<div class="form-row"><div class="form-group"><label>New Password <span style="font-weight:400;color:var(--text-muted)">(blank to keep)</span></label>'
+    +'<input id="eu-pass" type="password" autocomplete="new-password" placeholder=""></div>'+roleField+'</div>'
+    +'<div class="form-group"><label>Confirm New Password</label>'
+    +'<input id="eu-pass2" type="password" autocomplete="new-password" placeholder=""></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Working Schedule</div>'
     +buildSchedSection(false);
@@ -3649,10 +3656,25 @@ async function saveEditUser(){
   const sched=JSON.parse(JSON.stringify(editSched));
   DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
   const euEmail=(document.getElementById('eu-email')&&document.getElementById('eu-email').value||'').trim().toLowerCase();
+  const pass2=document.getElementById('eu-pass2')&&document.getElementById('eu-pass2').value||'';
   const updates={name,color:state.selUserColor,schedule:sched,dateOverrides:[...userOvs]};
   if(euEmail)updates.email=euEmail;
   if(role)updates.role=role;
-  if(pass)updates.passwordHash=await sha256(pass);
+  if(pass){
+    if(pass!==pass2){toast('Passwords do not match.','error');return;}
+    var passStrErr=checkPasswordStrength(pass);
+    if(passStrErr){toast(passStrErr,'error');return;}
+    // If editing self, require old password
+    if(state.user&&state.user.id===userId){
+      const oldPass=document.getElementById('eu-old-pass')&&document.getElementById('eu-old-pass').value||'';
+      if(!oldPass){toast('Enter your current password to set a new one.','error');return;}
+      const oldHash=await sha256(oldPass);
+      const selfUser=allUsers().find(function(u){return u.id===userId;});
+      const expectedHash=selfUser?selfUser.passwordHash:(db._subaccountAdmin&&db._subaccountAdmin.passwordHash);
+      if(oldHash!==expectedHash){toast('Current password is incorrect.','error');return;}
+    }
+    updates.passwordHash=await sha256(pass);
+  }
   if(isAdmin){
     db.settings.adminProfile={...db.settings.adminProfile,...updates};
     if(db._subaccountAdmin&&euEmail)db._subaccountAdmin.email=euEmail;
@@ -11262,13 +11284,13 @@ async function openAgencyEditUserModal(userId){
       +(isSelf?'<div style="font-size:11px;color:#fbbf24;margin-top:4px">You cannot deactivate yourself.</div>':isLastSuper?'<div style="font-size:11px;color:#fbbf24;margin-top:4px">Cannot deactivate the last Super Admin.</div>':'')+'</div>'
       +(isSelf
         ?'<div class="form-group"><label>Current Password <span style="font-weight:400;color:var(--text-muted)">(required to change password)</span></label>'
-        +'<input id="ag-edit-old-pass" type="password" placeholder="Your current password"></div>'
+        +'<input id="ag-edit-old-pass" type="password" autocomplete="current-password" placeholder="Your current password"></div>'
         :'')
       +'<div class="form-group"><label>'+(!isSelf?'Reset ':'')+' New Password <span style="font-weight:400;color:var(--text-muted)">(leave blank to keep current)</span></label>'
-      +'<input id="ag-edit-pass" type="password" placeholder="New password (optional)">'
+      +'<input id="ag-edit-pass" type="password" autocomplete="new-password" placeholder="New password (optional)">'
       +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
       +'<div class="form-group" id="ag-edit-pass2-group"><label>Confirm New Password</label>'
-      +'<input id="ag-edit-pass2" type="password" placeholder="Confirm new password"></div>';
+      +'<input id="ag-edit-pass2" type="password" autocomplete="new-password" placeholder="Confirm new password"></div>';
     openModal('Edit Agency User', body,
       '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
       +'<button class="btn btn-primary" onclick="agencySaveEditUser(\''+esc(userId)+'\')">Save Changes</button>',
