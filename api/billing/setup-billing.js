@@ -5,6 +5,7 @@
 
 const { findOrCreateCustomer, saveCardOnFile, calculateCharge } = require('../../lib/agency-billing');
 const { sendError } = require('../../lib/square');
+const { logAudit, extractActorFromBody } = require('../../lib/audit');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -36,6 +37,8 @@ module.exports = async function handler(req, res) {
     skipTrial
   } = req.body || {};
 
+  const actor = extractActorFromBody(req.body);
+
   const hasNewCard = !!sourceId;
   const hasExistingCard = !!(existingCustomerId && existingCardId);
   if (!subaccountSlug || (!hasNewCard && !hasExistingCard) || !tier || !billingPeriod || !adminEmail) {
@@ -53,13 +56,12 @@ module.exports = async function handler(req, res) {
   try {
     // 1. Get or create Square customer + card
     let customerId, cardId, cardLast4 = '', cardBrand = '';
+    let cardSource = hasExistingCard ? 'existing' : 'new';
 
     if (hasExistingCard) {
-      // Use existing Square customer and card directly
       customerId = existingCustomerId;
       cardId = existingCardId;
     } else {
-      // New card: tokenize nonce, save to Square
       const nameParts = (adminName || subaccountName || 'Customer').split(' ');
       const givenName = nameParts[0] || '';
       const familyName = nameParts.slice(1).join(' ') || '';
@@ -76,14 +78,14 @@ module.exports = async function handler(req, res) {
       cardBrand = card.card_brand || '';
     }
 
-    // 3. Calculate trial and billing dates
+    // 2. Calculate trial and billing dates
     const trialDays = skipTrial ? 0 : 14;
     const now = new Date();
     const nextBillingDate = new Date(now.getTime() + trialDays * 86400000).toISOString().split('T')[0];
     const trialEndsAt = trialDays > 0 ? new Date(now.getTime() + trialDays * 86400000).toISOString() : null;
-    const currentPeriodStart = trialDays > 0 ? now.toISOString() : now.toISOString();
+    const currentPeriodStart = now.toISOString();
 
-    // 4. Upsert subaccount_plans row with Square billing info
+    // 3. Upsert subaccount_plans row with Square billing info
     const planPayload = {
       subaccount_id: subaccountId,
       plan_tier: tier,
@@ -112,9 +114,48 @@ module.exports = async function handler(req, res) {
 
     if (!upsertRes.ok) {
       const errText = await upsertRes.text();
-      console.error('setup-billing: DB upsert failed after card save. Customer:', customer.id, 'Card:', card.id, errText);
+      console.error('setup-billing: DB upsert failed after card save. Customer:', customerId, 'Card:', cardId, errText);
+      await logAudit({
+        req, ...actor,
+        action: 'agency.subaccount.setup_billing',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'failure',
+        errorMessage: 'DB upsert failed after Square card save: ' + errText,
+        metadata: {
+          card_source: cardSource,
+          square_customer_id: customerId,
+          square_card_id: cardId,
+          tier: tier,
+          billing_period: billingPeriod
+        }
+      });
       return sendError(res, 500, 'Card saved in Square but billing record failed. Contact support.', errText);
     }
+
+    // Audit log: success
+    await logAudit({
+      req, ...actor,
+      action: 'agency.subaccount.setup_billing',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      metadata: {
+        card_source: cardSource,
+        square_customer_id: customerId,
+        square_card_id: cardId,
+        card_last4: cardLast4 || null,
+        card_brand: cardBrand || null,
+        tier: tier,
+        billing_period: billingPeriod,
+        hipaa_addon: !!hipaaAddon,
+        discount_percent: discountPercent || 0,
+        trial_days: trialDays,
+        next_billing_date: nextBillingDate,
+        starting_status: planPayload.status
+      }
+    });
 
     return res.status(200).json({
       success: true,
@@ -129,6 +170,21 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     console.error('setup-billing error:', e);
+    await logAudit({
+      req, ...actor,
+      action: 'agency.subaccount.setup_billing',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      outcome: 'failure',
+      errorMessage: e.message,
+      metadata: {
+        tier: tier,
+        billing_period: billingPeriod,
+        had_new_card: hasNewCard,
+        had_existing_card: hasExistingCard
+      }
+    });
     return sendError(res, 500, 'Billing setup failed', e.message);
   }
 };

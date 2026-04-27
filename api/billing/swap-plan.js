@@ -5,6 +5,7 @@
 
 const { chargeCardOnFile, calculateCharge, PLAN_PRICES_CENTS, HIPAA_ADDON_CENTS } = require('../../lib/agency-billing');
 const { sendError } = require('../../lib/square');
+const { logAudit, extractActorFromBody } = require('../../lib/audit');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -19,9 +20,9 @@ function sbHeaders(extra) {
   }, extra || {});
 }
 
-function calcProration(oldTier, newTier, billingPeriod, hipaaAddon, nextBillingDate) {
-  const oldCents = calculateCharge(oldTier, billingPeriod, hipaaAddon);
-  const newCents = calculateCharge(newTier, billingPeriod, hipaaAddon);
+function calcProration(oldTier, newTier, billingPeriod, hipaaAddon, nextBillingDate, discountPercent) {
+  const oldCents = calculateCharge(oldTier, billingPeriod, hipaaAddon, discountPercent || 0);
+  const newCents = calculateCharge(newTier, billingPeriod, hipaaAddon, discountPercent || 0);
   const totalDays = billingPeriod === 'annual' ? 365 : 30;
   const today = new Date();
   const nextDate = new Date(nextBillingDate);
@@ -36,6 +37,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
 
   const { subaccountId, newTier, newPeriod, newHipaa, newExempt, discountPercent, discountNote, customBillingDate } = req.body || {};
+  const actor = extractActorFromBody(req.body);
 
   if (!subaccountId || !newTier || !newPeriod) {
     return sendError(res, 400, 'Missing required fields');
@@ -54,32 +56,79 @@ module.exports = async function handler(req, res) {
     if (!plans || !plans.length) return sendError(res, 404, 'No plan found for ' + subaccountId);
     const plan = plans[0];
 
-    // Handle exempt flag changes
+    const beforeSnapshot = {
+      plan_tier: plan.plan_tier,
+      billing_period: plan.billing_period,
+      hipaa_addon: !!plan.hipaa_addon,
+      exempt_from_billing: !!plan.exempt_from_billing,
+      discount_percent: plan.discount_percent || 0,
+      status: plan.status
+    };
+
+    // ─────────────────────────────────────────
+    // Exempt status change
+    // ─────────────────────────────────────────
     if (newExempt !== undefined && !!newExempt !== !!plan.exempt_from_billing) {
       const exemptUpdatePayload = {
         plan_tier: newTier,
         billing_period: newPeriod,
         hipaa_addon: !!newHipaa,
         exempt_from_billing: !!newExempt,
-        status: newExempt ? 'exempt' : 'trialing'
+        status: newExempt ? 'exempt' : 'trialing',
+        discount_percent: discountPercent || 0,
+        discount_note: discountNote || null
       };
-      // Apply custom billing date if provided and switching from exempt to active
       if (!newExempt && customBillingDate) {
         exemptUpdatePayload.next_billing_date = customBillingDate;
         exemptUpdatePayload.status = 'active';
       }
       await updatePlan(subaccountId, exemptUpdatePayload);
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.exempt_changed',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        metadata: {
+          before: beforeSnapshot,
+          after: {
+            plan_tier: newTier,
+            billing_period: newPeriod,
+            hipaa_addon: !!newHipaa,
+            exempt_from_billing: !!newExempt,
+            status: exemptUpdatePayload.status,
+            next_billing_date: exemptUpdatePayload.next_billing_date || null
+          }
+        }
+      });
       return res.status(200).json({ success: true, action: 'exempt_changed' });
     }
 
     if (plan.exempt_from_billing || newExempt) {
-      // Exempt accounts: just update the DB record, no billing
+      // Both old and new are exempt: just update DB metadata, no billing
       await updatePlan(subaccountId, {
         plan_tier: newTier,
         billing_period: newPeriod,
         hipaa_addon: !!newHipaa,
         discount_percent: discountPercent || 0,
         discount_note: discountNote || null
+      });
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.swap',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        metadata: {
+          path: 'exempt_metadata_update',
+          before: beforeSnapshot,
+          after: {
+            plan_tier: newTier,
+            billing_period: newPeriod,
+            hipaa_addon: !!newHipaa,
+            discount_percent: discountPercent || 0
+          }
+        }
       });
       return res.status(200).json({ success: true, action: 'exempt_updated' });
     }
@@ -90,7 +139,9 @@ module.exports = async function handler(req, res) {
     const isPeriodChange = newPeriod !== oldPeriod;
     const isTierChange = newTier !== oldTier;
 
+    // ─────────────────────────────────────────
     // Downgrade or period-only change: schedule for next cycle
+    // ─────────────────────────────────────────
     if (!isUpgrade) {
       await updatePlan(subaccountId, {
         plan_tier: newTier,
@@ -99,6 +150,25 @@ module.exports = async function handler(req, res) {
         discount_percent: discountPercent || 0,
         discount_note: discountNote || null
       });
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.swap',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        metadata: {
+          path: 'scheduled',
+          is_tier_change: isTierChange,
+          is_period_change: isPeriodChange,
+          before: beforeSnapshot,
+          after: {
+            plan_tier: newTier,
+            billing_period: newPeriod,
+            hipaa_addon: !!newHipaa,
+            discount_percent: discountPercent || 0
+          }
+        }
+      });
       return res.status(200).json({
         success: true,
         action: 'scheduled',
@@ -106,35 +176,77 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Upgrade: calculate proration and charge immediately
+    // ─────────────────────────────────────────
+    // Upgrade: prorate and charge immediately
+    // ─────────────────────────────────────────
     if (!plan.square_customer_id || !plan.square_card_id) {
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.swap',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'denied',
+        errorMessage: 'No card on file',
+        metadata: { path: 'upgrade_denied', before: beforeSnapshot, attempted_tier: newTier }
+      });
       return sendError(res, 400, 'No card on file for this subaccount. Add a card via Manage Plan first.');
     }
     if (!plan.next_billing_date) {
       return sendError(res, 400, 'No billing date found. Cannot calculate proration.');
     }
 
-    const proratedCents = calcProration(oldTier, newTier, oldPeriod, !!newHipaa, plan.next_billing_date);
+    const proratedCents = calcProration(
+      oldTier, newTier, oldPeriod, !!newHipaa,
+      plan.next_billing_date,
+      discountPercent || plan.discount_percent || 0
+    );
 
     if (proratedCents <= 0) {
-      // Edge case: no charge needed (e.g. same effective rate)
+      // No charge needed (rare edge case: same effective rate after discount)
       await updatePlan(subaccountId, {
         plan_tier: newTier,
         billing_period: newPeriod,
-        hipaa_addon: !!newHipaa
+        hipaa_addon: !!newHipaa,
+        discount_percent: discountPercent || 0,
+        discount_note: discountNote || null
+      });
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.swap',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        metadata: {
+          path: 'upgraded_no_charge',
+          prorated_cents: proratedCents,
+          before: beforeSnapshot,
+          after: {
+            plan_tier: newTier,
+            billing_period: newPeriod,
+            hipaa_addon: !!newHipaa,
+            discount_percent: discountPercent || 0
+          }
+        }
       });
       return res.status(200).json({ success: true, action: 'upgraded_no_charge' });
     }
+
+    // Deterministic idempotency key. Same subaccount + same upgrade target + same day = same Square charge.
+    // Prevents double-charge if the agency admin double-clicks the upgrade button.
+    const today = new Date().toISOString().split('T')[0];
+    const idempotencyKey = 'msp-up-' + subaccountId + '-' + today + '-' + oldTier + '-to-' + newTier;
 
     const chargeNote = 'MySpark+ upgrade: ' + oldTier + ' to ' + newTier + ' (prorated)';
     const result = await chargeCardOnFile(
       plan.square_customer_id,
       plan.square_card_id,
       proratedCents,
-      chargeNote
+      chargeNote,
+      idempotencyKey
     );
 
-    // Log to invoices
+    // Log to invoices regardless of outcome
     await fetch(SUPABASE_URL + '/rest/v1/subaccount_invoices', {
       method: 'POST',
       headers: sbHeaders({ 'Prefer': 'return=minimal' }),
@@ -146,7 +258,7 @@ module.exports = async function handler(req, res) {
         status: result.success ? 'succeeded' : 'failed',
         failure_reason: result.success ? null : result.error,
         retry_attempt: 0,
-        billing_period_start: new Date().toISOString().split('T')[0],
+        billing_period_start: today,
         billing_period_end: plan.next_billing_date,
         succeeded_at: result.success ? new Date().toISOString() : null,
         failed_at: result.success ? null : new Date().toISOString()
@@ -154,6 +266,21 @@ module.exports = async function handler(req, res) {
     });
 
     if (!result.success) {
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.swap',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'failure',
+        errorMessage: 'Card charge failed: ' + result.error,
+        metadata: {
+          path: 'upgrade_charge_failed',
+          attempted_amount_cents: proratedCents,
+          before: beforeSnapshot,
+          attempted_tier: newTier
+        }
+      });
       return sendError(res, 402, 'Card charge failed: ' + result.error);
     }
 
@@ -162,7 +289,29 @@ module.exports = async function handler(req, res) {
       plan_tier: newTier,
       billing_period: newPeriod,
       hipaa_addon: !!newHipaa,
-      status: 'active'
+      status: 'active',
+      discount_percent: discountPercent || 0,
+      discount_note: discountNote || null
+    });
+
+    await logAudit({
+      req, ...actor,
+      action: 'agency.plan.swap',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      metadata: {
+        path: 'upgraded',
+        charged_cents: proratedCents,
+        square_payment_id: result.paymentId,
+        before: beforeSnapshot,
+        after: {
+          plan_tier: newTier,
+          billing_period: newPeriod,
+          hipaa_addon: !!newHipaa,
+          discount_percent: discountPercent || 0
+        }
+      }
     });
 
     return res.status(200).json({
@@ -174,6 +323,15 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     console.error('swap-plan error:', e);
+    await logAudit({
+      req, ...actor,
+      action: 'agency.plan.swap',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      outcome: 'failure',
+      errorMessage: e.message
+    });
     return sendError(res, 500, 'Plan swap failed', e.message);
   }
 };

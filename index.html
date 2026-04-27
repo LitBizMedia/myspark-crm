@@ -10285,7 +10285,7 @@ async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discou
     var r=await fetch('/api/billing/swap-plan',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||'',customBillingDate:customBillingDate||null})
+      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||'',customBillingDate:customBillingDate||null,actor:loadAgencySession()})
     });
     if(!r.ok){var t=await r.text();toast('Plan change failed: '+t,'error');return;}
     var data=await r.json();
@@ -10910,7 +10910,7 @@ async function createSubaccount(){
     if(!r2.ok){var e2=await r2.text();toast('Subaccount created but data init failed: '+e2,'warn');}
     // Handle billing setup
     if(!isExempt){
-      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote};
+      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote,actor:loadAgencySession()};
       if(state._cardMode==='existing'){
         // Use existing Square card on file
         var custSel=document.getElementById('new-sub-existing-customer');
