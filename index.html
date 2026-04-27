@@ -10284,13 +10284,21 @@ async function loadBillingSummary(){
 function computeBillingSummary(plans){
   var BASE={starter:{monthly:29,annual:290},professional:{monthly:79,annual:790},business:{monthly:149,annual:1490},enterprise:{monthly:349,annual:3490}};
   var HIPAA={monthly:50,annual:500};
-  var activeMrr=0,trialMrr=0,annualArr=0,activeCount=0,trialCount=0,exemptCount=0,suspendedCount=0,cancelledCount=0,pastDueCount=0;
+  // Monthly = real monthly subscriptions only. Annual = real annual subscriptions only.
+  // We do NOT convert annuals into a monthly equivalent. They are separate revenue streams.
+  var monthlyMrr=0, monthlyCount=0;
+  var annualArr=0,  annualCount=0;
+  var trialMonthlyMrr=0, trialMonthlyCount=0;
+  var trialAnnualArr=0,  trialAnnualCount=0;
+  var pastDueCount=0, exemptCount=0, suspendedCount=0, cancelledCount=0;
   var byTier={starter:0,professional:0,business:0,enterprise:0};
+
   plans.forEach(function(p){
     var status=p.status||'';
     if(status==='exempt'||p.exempt_from_billing){exemptCount++;return;}
     if(status==='cancelled'){cancelledCount++;return;}
     if(status==='suspended'){suspendedCount++;return;}
+
     var tier=p.plan_tier||'starter';
     var period=p.billing_period||'monthly';
     var price=BASE[tier]&&BASE[tier][period]||0;
@@ -10298,19 +10306,29 @@ function computeBillingSummary(plans){
     var subtotal=price+hipaaPrice;
     var pct=Number(p.discount_percent)||0;
     if(pct>0&&pct<100)subtotal=subtotal*(1-pct/100);
-    var monthlyEquivalent=period==='annual'?subtotal/12:subtotal;
+
     if(status==='active'||status==='past_due'){
-      activeMrr+=monthlyEquivalent;
-      annualArr+=monthlyEquivalent*12;
-      if(status==='active')activeCount++;
+      if(period==='annual'){annualArr+=subtotal;annualCount++;}
+      else{monthlyMrr+=subtotal;monthlyCount++;}
       if(status==='past_due')pastDueCount++;
       if(byTier[tier]!==undefined)byTier[tier]++;
     }else if(status==='trialing'){
-      trialMrr+=monthlyEquivalent;
-      trialCount++;
+      if(period==='annual'){trialAnnualArr+=subtotal;trialAnnualCount++;}
+      else{trialMonthlyMrr+=subtotal;trialMonthlyCount++;}
     }
   });
-  return{activeMrr:activeMrr,trialMrr:trialMrr,annualArr:annualArr,activeCount:activeCount,trialCount:trialCount,exemptCount:exemptCount,suspendedCount:suspendedCount,cancelledCount:cancelledCount,pastDueCount:pastDueCount,byTier:byTier};
+
+  return{
+    monthlyMrr:monthlyMrr, monthlyCount:monthlyCount,
+    annualArr:annualArr,   annualCount:annualCount,
+    trialMonthlyMrr:trialMonthlyMrr, trialMonthlyCount:trialMonthlyCount,
+    trialAnnualArr:trialAnnualArr,   trialAnnualCount:trialAnnualCount,
+    pastDueCount:pastDueCount,
+    exemptCount:exemptCount,
+    suspendedCount:suspendedCount,
+    cancelledCount:cancelledCount,
+    byTier:byTier
+  };
 }
 
 function renderBillingSummaryCards(s){
@@ -10320,16 +10338,32 @@ function renderBillingSummaryCards(s){
     if(s.byTier[t]>0)tierLines+=PLAN_TIER_LABELS[t]+': '+s.byTier[t]+' &middot; ';
   });
   if(tierLines)tierLines=tierLines.replace(/ &middot; $/,'');
+
+  // Trial subtext combines monthly and annual trial counts
+  var trialTotal=s.trialMonthlyCount+s.trialAnnualCount;
+  var trialSub='';
+  if(trialTotal===0)trialSub='no accounts trialing';
+  else{
+    var parts=[];
+    if(s.trialMonthlyCount>0)parts.push(s.trialMonthlyCount+' monthly');
+    if(s.trialAnnualCount>0)parts.push(s.trialAnnualCount+' annual');
+    trialSub=parts.join(' &middot; ');
+  }
+
   return '<div class="agency-stat-grid">'
-    +'<div class="agency-stat-card"><div class="agency-stat-label">Active MRR</div>'
-    +'<div class="agency-stat-value">'+fmt(s.activeMrr)+'</div>'
-    +'<div class="agency-stat-sub">'+s.activeCount+' active'+(s.pastDueCount?' &middot; '+s.pastDueCount+' past due':'')+'</div></div>'
-    +'<div class="agency-stat-card"><div class="agency-stat-label">Annual ARR</div>'
+    // MRR: only monthly plans
+    +'<div class="agency-stat-card"><div class="agency-stat-label">Monthly Recurring (MRR)</div>'
+    +'<div class="agency-stat-value">'+fmt(s.monthlyMrr)+'</div>'
+    +'<div class="agency-stat-sub">'+s.monthlyCount+' monthly subscription'+(s.monthlyCount===1?'':'s')+(s.pastDueCount?' &middot; '+s.pastDueCount+' past due':'')+'</div></div>'
+    // ARR: only annual plans
+    +'<div class="agency-stat-card"><div class="agency-stat-label">Annual Recurring (ARR)</div>'
     +'<div class="agency-stat-value">'+fmt(s.annualArr)+'</div>'
-    +'<div class="agency-stat-sub">projected from active</div></div>'
-    +'<div class="agency-stat-card"><div class="agency-stat-label">Trial MRR (potential)</div>'
-    +'<div class="agency-stat-value">'+fmt(s.trialMrr)+'</div>'
-    +'<div class="agency-stat-sub">'+s.trialCount+' trialing</div></div>'
+    +'<div class="agency-stat-sub">'+s.annualCount+' annual subscription'+(s.annualCount===1?'':'s')+'</div></div>'
+    // Trial: potential revenue if all converted, separated by period
+    +'<div class="agency-stat-card"><div class="agency-stat-label">Trialing (potential)</div>'
+    +'<div class="agency-stat-value" style="font-size:18px">'+fmt(s.trialMonthlyMrr)+'/mo &middot; '+fmt(s.trialAnnualArr)+'/yr</div>'
+    +'<div class="agency-stat-sub">'+trialSub+'</div></div>'
+    // Other: exempt, suspended, cancelled, plus tier breakdown
     +'<div class="agency-stat-card"><div class="agency-stat-label">Other accounts</div>'
     +'<div class="agency-stat-value" style="font-size:18px">'+s.exemptCount+' exempt &middot; '+s.cancelledCount+' cancelled &middot; '+s.suspendedCount+' suspended</div>'
     +'<div class="agency-stat-sub">'+(tierLines||'no tier breakdown')+'</div></div>'
