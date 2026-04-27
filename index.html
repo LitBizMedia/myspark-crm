@@ -10163,7 +10163,7 @@ async function openManagePlanModal(subId,subName){
       +'<select id="mp-existing-customer" class="filter-sel" style="width:100%;height:38px;margin-bottom:8px" onchange="loadMpExistingCards()"><option value="">Loading...</option></select>'
       +'<select id="mp-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Select a card</option></select>'
       +'</div>'
-      +'<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="saveMpCard(\''+subId+'\',\''+esc(extra.subName||'')+'\')">Save Card</button>'
+      +'<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="saveMpCard(\''+subId+'\',\''+esc(subName||'')+'\')">Save Card</button>'
       +'</div>'
       +'</div>'
     :'')
@@ -10241,7 +10241,7 @@ async function saveManagePlan(subId){
       +'<p style="margin-top:10px">A prorated charge of approximately <strong style="color:var(--orange)">$'+proratedEst+'</strong> will be applied now for the remaining '+daysLeft+' days of the current period.</p>'
       +(nextDate?'<p style="margin-top:6px;font-size:12px;color:var(--text-muted)">Next full charge on '+nextDate+' at $'+newPrice+(period==='annual'?'/yr':'/mo')+'.</p>':'')
       +'</div>',
-      '<button class="btn btn-ghost" onclick="openManagePlanModal(\''+subId+'\',\''+esc(extra.subName||'')+'\')">Go Back</button>'
+      '<button class="btn btn-ghost" onclick="openManagePlanModal(\''+subId+'\',\''+esc(subName||'')+'\')">Go Back</button>'
       +'<button class="btn btn-primary" onclick="confirmSwapPlan(\''+subId+'\',\''+tier+'\',\''+period+'\','+(hipaa?'true':'false')+','+(exemptChecked?'true':'false')+')">Confirm Upgrade</button>',
       'modal-sm');
     return;
