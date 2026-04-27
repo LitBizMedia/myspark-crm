@@ -1937,6 +1937,23 @@ async function checkSubaccountActive(){
   }
 }
 
+// Returns true if HIPAA addon is enabled for this subaccount, false if not, null if unknown.
+// Callers should default to enabled (true) on null for HIPAA safety.
+async function getSubaccountHipaaStatus(){
+  try{
+    var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+    var r=await fetch(url+'/rest/v1/subaccount_plans?subaccount_id=eq.'+encodeURIComponent(state.subaccountId||'sub-litbiz')+'&select=hipaa_addon',{
+      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    });
+    if(!r.ok)return null;
+    var rows=await r.json();
+    if(!rows||!rows.length)return false; // no plan record means no HIPAA addon
+    return !!rows[0].hipaa_addon;
+  }catch(e){
+    return null;
+  }
+}
+
 function handleLogout(){localStorage.removeItem(SSK);location.reload()}
 
 // =====================================================
@@ -3641,8 +3658,18 @@ function initApp(){
   if(!state._dashTimer){
     state._dashTimer=setInterval(function(){if(state.panel==='dashboard')renderDash();},30000);
   }
-  // Wire HIPAA idle timeout
-  initIdleTimeout();
+  // Wire HIPAA idle timeout - only if HIPAA addon is enabled for this subaccount.
+  // For non-HIPAA accounts (salons, fitness, retail), no idle timeout to avoid friction.
+  // If we cannot verify HIPAA status, default to enabled (safer for compliance).
+  getSubaccountHipaaStatus().then(function(isHipaa){
+    state.hipaaEnabled = (isHipaa === false) ? false : true;
+    if(state.hipaaEnabled){
+      initIdleTimeout();
+      console.log('[HIPAA] Idle timeout active (30 min)');
+    }else{
+      console.log('[HIPAA] Disabled for this workspace, no idle timeout');
+    }
+  });
 }
 
 function renderWorkspacePill(){
