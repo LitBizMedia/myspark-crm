@@ -1835,9 +1835,12 @@ function setSyncSt(s){
 // =====================================================
 // AUTH
 // =====================================================
-function loadSession(){
-  try{const r=localStorage.getItem(SSK);if(!r)return null;const s=JSON.parse(r);if(Date.now()-s.ts>7*86400000){localStorage.removeItem(SSK);return null}return s}catch(e){return null}
-}
+// loadSession() removed in Checkpoint 2.
+// Sessions are now validated via /api/subaccount/session against an
+// HttpOnly cookie. The localStorage approach was inherently insecure
+// (any DevTools user could forge a session by writing to SSK).
+// Legacy SSK key may still exist in localStorage from old logins;
+// it is harmless and gets cleaned up on next logout.
 
 document.getElementById('login-form').addEventListener('submit',async function(e){
   e.preventDefault();
@@ -10117,6 +10120,82 @@ function saveAgencySession(user){
   localStorage.setItem(AGENCY_SESSION_KEY,JSON.stringify({...user,ts:Date.now()}));
 }
 
+// =====================================================
+// AGENCY IDLE TIMEOUT (HIPAA: automatic logoff)
+// =====================================================
+// Same policy as subaccount-side: 30 minutes idle then 60 second warning.
+// Always active for the agency dashboard since agency super admins can
+// Login-As into HIPAA-enabled subaccounts and access PHI through that path.
+var agencyIdleState = { timer: null, warningTimer: null, warningOpen: false, _initialized: false, _countdownInterval: null };
+
+function initAgencyIdleTimeout(){
+  if(agencyIdleState._initialized)return;
+  agencyIdleState._initialized = true;
+  var events = ['mousemove','mousedown','keydown','touchstart','scroll'];
+  events.forEach(function(ev){
+    document.addEventListener(ev, resetAgencyIdleTimer, { passive: true });
+  });
+  resetAgencyIdleTimer();
+}
+
+function resetAgencyIdleTimer(){
+  if(agencyIdleState.warningOpen)return;
+  if(agencyIdleState.timer)clearTimeout(agencyIdleState.timer);
+  if(agencyIdleState.warningTimer)clearTimeout(agencyIdleState.warningTimer);
+  agencyIdleState.timer = setTimeout(showAgencyIdleWarning, IDLE_TIMEOUT_MS);
+}
+
+function showAgencyIdleWarning(){
+  if(!loadAgencySession())return; // already logged out
+  agencyIdleState.warningOpen = true;
+  var existing = document.getElementById('agency-idle-warn');
+  if(existing)existing.remove();
+  var div = document.createElement('div');
+  div.id = 'agency-idle-warn';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  div.innerHTML = '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;max-width:440px;width:90%;text-align:center">'
+    +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:14px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;color:var(--text)">Are you still there?</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">For your security, you will be signed out in <span id="agency-idle-countdown" style="color:#f59e0b;font-weight:700">60</span> seconds due to inactivity.</div>'
+    +'<button class="btn btn-primary" onclick="dismissAgencyIdleWarning()" style="width:100%">Stay signed in</button>'
+    +'</div>';
+  document.body.appendChild(div);
+  var remaining = IDLE_WARNING_MS / 1000;
+  var cd = document.getElementById('agency-idle-countdown');
+  agencyIdleState._countdownInterval = setInterval(function(){
+    remaining--;
+    if(cd)cd.textContent = remaining;
+    if(remaining<=0)clearInterval(agencyIdleState._countdownInterval);
+  }, 1000);
+  agencyIdleState.warningTimer = setTimeout(forceAgencyIdleLogout, IDLE_WARNING_MS);
+}
+
+function dismissAgencyIdleWarning(){
+  agencyIdleState.warningOpen = false;
+  var modal = document.getElementById('agency-idle-warn');
+  if(modal)modal.remove();
+  if(agencyIdleState._countdownInterval){clearInterval(agencyIdleState._countdownInterval);agencyIdleState._countdownInterval=null;}
+  if(agencyIdleState.warningTimer){clearTimeout(agencyIdleState.warningTimer);agencyIdleState.warningTimer=null;}
+  resetAgencyIdleTimer();
+}
+
+function forceAgencyIdleLogout(){
+  agencyIdleState.warningOpen = false;
+  var modal = document.getElementById('agency-idle-warn');
+  if(modal)modal.remove();
+  if(agencyIdleState._countdownInterval){clearInterval(agencyIdleState._countdownInterval);agencyIdleState._countdownInterval=null;}
+  if(agencyIdleState.timer){clearTimeout(agencyIdleState.timer);agencyIdleState.timer=null;}
+  if(agencyIdleState.warningTimer){clearTimeout(agencyIdleState.warningTimer);agencyIdleState.warningTimer=null;}
+  try{localStorage.removeItem(AGENCY_SESSION_KEY);}catch(e){}
+  try{
+    var flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1f1432;border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    flash.textContent = 'Signed out due to inactivity.';
+    document.body.appendChild(flash);
+  }catch(e){}
+  setTimeout(function(){location.reload();}, 800);
+}
+
 function agencyLogout(){
   localStorage.removeItem(AGENCY_SESSION_KEY);
   renderAgencyLogin();
@@ -10264,6 +10343,9 @@ function planTrialDaysRemaining(plan){
 async function renderAgencyDashboard(){
   var el=document.getElementById('agency-content');
   if(!el)return;
+  // Wire HIPAA-grade idle timeout for agency dashboard. Always on for agency
+  // since super admins can Login-As into HIPAA workspaces (effective PHI access).
+  initAgencyIdleTimeout();
   var sess=loadAgencySession()||{};
   var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[sess.role]||(sess.role||'');
   var activeTab=state.agencyTab||'accounts';
