@@ -1834,30 +1834,47 @@ function loadSession(){
 
 document.getElementById('login-form').addEventListener('submit',async function(e){
   e.preventDefault();
-  const username=document.getElementById('l-user').value.trim().toLowerCase();
+  const username=document.getElementById('l-user').value.trim();
   const password=document.getElementById('l-pass').value;
   const err=document.getElementById('login-error');
-  const hash=await sha256(password);
-  let user=null;
-  // Patrick's hardcoded admin login only works at the LitBiz workspace
-  if(username===DEFAULT_ADMIN.username&&hash===DEFAULT_ADMIN.passwordHash&&(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug))user=DEFAULT_ADMIN;
-  else user=db.users.find(u=>u.username.toLowerCase()===username&&u.passwordHash===hash&&u.active);
-  // Check subaccount admin credentials stored in data
-  if(!user&&db._subaccountAdmin&&username===db._subaccountAdmin.username.toLowerCase()&&hash===db._subaccountAdmin.passwordHash){
-    user={id:'admin-'+state.subaccountSlug,username:db._subaccountAdmin.username,role:'admin',name:db._subaccountAdmin.name||db._subaccountAdmin.username,color:db._subaccountAdmin.color||'#6b21ea'};
+  const submitBtn=e.target.querySelector('button[type="submit"]');
+  // Disable submit during request to prevent double-submit
+  if(submitBtn)submitBtn.disabled=true;
+  try{
+    const slug=state.subaccountSlug||getPathSlug()||DEFAULT_SLUG;
+    const r=await fetch('/api/subaccount/login',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({slug:slug,username:username,password:password})
+    });
+    const data=await r.json().catch(function(){return {error:'Server error'}});
+    if(!r.ok){
+      // 429 = lockout. 401 = bad credentials. 403 = suspended.
+      err.textContent=data.error||'Invalid username or password.';
+      err.classList.remove('hidden');
+      return;
+    }
+    err.classList.add('hidden');
+    // Server validated. Populate state.user from server response.
+    state.user={
+      id:data.user.id,
+      username:data.user.username,
+      role:data.user.role,
+      name:data.user.name||data.user.username,
+      color:data.user.color,
+      email:data.user.email,
+      breakglass:!!data.user.breakglass
+    };
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    initApp();
+  }catch(networkErr){
+    err.textContent='Cannot reach login server. Check your connection and try again.';
+    err.classList.remove('hidden');
+  }finally{
+    if(submitBtn)submitBtn.disabled=false;
   }
-  if(!user){err.textContent='Invalid username or password.';err.classList.remove('hidden');return}
-  // Check if subaccount is active before granting access. Fail-closed: if we cannot
-  // verify status, deny login. This is required for HIPAA compliance.
-  var subActive=await checkSubaccountActive();
-  if(subActive==='suspended'){err.textContent='This account has been suspended. Please contact support.';err.classList.remove('hidden');return;}
-  if(subActive==='unknown'){err.textContent='Cannot verify account status. Please check your connection and try again.';err.classList.remove('hidden');return;}
-  err.classList.add('hidden');
-  state.user=user;
-  localStorage.setItem(SSK,JSON.stringify({id:user.id,username:user.username,role:user.role,name:user.name||user.username,color:user.color,ts:Date.now()}));
-  document.getElementById('auth-screen').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
-  initApp();
 });
 
 function openForgotPassword(context){
@@ -1954,7 +1971,16 @@ async function getSubaccountHipaaStatus(){
   }
 }
 
-function handleLogout(){localStorage.removeItem(SSK);location.reload()}
+function handleLogout(){
+  // Best-effort server-side session revocation, then reload regardless.
+  // We always reload even if the server call fails so the user is not stuck.
+  fetch('/api/subaccount/logout',{method:'POST',credentials:'include'})
+    .catch(function(){})
+    .finally(function(){
+      try{localStorage.removeItem(SSK);}catch(e){}
+      location.reload();
+    });
+}
 
 // =====================================================
 // INIT
@@ -3731,42 +3757,48 @@ async function saveProfile(){
   const pass=document.getElementById('pf-pass').value;
   const pass2=document.getElementById('pf-pass2').value;
   if(pass&&pass!==pass2){toast('Passwords do not match.','error');return}
-  const u=state.user,isAdmin=isPrimaryAdmin(u.id);
+  const u=state.user;
+
+  // If password change requested, hit the server-side endpoint.
   if(pass){
     const oldPass=document.getElementById('pf-old-pass')&&document.getElementById('pf-old-pass').value||'';
     if(!oldPass){toast('Enter your current password to change it.','error');return;}
-    const oldHash=await sha256(oldPass);
-    // Verify old password
-    var validOld=false;
-    if(isAdmin){
-      if(db._subaccountAdmin&&u.username===db._subaccountAdmin.username){
-        validOld=oldHash===db._subaccountAdmin.passwordHash;
-      }else{
-        validOld=(oldHash===ADMIN_HASH)||(db.settings.adminProfile&&db.settings.adminProfile.passwordHash&&oldHash===db.settings.adminProfile.passwordHash);
-      }
-    }
-    else if(db._subaccountAdmin&&u.username===db._subaccountAdmin.username){validOld=oldHash===db._subaccountAdmin.passwordHash;}
-    else{const userRec=db.users.find(x=>x.id===u.id);validOld=userRec&&oldHash===userRec.passwordHash;}
-    if(!validOld){toast('Current password is incorrect.','error');return;}
     const passErr=checkPasswordStrength(pass);
     if(passErr){toast(passErr,'error');return;}
-  }
-  const updates={name,color:state.selUserColor};
-  if(pass){updates.passwordHash=await sha256(pass)}
-  if(isAdmin){
-    db.settings.adminProfile={...db.settings.adminProfile,...updates};
-    if(db._subaccountAdmin&&u.username===db._subaccountAdmin.username&&updates.passwordHash){
-      db._subaccountAdmin.passwordHash=updates.passwordHash;
+    try{
+      const r=await fetch('/api/subaccount/change-password',{
+        method:'POST',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({currentPassword:oldPass,newPassword:pass})
+      });
+      const data=await r.json().catch(function(){return {error:'Server error'}});
+      if(!r.ok){
+        toast(data.error||'Password change failed.','error');
+        return;
+      }
+    }catch(e){
+      toast('Cannot reach server. Check your connection.','error');
+      return;
     }
   }
-  else{const user=db.users.find(x=>x.id===u.id);if(user)Object.assign(user,updates)}
+
+  // Profile metadata (name, color) still updates locally.
+  // TODO: future migration moves this to a server-side update too.
+  const updates={name:name,color:state.selUserColor};
+  const isAdmin=isPrimaryAdmin(u.id);
+  if(isAdmin){
+    db.settings.adminProfile={...db.settings.adminProfile,...updates};
+  }else{
+    const userRec=db.users.find(x=>x.id===u.id);
+    if(userRec)Object.assign(userRec,updates);
+  }
   state.user={...state.user,...updates};
-  const sess=JSON.parse(localStorage.getItem(SSK)||'{}');
-  localStorage.setItem(SSK,JSON.stringify({...sess,...updates,ts:Date.now()}));
   document.getElementById('sb-name').textContent=name||u.username;
   document.getElementById('sb-avatar').textContent=initials(name||u.username);
   document.getElementById('sb-avatar').style.background=state.selUserColor;
-  saveData();closeModal();toast('Profile updated.','success');
+  saveData();closeModal();
+  toast(pass?'Password changed and profile updated.':'Profile updated.','success');
 }
 
 // =====================================================
@@ -6790,7 +6822,7 @@ function fbApplyLiveStyles(){
 }
 
 // Boot check for embed mode
-document.addEventListener('DOMContentLoaded',function(){
+document.addEventListener('DOMContentLoaded',async function(){
   // Detect path-based routing
   var pathSlug=getPathSlug();
   state.subaccountSlug=pathSlug;
@@ -6853,13 +6885,27 @@ document.addEventListener('DOMContentLoaded',function(){
       }catch(e){}
     }
   }
-  // Normal CRM login flow
-  const sess=loadSession();
-  if(sess){
-    state.user=sess;
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    fetchFromSupabase().then(function(ok){initApp();});
+  // Normal CRM login flow: validate the HttpOnly session cookie via the server.
+  // Browser cannot read the cookie directly (it is HttpOnly). We ask the server
+  // who we are. If a valid session exists, the server returns the user info.
+  try{
+    const sessRes=await fetch('/api/subaccount/session',{credentials:'include'});
+    if(sessRes.ok){
+      const sessData=await sessRes.json();
+      if(sessData.authenticated&&sessData.user){
+        state.user={
+          id:sessData.user.id,
+          username:sessData.user.username,
+          role:sessData.user.role,
+          name:sessData.user.name||sessData.user.username
+        };
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        fetchFromSupabase().then(function(ok){initApp();});
+      }
+    }
+  }catch(e){
+    // Network or server error - leave on login screen
   }
 });
 
