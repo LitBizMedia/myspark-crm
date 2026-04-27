@@ -6,6 +6,7 @@
 
 const { sendError } = require('../../lib/square');
 const { sendEmail } = require('../../lib/billing-emails');
+const { logAudit, extractActorFromBody } = require('../../lib/audit');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -24,6 +25,8 @@ module.exports = async function handler(req, res) {
   const { subaccountId } = req.body || {};
   if (!subaccountId) return sendError(res, 400, 'subaccountId required');
 
+  const actor = extractActorFromBody(req.body);
+
   try {
     // Load current plan
     const planRes = await fetch(
@@ -36,9 +39,27 @@ module.exports = async function handler(req, res) {
     const plan = plans[0];
 
     if (plan.exempt_from_billing) {
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.cancel',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'denied',
+        errorMessage: 'Cannot cancel exempt account'
+      });
       return sendError(res, 400, 'Exempt accounts cannot be cancelled this way. Remove exemption first.');
     }
     if (plan.status === 'cancelled') {
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.cancel',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'denied',
+        errorMessage: 'Account is already cancelled'
+      });
       return sendError(res, 400, 'Account is already cancelled.');
     }
 
@@ -58,7 +79,17 @@ module.exports = async function handler(req, res) {
       }
     );
     if (!updateRes.ok) {
-      return sendError(res, 500, 'Failed to cancel plan: ' + await updateRes.text());
+      const errText = await updateRes.text();
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.cancel',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'failure',
+        errorMessage: 'DB update failed: ' + errText
+      });
+      return sendError(res, 500, 'Failed to cancel plan: ' + errText);
     }
 
     // Send cancellation confirmation email
@@ -77,9 +108,23 @@ module.exports = async function handler(req, res) {
         }
       }
     } catch (emailErr) {
-      // Non-fatal: cancellation already succeeded, just log the email failure
       console.error('cancel.js: email send failed:', emailErr.message);
     }
+
+    // Audit log: success
+    await logAudit({
+      req, ...actor,
+      action: 'agency.plan.cancel',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      metadata: {
+        plan_tier: plan.plan_tier,
+        billing_period: plan.billing_period,
+        access_until: plan.next_billing_date,
+        previous_status: plan.status
+      }
+    });
 
     return res.status(200).json({
       success: true,
@@ -89,6 +134,15 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     console.error('cancel error:', e);
+    await logAudit({
+      req, ...actor,
+      action: 'agency.plan.cancel',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      outcome: 'failure',
+      errorMessage: e.message
+    });
     return sendError(res, 500, 'Cancellation failed', e.message);
   }
 };

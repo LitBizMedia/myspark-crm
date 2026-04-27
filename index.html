@@ -10068,6 +10068,7 @@ async function renderAgencyDashboard(){
     +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
     +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">MySpark<span style="color:var(--orange)">+</span> <span style="font-size:13px;font-weight:500;color:var(--text-muted)">Agency Dashboard</span></div>'
     +'<div style="font-size:12px;color:var(--text-muted);text-align:right;line-height:1.3"><div style="font-weight:600;color:var(--text)">'+esc(sess.name||sess.username||'')+'</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em">'+esc(roleLbl)+'</div></div>'
+    +(agencyHasRole('super_admin','admin')?'<button class="btn btn-ghost btn-sm" onclick="renderAgencyAuditLog()" title="Audit Log"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>Audit Log</button>':'')
     +'<button class="btn btn-ghost btn-sm" onclick="renderAgencySettings()" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
     +'</div>'
@@ -10415,7 +10416,7 @@ async function cancelSubscription(subId){
     var r=await fetch('/api/billing/cancel',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId})
+      body:JSON.stringify({subaccountId:subId,actor:loadAgencySession()})
     });
     if(!r.ok){var t=await r.text();toast('Cancel failed: '+t,'error');return;}
     var data=await r.json();
@@ -10430,12 +10431,16 @@ async function reactivateSubscription(subId){
     var r=await fetch('/api/billing/reactivate',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId})
+      body:JSON.stringify({subaccountId:subId,actor:loadAgencySession()})
     });
     if(!r.ok){var t=await r.text();toast('Reactivation failed: '+t,'error');return;}
     var data=await r.json();
     closeModal();
-    toast('Account reactivated. Card charged $'+(data.charged_cents/100).toFixed(2)+'. Next billing: '+data.next_billing_date+'.','success');
+    if(data.no_charge){
+      toast('Account reactivated. No charge: still within paid period until '+data.next_billing_date+'.','success');
+    }else{
+      toast('Account reactivated. Card charged $'+(data.charged_cents/100).toFixed(2)+'. Next billing: '+data.next_billing_date+'.','success');
+    }
     agencyLoadSubaccounts();
   }catch(e){toast('Error: '+e.message,'error');}
 }
@@ -11234,6 +11239,250 @@ async function savePlanPricing(){
     if(!r.ok){var t2=await r.text();toast('Could not save to database: '+t2,'error');return;}
     toast('Plan pricing updated.','success');
   }catch(e){toast('Error saving pricing: '+e.message,'error');}
+}
+
+
+// =====================================================
+// HIPAA AUDIT LOG VIEWER (agency-side)
+// =====================================================
+// Built April 27, 2026.
+// V1 caveats: actor info passed from the browser is currently spoofable
+// because there's no server-side session. The IP address and user-agent
+// recorded on each entry are server-observable and trustworthy.
+
+var auditLogState = { entries: [], total: 0, limit: 50, offset: 0, filters: {} };
+
+async function renderAgencyAuditLog(){
+  if(!agencyHasRole('super_admin','admin')){toast('You do not have permission to view the audit log.','error');return;}
+  var el=document.getElementById('agency-content');
+  if(!el)return;
+  var sess=loadAgencySession()||{};
+  var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[sess.role]||(sess.role||'');
+  el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
+    +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="renderAgencyDashboard()" title="Back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back</button>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">MySpark<span style="color:var(--orange)">+</span> <span style="font-size:13px;font-weight:500;color:var(--text-muted)">Audit Log</span></div>'
+    +'<div style="font-size:12px;color:var(--text-muted);text-align:right;line-height:1.3"><div style="font-weight:600;color:var(--text)">'+esc(sess.name||sess.username||'')+'</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em">'+esc(roleLbl)+'</div></div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
+    +'</div>'
+    +'<div style="padding:24px 32px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Activity Log</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Append-only record of agency and system actions for HIPAA compliance.</div></div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="exportAuditLogCsv()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export CSV</button>'
+    +'</div>'
+    // Filters
+    +'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Subaccount ID</label>'
+    +'<input id="audit-filter-subaccount" type="text" placeholder="sub-..." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px"></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Actor Type</label>'
+    +'<select id="audit-filter-actor-type" class="filter-sel" style="width:100%;height:34px"><option value="">All</option><option value="agency">Agency</option><option value="subaccount">Subaccount</option><option value="system">System</option><option value="cron">Cron</option></select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Action contains</label>'
+    +'<input id="audit-filter-action" type="text" placeholder="e.g. plan.cancel" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px"></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Outcome</label>'
+    +'<select id="audit-filter-outcome" class="filter-sel" style="width:100%;height:34px"><option value="">All</option><option value="success">Success</option><option value="failure">Failure</option><option value="denied">Denied</option></select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">From date</label>'
+    +'<input id="audit-filter-from" type="date" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px"></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">To date</label>'
+    +'<input id="audit-filter-to" type="date" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px"></div>'
+    +'<div style="display:flex;align-items:flex-end;gap:6px"><button class="btn btn-primary btn-sm" style="flex:1" onclick="applyAuditFilters()">Apply</button><button class="btn btn-ghost btn-sm" onclick="resetAuditFilters()">Reset</button></div>'
+    +'</div>'
+    // Table container
+    +'<div id="audit-log-table" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">'
+    +'<div style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center">Loading audit log...</div>'
+    +'</div>'
+    // Pagination footer
+    +'<div id="audit-log-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--text-muted)"></div>'
+    +'</div></div>';
+  loadAuditLog();
+}
+
+function applyAuditFilters(){
+  auditLogState.filters = {
+    subaccount: (document.getElementById('audit-filter-subaccount')||{}).value || '',
+    actorType:  (document.getElementById('audit-filter-actor-type')||{}).value || '',
+    action:     (document.getElementById('audit-filter-action')||{}).value || '',
+    outcome:    (document.getElementById('audit-filter-outcome')||{}).value || '',
+    from:       (document.getElementById('audit-filter-from')||{}).value || '',
+    to:         (document.getElementById('audit-filter-to')||{}).value || ''
+  };
+  auditLogState.offset = 0;
+  loadAuditLog();
+}
+
+function resetAuditFilters(){
+  ['audit-filter-subaccount','audit-filter-action','audit-filter-from','audit-filter-to'].forEach(function(id){var x=document.getElementById(id);if(x)x.value='';});
+  ['audit-filter-actor-type','audit-filter-outcome'].forEach(function(id){var x=document.getElementById(id);if(x)x.value='';});
+  auditLogState.filters = {};
+  auditLogState.offset = 0;
+  loadAuditLog();
+}
+
+function buildAuditLogQs(extra){
+  var f = auditLogState.filters || {};
+  var qs = 'limit=' + auditLogState.limit + '&offset=' + auditLogState.offset;
+  if(f.subaccount) qs += '&subaccount=' + encodeURIComponent(f.subaccount);
+  if(f.actorType)  qs += '&actorType='  + encodeURIComponent(f.actorType);
+  if(f.action)     qs += '&action='     + encodeURIComponent(f.action);
+  if(f.outcome)    qs += '&outcome='    + encodeURIComponent(f.outcome);
+  if(f.from)       qs += '&from='       + encodeURIComponent(new Date(f.from).toISOString());
+  if(f.to){
+    var toDate = new Date(f.to);
+    toDate.setHours(23,59,59,999);
+    qs += '&to=' + encodeURIComponent(toDate.toISOString());
+  }
+  if(extra){
+    Object.keys(extra).forEach(function(k){ qs += '&' + k + '=' + encodeURIComponent(extra[k]); });
+  }
+  return qs;
+}
+
+async function loadAuditLog(){
+  var tbl = document.getElementById('audit-log-table');
+  if(tbl) tbl.innerHTML = '<div style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center">Loading audit log...</div>';
+  try {
+    var r = await fetch('/api/agency/audit-log?' + buildAuditLogQs());
+    if(!r.ok){
+      if(tbl) tbl.innerHTML = '<div style="padding:24px;color:#f87171;font-size:13px;text-align:center">Failed to load audit log.</div>';
+      return;
+    }
+    var data = await r.json();
+    auditLogState.entries = data.entries || [];
+    auditLogState.total = data.total || 0;
+    renderAuditLogTable();
+    renderAuditLogPagination();
+  } catch(e){
+    if(tbl) tbl.innerHTML = '<div style="padding:24px;color:#f87171;font-size:13px;text-align:center">Error: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderAuditLogTable(){
+  var tbl = document.getElementById('audit-log-table');
+  if(!tbl) return;
+  var entries = auditLogState.entries || [];
+  if(!entries.length){
+    tbl.innerHTML = '<div style="padding:32px;color:var(--text-muted);font-size:13px;text-align:center">No audit log entries match these filters.</div>';
+    return;
+  }
+  var rows = entries.map(function(e){
+    var when = new Date(e.created_at).toLocaleString();
+    var actor = '';
+    if(e.actor_type === 'agency')        actor = (e.actor_username || e.actor_id || 'agency') + ' (agency)';
+    else if(e.actor_type === 'cron')     actor = 'cron job';
+    else if(e.actor_type === 'system')   actor = 'system';
+    else if(e.actor_type === 'subaccount') actor = (e.actor_username || e.actor_id || 'sub user') + ' (subaccount)';
+    else                                 actor = e.actor_type || 'unknown';
+    var outcomeColor = e.outcome === 'success' ? '#16a34a' : (e.outcome === 'denied' ? '#b45309' : '#dc2626');
+    var meta = '';
+    if(e.metadata){
+      try{
+        var m = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata;
+        meta = '<div style="font-size:11px;color:var(--text-muted);font-family:monospace;margin-top:4px;word-break:break-all">' + esc(JSON.stringify(m)) + '</div>';
+      }catch(err){ meta = '<div style="font-size:11px;color:var(--text-muted);font-family:monospace;margin-top:4px">' + esc(String(e.metadata)) + '</div>'; }
+    }
+    var errorRow = e.error_message ? '<div style="font-size:11px;color:#fca5a5;margin-top:4px">Error: ' + esc(e.error_message) + '</div>' : '';
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:9px 12px;font-size:12px;color:var(--text-muted);white-space:nowrap;vertical-align:top">' + esc(when) + '</td>'
+      +'<td style="padding:9px 12px;font-size:12px;vertical-align:top">' + esc(actor) + '</td>'
+      +'<td style="padding:9px 12px;font-size:12px;font-family:monospace;vertical-align:top">' + esc(e.action) + '</td>'
+      +'<td style="padding:9px 12px;font-size:12px;vertical-align:top">' + esc(e.target_subaccount_id || e.target_id || '') + '</td>'
+      +'<td style="padding:9px 12px;font-size:12px;vertical-align:top"><span style="display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700;background:' + outcomeColor + '22;color:' + outcomeColor + ';border:1px solid ' + outcomeColor + '44">' + esc(e.outcome) + '</span></td>'
+      +'<td style="padding:9px 12px;font-size:12px;color:var(--text-muted);vertical-align:top">' + esc(e.ip_address || '') + meta + errorRow + '</td>'
+      +'</tr>';
+  }).join('');
+  tbl.innerHTML = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="background:var(--bg-card);border-bottom:1px solid var(--border)">'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">When</th>'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Actor</th>'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Action</th>'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Target</th>'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Outcome</th>'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Details</th>'
+    +'</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderAuditLogPagination(){
+  var pag = document.getElementById('audit-log-pagination');
+  if(!pag) return;
+  var total = auditLogState.total || 0;
+  var off = auditLogState.offset || 0;
+  var lim = auditLogState.limit || 50;
+  var showingFrom = total === 0 ? 0 : off + 1;
+  var showingTo = Math.min(off + lim, total);
+  var prevDisabled = off <= 0;
+  var nextDisabled = off + lim >= total;
+  pag.innerHTML = '<div>Showing ' + showingFrom + '-' + showingTo + ' of ' + total + '</div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="btn btn-ghost btn-sm" ' + (prevDisabled ? 'disabled' : '') + ' onclick="auditLogPrev()">Previous</button>'
+    +'<button class="btn btn-ghost btn-sm" ' + (nextDisabled ? 'disabled' : '') + ' onclick="auditLogNext()">Next</button>'
+    +'</div>';
+}
+
+function auditLogPrev(){
+  auditLogState.offset = Math.max(0, auditLogState.offset - auditLogState.limit);
+  loadAuditLog();
+}
+
+function auditLogNext(){
+  auditLogState.offset = auditLogState.offset + auditLogState.limit;
+  loadAuditLog();
+}
+
+async function exportAuditLogCsv(){
+  toast('Building CSV export...','info');
+  try {
+    // Fetch up to 5000 rows with current filters for the export
+    var oldOffset = auditLogState.offset, oldLimit = auditLogState.limit;
+    auditLogState.offset = 0;
+    auditLogState.limit = 5000;
+    var qs = buildAuditLogQs();
+    auditLogState.offset = oldOffset;
+    auditLogState.limit = oldLimit;
+    var r = await fetch('/api/agency/audit-log?' + qs);
+    if(!r.ok){toast('Export failed.','error');return;}
+    var data = await r.json();
+    var rows = data.entries || [];
+    var headers = ['Timestamp','Actor Type','Actor ID','Actor Username','Actor Role','Action','Target Type','Target ID','Target Subaccount','Outcome','IP Address','User Agent','Error','Metadata'];
+    var csv = headers.join(',') + '\n';
+    rows.forEach(function(e){
+      var fields = [
+        e.created_at || '',
+        e.actor_type || '',
+        e.actor_id || '',
+        e.actor_username || '',
+        e.actor_role || '',
+        e.action || '',
+        e.target_type || '',
+        e.target_id || '',
+        e.target_subaccount_id || '',
+        e.outcome || '',
+        e.ip_address || '',
+        e.user_agent || '',
+        e.error_message || '',
+        e.metadata ? JSON.stringify(e.metadata) : ''
+      ];
+      var line = fields.map(function(f){
+        var s = String(f);
+        if(s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0){
+          return '"' + s.replace(/"/g,'""') + '"';
+        }
+        return s;
+      }).join(',');
+      csv += line + '\n';
+    });
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'myspark-audit-log-' + new Date().toISOString().split('T')[0] + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Exported ' + rows.length + ' entries to CSV.','success');
+  } catch(e){
+    toast('Export error: ' + e.message, 'error');
+  }
 }
 
 function renderAgencySettings(){

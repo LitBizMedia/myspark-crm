@@ -7,13 +7,17 @@
 
 const { chargeCardOnFile, calculateCharge } = require('../../lib/agency-billing');
 const { sendEmail } = require('../../lib/billing-emails');
+const { logAudit } = require('../../lib/audit');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET;
 
-const MAX_RETRIES        = 3;  // Mark past_due after this many failed attempts
-const SUSPEND_AFTER_DAYS = 7;  // Suspend subaccount if last attempt was 7+ days ago
+const MAX_RETRIES        = 3;
+const SUSPEND_AFTER_DAYS = 7;
+
+// Common actor for cron-initiated actions
+const CRON_ACTOR = { actorType: 'cron', actorId: 'cron-run-billing', actorUsername: 'cron', actorRole: 'system' };
 
 function sbHeaders(extra) {
   return Object.assign({
@@ -24,7 +28,6 @@ function sbHeaders(extra) {
 }
 
 module.exports = async function handler(req, res) {
-  // Verify the request came from Vercel cron (or an authorized manual trigger)
   const authHeader = req.headers.authorization || '';
   if (authHeader !== 'Bearer ' + CRON_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -34,7 +37,6 @@ module.exports = async function handler(req, res) {
   const summary = { processed: 0, succeeded: 0, failed: 0, suspended: 0, errors: [] };
 
   try {
-    // Find all non-exempt subaccounts whose billing date is today or past
     const url = SUPABASE_URL + '/rest/v1/subaccount_plans'
       + '?next_billing_date=lte.' + today
       + '&status=in.(trialing,active,past_due)'
@@ -52,29 +54,42 @@ module.exports = async function handler(req, res) {
 
     for (const sub of dueSubaccounts) {
       try {
-        await processBilling(sub, summary);
+        await processBilling(req, sub, summary);
       } catch (e) {
         console.error('run-billing: error processing ' + sub.subaccount_id, e.message);
         summary.errors.push({ subaccount_id: sub.subaccount_id, error: e.message });
+        await logAudit({
+          req, ...CRON_ACTOR,
+          action: 'system.billing.processing_error',
+          targetType: 'subaccount',
+          targetId: sub.subaccount_id,
+          targetSubaccountId: sub.subaccount_id,
+          outcome: 'failure',
+          errorMessage: e.message
+        });
       }
     }
 
-    // Process cancelled accounts: deactivate expired, auto-delete after 30 days
-    await processCancelledAccounts(summary);
-
-    // Send trial ending reminder emails (3 days before charge)
-    await sendTrialReminders();
+    await processCancelledAccounts(req, summary);
+    await sendTrialReminders(req);
 
     console.log('run-billing complete:', JSON.stringify(summary));
     return res.status(200).json(summary);
 
   } catch (e) {
     console.error('run-billing fatal error:', e.message);
+    await logAudit({
+      req, ...CRON_ACTOR,
+      action: 'system.billing.cron_fatal',
+      outcome: 'failure',
+      errorMessage: e.message,
+      metadata: { summary }
+    });
     return res.status(500).json({ error: e.message, summary });
   }
 };
 
-async function processBilling(sub, summary) {
+async function processBilling(req, sub, summary) {
   const amountCents = calculateCharge(
     sub.plan_tier,
     sub.billing_period,
@@ -82,18 +97,7 @@ async function processBilling(sub, summary) {
     sub.discount_percent || 0
   );
   const dollars = (amountCents / 100).toFixed(2);
-
-  // Note: We do NOT pre-transition trialing accounts to 'active' here.
-  // Status only changes to 'active' inside the success branch below, after
-  // the charge succeeds. This keeps the database honest: an account marked
-  // 'active' has actually paid.
-
   const chargeNote = 'MySpark+ ' + sub.plan_tier + ' (' + sub.billing_period + ')';
-
-  // Deterministic idempotency key tied to (subaccount, billing date, retry attempt).
-  // Same logical charge = same key = Square dedupes if cron retries.
-  // New retry tomorrow = new key (retry_count incremented) = Square processes the retry.
-  // Prevents double-billing on cron retries or duplicate invocations.
   const retryNum = sub.retry_count || 0;
   const idempotencyKey = 'msp-chg-' + sub.subaccount_id + '-' + sub.next_billing_date + '-r' + retryNum;
 
@@ -107,7 +111,6 @@ async function processBilling(sub, summary) {
 
   const nextDate = calcNextBillingDate(sub.billing_period);
 
-  // Log every attempt to subaccount_invoices
   await fetch(SUPABASE_URL + '/rest/v1/subaccount_invoices', {
     method: 'POST',
     headers: sbHeaders({ 'Prefer': 'return=minimal' }),
@@ -126,7 +129,6 @@ async function processBilling(sub, summary) {
     })
   });
 
-  // Fetch admin email for notifications
   const adminEmail = await getAdminEmail(sub.subaccount_id);
   const subName = sub.subaccount_name || sub.subaccount_id;
 
@@ -142,13 +144,26 @@ async function processBilling(sub, summary) {
     });
     if (adminEmail) {
       await sendEmail(adminEmail, 'receipt', {
-        subName,
-        dollars,
-        nextBillingDate: nextDate,
-        planTier: sub.plan_tier,
-        billingPeriod: sub.billing_period
+        subName, dollars, nextBillingDate: nextDate,
+        planTier: sub.plan_tier, billingPeriod: sub.billing_period
       });
     }
+    await logAudit({
+      req, ...CRON_ACTOR,
+      action: 'system.billing.charge_success',
+      targetType: 'subaccount',
+      targetId: sub.subaccount_id,
+      targetSubaccountId: sub.subaccount_id,
+      metadata: {
+        amount_cents: amountCents,
+        square_payment_id: result.paymentId,
+        plan_tier: sub.plan_tier,
+        billing_period: sub.billing_period,
+        next_billing_date: nextDate,
+        retry_attempt: retryNum,
+        was_trial_conversion: sub.status === 'trialing'
+      }
+    });
 
   } else {
     summary.failed++;
@@ -171,9 +186,21 @@ async function processBilling(sub, summary) {
         headers: sbHeaders(),
         body: JSON.stringify({ active: false })
       });
-      if (adminEmail) {
-        await sendEmail(adminEmail, 'suspended', { subName, dollars });
-      }
+      if (adminEmail) await sendEmail(adminEmail, 'suspended', { subName, dollars });
+
+      await logAudit({
+        req, ...CRON_ACTOR,
+        action: 'system.billing.suspend',
+        targetType: 'subaccount',
+        targetId: sub.subaccount_id,
+        targetSubaccountId: sub.subaccount_id,
+        metadata: {
+          reason: 'failed_payments',
+          retry_count: newRetryCount,
+          attempted_amount_cents: amountCents,
+          last_error: result.error
+        }
+      });
 
     } else if (newRetryCount >= MAX_RETRIES) {
       await updatePlan(sub.subaccount_id, {
@@ -183,9 +210,21 @@ async function processBilling(sub, summary) {
         retry_count: newRetryCount,
         next_billing_date: tomorrowDate()
       });
-      if (adminEmail) {
-        await sendEmail(adminEmail, 'past_due', { subName, dollars, retryCount: newRetryCount });
-      }
+      if (adminEmail) await sendEmail(adminEmail, 'past_due', { subName, dollars, retryCount: newRetryCount });
+
+      await logAudit({
+        req, ...CRON_ACTOR,
+        action: 'system.billing.past_due',
+        targetType: 'subaccount',
+        targetId: sub.subaccount_id,
+        targetSubaccountId: sub.subaccount_id,
+        outcome: 'failure',
+        errorMessage: result.error,
+        metadata: {
+          retry_count: newRetryCount,
+          attempted_amount_cents: amountCents
+        }
+      });
 
     } else {
       await updatePlan(sub.subaccount_id, {
@@ -196,13 +235,26 @@ async function processBilling(sub, summary) {
       });
       if (adminEmail) {
         await sendEmail(adminEmail, 'payment_failed', {
-          subName,
-          dollars,
+          subName, dollars,
           retryCount: newRetryCount,
           maxRetries: MAX_RETRIES,
           nextRetryDate: tomorrowDate()
         });
       }
+      await logAudit({
+        req, ...CRON_ACTOR,
+        action: 'system.billing.charge_failed',
+        targetType: 'subaccount',
+        targetId: sub.subaccount_id,
+        targetSubaccountId: sub.subaccount_id,
+        outcome: 'failure',
+        errorMessage: result.error,
+        metadata: {
+          retry_count: newRetryCount,
+          attempted_amount_cents: amountCents,
+          next_retry_date: tomorrowDate()
+        }
+      });
     }
   }
 }
@@ -222,8 +274,6 @@ async function updatePlan(subaccountId, updates) {
   }
 }
 
-// Fetches the admin email address from the subaccounts table.
-// Returns null if not found or on error so callers can skip sending gracefully.
 async function getAdminEmail(subaccountId) {
   try {
     const res = await fetch(
@@ -254,7 +304,7 @@ function tomorrowDate() {
   return new Date(Date.now() + 86400000).toISOString().split('T')[0];
 }
 
-async function processCancelledAccounts(summary) {
+async function processCancelledAccounts(req, summary) {
   const today = new Date().toISOString().split('T')[0];
   const cutoffDate = new Date(Date.now() - 30 * 86400000).toISOString();
 
@@ -275,6 +325,18 @@ async function processCancelledAccounts(summary) {
           { method: 'DELETE', headers: sbHeaders() }
         );
         summary.deleted = (summary.deleted || 0) + 1;
+        await logAudit({
+          req, ...CRON_ACTOR,
+          action: 'system.subaccount.auto_delete',
+          targetType: 'subaccount',
+          targetId: sub.subaccount_id,
+          targetSubaccountId: sub.subaccount_id,
+          metadata: {
+            reason: 'cancelled_30_days',
+            canceled_at: sub.canceled_at,
+            plan_tier: sub.plan_tier
+          }
+        });
         continue;
       }
       // Deactivate: access period has ended
@@ -288,6 +350,17 @@ async function processCancelledAccounts(summary) {
           }
         );
         console.log('run-billing: deactivated cancelled subaccount ' + sub.subaccount_id);
+        await logAudit({
+          req, ...CRON_ACTOR,
+          action: 'system.subaccount.deactivate',
+          targetType: 'subaccount',
+          targetId: sub.subaccount_id,
+          targetSubaccountId: sub.subaccount_id,
+          metadata: {
+            reason: 'cancelled_period_ended',
+            next_billing_date: sub.next_billing_date
+          }
+        });
       }
     } catch (e) {
       console.error('processCancelledAccounts error for ' + sub.subaccount_id, e.message);
@@ -295,7 +368,7 @@ async function processCancelledAccounts(summary) {
   }
 }
 
-async function sendTrialReminders() {
+async function sendTrialReminders(req) {
   try {
     const threeDaysFromNow = new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0];
     const twoDaysFromNow   = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
@@ -333,6 +406,18 @@ async function sendTrialReminders() {
 
         await sendEmail(adminEmail, 'trial_ending_soon', { subName, trialEndDate, dollars });
         console.log('trial-reminder sent to ' + adminEmail + ' for ' + sub.subaccount_id);
+
+        await logAudit({
+          req, ...CRON_ACTOR,
+          action: 'system.billing.trial_reminder_sent',
+          targetType: 'subaccount',
+          targetId: sub.subaccount_id,
+          targetSubaccountId: sub.subaccount_id,
+          metadata: {
+            trial_end_date: trialEndDate,
+            upcoming_charge_cents: amountCents
+          }
+        });
 
       } catch (e) {
         console.error('sendTrialReminders: error for ' + sub.subaccount_id + ':', e.message);

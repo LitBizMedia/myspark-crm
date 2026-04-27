@@ -11,6 +11,7 @@
 const { chargeCardOnFile, calculateCharge } = require('../../lib/agency-billing');
 const { sendError } = require('../../lib/square');
 const { sendEmail } = require('../../lib/billing-emails');
+const { logAudit, extractActorFromBody } = require('../../lib/audit');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -39,6 +40,8 @@ module.exports = async function handler(req, res) {
   const { subaccountId } = req.body || {};
   if (!subaccountId) return sendError(res, 400, 'subaccountId required');
 
+  const actor = extractActorFromBody(req.body);
+
   try {
     // Load current plan
     const planRes = await fetch(
@@ -52,6 +55,15 @@ module.exports = async function handler(req, res) {
 
     const reactivatableStatuses = ['suspended', 'cancelled', 'past_due'];
     if (!reactivatableStatuses.includes(plan.status)) {
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.reactivate',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'denied',
+        errorMessage: 'Account status is "' + plan.status + '", not reactivatable'
+      });
       return sendError(res, 400, 'Account status is "' + plan.status + '". Only suspended, cancelled, or past_due accounts can be reactivated.');
     }
 
@@ -61,13 +73,10 @@ module.exports = async function handler(req, res) {
     // ─────────────────────────────────────────────────────
     // GRACEFUL REACTIVATION (cancelled, period still active)
     // ─────────────────────────────────────────────────────
-    // Customer cancelled but still has paid time remaining. Restore access
-    // without charging. Keep existing billing dates intact. They already paid.
     const periodStillActive = plan.next_billing_date && plan.next_billing_date > today;
 
     if (plan.status === 'cancelled' && periodStillActive) {
 
-      // Re-enable the subaccount itself
       await fetch(
         SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + subaccountId,
         {
@@ -77,7 +86,6 @@ module.exports = async function handler(req, res) {
         }
       );
 
-      // Flip plan status back to active. Keep next_billing_date as-is.
       await fetch(
         SUPABASE_URL + '/rest/v1/subaccount_plans?subaccount_id=eq.' + subaccountId,
         {
@@ -91,7 +99,6 @@ module.exports = async function handler(req, res) {
         }
       );
 
-      // Send "welcome back, no charge" email
       try {
         const subRes = await fetch(
           SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + subaccountId + '&select=name,admin_email',
@@ -111,6 +118,22 @@ module.exports = async function handler(req, res) {
         console.error('reactivate.js (no charge): email send failed:', emailErr.message);
       }
 
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.reactivate',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        metadata: {
+          path: 'graceful',
+          charged_cents: 0,
+          plan_tier: plan.plan_tier,
+          billing_period: plan.billing_period,
+          next_billing_date: plan.next_billing_date,
+          previous_status: 'cancelled'
+        }
+      });
+
       return res.status(200).json({
         success: true,
         charged_cents: 0,
@@ -124,6 +147,15 @@ module.exports = async function handler(req, res) {
     // CHARGED REACTIVATION (suspended, past_due, expired)
     // ─────────────────────────────────────────────────────
     if (!plan.square_customer_id || !plan.square_card_id) {
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.reactivate',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'denied',
+        errorMessage: 'No card on file'
+      });
       return sendError(res, 400, 'No card on file. Cannot reactivate without a payment method.');
     }
 
@@ -135,10 +167,6 @@ module.exports = async function handler(req, res) {
     );
     const dollars     = (amountCents / 100).toFixed(2);
     const chargeNote  = 'MySpark+ reactivation: ' + plan.plan_tier + ' (' + plan.billing_period + ')';
-
-    // Deterministic idempotency key. Same subaccount + same day = same Square charge.
-    // Prevents double-billing if the agency admin double-clicks or the request retries.
-    // A reactivation attempt the next day will get a new key and process normally.
     const idempotencyKey = 'msp-rea-' + subaccountId + '-' + today;
 
     const result = await chargeCardOnFile(
@@ -151,7 +179,6 @@ module.exports = async function handler(req, res) {
 
     const nextDate = calcNextBillingDate(plan.billing_period);
 
-    // Log every attempt to invoices, success or failure
     await fetch(SUPABASE_URL + '/rest/v1/subaccount_invoices', {
       method: 'POST',
       headers: sbHeaders({ 'Prefer': 'return=minimal' }),
@@ -171,10 +198,24 @@ module.exports = async function handler(req, res) {
     });
 
     if (!result.success) {
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.reactivate',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        outcome: 'failure',
+        errorMessage: 'Card charge failed: ' + result.error,
+        metadata: {
+          path: 'charged',
+          attempted_amount_cents: amountCents,
+          plan_tier: plan.plan_tier,
+          previous_status: plan.status
+        }
+      });
       return sendError(res, 402, 'Card charge failed: ' + result.error);
     }
 
-    // Re-enable subaccount
     await fetch(
       SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + subaccountId,
       {
@@ -184,7 +225,6 @@ module.exports = async function handler(req, res) {
       }
     );
 
-    // Reset plan to active for a fresh cycle
     await fetch(
       SUPABASE_URL + '/rest/v1/subaccount_plans?subaccount_id=eq.' + subaccountId,
       {
@@ -204,7 +244,6 @@ module.exports = async function handler(req, res) {
       }
     );
 
-    // Send reactivation confirmation email
     try {
       const subRes = await fetch(
         SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + subaccountId + '&select=name,admin_email',
@@ -225,6 +264,23 @@ module.exports = async function handler(req, res) {
       console.error('reactivate.js: email send failed:', emailErr.message);
     }
 
+    await logAudit({
+      req, ...actor,
+      action: 'agency.plan.reactivate',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      metadata: {
+        path: 'charged',
+        charged_cents: amountCents,
+        square_payment_id: result.paymentId,
+        plan_tier: plan.plan_tier,
+        billing_period: plan.billing_period,
+        next_billing_date: nextDate,
+        previous_status: plan.status
+      }
+    });
+
     return res.status(200).json({
       success: true,
       charged_cents: amountCents,
@@ -235,6 +291,15 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     console.error('reactivate error:', e);
+    await logAudit({
+      req, ...actor,
+      action: 'agency.plan.reactivate',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      outcome: 'failure',
+      errorMessage: e.message
+    });
     return sendError(res, 500, 'Reactivation failed', e.message);
   }
 };
