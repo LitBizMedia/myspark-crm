@@ -1847,9 +1847,11 @@ document.getElementById('login-form').addEventListener('submit',async function(e
     user={id:'admin-'+state.subaccountSlug,username:db._subaccountAdmin.username,role:'admin',name:db._subaccountAdmin.name||db._subaccountAdmin.username,color:db._subaccountAdmin.color||'#6b21ea'};
   }
   if(!user){err.textContent='Invalid username or password.';err.classList.remove('hidden');return}
-  // Check if subaccount is active before granting access
+  // Check if subaccount is active before granting access. Fail-closed: if we cannot
+  // verify status, deny login. This is required for HIPAA compliance.
   var subActive=await checkSubaccountActive();
-  if(!subActive){err.textContent='This account has been suspended. Please contact support.';err.classList.remove('hidden');return;}
+  if(subActive==='suspended'){err.textContent='This account has been suspended. Please contact support.';err.classList.remove('hidden');return;}
+  if(subActive==='unknown'){err.textContent='Cannot verify account status. Please check your connection and try again.';err.classList.remove('hidden');return;}
   err.classList.add('hidden');
   state.user=user;
   localStorage.setItem(SSK,JSON.stringify({id:user.id,username:user.username,role:user.role,name:user.name||user.username,color:user.color,ts:Date.now()}));
@@ -1918,17 +1920,20 @@ async function submitResetPassword(token){
 
 // Check if the current subaccount is active. Returns true if active or if check cannot be performed.
 async function checkSubaccountActive(){
+  // Returns one of: 'active', 'suspended', 'unknown'.
+  // Callers must treat 'unknown' as a hard failure for HIPAA compliance.
+  // Previously this failed open (returned true on error). Now it fails closed.
   try{
     var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
     var r=await fetch(url+'/rest/v1/subaccounts?id=eq.'+encodeURIComponent(state.subaccountId||'sub-litbiz')+'&select=active',{
       headers:{'apikey':key,'Authorization':'Bearer '+key}
     });
-    if(!r.ok)return true; // fail open if check fails
+    if(!r.ok)return 'unknown';
     var rows=await r.json();
-    if(!rows||!rows.length)return true; // no record = allow (new subaccount)
-    return rows[0].active!==false;
+    if(!rows||!rows.length)return 'unknown'; // record missing = treat as unverified
+    return rows[0].active===false?'suspended':'active';
   }catch(e){
-    return true; // fail open
+    return 'unknown';
   }
 }
 
@@ -3529,6 +3534,92 @@ async function pullFromSupabase(){
 // =====================================================
 // initApp - Supabase-aware
 // =====================================================
+// =====================================================
+// IDLE TIMEOUT (HIPAA: automatic logoff)
+// =====================================================
+// Per HIPAA Security Rule, sessions must terminate after a period of inactivity.
+// Default: 30 minutes idle, then 60-second warning, then forced logout.
+var IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+var IDLE_WARNING_MS = 60 * 1000;      // 60 second warning
+var idleState = { timer: null, warningTimer: null, warningOpen: false };
+
+function initIdleTimeout(){
+  if(idleState._initialized)return;
+  idleState._initialized = true;
+  var events = ['mousemove','mousedown','keydown','touchstart','scroll'];
+  events.forEach(function(ev){
+    document.addEventListener(ev, resetIdleTimer, { passive: true });
+  });
+  resetIdleTimer();
+}
+
+function resetIdleTimer(){
+  // If the warning modal is open, only an explicit "Stay logged in" click resets.
+  // Other activity is ignored to prevent ghost mouse movements from extending the session.
+  if(idleState.warningOpen)return;
+  if(idleState.timer)clearTimeout(idleState.timer);
+  if(idleState.warningTimer)clearTimeout(idleState.warningTimer);
+  idleState.timer = setTimeout(showIdleWarning, IDLE_TIMEOUT_MS);
+}
+
+function showIdleWarning(){
+  if(!state.user)return; // already logged out
+  idleState.warningOpen = true;
+  // Build inline warning modal (does not use openModal so it cannot be overridden by another modal)
+  var existing = document.getElementById('idle-warn-modal');
+  if(existing)existing.remove();
+  var div = document.createElement('div');
+  div.id = 'idle-warn-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  div.innerHTML = '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;max-width:440px;width:90%;text-align:center">'
+    +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:14px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;color:var(--text)">Are you still there?</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">For your security, you will be signed out in <span id="idle-countdown" style="color:#f59e0b;font-weight:700">60</span> seconds due to inactivity.</div>'
+    +'<button class="btn btn-primary" onclick="dismissIdleWarning()" style="width:100%">Stay signed in</button>'
+    +'</div>';
+  document.body.appendChild(div);
+  // Countdown display
+  var remaining = IDLE_WARNING_MS / 1000;
+  var cd = document.getElementById('idle-countdown');
+  var countdownInterval = setInterval(function(){
+    remaining--;
+    if(cd)cd.textContent = remaining;
+    if(remaining<=0)clearInterval(countdownInterval);
+  }, 1000);
+  idleState._countdownInterval = countdownInterval;
+  // Force logout when warning expires
+  idleState.warningTimer = setTimeout(forceIdleLogout, IDLE_WARNING_MS);
+}
+
+function dismissIdleWarning(){
+  idleState.warningOpen = false;
+  var modal = document.getElementById('idle-warn-modal');
+  if(modal)modal.remove();
+  if(idleState._countdownInterval){clearInterval(idleState._countdownInterval);idleState._countdownInterval=null;}
+  if(idleState.warningTimer){clearTimeout(idleState.warningTimer);idleState.warningTimer=null;}
+  resetIdleTimer();
+}
+
+function forceIdleLogout(){
+  idleState.warningOpen = false;
+  var modal = document.getElementById('idle-warn-modal');
+  if(modal)modal.remove();
+  if(idleState._countdownInterval){clearInterval(idleState._countdownInterval);idleState._countdownInterval=null;}
+  // Clear timers so a stale resetIdleTimer call cannot revive the session
+  if(idleState.timer){clearTimeout(idleState.timer);idleState.timer=null;}
+  if(idleState.warningTimer){clearTimeout(idleState.warningTimer);idleState.warningTimer=null;}
+  // Wipe session and reload
+  try{localStorage.removeItem(SSK);}catch(e){}
+  // Show a brief flash so the user understands what happened
+  try{
+    var flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1f1432;border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    flash.textContent = 'Signed out due to inactivity.';
+    document.body.appendChild(flash);
+  }catch(e){}
+  setTimeout(function(){location.reload();}, 800);
+}
+
 function initApp(){
   const u=state.user;
   document.getElementById('sb-name').textContent=u.name||u.username;
@@ -3550,6 +3641,8 @@ function initApp(){
   if(!state._dashTimer){
     state._dashTimer=setInterval(function(){if(state.panel==='dashboard')renderDash();},30000);
   }
+  // Wire HIPAA idle timeout
+  initIdleTimeout();
 }
 
 function renderWorkspacePill(){
