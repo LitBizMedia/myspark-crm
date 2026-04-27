@@ -10031,6 +10031,12 @@ async function openManagePlanModal(subId,subName){
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="mp-hipaa" '+(curHipaa?'checked':'')+' onchange="updatePlanSummary()" style="width:auto;margin:0">'
     +'<span>HIPAA Compliance Add-on (+$50/mo or $500/yr)</span></label></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div class="form-group" style="margin:0"><label>Discount %</label>'
+    +'<input id="mp-discount" type="number" min="0" max="100" value="'+(plan&&plan.discount_percent||0)+'" placeholder="0" onchange="updatePlanSummary()"></div>'
+    +'<div class="form-group" style="margin:0"><label>Discount Note</label>'
+    +'<input id="mp-discount-note" type="text" value="'+esc((plan&&plan.discount_note)||'')+'" placeholder="e.g. Founding member"></div>'
+    +'</div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="mp-exempt" '+(isExempt?'checked':'')+' style="width:auto;margin:0">'
     +'<span>Exempt from billing (test workspace, partner, internal)</span></label></div>'
@@ -10072,13 +10078,15 @@ function updatePlanSummary(){
   var tier=document.getElementById('mp-tier');
   var period=document.getElementById('mp-period');
   var hipaa=document.getElementById('mp-hipaa');
+  var discountEl=document.getElementById('mp-discount');
   var sum=document.getElementById('mp-summary');
   if(!tier||!period||!sum)return;
-  var extra=state.modal&&state.modal.extra||{};
-  var isExempt=!!(extra.plan&&extra.plan.exempt_from_billing);
-  if(isExempt){sum.textContent='No charge';return;}
+  var exemptEl=document.getElementById('mp-exempt');
+  if(exemptEl&&exemptEl.checked){sum.textContent='No charge';return;}
   var price=planMonthlyPrice(tier.value,period.value,hipaa&&hipaa.checked);
-  sum.textContent='$'+price+(period.value==='annual'?'/yr':'/mo');
+  var disc=discountEl?Math.min(100,Math.max(0,parseInt(discountEl.value)||0)):0;
+  if(disc>0)price=Math.round(price*(1-disc/100));
+  sum.textContent='$'+price+(period.value==='annual'?'/yr':'/mo')+(disc>0?' ('+disc+'% off)':'');
 }
 
 async function saveManagePlan(subId){
@@ -10086,6 +10094,8 @@ async function saveManagePlan(subId){
   var period=document.getElementById('mp-period')&&document.getElementById('mp-period').value;
   var hipaa=document.getElementById('mp-hipaa')&&document.getElementById('mp-hipaa').checked;
   var exemptChecked=!!(document.getElementById('mp-exempt')&&document.getElementById('mp-exempt').checked);
+  var discountPct=parseInt((document.getElementById('mp-discount')&&document.getElementById('mp-discount').value)||'0')||0;
+  var discountNote=(document.getElementById('mp-discount-note')&&document.getElementById('mp-discount-note').value||'').trim();
   if(!tier||!period){toast('All fields required.','error');return;}
   var extra=state.modal&&state.modal.extra||{};
   var existing=extra.plan;
@@ -10116,15 +10126,15 @@ async function saveManagePlan(subId){
   }
 
   // Downgrade, period change, or exempt: call swap-plan (no charge)
-  await confirmSwapPlan(subId,tier,period,hipaa,exemptChecked,true);
+  await confirmSwapPlan(subId,tier,period,hipaa,exemptChecked,discountPct,discountNote,true);
 }
 
-async function confirmSwapPlan(subId,tier,period,hipaa,exempt,silent){
+async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discountNote,silent){
   try{
     var r=await fetch('/api/billing/swap-plan',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt})
+      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||''})
     });
     if(!r.ok){var t=await r.text();toast('Plan change failed: '+t,'error');return;}
     var data=await r.json();
@@ -10514,7 +10524,17 @@ function openCreateSubaccountModal(){
     +'<span>Exempt from billing (test workspace, partner, internal use)</span></label></div>'
     +'<div id="new-sub-billing-fields">'
     +'<div class="form-group"><label>Payment Card *</label>'
+    +'<div style="display:flex;gap:8px;margin-bottom:10px">'
+    +'<button type="button" id="new-sub-card-mode-new" class="btn btn-primary btn-sm" onclick="setCardMode(\'new\')" style="flex:1">Enter New Card</button>'
+    +'<button type="button" id="new-sub-card-mode-existing" class="btn btn-ghost btn-sm" onclick="setCardMode(\'existing\')" style="flex:1">Use Card on File</button>'
+    +'</div>'
+    +'<div id="new-sub-card-new-section">'
     +'<div id="new-sub-card-container" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:52px"></div>'
+    +'</div>'
+    +'<div id="new-sub-card-existing-section" style="display:none">'
+    +'<select id="new-sub-existing-customer" class="filter-sel" style="width:100%;height:38px;margin-bottom:8px" onchange="loadExistingCards()"><option value="">Loading customers...</option></select>'
+    +'<select id="new-sub-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Select a card</option></select>'
+    +'</div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:5px">14-day free trial. Card auto-charges at trial end. Cancel anytime.</div></div>'
     +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:12px;display:flex;align-items:center;justify-content:space-between;margin-top:4px">'
     +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">After 14-day trial</div>'
@@ -10592,20 +10612,31 @@ async function createSubaccount(){
     if(!r2.ok){var e2=await r2.text();toast('Subaccount created but data init failed: '+e2,'warn');}
     // Handle billing setup
     if(!isExempt){
-      var subCard=state._subaccountCard;
-      if(!subCard){toast('Card form not loaded. Reload and try again.','error');return;}
-      var tokenResult=await subCard.tokenize();
-      if(tokenResult.status!=='OK'){
-        var cardErr=(tokenResult.errors&&tokenResult.errors[0]&&tokenResult.errors[0].message)||'Unknown card error';
-        toast('Card error: '+cardErr,'error');return;
+      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon};
+      if(state._cardMode==='existing'){
+        // Use existing Square card on file
+        var custSel=document.getElementById('new-sub-existing-customer');
+        var cardSel=document.getElementById('new-sub-existing-card');
+        var existingCustId=custSel&&custSel.value;
+        var existingCardId=cardSel&&cardSel.value;
+        if(!existingCustId||!existingCardId){toast('Select a customer and card.','error');return;}
+        billingPayload.existingCustomerId=existingCustId;
+        billingPayload.existingCardId=existingCardId;
+      }else{
+        // New card via Square Web Payments SDK
+        var subCard=state._subaccountCard;
+        if(!subCard){toast('Card form not loaded. Reload and try again.','error');return;}
+        var tokenResult=await subCard.tokenize();
+        if(tokenResult.status!=='OK'){
+          var cardErr=(tokenResult.errors&&tokenResult.errors[0]&&tokenResult.errors[0].message)||'Unknown card error';
+          toast('Card error: '+cardErr,'error');return;
+        }
+        billingPayload.sourceId=tokenResult.token;
       }
       var billingRes=await fetch('/api/billing/setup-billing',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,
-          sourceId:tokenResult.token,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon
-        })
+        body:JSON.stringify(billingPayload)
       });
       if(!billingRes.ok){
         var billingErr=await billingRes.text();
@@ -10662,6 +10693,61 @@ function toggleBillingFields(){
   fields.style.display=exempt.checked?'none':'block';
 }
 
+function setCardMode(mode){
+  var newSection=document.getElementById('new-sub-card-new-section');
+  var existingSection=document.getElementById('new-sub-card-existing-section');
+  var btnNew=document.getElementById('new-sub-card-mode-new');
+  var btnExisting=document.getElementById('new-sub-card-mode-existing');
+  if(!newSection||!existingSection)return;
+  state._cardMode=mode;
+  if(mode==='existing'){
+    newSection.style.display='none';
+    existingSection.style.display='block';
+    btnNew.className='btn btn-ghost btn-sm';
+    btnExisting.className='btn btn-primary btn-sm';
+    loadSquareCustomers();
+  }else{
+    newSection.style.display='block';
+    existingSection.style.display='none';
+    btnNew.className='btn btn-primary btn-sm';
+    btnExisting.className='btn btn-ghost btn-sm';
+  }
+}
+
+async function loadSquareCustomers(){
+  var sel=document.getElementById('new-sub-existing-customer');
+  if(!sel)return;
+  sel.innerHTML='<option value="">Loading...</option>';
+  try{
+    var r=await fetch('/api/billing/list-cards');
+    if(!r.ok){sel.innerHTML='<option value="">Could not load customers</option>';return;}
+    var data=await r.json();
+    var customers=data.customers||[];
+    if(!customers.length){sel.innerHTML='<option value="">No customers with cards found</option>';return;}
+    state._squareCustomers=customers;
+    sel.innerHTML='<option value="">Select a customer</option>'
+      +customers.map(function(c){
+        return '<option value="'+c.customerId+'">'+esc(c.customerName)+(c.email?' ('+esc(c.email)+')':'')+'</option>';
+      }).join('');
+  }catch(e){
+    sel.innerHTML='<option value="">Error: '+esc(e.message)+'</option>';
+  }
+}
+
+function loadExistingCards(){
+  var custSel=document.getElementById('new-sub-existing-customer');
+  var cardSel=document.getElementById('new-sub-existing-card');
+  if(!custSel||!cardSel)return;
+  var custId=custSel.value;
+  if(!custId){cardSel.innerHTML='<option value="">Select a customer first</option>';return;}
+  var customers=state._squareCustomers||[];
+  var cust=customers.find(function(c){return c.customerId===custId;});
+  if(!cust||!cust.cards||!cust.cards.length){cardSel.innerHTML='<option value="">No cards found</option>';return;}
+  cardSel.innerHTML=cust.cards.map(function(c){
+    return '<option value="'+c.cardId+'">'+esc(c.brand)+' ending '+esc(c.last4)+' (exp '+c.expMonth+'/'+c.expYear+')</option>';
+  }).join('');
+}
+
 async function initSubaccountCardForm(){
   var container=document.getElementById('new-sub-card-container');
   if(!container)return;
@@ -10713,11 +10799,7 @@ async function openEditSubaccountModal(id,name,slug,plan){
       +'<div style="font-size:11px;color:#fbbf24;margin-top:4px">Changing the username means the admin must use the new username on their next login. Existing sessions stay valid.</div></div>';
   var body='<div class="form-group"><label>Subaccount Name</label>'
     +'<input id="edit-sub-name" type="text" value="'+esc(name)+'"></div>'
-    +'<div class="form-group"><label>Plan</label>'
-    +'<select id="edit-sub-plan" class="filter-sel" style="width:100%;height:38px">'
-    +['starter','pro','enterprise'].map(function(p){return'<option value="'+p+'"'+(p===plan?' selected':'')+'>'+p[0].toUpperCase()+p.slice(1)+'</option>';}).join('')
-    +'</select></div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">URL slug cannot be changed after creation.</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">URL slug cannot be changed after creation. Use Manage Plan to change billing tier.</div>'
     +'<div class="divider" style="margin:10px 0"></div>'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Workspace Admin</div>'
     +adminSection;
@@ -10730,7 +10812,6 @@ async function openEditSubaccountModal(id,name,slug,plan){
 
 async function saveEditSubaccount(id){
   var name=(document.getElementById('edit-sub-name')&&document.getElementById('edit-sub-name').value||'').trim();
-  var plan=document.getElementById('edit-sub-plan')&&document.getElementById('edit-sub-plan').value||'starter';
   if(!name){toast('Name required.','error');return;}
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   var slug=state.modal&&state.modal.extra&&state.modal.extra.slug||'';
@@ -10749,7 +10830,7 @@ async function saveEditSubaccount(id){
     var r1=await fetch(url+'/rest/v1/subaccounts?id=eq.'+encodeURIComponent(id),{
       method:'PATCH',
       headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({name:name,plan:plan})
+      body:JSON.stringify({name:name})
     });
     if(!r1.ok){var e1=await r1.text();toast('Could not update subaccount: '+e1,'error');return;}
     // Patch the _subaccountAdmin inside subaccount_data (non-LitBiz only)
@@ -10841,6 +10922,37 @@ async function agencyConfirmDeleteSub(id){
 // =====================================================
 // AGENCY SETTINGS PANEL
 // =====================================================
+async function savePlanPricing(){
+  var tiers=['starter','professional','business','enterprise'];
+  var valid=true;
+  tiers.forEach(function(t){
+    var m=parseInt(document.getElementById('price-'+t+'-monthly')&&document.getElementById('price-'+t+'-monthly').value)||0;
+    var a=parseInt(document.getElementById('price-'+t+'-annual')&&document.getElementById('price-'+t+'-annual').value)||0;
+    if(m<=0||a<=0){valid=false;}
+    PLAN_PRICES[t]={monthly:m,annual:a};
+  });
+  var hm=parseInt(document.getElementById('price-hipaa-monthly')&&document.getElementById('price-hipaa-monthly').value)||50;
+  var ha=parseInt(document.getElementById('price-hipaa-annual')&&document.getElementById('price-hipaa-annual').value)||500;
+  HIPAA_ADDON_PRICES.monthly=hm;
+  HIPAA_ADDON_PRICES.annual=ha;
+  if(!valid){toast('All prices must be greater than 0.','error');return;}
+  // Save to Supabase plan_pricing table
+  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  var rows=tiers.map(function(t){
+    return {id:t,tier:t,monthly_cents:PLAN_PRICES[t].monthly*100,annual_cents:PLAN_PRICES[t].annual*100,
+      hipaa_monthly_cents:hm*100,hipaa_annual_cents:ha*100,updated_at:new Date().toISOString()};
+  });
+  try{
+    var r=await fetch(url+'/rest/v1/plan_pricing',{
+      method:'POST',
+      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify(rows)
+    });
+    if(!r.ok){var t2=await r.text();toast('Could not save to database: '+t2,'error');return;}
+    toast('Plan pricing updated.','success');
+  }catch(e){toast('Error saving pricing: '+e.message,'error');}
+}
+
 function renderAgencySettings(){
   var el=document.getElementById('agency-content');
   if(!el)return;
@@ -10868,6 +10980,38 @@ function renderAgencySettings(){
     +'<button class="btn btn-primary btn-sm" onclick="openAgencyChangePasswordModal()">Change Password</button>'
     +'</div>'
     // Agency Users section (super_admin only)
+    +'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px">'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700">Plan Pricing</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Edit plan tiers and pricing. Changes apply to new billing cycles.</div></div>'
+    +'<button class="btn btn-primary btn-sm" onclick="savePlanPricing()">Save Pricing</button>'
+    +'</div>'
+    +'<div style="overflow-x:auto">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:13px">'
+    +'<thead><tr style="border-bottom:1px solid var(--border)">'
+    +'<th style="text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600">Tier</th>'
+    +'<th style="text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600">Monthly ($)</th>'
+    +'<th style="text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600">Annual ($)</th>'
+    +'</tr></thead>'
+    +'<tbody>'
++['starter','professional','business','enterprise'].map(function(tier){
+      var p=PLAN_PRICES[tier];
+      return '<tr style="border-bottom:1px solid var(--border)">'
+        +'<td style="padding:10px 12px;font-weight:600;color:var(--text)">'+PLAN_TIER_LABELS[tier]+'</td>'
+        +'<td style="padding:10px 12px"><input id="price-'+tier+'-monthly" type="number" min="0" value="'+p.monthly+'" style="width:90px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></td>'
+        +'<td style="padding:10px 12px"><input id="price-'+tier+'-annual" type="number" min="0" value="'+p.annual+'" style="width:100px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></td>'
+        +'</tr>';
+    }).join('')
+    +'</tbody></table>'
+    +'<div style="margin-top:12px;display:flex;gap:12px;align-items:center">'
+    +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">HIPAA Add-on</div>'
+    +'<div style="font-size:13px;color:var(--text-muted)">Monthly:</div>'
+    +'<input id="price-hipaa-monthly" type="number" min="0" value="'+HIPAA_ADDON_PRICES.monthly+'" style="width:80px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px">'
+    +'<div style="font-size:13px;color:var(--text-muted)">Annual:</div>'
+    +'<input id="price-hipaa-annual" type="number" min="0" value="'+HIPAA_ADDON_PRICES.annual+'" style="width:80px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px">'
+    +'</div>'
+    +'</div>'
+    +'</div>'
     +(canManageUsers
       ?'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px">'

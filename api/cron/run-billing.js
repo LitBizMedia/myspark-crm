@@ -71,7 +71,7 @@ module.exports = async function handler(req, res) {
 };
 
 async function processBilling(sub, summary) {
-  const amountCents = calculateCharge(sub.plan_tier, sub.billing_period, sub.hipaa_addon);
+  const amountCents = calculateCharge(sub.plan_tier, sub.billing_period, sub.hipaa_addon, sub.discount_percent || 0);
 
   // If subaccount is still in trial, transition to active first,
   // then charge for the first real billing period.

@@ -26,14 +26,18 @@ module.exports = async function handler(req, res) {
     adminEmail,
     adminName,
     sourceId,
+    existingCustomerId,
+    existingCardId,
     tier,
     billingPeriod,
     hipaaAddon,
     skipTrial
   } = req.body || {};
 
-  if (!subaccountSlug || !sourceId || !tier || !billingPeriod || !adminEmail) {
-    return sendError(res, 400, 'Missing required fields: subaccountSlug, sourceId, tier, billingPeriod, adminEmail');
+  const hasNewCard = !!sourceId;
+  const hasExistingCard = !!(existingCustomerId && existingCardId);
+  if (!subaccountSlug || (!hasNewCard && !hasExistingCard) || !tier || !billingPeriod || !adminEmail) {
+    return sendError(res, 400, 'Missing required fields: subaccountSlug, (sourceId or existingCustomerId+existingCardId), tier, billingPeriod, adminEmail');
   }
   if (!['starter', 'professional', 'business', 'enterprise'].includes(tier)) {
     return sendError(res, 400, 'Invalid tier: ' + tier);
@@ -45,20 +49,30 @@ module.exports = async function handler(req, res) {
   const subaccountId = 'sub-' + subaccountSlug;
 
   try {
-    // 1. Find or create Square customer (referenced by subaccountId for lookup later)
-    const nameParts = (adminName || subaccountName || 'Customer').split(' ');
-    const givenName = nameParts[0] || '';
-    const familyName = nameParts.slice(1).join(' ') || '';
+    // 1. Get or create Square customer + card
+    let customerId, cardId, cardLast4 = '', cardBrand = '';
 
-    const customer = await findOrCreateCustomer({
-      givenName,
-      familyName,
-      emailAddress: adminEmail,
-      referenceId: subaccountId
-    });
-
-    // 2. Save card on file (sourceId is a one-time nonce from Square Web Payments SDK)
-    const card = await saveCardOnFile(customer.id, sourceId, adminName || '');
+    if (hasExistingCard) {
+      // Use existing Square customer and card directly
+      customerId = existingCustomerId;
+      cardId = existingCardId;
+    } else {
+      // New card: tokenize nonce, save to Square
+      const nameParts = (adminName || subaccountName || 'Customer').split(' ');
+      const givenName = nameParts[0] || '';
+      const familyName = nameParts.slice(1).join(' ') || '';
+      const customer = await findOrCreateCustomer({
+        givenName,
+        familyName,
+        emailAddress: adminEmail,
+        referenceId: subaccountId
+      });
+      const card = await saveCardOnFile(customer.id, sourceId, adminName || '');
+      customerId = customer.id;
+      cardId = card.id;
+      cardLast4 = card.last_4 || '';
+      cardBrand = card.card_brand || '';
+    }
 
     // 3. Calculate trial and billing dates
     const trialDays = skipTrial ? 0 : 14;
@@ -74,8 +88,8 @@ module.exports = async function handler(req, res) {
       billing_period: billingPeriod,
       hipaa_addon: !!hipaaAddon,
       status: trialDays > 0 ? 'trialing' : 'active',
-      square_customer_id: customer.id,
-      square_card_id: card.id,
+      square_customer_id: customerId,
+      square_card_id: cardId,
       trial_ends_at: trialEndsAt,
       next_billing_date: nextBillingDate,
       current_period_start: currentPeriodStart,
@@ -98,10 +112,10 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      customer_id: customer.id,
-      card_id: card.id,
-      card_last4: card.last_4 || '',
-      card_brand: card.card_brand || '',
+      customer_id: customerId,
+      card_id: cardId,
+      card_last4: cardLast4,
+      card_brand: cardBrand,
       next_billing_date: nextBillingDate,
       trial_ends_at: trialEndsAt,
       status: planPayload.status

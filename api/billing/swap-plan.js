@@ -35,7 +35,7 @@ function calcProration(oldTier, newTier, billingPeriod, hipaaAddon, nextBillingD
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
 
-  const { subaccountId, newTier, newPeriod, newHipaa, newExempt } = req.body || {};
+  const { subaccountId, newTier, newPeriod, newHipaa, newExempt, discountPercent, discountNote } = req.body || {};
 
   if (!subaccountId || !newTier || !newPeriod) {
     return sendError(res, 400, 'Missing required fields');
@@ -71,7 +71,9 @@ module.exports = async function handler(req, res) {
       await updatePlan(subaccountId, {
         plan_tier: newTier,
         billing_period: newPeriod,
-        hipaa_addon: !!newHipaa
+        hipaa_addon: !!newHipaa,
+        discount_percent: discountPercent || 0,
+        discount_note: discountNote || null
       });
       return res.status(200).json({ success: true, action: 'exempt_updated' });
     }
@@ -87,7 +89,9 @@ module.exports = async function handler(req, res) {
       await updatePlan(subaccountId, {
         plan_tier: newTier,
         billing_period: newPeriod,
-        hipaa_addon: !!newHipaa
+        hipaa_addon: !!newHipaa,
+        discount_percent: discountPercent || 0,
+        discount_note: discountNote || null
       });
       return res.status(200).json({
         success: true,
