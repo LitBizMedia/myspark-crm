@@ -9956,28 +9956,30 @@ async function agencyLogin(){
     return;
   }
   var hash=await sha256(password);
-  // Try database first
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  // Primary path: server-side validation and audit logging
   try{
-    var r=await fetch(url+'/rest/v1/agency_users?username=eq.'+encodeURIComponent(username)+'&active=eq.true&select=*',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    var r=await fetch('/api/agency/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:username,hash:hash})
     });
-    if(r.ok){
-      var rows=await r.json();
-      if(rows&&rows.length&&rows[0].password_hash===hash){
-        var u=rows[0];
-        saveAgencySession({id:u.id,username:u.username,name:u.name||u.username,role:u.role||'admin'});
-        renderAgencyDashboard();
-        return;
-      }
-      // Table reachable but no match - reject even if fallback would work
-      if(errEl){errEl.textContent='Invalid credentials.';errEl.classList.remove('hidden');}
+    var data=await r.json().catch(function(){return null;});
+    if(r.ok&&data&&data.success&&data.user){
+      saveAgencySession(data.user);
+      renderAgencyDashboard();
       return;
     }
+    if(r.status===401){
+      if(errEl){errEl.textContent=(data&&data.error)||'Invalid credentials.';errEl.classList.remove('hidden');}
+      return;
+    }
+    // Server returned non-401 error. Try client-side fallback (disaster recovery).
+    console.warn('Login API returned status '+r.status+', trying client fallback');
   }catch(e){
-    console.warn('Agency users table unreachable, trying fallback:',e);
+    console.warn('Login API unreachable, trying client fallback:',e.message);
   }
-  // Fallback for disaster recovery only
+  // Client-side fallback for the case where the API itself is down.
+  // Server-side fallback in /api/agency/login.js is the primary recovery path.
   if(username===AGENCY_FALLBACK_USER&&hash===AGENCY_FALLBACK_HASH){
     saveAgencySession({id:'agency-admin-primary',username:AGENCY_FALLBACK_USER,name:'Admin',role:'super_admin'});
     renderAgencyDashboard();
@@ -10741,8 +10743,26 @@ function agencyLoginAs(slug,name){
     +'<button class="btn btn-primary" onclick="agencyConfirmLoginAs(\''+esc(slug)+'\')">Open Workspace</button>');
 }
 
-function agencyConfirmLoginAs(slug){
+async function agencyConfirmLoginAs(slug){
   closeModal();
+  // Server-side validation and audit log first. Blocks if denied.
+  try{
+    var sess=loadAgencySession()||{};
+    var r=await fetch('/api/agency/login-as',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({slug:slug,actor:sess})
+    });
+    if(!r.ok){
+      var errData=await r.json().catch(function(){return {error:'Server rejected request'};});
+      toast('Login-as denied: '+(errData.error||'Unknown error'),'error');
+      return;
+    }
+  }catch(e){
+    toast('Login-as failed: '+e.message,'error');
+    return;
+  }
+  // Server validated. Generate session token and open the workspace tab.
   var token=uid()+uid();
   var exp=Date.now()+300000; // 5 min
   localStorage.setItem(AGENCY_TOKEN_PREFIX+slug,JSON.stringify({token:token,exp:exp}));
