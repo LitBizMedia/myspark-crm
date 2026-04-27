@@ -10597,11 +10597,12 @@ function toggleBillingFields(){
 async function initSubaccountCardForm(){
   var container=document.getElementById('new-sub-card-container');
   if(!container)return;
+  // Always destroy stale instance - DOM is recreated each time modal opens
   if(state._subaccountCard){
-    // Already initialized, re-attach in case DOM was replaced
-    try{await state._subaccountCard.attach('#new-sub-card-container');}catch(e){}
-    return;
+    try{await state._subaccountCard.destroy();}catch(e){}
+    state._subaccountCard=null;
   }
+  container.innerHTML='';
   try{
     if(!window.Square){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square SDK not loaded.</span>';return;}
     var cfgRes=await fetch('/api/square/config');
