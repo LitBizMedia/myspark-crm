@@ -11266,7 +11266,9 @@ async function openAgencyEditUserModal(userId){
         :'')
       +'<div class="form-group"><label>'+(!isSelf?'Reset ':'')+' New Password <span style="font-weight:400;color:var(--text-muted)">(leave blank to keep current)</span></label>'
       +'<input id="ag-edit-pass" type="password" placeholder="New password (optional)">'
-      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>';
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
+      +'<div class="form-group" id="ag-edit-pass2-group"><label>Confirm New Password</label>'
+      +'<input id="ag-edit-pass2" type="password" placeholder="Confirm new password"></div>';
     openModal('Edit Agency User', body,
       '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
       +'<button class="btn btn-primary" onclick="agencySaveEditUser(\''+esc(userId)+'\')">Save Changes</button>',
@@ -11297,7 +11299,9 @@ async function agencySaveEditUser(userId){
         toast('Cannot change role of the last active Super Admin.','error');return;
       }
     }
+    var pass2=document.getElementById('ag-edit-pass2')&&document.getElementById('ag-edit-pass2').value||'';
     if(pass){
+      if(pass!==pass2){toast('Passwords do not match.','error');return;}
       var passErr=checkPasswordStrength(pass);
       if(passErr){toast(passErr,'error');return;}
       // If editing self, verify old password first
