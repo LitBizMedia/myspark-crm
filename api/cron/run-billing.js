@@ -58,6 +58,9 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    // Process cancelled accounts: deactivate expired, auto-delete after 30 days
+    await processCancelledAccounts(summary);
+
     console.log('run-billing complete:', JSON.stringify(summary));
     return res.status(200).json(summary);
 
@@ -203,6 +206,49 @@ function calcNextBillingDate(billingPeriod) {
 
 function tomorrowDate() {
   return new Date(Date.now() + 86400000).toISOString().split('T')[0];
+}
+
+async function processCancelledAccounts(summary) {
+  const today = new Date().toISOString().split('T')[0];
+  const cutoffDate = new Date(Date.now() - 30 * 86400000).toISOString();
+
+  // Fetch all cancelled accounts
+  const fetchRes = await fetch(
+    SUPABASE_URL + '/rest/v1/subaccount_plans?status=eq.cancelled&select=*',
+    { headers: sbHeaders() }
+  );
+  if (!fetchRes.ok) return;
+  const cancelled = await fetchRes.json();
+
+  for (const sub of (cancelled || [])) {
+    try {
+      // Auto-delete: 30 days after canceled_at
+      if (sub.canceled_at && sub.canceled_at <= cutoffDate) {
+        console.log('run-billing: auto-deleting cancelled subaccount ' + sub.subaccount_id);
+        await fetch(
+          SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + sub.subaccount_id,
+          { method: 'DELETE', headers: sbHeaders() }
+        );
+        if (summary.deleted !== undefined) summary.deleted++;
+        else summary.deleted = 1;
+        continue;
+      }
+      // Deactivate: access period has ended (next_billing_date has passed)
+      if (sub.next_billing_date && sub.next_billing_date <= today) {
+        await fetch(
+          SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + sub.subaccount_id,
+          {
+            method: 'PATCH',
+            headers: sbHeaders(),
+            body: JSON.stringify({ active: false })
+          }
+        );
+        console.log('run-billing: deactivated cancelled subaccount ' + sub.subaccount_id);
+      }
+    } catch (e) {
+      console.error('processCancelledAccounts error for ' + sub.subaccount_id, e.message);
+    }
+  }
 }
 
 async function sendBillingEmail(sub, type, data) {
