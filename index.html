@@ -10249,6 +10249,7 @@ async function saveManagePlan(subId){
   var customBillingDate=billingDateEl&&billingDateEl.value?billingDateEl.value:null;
   if(!tier||!period){toast('All fields required.','error');return;}
   var extra=state.modal&&state.modal.extra||{};
+  var subName=extra.subName||subId;
   var existing=extra.plan;
   var isExempt=exemptChecked;
   var tierOrder={starter:1,professional:2,business:3,enterprise:4};
