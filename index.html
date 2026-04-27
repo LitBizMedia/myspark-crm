@@ -6828,6 +6828,13 @@ function fbApplyLiveStyles(){
   document.querySelectorAll('.fb-mopt-dot,.fb-mopt-box').forEach(function(el){el.style.borderColor=st.primaryColor||'#6b21ea';});
 }
 
+// Helper called from every code path that decides which screen to show.
+// All paths that take the user past the loading splash MUST call this.
+function hideAuthLoading(){
+  var el=document.getElementById('auth-loading');
+  if(el)el.style.display='none';
+}
+
 // Boot check for embed mode
 document.addEventListener('DOMContentLoaded',async function(){
   // Detect path-based routing
@@ -6847,9 +6854,10 @@ document.addEventListener('DOMContentLoaded',async function(){
   SSK='myspark_session_v1_'+(state.agencyMode?'agency':pathSlug);
   loadData();
   applyFallbackCredentials();
-  if(fbCheckEmbedMode())return;
+  if(fbCheckEmbedMode()){hideAuthLoading();return;}
   // Agency path
   if(state.agencyMode){
+    hideAuthLoading();
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.add('hidden');
     document.getElementById('agency-screen').classList.remove('hidden');
@@ -6870,6 +6878,7 @@ document.addEventListener('DOMContentLoaded',async function(){
         var td=JSON.parse(storedToken);
         if(td.token===agencyToken&&td.exp>Date.now()){
           history.replaceState(null,'',window.location.pathname);
+          hideAuthLoading();
           document.getElementById('auth-screen').classList.add('hidden');
           document.getElementById('app').classList.remove('hidden');
           // Fetch data first so _subaccountAdmin is available, then log in as that actual admin
@@ -6906,7 +6915,7 @@ document.addEventListener('DOMContentLoaded',async function(){
           role:sessData.user.role,
           name:sessData.user.name||sessData.user.username
         };
-        document.getElementById('auth-loading').style.display='none';
+        hideAuthLoading();
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
         fetchFromSupabase().then(function(ok){initApp();});
@@ -6917,7 +6926,7 @@ document.addEventListener('DOMContentLoaded',async function(){
     // Network or server error - fall through to show login
   }
   // No valid session - show login screen
-  document.getElementById('auth-loading').style.display='none';
+  hideAuthLoading();
   document.getElementById('auth-screen').classList.remove('hidden');
 });
 
