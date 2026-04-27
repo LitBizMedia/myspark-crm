@@ -5,6 +5,7 @@
 // Auto-delete runs 30 days after canceled_at.
 
 const { sendError } = require('../../lib/square');
+const { sendEmail } = require('../../lib/billing-emails');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -58,6 +59,26 @@ module.exports = async function handler(req, res) {
     );
     if (!updateRes.ok) {
       return sendError(res, 500, 'Failed to cancel plan: ' + await updateRes.text());
+    }
+
+    // Send cancellation confirmation email
+    try {
+      const subRes = await fetch(
+        SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + subaccountId + '&select=name,admin_email',
+        { headers: sbHeaders() }
+      );
+      if (subRes.ok) {
+        const subRows = await subRes.json();
+        if (subRows && subRows.length && subRows[0].admin_email) {
+          await sendEmail(subRows[0].admin_email, 'cancellation_confirmed', {
+            subName: subRows[0].name || subaccountId,
+            accessUntil: plan.next_billing_date || null
+          });
+        }
+      }
+    } catch (emailErr) {
+      // Non-fatal: cancellation already succeeded, just log the email failure
+      console.error('cancel.js: email send failed:', emailErr.message);
     }
 
     return res.status(200).json({

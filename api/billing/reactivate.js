@@ -5,6 +5,7 @@
 
 const { chargeCardOnFile, calculateCharge } = require('../../lib/agency-billing');
 const { sendError } = require('../../lib/square');
+const { sendEmail } = require('../../lib/billing-emails');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -54,7 +55,8 @@ module.exports = async function handler(req, res) {
 
     // Charge immediately for one billing cycle
     const amountCents = calculateCharge(plan.plan_tier, plan.billing_period, plan.hipaa_addon);
-    const chargeNote = 'MySpark+ reactivation: ' + plan.plan_tier + ' (' + plan.billing_period + ')';
+    const dollars     = (amountCents / 100).toFixed(2);
+    const chargeNote  = 'MySpark+ reactivation: ' + plan.plan_tier + ' (' + plan.billing_period + ')';
 
     const result = await chargeCardOnFile(
       plan.square_customer_id,
@@ -63,7 +65,7 @@ module.exports = async function handler(req, res) {
       chargeNote
     );
 
-    // Log invoice
+    // Log invoice regardless of outcome
     const nextDate = calcNextBillingDate(plan.billing_period);
     await fetch(SUPABASE_URL + '/rest/v1/subaccount_invoices', {
       method: 'POST',
@@ -118,6 +120,28 @@ module.exports = async function handler(req, res) {
         })
       }
     );
+
+    // Send reactivation confirmation email
+    try {
+      const subRes = await fetch(
+        SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + subaccountId + '&select=name,admin_email',
+        { headers: sbHeaders() }
+      );
+      if (subRes.ok) {
+        const subRows = await subRes.json();
+        if (subRows && subRows.length && subRows[0].admin_email) {
+          await sendEmail(subRows[0].admin_email, 'reactivation_confirmed', {
+            subName: subRows[0].name || subaccountId,
+            dollars,
+            nextBillingDate: nextDate,
+            planTier: plan.plan_tier
+          });
+        }
+      }
+    } catch (emailErr) {
+      // Non-fatal: reactivation already succeeded, just log the email failure
+      console.error('reactivate.js: email send failed:', emailErr.message);
+    }
 
     return res.status(200).json({
       success: true,
