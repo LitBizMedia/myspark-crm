@@ -10412,10 +10412,11 @@ function openCreateSubaccountModal(){
     +'<div style="display:flex;align-items:center;gap:0">'
     +'<span style="background:var(--bg-card);border:1px solid var(--border);border-right:none;border-radius:var(--radius) 0 0 var(--radius);padding:9px 12px;font-size:13px;color:var(--text-muted);white-space:nowrap">mysparkplus.app/</span>'
     +'<input id="new-sub-slug" type="text" placeholder="riverside-spa" style="border-radius:0 var(--radius) var(--radius) 0;flex:1" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,\'-\')"></div></div>'
-    +'<div class="form-group"><label>Plan</label>'
-    +'<select id="new-sub-plan" class="filter-sel" style="width:100%;height:38px">'
+    +'<div class="form-group"><label>Plan Tier *</label>'
+    +'<select id="new-sub-tier" class="filter-sel" style="width:100%;height:38px" onchange="updateSubBillingPreview()">'
     +'<option value="starter">Starter</option>'
-    +'<option value="pro">Pro</option>'
+    +'<option value="professional">Professional</option>'
+    +'<option value="business">Business</option>'
     +'<option value="enterprise">Enterprise</option>'
     +'</select></div>'
     +'<div class="form-group"><label>Admin Full Name *</label>'
@@ -10426,17 +10427,46 @@ function openCreateSubaccountModal(){
     +'<input id="new-sub-email" type="email" placeholder="admin@theirbusiness.com"></div>'
     +'<div class="form-group"><label>Admin Password *</label>'
     +'<input id="new-sub-pass" type="password" placeholder="Strong password">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>';
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
+    +'<div style="border-top:1px solid var(--border);margin:18px 0 14px"></div>'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:12px">Subscription and Billing</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
+    +'<div class="form-group" style="margin:0"><label>Billing Period</label>'
+    +'<select id="new-sub-billing-period" class="filter-sel" style="width:100%;height:38px" onchange="updateSubBillingPreview()">'
+    +'<option value="monthly">Monthly</option>'
+    +'<option value="annual">Annual (2 months free)</option>'
+    +'</select></div>'
+    +'<div class="form-group" style="margin:0"><label>HIPAA Add-on</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px">'
+    +'<input type="checkbox" id="new-sub-hipaa" onchange="updateSubBillingPreview()" style="width:auto;margin:0">'
+    +'<span style="font-size:13px;color:var(--text)">+$50/mo</span></label></div>'
+    +'</div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
+    +'<input type="checkbox" id="new-sub-exempt" onchange="toggleBillingFields()" style="width:auto;margin:0">'
+    +'<span>Exempt from billing (test workspace, partner, internal use)</span></label></div>'
+    +'<div id="new-sub-billing-fields">'
+    +'<div class="form-group"><label>Payment Card *</label>'
+    +'<div id="new-sub-card-container" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:52px"></div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:5px">14-day free trial. Card auto-charges at trial end. Cancel anytime.</div></div>'
+    +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:12px;display:flex;align-items:center;justify-content:space-between;margin-top:4px">'
+    +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">After 14-day trial</div>'
+    +'<div id="new-sub-charge-summary" style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;color:var(--orange);margin-top:2px">$29/mo</div></div>'
+    +'</div>'
+    +'</div>';
   openModal('New Subaccount',body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="createSubaccount()">Create Subaccount</button>',
     'modal-lg');
+  setTimeout(initSubaccountCardForm,300);
 }
 
 async function createSubaccount(){
   var name=(document.getElementById('new-sub-name')&&document.getElementById('new-sub-name').value||'').trim();
   var slug=(document.getElementById('new-sub-slug')&&document.getElementById('new-sub-slug').value||'').trim().toLowerCase();
-  var plan=document.getElementById('new-sub-plan')&&document.getElementById('new-sub-plan').value||'starter';
+  var tier=document.getElementById('new-sub-tier')&&document.getElementById('new-sub-tier').value||'starter';
+  var billingPeriod=document.getElementById('new-sub-billing-period')&&document.getElementById('new-sub-billing-period').value||'monthly';
+  var hipaaAddon=!!(document.getElementById('new-sub-hipaa')&&document.getElementById('new-sub-hipaa').checked);
+  var isExempt=!!(document.getElementById('new-sub-exempt')&&document.getElementById('new-sub-exempt').checked);
   var adminName=(document.getElementById('new-sub-admin-name')&&document.getElementById('new-sub-admin-name').value||'').trim();
   var adminUser=(document.getElementById('new-sub-user')&&document.getElementById('new-sub-user').value||'').trim().toLowerCase();
   var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
@@ -10454,7 +10484,7 @@ async function createSubaccount(){
     var r1=await fetch(url+'/rest/v1/subaccounts',{
       method:'POST',
       headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({id:subId,agency_id:'agency-main',name:name,slug:slug,plan:plan,active:true})
+      body:JSON.stringify({id:subId,agency_id:'agency-main',name:name,slug:slug,plan:tier,active:true})
     });
     if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
     // Create initial data record with admin user
@@ -10492,8 +10522,39 @@ async function createSubaccount(){
       body:JSON.stringify({id:'data-'+slug,subaccount_id:subId,data:initData,updated_at:new Date().toISOString()})
     });
     if(!r2.ok){var e2=await r2.text();toast('Subaccount created but data init failed: '+e2,'warn');}
+    // Handle billing setup
+    if(!isExempt){
+      var subCard=state._subaccountCard;
+      if(!subCard){toast('Card form not loaded. Reload and try again.','error');return;}
+      var tokenResult=await subCard.tokenize();
+      if(tokenResult.status!=='OK'){
+        var cardErr=(tokenResult.errors&&tokenResult.errors[0]&&tokenResult.errors[0].message)||'Unknown card error';
+        toast('Card error: '+cardErr,'error');return;
+      }
+      var billingRes=await fetch('/api/billing/setup-billing',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,
+          sourceId:tokenResult.token,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon
+        })
+      });
+      if(!billingRes.ok){
+        var billingErr=await billingRes.text();
+        toast('Subaccount created but billing setup failed: '+billingErr+'. Use Manage Plan to fix.','error');
+      }else{
+        toast('Subaccount created. 14-day trial started.','success');
+      }
+    }else{
+      // Exempt subaccount: write exempt plan record
+      await fetch(SB_FALLBACK_URL+'/rest/v1/subaccount_plans',{
+        method:'POST',
+        headers:{'apikey':SB_FALLBACK_KEY,'Authorization':'Bearer '+SB_FALLBACK_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify({subaccount_id:subId,plan_tier:tier,billing_period:billingPeriod,hipaa_addon:hipaaAddon,status:'exempt',exempt_from_billing:true,updated_at:new Date().toISOString()})
+      }).catch(function(){});
+      toast('Subaccount "'+name+'" created (exempt from billing).','success');
+    }
     closeModal();
-    toast('Subaccount "'+name+'" created. URL: mysparkplus.app/'+slug,'success');
     agencyLoadSubaccounts();
     // Fire welcome email to new admin
     var welcomeHtml='<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
@@ -10510,6 +10571,49 @@ async function createSubaccount(){
     fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:'litbiz',to:adminEmail,subject:'Your MySpark+ workspace is ready: '+name,html:welcomeHtml,fromName:'MySpark+',templateType:'welcome'})}).catch(function(){});
   }catch(e){
     toast('Error creating subaccount: '+e.message,'error');
+  }
+}
+
+function updateSubBillingPreview(){
+  var tier=document.getElementById('new-sub-tier');
+  var period=document.getElementById('new-sub-billing-period');
+  var hipaa=document.getElementById('new-sub-hipaa');
+  var summary=document.getElementById('new-sub-charge-summary');
+  if(!tier||!period||!summary)return;
+  var prices={starter:{monthly:29,annual:290},professional:{monthly:79,annual:790},business:{monthly:149,annual:1490},enterprise:{monthly:349,annual:3490}};
+  var base=(prices[tier.value]||prices.starter)[period.value]||29;
+  var addon=hipaa&&hipaa.checked?(period.value==='annual'?500:50):0;
+  var total=base+addon;
+  summary.textContent='$'+total+(period.value==='annual'?'/yr':'/mo');
+}
+
+function toggleBillingFields(){
+  var exempt=document.getElementById('new-sub-exempt');
+  var fields=document.getElementById('new-sub-billing-fields');
+  if(!exempt||!fields)return;
+  fields.style.display=exempt.checked?'none':'block';
+}
+
+async function initSubaccountCardForm(){
+  var container=document.getElementById('new-sub-card-container');
+  if(!container)return;
+  if(state._subaccountCard){
+    // Already initialized, re-attach in case DOM was replaced
+    try{await state._subaccountCard.attach('#new-sub-card-container');}catch(e){}
+    return;
+  }
+  try{
+    if(!window.Square){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square SDK not loaded.</span>';return;}
+    var cfgRes=await fetch('/api/square/config');
+    var cfg=await cfgRes.json();
+    if(!cfg.appId){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square not configured.</span>';return;}
+    var payments=window.Square.payments(cfg.appId,'production');
+    var card=await payments.card();
+    await card.attach('#new-sub-card-container');
+    state._subaccountCard=card;
+  }catch(e){
+    console.error('initSubaccountCardForm error:',e);
+    if(container)container.innerHTML='<span style="color:var(--orange);font-size:12px">Could not load card form: '+e.message+'</span>';
   }
 }
 
