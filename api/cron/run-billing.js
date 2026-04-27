@@ -61,6 +61,9 @@ module.exports = async function handler(req, res) {
     // Process cancelled accounts: deactivate expired, auto-delete after 30 days
     await processCancelledAccounts(summary);
 
+    // Send trial ending reminder emails (3 days before charge)
+    await sendTrialReminders();
+
     console.log('run-billing complete:', JSON.stringify(summary));
     return res.status(200).json(summary);
 
@@ -248,6 +251,63 @@ async function processCancelledAccounts(summary) {
     } catch (e) {
       console.error('processCancelledAccounts error for ' + sub.subaccount_id, e.message);
     }
+  }
+}
+
+async function sendTrialReminders() {
+  try {
+    // Find subaccounts whose trial ends in 3 days
+    const threeDaysFromNow = new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0];
+    const twoDaysFromNow = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
+    const url = SUPABASE_URL + '/rest/v1/subaccount_plans'
+      + '?status=eq.trialing'
+      + '&trial_ends_at=gte.' + twoDaysFromNow
+      + '&trial_ends_at=lte.' + threeDaysFromNow
+      + '&exempt_from_billing=eq.false'
+      + '&select=*';
+    const r = await fetch(url, { headers: sbHeaders() });
+    if (!r.ok) return;
+    const dueSubs = await r.json();
+    for (const sub of (dueSubs || [])) {
+      // Fetch admin email from subaccounts table
+      const rSub = await fetch(
+        SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + sub.subaccount_id + '&select=name,admin_email',
+        { headers: sbHeaders() }
+      );
+      if (!rSub.ok) continue;
+      const subRows = await rSub.json();
+      if (!subRows || !subRows.length || !subRows[0].admin_email) continue;
+      const subName = subRows[0].name || sub.subaccount_id;
+      const adminEmail = subRows[0].admin_email;
+      const amountCents = calculateCharge(sub.plan_tier, sub.billing_period, sub.hipaa_addon, sub.discount_percent || 0);
+      const dollars = (amountCents / 100).toFixed(2);
+      const trialEndDate = sub.trial_ends_at ? sub.trial_ends_at.split('T')[0] : 'soon';
+      const html = '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#1a1030">'
+        + '<h2 style="color:#6b21ea;margin:0 0 8px">Your free trial ends in 3 days</h2>'
+        + '<p style="margin:0 0 16px;color:#5a4d7a;font-size:15px">Hi, your MySpark+ trial for <strong>' + subName + '</strong> ends on <strong>' + trialEndDate + '</strong>.</p>'
+        + '<p style="margin:0 0 16px;color:#5a4d7a;font-size:14px">Your card on file will be charged <strong>$' + dollars + '</strong> automatically at the end of your trial. No action needed if you want to continue.</p>'
+        + '<p style="font-size:13px;color:#5a4d7a;margin:0">Questions? Reply to this email or contact your MySpark+ administrator.</p>'
+        + '<p style="font-size:12px;color:#9b8ec4;margin-top:20px">MySpark+ by LitBiz Media</p>'
+        + '</div>';
+      if (RESEND_API_KEY) {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + RESEND_API_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: 'MySpark+ <noreply@mysparkplus.app>',
+            to: [adminEmail],
+            subject: 'Your MySpark+ trial ends in 3 days',
+            html
+          })
+        });
+        console.log('trial-reminder sent to ' + adminEmail + ' for ' + sub.subaccount_id);
+      }
+    }
+  } catch (e) {
+    console.error('sendTrialReminders error:', e.message);
   }
 }
 

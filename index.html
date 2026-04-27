@@ -10141,6 +10141,32 @@ async function openManagePlanModal(subId,subName){
     +'<div id="mp-summary" style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--orange);margin-top:2px">'+summary+'</div></div>'
     +'<div style="font-size:11px;color:var(--text-muted);text-align:right;line-height:1.5">'+esc(subName)+'</div>'
     +'</div>'
+    +((!isExempt)?
+      '<div style="margin-top:14px;padding:14px 16px;background:var(--bg-card);border-radius:var(--radius)">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+      +'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700">Payment Method</div>'
+      +'<button class="btn btn-ghost btn-sm" onclick="toggleManagePlanCardForm(\''+subId+'\')">'
+      +(plan&&plan.square_card_id?'Update Card':'Add Card')
+      +'</button></div>'
+      +(plan&&plan.square_card_id
+        ?'<div style="font-size:13px;color:var(--text)">Card on file</div>'
+        +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">No card on file. Add one to enable billing.</div>'
+        :'<div style="font-size:13px;color:#fbbf24">No card on file. Add one to enable billing.</div>'
+      )
+      +'<div id="mp-card-form-section" style="display:none;margin-top:12px">'
+      +'<div id="mp-card-container" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:52px"></div>'
+      +'<div style="display:flex;gap:8px;margin-top:8px">'
+      +'<button type="button" id="mp-card-mode-new" class="btn btn-primary btn-sm" onclick="setMpCardMode(\'new\')" style="flex:1">New Card</button>'
+      +'<button type="button" id="mp-card-mode-existing" class="btn btn-ghost btn-sm" onclick="setMpCardMode(\'existing\')" style="flex:1">Card on File</button>'
+      +'</div>'
+      +'<div id="mp-existing-card-section" style="display:none;margin-top:8px">'
+      +'<select id="mp-existing-customer" class="filter-sel" style="width:100%;height:38px;margin-bottom:8px" onchange="loadMpExistingCards()"><option value="">Loading...</option></select>'
+      +'<select id="mp-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Select a card</option></select>'
+      +'</div>'
+      +'<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="saveMpCard(\''+subId+'\',\''+esc(extra.subName||'')+'\')">Save Card</button>'
+      +'</div>'
+      +'</div>'
+    :'')
     +(isCancellable?'<div style="margin-top:14px;padding:12px 14px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
     +'<div style="font-size:13px;color:var(--text-muted)">Cancel subscription. Access continues until end of current period. Data deleted after 30 days.</div>'
     +'<button class="btn btn-ghost" style="color:#f87171;border-color:rgba(239,68,68,.3);white-space:nowrap;margin-left:12px" onclick="cancelSubscription(\''+subId+'\')">Cancel Plan</button>'
@@ -10238,6 +10264,122 @@ async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discou
     if(data.action==='upgraded')toast('Plan upgraded. Card charged $'+(data.charged_cents/100).toFixed(2)+'.','success');
     else if(data.action==='scheduled')toast('Plan change scheduled for next billing cycle.','success');
     else toast('Plan updated.','success');
+    agencyLoadSubaccounts();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+var _mpSqCard=null;
+
+function toggleManagePlanCardForm(subId){
+  var section=document.getElementById('mp-card-form-section');
+  if(!section)return;
+  var showing=section.style.display!=='none';
+  section.style.display=showing?'none':'block';
+  if(!showing){
+    _mpSqCard=null;
+    initMpCardForm();
+  }
+}
+
+async function initMpCardForm(){
+  var container=document.getElementById('mp-card-container');
+  if(!container)return;
+  if(_mpSqCard){try{await _mpSqCard.destroy();}catch(e){}; _mpSqCard=null;}
+  container.innerHTML='';
+  try{
+    if(!window.Square){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square SDK not loaded.</span>';return;}
+    var cfgRes=await fetch('/api/square/config');
+    var cfg=await cfgRes.json();
+    if(!cfg.appId){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square not configured.</span>';return;}
+    var payments=window.Square.payments(cfg.appId,'production');
+    var card=await payments.card();
+    await card.attach('#mp-card-container');
+    _mpSqCard=card;
+  }catch(e){
+    if(container)container.innerHTML='<span style="color:var(--orange);font-size:12px">Could not load card form: '+e.message+'</span>';
+  }
+}
+
+function setMpCardMode(mode){
+  var newSection=document.getElementById('mp-card-container');
+  var existingSection=document.getElementById('mp-existing-card-section');
+  var btnNew=document.getElementById('mp-card-mode-new');
+  var btnExisting=document.getElementById('mp-card-mode-existing');
+  if(!newSection||!existingSection)return;
+  state._mpCardMode=mode;
+  if(mode==='existing'){
+    newSection.style.display='none';
+    existingSection.style.display='block';
+    if(btnNew)btnNew.className='btn btn-ghost btn-sm';
+    if(btnExisting)btnExisting.className='btn btn-primary btn-sm';
+    loadMpSquareCustomers();
+  }else{
+    newSection.style.display='block';
+    existingSection.style.display='none';
+    if(btnNew)btnNew.className='btn btn-primary btn-sm';
+    if(btnExisting)btnExisting.className='btn btn-ghost btn-sm';
+    initMpCardForm();
+  }
+}
+
+async function loadMpSquareCustomers(){
+  var sel=document.getElementById('mp-existing-customer');
+  if(!sel)return;
+  sel.innerHTML='<option value="">Loading...</option>';
+  try{
+    var r=await fetch('/api/billing/list-cards');
+    if(!r.ok){sel.innerHTML='<option value="">Could not load</option>';return;}
+    var data=await r.json();
+    var customers=data.customers||[];
+    state._mpSquareCustomers=customers;
+    sel.innerHTML='<option value="">Select customer</option>'
+      +customers.map(function(c){
+        return '<option value="'+c.customerId+'">'+esc(c.customerName)+(c.email?' ('+esc(c.email)+')':'')+'</option>';
+      }).join('');
+  }catch(e){
+    sel.innerHTML='<option value="">Error: '+esc(e.message)+'</option>';
+  }
+}
+
+function loadMpExistingCards(){
+  var custSel=document.getElementById('mp-existing-customer');
+  var cardSel=document.getElementById('mp-existing-card');
+  if(!custSel||!cardSel)return;
+  var custId=custSel.value;
+  if(!custId){cardSel.innerHTML='<option value="">Select customer first</option>';return;}
+  var customers=state._mpSquareCustomers||[];
+  var cust=customers.find(function(c){return c.customerId===custId;});
+  if(!cust||!cust.cards||!cust.cards.length){cardSel.innerHTML='<option value="">No cards found</option>';return;}
+  cardSel.innerHTML=cust.cards.map(function(c){
+    return '<option value="'+c.cardId+'">'+esc(c.brand)+' ending '+esc(c.last4)+' (exp '+c.expMonth+'/'+c.expYear+')</option>';
+  }).join('');
+}
+
+async function saveMpCard(subId,subName){
+  var extra=state.modal&&state.modal.extra||{};
+  var adminEmail=(extra.plan&&extra.plan.admin_email)||'';
+  var payload={subaccountId:subId,adminEmail:adminEmail,adminName:subName};
+  if(state._mpCardMode==='existing'){
+    var custSel=document.getElementById('mp-existing-customer');
+    var cardSel=document.getElementById('mp-existing-card');
+    if(!custSel||!custSel.value||!cardSel||!cardSel.value){toast('Select a customer and card.','error');return;}
+    payload.existingCustomerId=custSel.value;
+    payload.existingCardId=cardSel.value;
+  }else{
+    if(!_mpSqCard){toast('Card form not loaded.','error');return;}
+    var tokenResult=await _mpSqCard.tokenize();
+    if(tokenResult.status!=='OK'){
+      var cardErr=(tokenResult.errors&&tokenResult.errors[0]&&tokenResult.errors[0].message)||'Unknown card error';
+      toast('Card error: '+cardErr,'error');return;
+    }
+    payload.sourceId=tokenResult.token;
+  }
+  try{
+    var r=await fetch('/api/billing/update-card',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!r.ok){var t=await r.text();toast('Card update failed: '+t,'error');return;}
+    toast('Card updated successfully.','success');
+    var section=document.getElementById('mp-card-form-section');
+    if(section)section.style.display='none';
     agencyLoadSubaccounts();
   }catch(e){toast('Error: '+e.message,'error');}
 }
