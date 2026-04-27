@@ -5,7 +5,7 @@
 //
 // REAL MONEY: Be careful modifying this file. Test with Patrick's own card first.
 
-const { chargeCardOnFile, calculateCharge } = require('../../lib/agency-billing');
+const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('../../lib/agency-billing');
 const { sendEmail } = require('../../lib/billing-emails');
 const { logAudit } = require('../../lib/audit');
 
@@ -99,7 +99,7 @@ async function processBilling(req, sub, summary) {
   const dollars = (amountCents / 100).toFixed(2);
   const chargeNote = 'MySpark+ ' + sub.plan_tier + ' (' + sub.billing_period + ')';
   const retryNum = sub.retry_count || 0;
-  const idempotencyKey = 'msp-chg-' + sub.subaccount_id + '-' + sub.next_billing_date + '-r' + retryNum;
+  const idempotencyKey = makeIdempotencyKey('chg', sub.subaccount_id, sub.next_billing_date, 'r' + retryNum);
 
   const result = await chargeCardOnFile(
     sub.square_customer_id,

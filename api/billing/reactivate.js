@@ -8,7 +8,7 @@
 //   - Cancelled and the period has expired, OR suspended, OR past_due:
 //       charge immediately for one billing cycle and start a fresh period.
 
-const { chargeCardOnFile, calculateCharge } = require('../../lib/agency-billing');
+const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('../../lib/agency-billing');
 const { sendError } = require('../../lib/square');
 const { sendEmail } = require('../../lib/billing-emails');
 const { logAudit, extractActorFromBody } = require('../../lib/audit');
@@ -167,7 +167,7 @@ module.exports = async function handler(req, res) {
     );
     const dollars     = (amountCents / 100).toFixed(2);
     const chargeNote  = 'MySpark+ reactivation: ' + plan.plan_tier + ' (' + plan.billing_period + ')';
-    const idempotencyKey = 'msp-rea-' + subaccountId + '-' + today;
+    const idempotencyKey = makeIdempotencyKey('rea', subaccountId, today);
 
     const result = await chargeCardOnFile(
       plan.square_customer_id,

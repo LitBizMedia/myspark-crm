@@ -3,7 +3,7 @@
 // Upgrades: immediate prorated charge for remaining days in current period.
 // Downgrades and period changes: take effect at next billing cycle, no charge now.
 
-const { chargeCardOnFile, calculateCharge, PLAN_PRICES_CENTS, HIPAA_ADDON_CENTS } = require('../../lib/agency-billing');
+const { chargeCardOnFile, calculateCharge, makeIdempotencyKey, PLAN_PRICES_CENTS, HIPAA_ADDON_CENTS } = require('../../lib/agency-billing');
 const { sendError } = require('../../lib/square');
 const { logAudit, extractActorFromBody } = require('../../lib/audit');
 
@@ -272,7 +272,7 @@ module.exports = async function handler(req, res) {
     // Deterministic idempotency key. Same subaccount + same upgrade target + same day = same Square charge.
     // Prevents double-charge if the agency admin double-clicks the upgrade button.
     const today = new Date().toISOString().split('T')[0];
-    const idempotencyKey = 'msp-up-' + subaccountId + '-' + today + '-' + oldTier + '-to-' + newTier;
+    const idempotencyKey = makeIdempotencyKey('up', subaccountId, today, oldTier, newTier);
 
     const chargeNote = 'MySpark+ upgrade: ' + oldTier + ' to ' + newTier + ' (prorated)';
     const result = await chargeCardOnFile(
