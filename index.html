@@ -1894,9 +1894,9 @@ async function submitResetPassword(token){
     var data=await r.json();
     if(!r.ok){toast(data.error||'Reset failed.','error');return;}
     closeModal();
-    // Clear reset token from URL
-    history.replaceState(null,'',window.location.pathname);
-    toast('Password updated. Please sign in with your new password.','success');
+    toast('Password updated. Reloading...','success');
+    // Force full reload so fetchFromSupabase picks up the new password hash
+    setTimeout(function(){window.location.href=window.location.pathname;},1200);
   }catch(e){
     toast('Reset failed: '+e.message,'error');
   }
