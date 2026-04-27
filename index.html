@@ -799,6 +799,20 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .week-appt-time{font-size:11px;font-weight:700;color:var(--text-muted);flex-shrink:0;min-width:52px}
 .week-appt-title{font-size:13px;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .week-no-appts{font-size:12px;color:var(--text-dim);padding:4px 0}
+/* AGENCY DASHBOARD TABS */
+.agency-tab-bar{background:var(--bg-panel);border-bottom:1px solid var(--border);padding:0 32px;display:flex;gap:0;align-items:flex-end}
+.agency-tab{background:transparent;border:none;color:var(--text-muted);padding:14px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;letter-spacing:0.02em;transition:color .15s}
+.agency-tab:hover{color:var(--text)}
+.agency-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
+.agency-tab-content{padding:28px 32px}
+.agency-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.agency-toolbar input[type="text"],.agency-toolbar select{background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;height:34px;font-family:inherit}
+.agency-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.agency-stat-card{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
+.agency-stat-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px}
+.agency-stat-value{font-family:Exo 2,sans-serif;font-size:26px;font-weight:800;color:var(--text)}
+.agency-stat-sub{font-size:12px;color:var(--text-muted);margin-top:4px}
+
 /* BOOKING WIDGETS */
 .booking-widget-placeholder{background:var(--bg-card);border:1px dashed var(--border);border-radius:var(--radius-lg);padding:48px 24px;text-align:center;color:var(--text-muted)}
 /* CUSTOM FIELD READ-ONLY */
@@ -10065,6 +10079,10 @@ async function renderAgencyDashboard(){
   if(!el)return;
   var sess=loadAgencySession()||{};
   var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[sess.role]||(sess.role||'');
+  var activeTab=state.agencyTab||'accounts';
+  function tabBtn(name,label){
+    return '<button class="agency-tab'+(activeTab===name?' active':'')+'" onclick="switchAgencyTab(\''+name+'\')">'+label+'</button>';
+  }
   el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
     // Top bar
     +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
@@ -10074,19 +10092,397 @@ async function renderAgencyDashboard(){
     +'<button class="btn btn-ghost btn-sm" onclick="renderAgencySettings()" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
     +'</div>'
-    // Body
-    +'<div style="padding:28px 32px">'
-    +'<div id="agency-sms-requests-section"></div>'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">'
+    // Tab bar
+    +'<div class="agency-tab-bar">'
+    +tabBtn('accounts','Accounts')
+    +tabBtn('phone','Phone')
+    +tabBtn('email','Email')
+    +tabBtn('billing','Billing')
+    +'</div>'
+    // Tab content
+    +'<div id="agency-tab-content" class="agency-tab-content"></div>'
+    +'</div>';
+  switchAgencyTab(activeTab);
+}
+
+function switchAgencyTab(name){
+  state.agencyTab=name||'accounts';
+  // Update tab button highlights without re-rendering the whole page
+  var tabs=document.querySelectorAll('.agency-tab');
+  tabs.forEach(function(b){
+    if(!b)return;
+    var match=(b.getAttribute('onclick')||'').indexOf("'"+state.agencyTab+"'")>=0;
+    if(match)b.classList.add('active');else b.classList.remove('active');
+  });
+  if(state.agencyTab==='accounts')renderAgencyAccountsTab();
+  else if(state.agencyTab==='phone')renderAgencyPhoneTab();
+  else if(state.agencyTab==='email')renderAgencyEmailTab();
+  else if(state.agencyTab==='billing')renderAgencyBillingTab();
+}
+
+// =====================================================
+// AGENCY: ACCOUNTS TAB
+// =====================================================
+
+var accountsFilters={status:'',tier:'',search:''};
+var accountsSort={col:'name',dir:'asc'};
+
+function renderAgencyAccountsTab(){
+  var el=document.getElementById('agency-tab-content');
+  if(!el)return;
+  el.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Subaccounts</div>'
     +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Manage your client CRM accounts</div></div>'
     +(agencyCanManageSubaccounts()?'<button class="btn btn-primary" onclick="openCreateSubaccountModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subaccount</button>':'')
     +'</div>'
+    +'<div class="agency-toolbar">'
+    +'<input type="text" id="acct-search" placeholder="Search by name or slug" value="'+esc(accountsFilters.search||'')+'" oninput="onAccountsFilterChange()" style="flex:1;min-width:200px;max-width:340px">'
+    +'<select id="acct-filter-status" onchange="onAccountsFilterChange()">'
+    +'<option value="">All statuses</option>'
+    +'<option value="active"'+(accountsFilters.status==='active'?' selected':'')+'>Active</option>'
+    +'<option value="trialing"'+(accountsFilters.status==='trialing'?' selected':'')+'>Trial</option>'
+    +'<option value="past_due"'+(accountsFilters.status==='past_due'?' selected':'')+'>Past Due</option>'
+    +'<option value="cancelled"'+(accountsFilters.status==='cancelled'?' selected':'')+'>Cancelled</option>'
+    +'<option value="suspended"'+(accountsFilters.status==='suspended'?' selected':'')+'>Suspended</option>'
+    +'<option value="exempt"'+(accountsFilters.status==='exempt'?' selected':'')+'>Exempt</option>'
+    +'</select>'
+    +'<select id="acct-filter-tier" onchange="onAccountsFilterChange()">'
+    +'<option value="">All tiers</option>'
+    +'<option value="starter"'+(accountsFilters.tier==='starter'?' selected':'')+'>Starter</option>'
+    +'<option value="professional"'+(accountsFilters.tier==='professional'?' selected':'')+'>Professional</option>'
+    +'<option value="business"'+(accountsFilters.tier==='business'?' selected':'')+'>Business</option>'
+    +'<option value="enterprise"'+(accountsFilters.tier==='enterprise'?' selected':'')+'>Enterprise</option>'
+    +'</select>'
+    +'<select id="acct-sort" onchange="onAccountsSortChange()">'
+    +'<option value="name-asc"'+(accountsSort.col==='name'&&accountsSort.dir==='asc'?' selected':'')+'>Name A-Z</option>'
+    +'<option value="name-desc"'+(accountsSort.col==='name'&&accountsSort.dir==='desc'?' selected':'')+'>Name Z-A</option>'
+    +'<option value="created-desc"'+(accountsSort.col==='created'&&accountsSort.dir==='desc'?' selected':'')+'>Newest first</option>'
+    +'<option value="created-asc"'+(accountsSort.col==='created'&&accountsSort.dir==='asc'?' selected':'')+'>Oldest first</option>'
+    +'<option value="tier-desc"'+(accountsSort.col==='tier'&&accountsSort.dir==='desc'?' selected':'')+'>Tier high to low</option>'
+    +'<option value="tier-asc"'+(accountsSort.col==='tier'&&accountsSort.dir==='asc'?' selected':'')+'>Tier low to high</option>'
+    +'</select>'
+    +'<button class="btn btn-ghost btn-sm" onclick="resetAccountsFilters()">Reset</button>'
+    +'</div>'
     +'<div id="agency-subs-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">'
     +'<div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading subaccounts...</div>'
-    +'</div></div></div>';
+    +'</div>';
   agencyLoadSubaccounts();
+}
+
+function onAccountsFilterChange(){
+  var s=document.getElementById('acct-search');
+  var st=document.getElementById('acct-filter-status');
+  var t=document.getElementById('acct-filter-tier');
+  accountsFilters.search=s?s.value:'';
+  accountsFilters.status=st?st.value:'';
+  accountsFilters.tier=t?t.value:'';
+  agencyLoadSubaccounts();
+}
+
+function onAccountsSortChange(){
+  var sel=document.getElementById('acct-sort');
+  if(!sel)return;
+  var parts=(sel.value||'name-asc').split('-');
+  accountsSort.col=parts[0]||'name';
+  accountsSort.dir=parts[1]||'asc';
+  agencyLoadSubaccounts();
+}
+
+function resetAccountsFilters(){
+  accountsFilters={status:'',tier:'',search:''};
+  accountsSort={col:'name',dir:'asc'};
+  renderAgencyAccountsTab();
+}
+
+// =====================================================
+// AGENCY: PHONE TAB
+// =====================================================
+
+function renderAgencyPhoneTab(){
+  var el=document.getElementById('agency-tab-content');
+  if(!el)return;
+  el.innerHTML='<div style="margin-bottom:18px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Phone</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">SMS provisioning and campaign approvals</div>'
+    +'</div>'
+    +'<div id="agency-sms-requests-section"></div>';
   agencyLoadSmsRequests();
+}
+
+// =====================================================
+// AGENCY: EMAIL TAB
+// =====================================================
+
+function renderAgencyEmailTab(){
+  var el=document.getElementById('agency-tab-content');
+  if(!el)return;
+  el.innerHTML='<div style="margin-bottom:18px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Email</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Domain verification status and sending insights</div>'
+    +'</div>'
+    +'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);padding:48px 24px;text-align:center;color:var(--text-muted)">'
+    +'<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Email management coming soon</div>'
+    +'<div style="font-size:13px;max-width:480px;margin:0 auto;line-height:1.7">This tab will show verified sending domains across all subaccounts, deliverability stats, bounce and complaint rates, and quick links to remove domains.</div>'
+    +'</div>';
+}
+
+// =====================================================
+// AGENCY: BILLING TAB
+// =====================================================
+
+var billingState={summary:null,invoicesLoaded:false,invoiceFilter:{status:'',from:'',to:''},invoicesOffset:0,invoicesLimit:50,invoicesTotal:0,entries:[]};
+
+function renderAgencyBillingTab(){
+  var el=document.getElementById('agency-tab-content');
+  if(!el)return;
+  el.innerHTML='<div style="margin-bottom:18px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Billing</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Recurring revenue and transaction history</div>'
+    +'</div>'
+    +'<div id="agency-billing-summary"><div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading summary...</div></div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin:28px 0 14px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800">Transactions</div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="loadAgencyInvoices()">Refresh</button>'
+    +'</div>'
+    +'<div class="agency-toolbar">'
+    +'<select id="inv-filter-status" onchange="onInvoiceFilterChange()">'
+    +'<option value="">All statuses</option>'
+    +'<option value="succeeded">Succeeded</option>'
+    +'<option value="failed">Failed</option>'
+    +'<option value="refunded">Refunded</option>'
+    +'<option value="pending">Pending</option>'
+    +'</select>'
+    +'<input type="date" id="inv-filter-from" onchange="onInvoiceFilterChange()" style="color-scheme:dark">'
+    +'<input type="date" id="inv-filter-to" onchange="onInvoiceFilterChange()" style="color-scheme:dark">'
+    +'<button class="btn btn-ghost btn-sm" onclick="resetInvoiceFilters()">Reset</button>'
+    +'</div>'
+    +'<div id="agency-invoices-table" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">'
+    +'<div style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center">Loading transactions...</div>'
+    +'</div>'
+    +'<div id="agency-invoices-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--text-muted)"></div>';
+  loadBillingSummary();
+  loadAgencyInvoices();
+}
+
+async function loadBillingSummary(){
+  var el=document.getElementById('agency-billing-summary');
+  if(!el)return;
+  // Pull all plans (we already have similar data via agencyLoadSubaccounts but fetch fresh here)
+  try{
+    var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+    var r=await fetch(url+'/rest/v1/subaccount_plans?select=*',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    if(!r.ok){el.innerHTML='<div style="color:#f87171;font-size:13px">Failed to load summary.</div>';return;}
+    var plans=await r.json();
+    var summary=computeBillingSummary(plans||[]);
+    billingState.summary=summary;
+    el.innerHTML=renderBillingSummaryCards(summary);
+  }catch(e){
+    el.innerHTML='<div style="color:#f87171;font-size:13px">Error: '+esc(e.message)+'</div>';
+  }
+}
+
+function computeBillingSummary(plans){
+  var BASE={starter:{monthly:29,annual:290},professional:{monthly:79,annual:790},business:{monthly:149,annual:1490},enterprise:{monthly:349,annual:3490}};
+  var HIPAA={monthly:50,annual:500};
+  var activeMrr=0,trialMrr=0,annualArr=0,activeCount=0,trialCount=0,exemptCount=0,suspendedCount=0,cancelledCount=0,pastDueCount=0;
+  var byTier={starter:0,professional:0,business:0,enterprise:0};
+  plans.forEach(function(p){
+    var status=p.status||'';
+    if(status==='exempt'||p.exempt_from_billing){exemptCount++;return;}
+    if(status==='cancelled'){cancelledCount++;return;}
+    if(status==='suspended'){suspendedCount++;return;}
+    var tier=p.plan_tier||'starter';
+    var period=p.billing_period||'monthly';
+    var price=BASE[tier]&&BASE[tier][period]||0;
+    var hipaaPrice=p.hipaa_addon?HIPAA[period]:0;
+    var subtotal=price+hipaaPrice;
+    var pct=Number(p.discount_percent)||0;
+    if(pct>0&&pct<100)subtotal=subtotal*(1-pct/100);
+    var monthlyEquivalent=period==='annual'?subtotal/12:subtotal;
+    if(status==='active'||status==='past_due'){
+      activeMrr+=monthlyEquivalent;
+      annualArr+=monthlyEquivalent*12;
+      if(status==='active')activeCount++;
+      if(status==='past_due')pastDueCount++;
+      if(byTier[tier]!==undefined)byTier[tier]++;
+    }else if(status==='trialing'){
+      trialMrr+=monthlyEquivalent;
+      trialCount++;
+    }
+  });
+  return{activeMrr:activeMrr,trialMrr:trialMrr,annualArr:annualArr,activeCount:activeCount,trialCount:trialCount,exemptCount:exemptCount,suspendedCount:suspendedCount,cancelledCount:cancelledCount,pastDueCount:pastDueCount,byTier:byTier};
+}
+
+function renderBillingSummaryCards(s){
+  function fmt(n){return '$'+Math.round(n).toLocaleString();}
+  var tierLines='';
+  Object.keys(s.byTier).forEach(function(t){
+    if(s.byTier[t]>0)tierLines+=PLAN_TIER_LABELS[t]+': '+s.byTier[t]+' &middot; ';
+  });
+  if(tierLines)tierLines=tierLines.replace(/ &middot; $/,'');
+  return '<div class="agency-stat-grid">'
+    +'<div class="agency-stat-card"><div class="agency-stat-label">Active MRR</div>'
+    +'<div class="agency-stat-value">'+fmt(s.activeMrr)+'</div>'
+    +'<div class="agency-stat-sub">'+s.activeCount+' active'+(s.pastDueCount?' &middot; '+s.pastDueCount+' past due':'')+'</div></div>'
+    +'<div class="agency-stat-card"><div class="agency-stat-label">Annual ARR</div>'
+    +'<div class="agency-stat-value">'+fmt(s.annualArr)+'</div>'
+    +'<div class="agency-stat-sub">projected from active</div></div>'
+    +'<div class="agency-stat-card"><div class="agency-stat-label">Trial MRR (potential)</div>'
+    +'<div class="agency-stat-value">'+fmt(s.trialMrr)+'</div>'
+    +'<div class="agency-stat-sub">'+s.trialCount+' trialing</div></div>'
+    +'<div class="agency-stat-card"><div class="agency-stat-label">Other accounts</div>'
+    +'<div class="agency-stat-value" style="font-size:18px">'+s.exemptCount+' exempt &middot; '+s.cancelledCount+' cancelled &middot; '+s.suspendedCount+' suspended</div>'
+    +'<div class="agency-stat-sub">'+(tierLines||'no tier breakdown')+'</div></div>'
+    +'</div>';
+}
+
+function onInvoiceFilterChange(){
+  var st=document.getElementById('inv-filter-status');
+  var f=document.getElementById('inv-filter-from');
+  var t=document.getElementById('inv-filter-to');
+  billingState.invoiceFilter.status=st?st.value:'';
+  billingState.invoiceFilter.from=f?f.value:'';
+  billingState.invoiceFilter.to=t?t.value:'';
+  billingState.invoicesOffset=0;
+  loadAgencyInvoices();
+}
+
+function resetInvoiceFilters(){
+  billingState.invoiceFilter={status:'',from:'',to:''};
+  billingState.invoicesOffset=0;
+  ['inv-filter-status','inv-filter-from','inv-filter-to'].forEach(function(id){var x=document.getElementById(id);if(x)x.value='';});
+  loadAgencyInvoices();
+}
+
+async function loadAgencyInvoices(){
+  var tbl=document.getElementById('agency-invoices-table');
+  if(tbl)tbl.innerHTML='<div style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center">Loading transactions...</div>';
+  try{
+    var qs='limit='+billingState.invoicesLimit+'&offset='+billingState.invoicesOffset;
+    var f=billingState.invoiceFilter;
+    if(f.status)qs+='&status='+encodeURIComponent(f.status);
+    if(f.from)qs+='&from='+encodeURIComponent(new Date(f.from).toISOString());
+    if(f.to){var to=new Date(f.to);to.setHours(23,59,59,999);qs+='&to='+encodeURIComponent(to.toISOString());}
+    var r=await fetch('/api/agency/list-invoices?'+qs);
+    if(!r.ok){
+      if(tbl)tbl.innerHTML='<div style="padding:24px;color:#f87171;font-size:13px;text-align:center">Failed to load transactions.</div>';
+      return;
+    }
+    var data=await r.json();
+    billingState.entries=data.entries||[];
+    billingState.invoicesTotal=data.total||0;
+    renderInvoicesTable();
+    renderInvoicesPagination();
+  }catch(e){
+    if(tbl)tbl.innerHTML='<div style="padding:24px;color:#f87171;font-size:13px;text-align:center">Error: '+esc(e.message)+'</div>';
+  }
+}
+
+function renderInvoicesTable(){
+  var tbl=document.getElementById('agency-invoices-table');
+  if(!tbl)return;
+  var rows=billingState.entries||[];
+  if(!rows.length){
+    tbl.innerHTML='<div style="padding:32px;color:var(--text-muted);font-size:13px;text-align:center">No transactions match these filters.</div>';
+    return;
+  }
+  var statusColor={succeeded:'#16a34a',failed:'#dc2626',refunded:'#9b8ec4',pending:'#b45309'};
+  var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="background:var(--bg-card);border-bottom:1px solid var(--border)">'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">When</th>'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Subaccount</th>'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Description</th>'
+    +'<th style="padding:11px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Amount</th>'
+    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Status</th>'
+    +'<th style="padding:11px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Action</th>'
+    +'</tr></thead><tbody>';
+  rows.forEach(function(r){
+    var when=new Date(r.created_at).toLocaleString();
+    var sub=r.subaccounts||{};
+    var subName=sub.name||r.subaccount_id;
+    var amt='$'+((r.amount_cents||0)/100).toFixed(2);
+    var color=statusColor[r.status]||'#5a4d7a';
+    var actionCell='';
+    if(r.status==='succeeded'){
+      actionCell='<button class="btn btn-ghost btn-sm" onclick="openRefundModal(\''+r.id+'\')">Refund</button>';
+    }else if(r.status==='refunded'){
+      actionCell='<span style="font-size:11px;color:var(--text-muted)">Refunded</span>';
+    }else if(r.status==='failed'&&r.failure_reason){
+      actionCell='<span style="font-size:11px;color:#fca5a5" title="'+esc(r.failure_reason)+'">Failed</span>';
+    }
+    html+='<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:9px 12px;font-size:12px;color:var(--text-muted);white-space:nowrap">'+esc(when)+'</td>'
+      +'<td style="padding:9px 12px;font-size:12px">'+esc(subName)+'</td>'
+      +'<td style="padding:9px 12px;font-size:12px;color:var(--text-muted)">'+esc(r.description||'')+'</td>'
+      +'<td style="padding:9px 12px;font-size:13px;font-weight:700;text-align:right;font-family:monospace">'+amt+'</td>'
+      +'<td style="padding:9px 12px"><span style="display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700;background:'+color+'22;color:'+color+';border:1px solid '+color+'44">'+esc(r.status)+'</span></td>'
+      +'<td style="padding:9px 12px;text-align:right">'+actionCell+'</td>'
+      +'</tr>';
+  });
+  html+='</tbody></table></div>';
+  tbl.innerHTML=html;
+}
+
+function renderInvoicesPagination(){
+  var pag=document.getElementById('agency-invoices-pagination');
+  if(!pag)return;
+  var total=billingState.invoicesTotal||0;
+  var off=billingState.invoicesOffset||0;
+  var lim=billingState.invoicesLimit||50;
+  var showingFrom=total===0?0:off+1;
+  var showingTo=Math.min(off+lim,total);
+  var prevDisabled=off<=0;
+  var nextDisabled=off+lim>=total;
+  pag.innerHTML='<div>Showing '+showingFrom+'-'+showingTo+' of '+total+'</div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="btn btn-ghost btn-sm" '+(prevDisabled?'disabled':'')+' onclick="invoicesPrev()">Previous</button>'
+    +'<button class="btn btn-ghost btn-sm" '+(nextDisabled?'disabled':'')+' onclick="invoicesNext()">Next</button>'
+    +'</div>';
+}
+
+function invoicesPrev(){billingState.invoicesOffset=Math.max(0,billingState.invoicesOffset-billingState.invoicesLimit);loadAgencyInvoices();}
+function invoicesNext(){billingState.invoicesOffset=billingState.invoicesOffset+billingState.invoicesLimit;loadAgencyInvoices();}
+
+function openRefundModal(invoiceId){
+  if(!agencyCanManageSubaccounts()){toast('You do not have permission to issue refunds.','error');return;}
+  var inv=(billingState.entries||[]).find(function(r){return r.id===invoiceId;});
+  if(!inv){toast('Transaction not found.','error');return;}
+  var amt='$'+((inv.amount_cents||0)/100).toFixed(2);
+  var subName=(inv.subaccounts&&inv.subaccounts.name)||inv.subaccount_id;
+  state.modal={type:'refund-confirm',id:invoiceId};
+  var body='<div style="font-size:14px;line-height:1.7;color:var(--text)">'
+    +'<p>Refund <strong>'+amt+'</strong> charged to <strong>'+esc(subName)+'</strong>?</p>'
+    +'<p style="margin-top:8px;color:var(--text-muted);font-size:13px">'+esc(inv.description||'')+'</p>'
+    +'<p style="margin-top:14px;font-size:12px;color:var(--text-muted)">This sends a full refund through Square. The customer\'s card is credited within a few business days.</p>'
+    +'</div>'
+    +'<div class="form-group" style="margin-top:14px"><label>Reason (optional)</label>'
+    +'<input id="refund-reason" type="text" placeholder="Reason for refund" maxlength="180"></div>';
+  openModal('Refund Transaction',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-danger" onclick="confirmRefund(\''+invoiceId+'\')">Confirm Refund</button>');
+}
+
+async function confirmRefund(invoiceId){
+  var reasonEl=document.getElementById('refund-reason');
+  var reason=reasonEl?reasonEl.value:'';
+  try{
+    var r=await fetch('/api/billing/refund',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({invoiceId:invoiceId,reason:reason||null,actor:loadAgencySession()})
+    });
+    if(!r.ok){
+      var errData=await r.json().catch(function(){return {error:'Server error'};});
+      toast('Refund failed: '+(errData.error||'Unknown'),'error');
+      return;
+    }
+    var data=await r.json();
+    closeModal();
+    toast('Refund processed. Square refund ID: '+(data.square_refund_id||''),'success');
+    loadAgencyInvoices();
+  }catch(e){
+    toast('Refund error: '+e.message,'error');
+  }
 }
 
 // =====================================================
@@ -10696,6 +11092,50 @@ async function agencyLoadSubaccounts(){
     });
     // Load plan records for all subaccounts
     var plansMap=await loadAllPlans();
+
+    // Apply filters and sort from the accounts toolbar (if defined - these globals
+    // come from renderAgencyAccountsTab; on first paint they may be missing)
+    var f=(typeof accountsFilters!=='undefined'&&accountsFilters)||{search:'',status:'',tier:''};
+    var s=(typeof accountsSort!=='undefined'&&accountsSort)||{col:'name',dir:'asc'};
+    var tierOrder={starter:1,professional:2,business:3,enterprise:4};
+
+    subs=subs.filter(function(sub){
+      var pr=plansMap[sub.id]||null;
+      var planTier=(pr&&pr.plan_tier)||sub.plan||'starter';
+      var planStatus=(pr&&pr.status)||'trialing';
+      var isExempt=!!(pr&&pr.exempt_from_billing);
+      // search match
+      if(f.search){
+        var q=f.search.toLowerCase();
+        var hay=((sub.name||'')+' '+(sub.slug||'')).toLowerCase();
+        if(hay.indexOf(q)<0)return false;
+      }
+      // status filter (treat exempt as a pseudo-status)
+      if(f.status){
+        if(f.status==='exempt'){if(!isExempt)return false;}
+        else{if(planStatus!==f.status)return false;}
+      }
+      // tier filter
+      if(f.tier&&planTier!==f.tier)return false;
+      return true;
+    });
+
+    subs.sort(function(a,b){
+      var pa=plansMap[a.id]||{},pb=plansMap[b.id]||{};
+      var av,bv;
+      if(s.col==='created'){av=a.created_at||'';bv=b.created_at||'';}
+      else if(s.col==='tier'){av=tierOrder[(pa.plan_tier||a.plan||'starter')]||0;bv=tierOrder[(pb.plan_tier||b.plan||'starter')]||0;}
+      else{av=(a.name||'').toLowerCase();bv=(b.name||'').toLowerCase();}
+      if(av<bv)return s.dir==='desc'?1:-1;
+      if(av>bv)return s.dir==='desc'?-1:1;
+      return 0;
+    });
+
+    if(!subs.length){
+      el.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:20px 0">No subaccounts match these filters.</div>';
+      return;
+    }
+
     el.innerHTML=subs.map(function(sub){
       var data=statsMap[sub.id]||{};
       var contactCount=(data.contacts||[]).length;
