@@ -11179,7 +11179,11 @@ async function openAgencyEditUserModal(userId){
       +'<option value="false"'+(u.active===false?' selected':'')+'>Inactive</option>'
       +'</select>'
       +(isSelf?'<div style="font-size:11px;color:#fbbf24;margin-top:4px">You cannot deactivate yourself.</div>':isLastSuper?'<div style="font-size:11px;color:#fbbf24;margin-top:4px">Cannot deactivate the last Super Admin.</div>':'')+'</div>'
-      +'<div class="form-group"><label>Reset Password <span style="font-weight:400;color:var(--text-muted)">(leave blank to keep current)</span></label>'
+      +(isSelf
+        ?'<div class="form-group"><label>Current Password <span style="font-weight:400;color:var(--text-muted)">(required to change password)</span></label>'
+        +'<input id="ag-edit-old-pass" type="password" placeholder="Your current password"></div>'
+        :'')
+      +'<div class="form-group"><label>'+(!isSelf?'Reset ':'')+' New Password <span style="font-weight:400;color:var(--text-muted)">(leave blank to keep current)</span></label>'
       +'<input id="ag-edit-pass" type="password" placeholder="New password (optional)">'
       +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>';
     openModal('Edit Agency User', body,
@@ -11213,6 +11217,18 @@ async function agencySaveEditUser(userId){
     if(pass){
       var passErr=checkPasswordStrength(pass);
       if(passErr){toast(passErr,'error');return;}
+      // If editing self, verify old password first
+      var isSelfEdit=userId===agencyCurrentUserId();
+      if(isSelfEdit){
+        var oldPass=document.getElementById('ag-edit-old-pass')&&document.getElementById('ag-edit-old-pass').value||'';
+        if(!oldPass){toast('Enter your current password to set a new one.','error');return;}
+        var oldHash=await sha256(oldPass);
+        var rSelf=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId)+'&password_hash=eq.'+encodeURIComponent(oldHash)+'&select=id',{
+          headers:{'apikey':key,'Authorization':'Bearer '+key}
+        });
+        var selfRows=await rSelf.json();
+        if(!selfRows||!selfRows.length){toast('Current password is incorrect.','error');return;}
+      }
       updates.password_hash=await sha256(pass);
     }
     var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId),{
