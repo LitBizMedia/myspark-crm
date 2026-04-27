@@ -99,6 +99,8 @@ module.exports = async function handler(req, res) {
       exempt_from_billing: false,
       discount_percent: discountPercent || 0,
       discount_note: discountNote || null,
+      card_last4: cardLast4 || null,
+      card_brand: cardBrand || null,
       updated_at: now.toISOString()
     };
 

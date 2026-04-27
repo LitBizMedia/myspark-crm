@@ -10134,8 +10134,13 @@ async function openManagePlanModal(subId,subName){
     +'<input id="mp-discount-note" type="text" value="'+esc((plan&&plan.discount_note)||'')+'" placeholder="e.g. Founding member"></div>'
     +'</div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
-    +'<input type="checkbox" id="mp-exempt" '+(isExempt?'checked':'')+' style="width:auto;margin:0">'
+    +'<input type="checkbox" id="mp-exempt" '+(isExempt?'checked':'')+' onchange="toggleMpBillingDate()" style="width:auto;margin:0">'
     +'<span>Exempt from billing (test workspace, partner, internal)</span></label></div>'
+    +'<div id="mp-billing-date-section" style="'+(isExempt?'':'display:none')+'">'
+    +'<div class="form-group"><label>First Billing Date <span style="font-weight:400;color:var(--text-muted)">(when to start charging after removing exempt)</span></label>'
+    +'<input id="mp-billing-date" type="date" value="'+(plan&&plan.next_billing_date||'')+'">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Set this to match their existing billing cycle. The cron will charge on this date.</div>'
+    +'</div></div>'
     +'<div style="margin-top:14px;padding:14px 16px;background:var(--bg-card);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
     +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Effective Charge</div>'
     +'<div id="mp-summary" style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--orange);margin-top:2px">'+summary+'</div></div>'
@@ -10149,7 +10154,10 @@ async function openManagePlanModal(subId,subName){
       +(plan&&plan.square_card_id?'Update Card':'Add Card')
       +'</button></div>'
       +(plan&&plan.square_card_id
-        ?'<div style="font-size:13px;color:#34d399">Card on file</div>'
+        ?'<div style="font-size:13px;color:#34d399">'
+        +(plan.card_brand?esc(plan.card_brand)+' ':'')+'ending '
+        +(plan.card_last4?esc(plan.card_last4):'on file')
+        +'</div>'
         :'<div style="font-size:13px;color:#fbbf24">No card on file. Add one to enable billing.</div>'
       )
       +'<div id="mp-card-form-section" style="display:none;margin-top:12px">'
@@ -10217,6 +10225,8 @@ async function saveManagePlan(subId){
   var exemptChecked=!!(document.getElementById('mp-exempt')&&document.getElementById('mp-exempt').checked);
   var discountPct=parseInt((document.getElementById('mp-discount')&&document.getElementById('mp-discount').value)||'0')||0;
   var discountNote=(document.getElementById('mp-discount-note')&&document.getElementById('mp-discount-note').value||'').trim();
+  var billingDateEl=document.getElementById('mp-billing-date');
+  var customBillingDate=billingDateEl&&billingDateEl.value?billingDateEl.value:null;
   if(!tier||!period){toast('All fields required.','error');return;}
   var extra=state.modal&&state.modal.extra||{};
   var existing=extra.plan;
@@ -10241,21 +10251,21 @@ async function saveManagePlan(subId){
       +(nextDate?'<p style="margin-top:6px;font-size:12px;color:var(--text-muted)">Next full charge on '+nextDate+' at $'+newPrice+(period==='annual'?'/yr':'/mo')+'.</p>':'')
       +'</div>',
       '<button class="btn btn-ghost" onclick="openManagePlanModal(\''+subId+'\',\''+esc(subName||'')+'\')">Go Back</button>'
-      +'<button class="btn btn-primary" onclick="confirmSwapPlan(\''+subId+'\',\''+tier+'\',\''+period+'\','+(hipaa?'true':'false')+','+(exemptChecked?'true':'false')+')">Confirm Upgrade</button>',
+      +'<button class="btn btn-primary" onclick="confirmSwapPlan(\''+subId+'\',\''+tier+'\',\''+period+'\','+(hipaa?'true':'false')+','+(exemptChecked?'true':'false')+','+(discountPct||0)+',\''+esc(discountNote||'')+'\',' +(customBillingDate?'\''+customBillingDate+'\'':'null')+')">Confirm Upgrade</button>',
       'modal-sm');
     return;
   }
 
   // Downgrade, period change, or exempt: call swap-plan (no charge)
-  await confirmSwapPlan(subId,tier,period,hipaa,exemptChecked,discountPct,discountNote,true);
+  await confirmSwapPlan(subId,tier,period,hipaa,exemptChecked,discountPct,discountNote,customBillingDate,true);
 }
 
-async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discountNote,silent){
+async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discountNote,customBillingDate,silent){
   try{
     var r=await fetch('/api/billing/swap-plan',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||''})
+      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||'',customBillingDate:customBillingDate||null})
     });
     if(!r.ok){var t=await r.text();toast('Plan change failed: '+t,'error');return;}
     var data=await r.json();
@@ -10932,6 +10942,14 @@ function updateSubBillingPreview(){
   var disc=discountEl?Math.min(100,Math.max(0,parseInt(discountEl.value)||0)):0;
   var total=Math.round((base+addon)*(1-disc/100));
   summary.textContent='$'+total+(period.value==='annual'?'/yr':'/mo')+(disc>0?' ('+disc+'% off)':'');
+}
+
+function toggleMpBillingDate(){
+  var exempt=document.getElementById('mp-exempt');
+  var section=document.getElementById('mp-billing-date-section');
+  if(!exempt||!section)return;
+  // Show billing date picker when unchecking exempt
+  section.style.display=exempt.checked?'none':'block';
 }
 
 function toggleBillingFields(){

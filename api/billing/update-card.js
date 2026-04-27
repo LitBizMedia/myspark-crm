@@ -69,6 +69,8 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify({
           square_customer_id: customerId,
           square_card_id: cardId,
+          card_last4: cardLast4 || null,
+          card_brand: cardBrand || null,
           updated_at: new Date().toISOString()
         })
       }
