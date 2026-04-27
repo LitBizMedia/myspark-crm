@@ -75,24 +75,34 @@ module.exports = async function handler(req, res) {
 };
 
 async function processBilling(sub, summary) {
-  const amountCents = calculateCharge(sub.plan_tier, sub.billing_period, sub.hipaa_addon, sub.discount_percent || 0);
+  const amountCents = calculateCharge(
+    sub.plan_tier,
+    sub.billing_period,
+    sub.hipaa_addon,
+    sub.discount_percent || 0
+  );
   const dollars = (amountCents / 100).toFixed(2);
 
-  // If subaccount is still in trial, transition to active before charging
-  if (sub.status === 'trialing') {
-    await updatePlan(sub.subaccount_id, {
-      status: 'active',
-      current_period_start: new Date().toISOString(),
-      retry_count: 0
-    });
-  }
+  // Note: We do NOT pre-transition trialing accounts to 'active' here.
+  // Status only changes to 'active' inside the success branch below, after
+  // the charge succeeds. This keeps the database honest: an account marked
+  // 'active' has actually paid.
 
   const chargeNote = 'MySpark+ ' + sub.plan_tier + ' (' + sub.billing_period + ')';
+
+  // Deterministic idempotency key tied to (subaccount, billing date, retry attempt).
+  // Same logical charge = same key = Square dedupes if cron retries.
+  // New retry tomorrow = new key (retry_count incremented) = Square processes the retry.
+  // Prevents double-billing on cron retries or duplicate invocations.
+  const retryNum = sub.retry_count || 0;
+  const idempotencyKey = 'msp-chg-' + sub.subaccount_id + '-' + sub.next_billing_date + '-r' + retryNum;
+
   const result = await chargeCardOnFile(
     sub.square_customer_id,
     sub.square_card_id,
     amountCents,
-    chargeNote
+    chargeNote,
+    idempotencyKey
   );
 
   const nextDate = calcNextBillingDate(sub.billing_period);
@@ -108,7 +118,7 @@ async function processBilling(sub, summary) {
       square_payment_id: result.success ? result.paymentId : null,
       status: result.success ? 'succeeded' : 'failed',
       failure_reason: result.success ? null : result.error,
-      retry_attempt: sub.retry_count || 0,
+      retry_attempt: retryNum,
       billing_period_start: new Date().toISOString().split('T')[0],
       billing_period_end: nextDate,
       succeeded_at: result.success ? new Date().toISOString() : null,
@@ -142,7 +152,7 @@ async function processBilling(sub, summary) {
 
   } else {
     summary.failed++;
-    const newRetryCount = (sub.retry_count || 0) + 1;
+    const newRetryCount = retryNum + 1;
     const lastAttempt = sub.last_charge_attempt_at ? new Date(sub.last_charge_attempt_at).getTime() : null;
     const daysSinceLastAttempt = lastAttempt ? (Date.now() - lastAttempt) / 86400000 : 0;
     const shouldSuspend = newRetryCount >= MAX_RETRIES && daysSinceLastAttempt >= SUSPEND_AFTER_DAYS;
@@ -312,7 +322,12 @@ async function sendTrialReminders() {
 
         const subName    = subRows[0].name || sub.subaccount_id;
         const adminEmail = subRows[0].admin_email;
-        const amountCents = calculateCharge(sub.plan_tier, sub.billing_period, sub.hipaa_addon, sub.discount_percent || 0);
+        const amountCents = calculateCharge(
+          sub.plan_tier,
+          sub.billing_period,
+          sub.hipaa_addon,
+          sub.discount_percent || 0
+        );
         const dollars     = (amountCents / 100).toFixed(2);
         const trialEndDate = sub.trial_ends_at ? sub.trial_ends_at.split('T')[0] : 'soon';
 
