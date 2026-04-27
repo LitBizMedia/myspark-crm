@@ -71,8 +71,28 @@ module.exports = async function handler(req, res) {
       if (rSub.ok) {
         const subRows = await rSub.json();
         if (subRows && subRows.length) {
+          // Also fetch data blob to get the admin username
+          let adminUsername = '';
+          try {
+            const rBlob = await fetch(
+              SUPABASE_URL + '/rest/v1/subaccount_data?subaccount_id=eq.' + encodeURIComponent(subId) + '&select=data',
+              { headers: sbHeaders() }
+            );
+            if (rBlob.ok) {
+              const blobRows = await rBlob.json();
+              if (blobRows && blobRows.length && blobRows[0].data) {
+                const b = blobRows[0].data;
+                if (b._subaccountAdmin && b._subaccountAdmin.username) {
+                  adminUsername = b._subaccountAdmin.username;
+                } else if (b.settings && b.settings.adminProfile && b.settings.adminProfile.username) {
+                  adminUsername = b.settings.adminProfile.username;
+                }
+              }
+            }
+          } catch (e) {}
           userType = 'subaccount_admin';
-          userIdentifier = subId;
+          // Store subId:username so reset-password can create _subaccountAdmin if needed
+          userIdentifier = adminUsername ? subId + ':' + adminUsername : subId;
           userName = subRows[0].name || '';
         }
       }
@@ -91,7 +111,9 @@ module.exports = async function handler(req, res) {
             if (blob._subaccountAdmin && blob._subaccountAdmin.email &&
                 blob._subaccountAdmin.email.toLowerCase() === email.toLowerCase()) {
               userType = 'subaccount_admin';
-              userIdentifier = subId;
+              userIdentifier = blob._subaccountAdmin.username
+                ? subId + ':' + blob._subaccountAdmin.username
+                : subId;
               userName = blob._subaccountAdmin.name || '';
             }
             // Check staff users

@@ -83,8 +83,10 @@ module.exports = async function handler(req, res) {
       if (!r.ok) return res.status(500).json({ error: 'Failed to update password' });
 
     } else if (rec.user_type === 'subaccount_admin') {
-      // Update _subaccountAdmin.passwordHash in subaccount_data blob
-      const subId = rec.user_identifier;
+      // user_identifier is either subId or subId:username
+      const parts = rec.user_identifier.split(':');
+      const subId = parts[0];
+      const adminUsername = parts[1] || '';
       const rData = await fetch(
         SUPABASE_URL + '/rest/v1/subaccount_data?subaccount_id=eq.' + encodeURIComponent(subId) + '&select=id,data',
         { headers: sbHeaders() }
@@ -93,8 +95,20 @@ module.exports = async function handler(req, res) {
       const rows = await rData.json();
       if (!rows || !rows.length) return res.status(404).json({ error: 'Subaccount data not found' });
       const blob = rows[0].data;
-      if (!blob._subaccountAdmin) return res.status(404).json({ error: 'Subaccount admin not found' });
-      blob._subaccountAdmin.passwordHash = passwordHash;
+      if (!blob._subaccountAdmin) {
+        // Create _subaccountAdmin record - overrides hardcoded credentials going forward
+        if (!adminUsername) return res.status(404).json({ error: 'Cannot identify admin user. Please contact support.' });
+        blob._subaccountAdmin = {
+          username: adminUsername,
+          passwordHash: passwordHash,
+          name: adminUsername,
+          email: rec.email,
+          color: '#ff4000',
+          createdAt: new Date().toISOString()
+        };
+      } else {
+        blob._subaccountAdmin.passwordHash = passwordHash;
+      }
       const rUpdate = await fetch(
         SUPABASE_URL + '/rest/v1/subaccount_data?id=eq.' + encodeURIComponent(rows[0].id),
         {
