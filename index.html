@@ -10255,6 +10255,26 @@ async function saveManagePlan(subId){
   var tierOrder={starter:1,professional:2,business:3,enterprise:4};
   var oldTier=existing&&existing.plan_tier||tier;
   var isUpgrade=!isExempt&&(tierOrder[tier]||1)>(tierOrder[oldTier]||1);
+  var isTrial=existing&&existing.status==='trialing';
+
+  // Trial accounts: any plan change just updates the record. No charge today.
+  // Show a clean confirmation that explains this rather than the prorated charge modal.
+  if(isTrial&&!isExempt&&(isUpgrade||tier!==oldTier||period!==(existing&&existing.billing_period))){
+    var trialEnd=existing&&existing.trial_ends_at?existing.trial_ends_at.split('T')[0]:'when your trial ends';
+    var newPriceTrial=(PLAN_PRICES&&PLAN_PRICES[tier])?(period==='annual'?PLAN_PRICES[tier].annual:PLAN_PRICES[tier].monthly):0;
+    var priceTextTrial='$'+newPriceTrial+(period==='annual'?'/yr':'/mo');
+    openModal('Confirm Plan Change',
+      '<div style="font-size:14px;color:var(--text);line-height:1.7">'
+      +'<p>Changing <strong>'+esc(subName)+'</strong> from '
+      +PLAN_TIER_LABELS[oldTier]+' to '+PLAN_TIER_LABELS[tier]+'.</p>'
+      +'<p style="margin-top:10px;color:var(--text-muted)">No charge today. Your free trial continues until '+trialEnd+'.</p>'
+      +'<p style="margin-top:6px;font-size:12px;color:var(--text-muted)">After the trial ends, the card on file will be charged '+priceTextTrial+' at the new tier.</p>'
+      +'</div>',
+      '<button class="btn btn-ghost" onclick="openManagePlanModal(\''+subId+'\',\''+esc(subName)+'\')">Go Back</button>'
+      +'<button class="btn btn-primary" onclick="confirmSwapPlan(\''+subId+'\',\''+tier+'\',\''+period+'\','+(hipaa?'true':'false')+','+(exemptChecked?'true':'false')+','+(discountPct||0)+',\''+esc(discountNote||'')+'\','+(customBillingDate?'\''+customBillingDate+'\'':'null')+')">Confirm Change</button>',
+      'modal-sm');
+    return;
+  }
 
   if(isUpgrade){
     // Show confirmation with prorated charge estimate
@@ -10293,6 +10313,8 @@ async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discou
     closeModal();
     if(data.action==='upgraded')toast('Plan upgraded. Card charged $'+(data.charged_cents/100).toFixed(2)+'.','success');
     else if(data.action==='scheduled')toast('Plan change scheduled for next billing cycle.','success');
+    else if(data.action==='trial_updated')toast('Plan updated. Card will be charged at new tier when trial ends.','success');
+    else if(data.action==='upgraded_no_charge')toast('Plan upgraded. No charge applied.','success');
     else toast('Plan updated.','success');
     agencyLoadSubaccounts();
   }catch(e){toast('Error: '+e.message,'error');}

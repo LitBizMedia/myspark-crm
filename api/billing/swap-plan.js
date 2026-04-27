@@ -133,6 +133,43 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true, action: 'exempt_updated' });
     }
 
+    // ─────────────────────────────────────────
+    // Trial path: any plan change during trial just updates the record.
+    // No charge today. The cron charges at the new tier when the trial ends.
+    // ─────────────────────────────────────────
+    if (plan.status === 'trialing') {
+      await updatePlan(subaccountId, {
+        plan_tier: newTier,
+        billing_period: newPeriod,
+        hipaa_addon: !!newHipaa,
+        discount_percent: discountPercent || 0,
+        discount_note: discountNote || null
+      });
+      await logAudit({
+        req, ...actor,
+        action: 'agency.plan.swap',
+        targetType: 'subaccount',
+        targetId: subaccountId,
+        targetSubaccountId: subaccountId,
+        metadata: {
+          path: 'trial_updated',
+          before: beforeSnapshot,
+          after: {
+            plan_tier: newTier,
+            billing_period: newPeriod,
+            hipaa_addon: !!newHipaa,
+            discount_percent: discountPercent || 0
+          },
+          trial_ends_at: plan.trial_ends_at || null
+        }
+      });
+      return res.status(200).json({
+        success: true,
+        action: 'trial_updated',
+        message: 'Plan updated. Card will be charged at the new tier when the trial ends.'
+      });
+    }
+
     const oldTier = plan.plan_tier;
     const oldPeriod = plan.billing_period;
     const isUpgrade = TIER_ORDER[newTier] > TIER_ORDER[oldTier];
