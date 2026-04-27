@@ -10163,6 +10163,7 @@ function renderAgencyAccountsTab(){
     +'</select>'
     +'<button class="btn btn-ghost btn-sm" onclick="resetAccountsFilters()">Reset</button>'
     +'</div>'
+    +'<div id="agency-pastdue-banner"></div>'
     +'<div id="agency-subs-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">'
     +'<div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading subaccounts...</div>'
     +'</div>';
@@ -10192,6 +10193,41 @@ function resetAccountsFilters(){
   accountsFilters={status:'',tier:'',search:''};
   accountsSort={col:'name',dir:'asc'};
   renderAgencyAccountsTab();
+}
+
+function renderPastDueBanner(pastDue,suspended){
+  var el=document.getElementById('agency-pastdue-banner');
+  if(!el)return;
+  if((!pastDue||!pastDue.length)&&(!suspended||!suspended.length)){el.innerHTML='';return;}
+  var pdCount=(pastDue||[]).length;
+  var sCount=(suspended||[]).length;
+  var msg='';
+  if(pdCount>0){
+    msg+='<strong>'+pdCount+' account'+(pdCount===1?'':'s')+' past due.</strong> '
+      +'Card charges failed and retries are scheduled. Click to filter.';
+  }
+  if(sCount>0){
+    if(msg)msg+=' &middot; ';
+    msg+='<strong>'+sCount+' suspended</strong> after exhausted retries.';
+  }
+  var bgCol=pdCount>0?'rgba(239,68,68,.08)':'rgba(122,133,153,.08)';
+  var bdCol=pdCount>0?'rgba(239,68,68,.3)':'rgba(122,133,153,.3)';
+  var fgCol=pdCount>0?'#fca5a5':'#94a3b8';
+  el.innerHTML='<div onclick="filterAccountsToPastDue()" style="cursor:'+(pdCount>0?'pointer':'default')+';background:'+bgCol+';border:1px solid '+bdCol+';border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:'+fgCol+';display:flex;align-items:center;gap:10px">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+    +'<div style="flex:1">'+msg+'</div>'
+    +'</div>';
+}
+
+function filterAccountsToPastDue(){
+  accountsFilters.status='past_due';
+  // Update the dropdown UI to match
+  var sel=document.getElementById('acct-filter-status');
+  if(sel)sel.value='past_due';
+  agencyLoadSubaccounts();
+  // Scroll to grid
+  var grid=document.getElementById('agency-subs-grid');
+  if(grid)grid.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 // =====================================================
@@ -11126,6 +11162,17 @@ async function agencyLoadSubaccounts(){
     });
     // Load plan records for all subaccounts
     var plansMap=await loadAllPlans();
+
+    // Count past-due and suspended accounts and render the alert banner above the grid
+    var pastDueAccounts=[];
+    var suspendedRecent=[];
+    subs.forEach(function(sub){
+      var pr=plansMap[sub.id];
+      if(!pr)return;
+      if(pr.status==='past_due')pastDueAccounts.push({id:sub.id,name:sub.name});
+      if(pr.status==='suspended')suspendedRecent.push({id:sub.id,name:sub.name});
+    });
+    renderPastDueBanner(pastDueAccounts,suspendedRecent);
 
     // Apply filters and sort from the accounts toolbar (if defined - these globals
     // come from renderAgencyAccountsTab; on first paint they may be missing)
