@@ -31,6 +31,8 @@ module.exports = async function handler(req, res) {
     tier,
     billingPeriod,
     hipaaAddon,
+    discountPercent,
+    discountNote,
     skipTrial
   } = req.body || {};
 
@@ -95,6 +97,8 @@ module.exports = async function handler(req, res) {
       current_period_start: currentPeriodStart,
       retry_count: 0,
       exempt_from_billing: false,
+      discount_percent: discountPercent || 0,
+      discount_note: discountNote || null,
       updated_at: now.toISOString()
     };
 

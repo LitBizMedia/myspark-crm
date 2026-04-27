@@ -10519,6 +10519,12 @@ function openCreateSubaccountModal(){
     +'<input type="checkbox" id="new-sub-hipaa" onchange="updateSubBillingPreview()" style="width:auto;margin:0">'
     +'<span style="font-size:13px;color:var(--text)">+$50/mo</span></label></div>'
     +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
+    +'<div class="form-group" style="margin:0"><label>Discount % <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
+    +'<input id="new-sub-discount" type="number" min="0" max="100" value="0" placeholder="0" onchange="updateSubBillingPreview()"></div>'
+    +'<div class="form-group" style="margin:0"><label>Discount Note <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
+    +'<input id="new-sub-discount-note" type="text" placeholder="e.g. Founding member"></div>'
+    +'</div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="new-sub-exempt" onchange="toggleBillingFields()" style="width:auto;margin:0">'
     +'<span>Exempt from billing (test workspace, partner, internal use)</span></label></div>'
@@ -10555,6 +10561,8 @@ async function createSubaccount(){
   var billingPeriod=document.getElementById('new-sub-billing-period')&&document.getElementById('new-sub-billing-period').value||'monthly';
   var hipaaAddon=!!(document.getElementById('new-sub-hipaa')&&document.getElementById('new-sub-hipaa').checked);
   var isExempt=!!(document.getElementById('new-sub-exempt')&&document.getElementById('new-sub-exempt').checked);
+  var discountPct=parseInt((document.getElementById('new-sub-discount')&&document.getElementById('new-sub-discount').value)||'0')||0;
+  var discountNote=(document.getElementById('new-sub-discount-note')&&document.getElementById('new-sub-discount-note').value||'').trim();
   var adminName=(document.getElementById('new-sub-admin-name')&&document.getElementById('new-sub-admin-name').value||'').trim();
   var adminUser=(document.getElementById('new-sub-user')&&document.getElementById('new-sub-user').value||'').trim().toLowerCase();
   var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
@@ -10612,7 +10620,7 @@ async function createSubaccount(){
     if(!r2.ok){var e2=await r2.text();toast('Subaccount created but data init failed: '+e2,'warn');}
     // Handle billing setup
     if(!isExempt){
-      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon};
+      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote};
       if(state._cardMode==='existing'){
         // Use existing Square card on file
         var custSel=document.getElementById('new-sub-existing-customer');
@@ -10649,7 +10657,7 @@ async function createSubaccount(){
       await fetch(SB_FALLBACK_URL+'/rest/v1/subaccount_plans',{
         method:'POST',
         headers:{'apikey':SB_FALLBACK_KEY,'Authorization':'Bearer '+SB_FALLBACK_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify({subaccount_id:subId,plan_tier:tier,billing_period:billingPeriod,hipaa_addon:hipaaAddon,status:'exempt',exempt_from_billing:true,updated_at:new Date().toISOString()})
+        body:JSON.stringify({subaccount_id:subId,plan_tier:tier,billing_period:billingPeriod,hipaa_addon:hipaaAddon,status:'exempt',exempt_from_billing:true,discount_percent:discountPct,discount_note:discountNote||null,updated_at:new Date().toISOString()})
       }).catch(function(){});
       toast('Subaccount "'+name+'" created (exempt from billing).','success');
     }
@@ -10677,13 +10685,15 @@ function updateSubBillingPreview(){
   var tier=document.getElementById('new-sub-tier');
   var period=document.getElementById('new-sub-billing-period');
   var hipaa=document.getElementById('new-sub-hipaa');
+  var discountEl=document.getElementById('new-sub-discount');
   var summary=document.getElementById('new-sub-charge-summary');
   if(!tier||!period||!summary)return;
   var prices={starter:{monthly:29,annual:290},professional:{monthly:79,annual:790},business:{monthly:149,annual:1490},enterprise:{monthly:349,annual:3490}};
   var base=(prices[tier.value]||prices.starter)[period.value]||29;
   var addon=hipaa&&hipaa.checked?(period.value==='annual'?500:50):0;
-  var total=base+addon;
-  summary.textContent='$'+total+(period.value==='annual'?'/yr':'/mo');
+  var disc=discountEl?Math.min(100,Math.max(0,parseInt(discountEl.value)||0)):0;
+  var total=Math.round((base+addon)*(1-disc/100));
+  summary.textContent='$'+total+(period.value==='annual'?'/yr':'/mo')+(disc>0?' ('+disc+'% off)':'');
 }
 
 function toggleBillingFields(){
