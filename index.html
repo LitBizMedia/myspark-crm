@@ -3633,6 +3633,7 @@ function openEditUserModal(userId){
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Username</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
+    +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(for password recovery)</span></label><input id="eu-email" type="email" value="'+esc(u.email||u.emailAddress||'')+'" placeholder="email@example.com"></div>'
     +'<div class="form-row"><div class="form-group"><label>New Password <span style="font-weight:400;color:var(--text-muted)">(blank to keep)</span></label><input id="eu-pass" type="password" placeholder=""></div>'+roleField+'</div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Working Schedule</div>'
@@ -3647,11 +3648,15 @@ async function saveEditUser(){
   const role=!isAdmin&&document.getElementById('eu-role')?document.getElementById('eu-role').value:null;
   const sched=JSON.parse(JSON.stringify(editSched));
   DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
+  const euEmail=(document.getElementById('eu-email')&&document.getElementById('eu-email').value||'').trim().toLowerCase();
   const updates={name,color:state.selUserColor,schedule:sched,dateOverrides:[...userOvs]};
+  if(euEmail)updates.email=euEmail;
   if(role)updates.role=role;
   if(pass)updates.passwordHash=await sha256(pass);
-  if(isAdmin){db.settings.adminProfile={...db.settings.adminProfile,...updates}}
-  else{const u=db.users.find(x=>x.id===userId);if(u)Object.assign(u,updates)}
+  if(isAdmin){
+    db.settings.adminProfile={...db.settings.adminProfile,...updates};
+    if(db._subaccountAdmin&&euEmail)db._subaccountAdmin.email=euEmail;
+  }else{const u=db.users.find(x=>x.id===userId);if(u)Object.assign(u,updates);}
   if(state.user&&state.user.id===userId){
     state.user={...state.user,...updates};
     document.getElementById('sb-name').textContent=updates.name||state.user.username;
