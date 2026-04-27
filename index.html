@@ -2681,7 +2681,7 @@ async function reviewCharge(){
     +'<p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
   state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
-  openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="processCharge()">Process Payment</button>');
+  openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="withBtnLock(this,()=>processCharge())">Process Payment</button>');
 }
 
 let posSqCard=null;
@@ -3373,6 +3373,22 @@ function toast(msg,type){
   el.innerHTML='<span>'+(type==='error'?'&#x2715;':type==='warn'?'&#x26A0;':'&#x2713;')+'</span>'+esc(msg);
   document.getElementById('toast-container').appendChild(el);
   setTimeout(()=>el.remove(),3500);
+}
+
+// =====================================================
+// BUTTON LOCK - prevents double-click on async actions
+// Usage: onclick="withBtnLock(this, ()=>myAsyncFn(args))"
+// The button is disabled and shows "Please wait..." until
+// the promise resolves or rejects, then restores itself.
+// Add this wrapper to any button that fires a network request.
+// =====================================================
+function withBtnLock(btn, asyncFn) {
+  if (btn && btn.disabled) return;
+  var orig = btn ? btn.innerHTML : null;
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.innerHTML = 'Please wait...'; }
+  Promise.resolve().then(asyncFn).finally(function() {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = orig; }
+  });
 }
 
 // Boot: handled in injected block below
@@ -7506,7 +7522,7 @@ async function openAddCardModal(contactId){
     '<div id="sq-card-errors" style="color:#f87171;font-size:12px;margin-top:6px;min-height:18px"></div>';
   document.getElementById('modal-foot').innerHTML=
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+
-    '<button class="btn btn-primary" id="save-card-btn" onclick="submitAddCard()">Save Card</button>';
+    '<button class="btn btn-primary" id="save-card-btn" onclick="withBtnLock(this,()=>submitAddCard())">Save Card</button>';
   document.getElementById('modal-overlay').classList.add('open');
   await initSquareCardForm();
 }
@@ -7657,7 +7673,7 @@ async function chargeCardOnFile(){
     '<div class="warn-box" style="margin-top:14px">This will charge the card immediately. This action cannot be undone.</div>';
   document.getElementById('modal-foot').innerHTML=
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+
-    '<button class="btn btn-primary" id="confirm-charge-btn" onclick="confirmChargeCoF()">Charge $'+total.toFixed(2)+'</button>';
+    '<button class="btn btn-primary" id="confirm-charge-btn" onclick="withBtnLock(this,()=>confirmChargeCoF())">Charge $'+total.toFixed(2)+'</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
 
@@ -8467,7 +8483,7 @@ function txnVoid(id){
     +(t.squarePaymentId?'This will attempt to cancel the payment in Square. ':'No Square payment ID found. Only the local record will be updated. ')
     +'This cannot be undone.</div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-danger" onclick="txnConfirmVoid(\''+id+'\')">Void Transaction</button>');
+    +'<button class="btn btn-danger" onclick="withBtnLock(this,()=>txnConfirmVoid(\''+id+'\'))">Void Transaction</button>');
 }
 
 async function txnConfirmVoid(id){
@@ -8561,7 +8577,7 @@ function txnRefund(id){
   state.modal = {type:'txn-refund', id: id, extra:{hasGC:hasGC,gcAmt:gcLeft,remainderAmt:remLeft,hasSquare:hasSquare,totalLeft:totalLeft}};
   openModal('Refund Transaction', body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-purple" onclick="txnConfirmRefund(\''+id+'\')">Process Refund</button>',
+    +'<button class="btn btn-purple" onclick="withBtnLock(this,()=>txnConfirmRefund(\''+id+'\'))">Process Refund</button>',
     'modal-lg');
 }
 
@@ -10176,11 +10192,11 @@ async function openManagePlanModal(subId,subName){
     :'')
     +(isCancellable?'<div style="margin-top:14px;padding:12px 14px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
     +'<div style="font-size:13px;color:var(--text-muted)">Cancel subscription. Access continues until end of current period. Data deleted after 30 days.</div>'
-    +'<button class="btn btn-ghost" style="color:#f87171;border-color:rgba(239,68,68,.3);white-space:nowrap;margin-left:12px" onclick="cancelSubscription(\''+subId+'\')">Cancel Plan</button>'
+    +'<button class="btn btn-ghost" style="color:#f87171;border-color:rgba(239,68,68,.3);white-space:nowrap;margin-left:12px" onclick="withBtnLock(this,()=>cancelSubscription(\''+subId+'\'))">Cancel Plan</button>'
     +'</div>':'')
     +(isReactivatable?'<div style="margin-top:14px;padding:12px 14px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
     +'<div style="font-size:13px;color:var(--text-muted)">Reactivate this account. Card will be charged immediately for one billing cycle.</div>'
-    +'<button class="btn btn-primary" style="white-space:nowrap;margin-left:12px" onclick="reactivateSubscription(\''+subId+'\')">Reactivate</button>'
+    +'<button class="btn btn-primary" style="white-space:nowrap;margin-left:12px" onclick="withBtnLock(this,()=>reactivateSubscription(\''+subId+'\'))">Reactivate</button>'
     +'</div>':'');
 
   openModal('Manage Plan: '+esc(subName),body,
