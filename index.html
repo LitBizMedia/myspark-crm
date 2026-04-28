@@ -11144,7 +11144,7 @@ async function spProcessSale(){
         return;
       }
       var idempKey='sp-'+uid();
-      var chargeRes=await fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sourceId:result.token,amountCents:Math.round(tmpl.price*100),idempotencyKey:idempKey,note:'Session Pack: '+tmpl.name,contactId:contactId,staffId:staffId}),credentials:'include'});
+      var chargeRes=await fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:result.token,amountCents:Math.round(tmpl.price*100),idempotencyKey:idempKey,note:'Session Pack: '+tmpl.name,contactId:contactId,staffId:staffId}),credentials:'include'});
       var chargeData=await chargeRes.json();
       if(!chargeData.success){
         if(errEl)errEl.textContent='Charge failed: '+(chargeData.error||'Unknown error');
