@@ -8,6 +8,7 @@
 const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('../../lib/agency-billing');
 const { sendEmail } = require('../../lib/billing-emails');
 const { logAudit } = require('../../lib/audit');
+const { deleteSubaccount } = require('../../lib/subaccount-lifecycle');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -318,25 +319,28 @@ async function processCancelledAccounts(req, summary) {
   for (const sub of (cancelled || [])) {
     try {
       // Auto-delete: 30 days after canceled_at
+      // Uses shared lifecycle helper which handles full cleanup chain:
+      // Square card disable, customer cards disable, Twilio release, Resend
+      // domain remove, non-cascading table deletion, then the subaccounts row.
+      // Helper also writes both the start audit (with snapshot) and the
+      // completion audit (with cleanup results) - we don't write our own here.
       if (sub.canceled_at && sub.canceled_at <= cutoffDate) {
         console.log('run-billing: auto-deleting cancelled subaccount ' + sub.subaccount_id);
-        await fetch(
-          SUPABASE_URL + '/rest/v1/subaccounts?id=eq.' + sub.subaccount_id,
-          { method: 'DELETE', headers: sbHeaders() }
-        );
-        summary.deleted = (summary.deleted || 0) + 1;
-        await logAudit({
-          req, ...CRON_ACTOR,
-          action: 'system.subaccount.auto_delete',
-          targetType: 'subaccount',
-          targetId: sub.subaccount_id,
-          targetSubaccountId: sub.subaccount_id,
-          metadata: {
-            reason: 'cancelled_30_days',
-            canceled_at: sub.canceled_at,
-            plan_tier: sub.plan_tier
-          }
+        const delResult = await deleteSubaccount(sub.subaccount_id, {
+          req: req,
+          actor: CRON_ACTOR,
+          actionName: 'system.subaccount.auto_delete',
+          reason: 'cancelled_30_days'
         });
+        if (delResult.success) {
+          summary.deleted = (summary.deleted || 0) + 1;
+          if (delResult.partial) {
+            summary.partial_deletes = (summary.partial_deletes || 0) + 1;
+          }
+        } else {
+          console.error('run-billing: auto-delete failed for ' + sub.subaccount_id + ':', delResult.error);
+          summary.errors.push({ subaccount_id: sub.subaccount_id, error: 'Auto-delete failed: ' + delResult.error });
+        }
         continue;
       }
       // Deactivate: access period has ended

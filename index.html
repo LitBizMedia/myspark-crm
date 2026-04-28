@@ -12171,7 +12171,7 @@ async function agencyLoadSubaccounts(){
         +(agencyCanManageSubaccounts()&&!isProtected?(isActive
           ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false,\''+esc(sub.name)+'\')">Suspend</button>'
           :'<button class="btn btn-purple btn-sm" onclick="agencyToggleSub(\''+sub.id+'\',true,\''+esc(sub.name)+'\')">Activate</button>'):'')
-        +(agencyCanManageSubaccounts()&&!isProtected?'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\')">Delete</button>':'')
+        +(agencyCanManageSubaccounts()&&!isProtected?'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug||'')+'\')">Delete</button>':'')
         +(isProtected?'<span title="This workspace is protected and cannot be suspended or deleted." style="font-size:10px;color:var(--text-muted);padding:6px 0;display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected</span>':'')
         +'</div>'
         +'</div>';
@@ -12651,29 +12651,61 @@ async function agencyConfirmToggleSub(id,active){
 }
 
 // ── Delete Subaccount ──
-function agencyDeleteSub(id,name){
-  if(!agencyCanManageSubaccounts()){toast('You do not have permission to delete subaccounts.','error');return;}
+function agencyDeleteSub(id,name,slug){
+  // Super_admin only - hard-gated server-side, but fail fast in UI for UX
+  var role=agencyCurrentRole();
+  if(role!=='super_admin'){toast('Only super_admin can permanently delete subaccounts.','error');return;}
   state.modal={type:'del-agency-sub',id:id};
   document.getElementById('modal-title').textContent='Delete Subaccount';
   document.getElementById('modal-box').className='modal';
-  document.getElementById('modal-body').innerHTML='<div class="warn-box">Permanently delete <strong>'+esc(name)+'</strong>? All contacts, payments, and data for this subaccount will be removed. This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="agencyConfirmDeleteSub(\''+id+'\')">Delete Permanently</button>';
+  document.getElementById('modal-body').innerHTML=
+    '<div class="warn-box" style="margin-bottom:14px"><strong>Permanently delete '+esc(name)+'?</strong><br>'
+    +'All contacts, payments, appointments, notes, forms, and data for this subaccount will be removed. '
+    +'Saved customer cards will be disabled in Square. The Twilio number will be released. The Resend email domain will be removed.<br><br>'
+    +'<strong>This cannot be undone.</strong></div>'
+    +'<div style="font-size:13px;color:var(--main-text);margin-bottom:6px">Type <strong style="font-family:monospace;background:var(--main-bg-input);padding:2px 6px;border-radius:4px">'+esc(slug)+'</strong> below to confirm:</div>'
+    +'<input id="agency-del-slug-confirm" type="text" placeholder="'+esc(slug)+'" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;background:var(--main-bg-input);border:1px solid var(--main-border);border-radius:6px;color:var(--main-text);padding:9px 12px;font-family:monospace;font-size:14px">';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="agencyConfirmDeleteSub(\''+id+'\',\''+esc(slug)+'\')">Delete Permanently</button>';
   document.getElementById('modal-overlay').classList.add('open');
+  // Focus the input so admin can type immediately
+  setTimeout(function(){var el=document.getElementById('agency-del-slug-confirm');if(el)el.focus();},50);
 }
 
-async function agencyConfirmDeleteSub(id){
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+async function agencyConfirmDeleteSub(id,expectedSlug){
+  // Read slug confirmation from input
+  var typed=(document.getElementById('agency-del-slug-confirm')||{}).value||'';
+  typed=typed.trim();
+  if(typed!==expectedSlug){
+    toast('Slug does not match. Type "'+expectedSlug+'" to confirm.','error');
+    return;
+  }
+  // Disable the delete button to prevent double-click during the request
+  var btns=document.querySelectorAll('#modal-foot button');
+  btns.forEach(function(b){b.disabled=true;});
   try{
-    await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+id,{
-      method:'DELETE',
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    var r=await fetch('/api/agency/delete-subaccount',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subaccountId:id,slugConfirmation:typed})
     });
-    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
-      method:'DELETE',
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    closeModal();toast('Subaccount deleted.','success');agencyLoadSubaccounts();
-  }catch(e){toast('Error: '+e.message,'error');}
+    var data=await r.json().catch(function(){return {error:'Server error'};});
+    if(!r.ok){
+      btns.forEach(function(b){b.disabled=false;});
+      toast('Delete failed: '+(data.error||'Status '+r.status),'error');
+      return;
+    }
+    closeModal();
+    var msg='Subaccount deleted.';
+    if(data.partial){
+      msg='Subaccount deleted, but some external cleanup steps failed. Check audit log.';
+    }
+    toast(msg,data.partial?'warn':'success');
+    agencyLoadSubaccounts();
+  }catch(e){
+    btns.forEach(function(b){b.disabled=false;});
+    toast('Error: '+e.message,'error');
+  }
 }
 
 // =====================================================
