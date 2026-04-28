@@ -16,6 +16,7 @@
 // Body: { subaccountId, newPassword }
 
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { requireAgencyAuth } = require('../../lib/require-subaccount-auth');
 const { logAudit } = require('../../lib/audit');
 
@@ -129,7 +130,9 @@ module.exports = async function handler(req, res) {
   } else {
     // No row exists. Create one. This handles legacy subaccounts where the
     // admin has only ever been in the JSON blob.
-    const newId = 'user-' + sub.slug + '-admin-' + Date.now();
+    // Use crypto.randomUUID() because subaccount_users.id is a uuid column,
+    // not text. (Found out the hard way during testing - thanks Patrick.)
+    const newId = crypto.randomUUID();
     try {
       const r = await fetch(SUPABASE_URL + '/rest/v1/subaccount_users', {
         method: 'POST',
