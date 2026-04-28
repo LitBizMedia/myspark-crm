@@ -3173,7 +3173,14 @@ function renderUserList(){
 }
 
 function renderTagMgr(){const el=document.getElementById('tag-mgr');if(!el)return;el.innerHTML=db.tags.map(t=>'<div class="tag-manage-item" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'<button class="tag-rm" onclick="delTag(\''+t.id+'\')">×</button></div>').join('')}
-function saveSquare(){db.settings.square={appId:document.getElementById('sq-app-id').value.trim(),accessToken:document.getElementById('sq-token').value.trim(),locationId:document.getElementById('sq-loc').value.trim(),sandbox:document.getElementById('sq-env').value==='true'};saveData();toast('Square settings saved.','success')}
+function saveSquare(){
+  db.settings.square={appId:document.getElementById('sq-app-id').value.trim(),accessToken:document.getElementById('sq-token').value.trim(),locationId:document.getElementById('sq-loc').value.trim(),sandbox:document.getElementById('sq-env').value==='true'};
+  saveData();
+  logSubaccountAudit('subaccount.settings.update', {
+    metadata: { settings_section: 'square_payments', fields_changed: ['appId','accessToken','locationId','sandbox'] }
+  });
+  toast('Square settings saved.','success');
+}
 
 // =====================================================
 // DOUBLE BOOKING
@@ -3663,12 +3670,26 @@ async function saveUser(){
   const sched=JSON.parse(JSON.stringify(editSched));
   DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
   var userEmail=(document.getElementById('uf-email')&&document.getElementById('uf-email').value||'').trim().toLowerCase();
-  db.users.push({id:uid(),username,name:name||username,email:userEmail||null,passwordHash:hash,role,active:true,color:state.selUserColor,schedule:sched,dateOverrides:[...userOvs],createdAt:now_()});
-  saveData();closeModal();renderUserList();toast('User added.','success');
+  var newUserId=uid();
+  db.users.push({id:newUserId,username,name:name||username,email:userEmail||null,passwordHash:hash,role,active:true,color:state.selUserColor,schedule:sched,dateOverrides:[...userOvs],createdAt:now_()});
+  saveData();closeModal();renderUserList();
+  // Audit: user creation (admin action)
+  logSubaccountAudit('subaccount.user.create', {
+    targetId: newUserId,
+    targetType: 'user',
+    metadata: { username: username, name: name||username, role: role }
+  });
+  toast('User added.','success');
 }
 
 function saveUserSched(){
   const uid=state.modal.id;
+  // Audit: schedule update (user.update)
+  logSubaccountAudit('subaccount.user.update', {
+    targetId: uid,
+    targetType: 'user',
+    metadata: { fields_changed: ['schedule', 'dateOverrides'] }
+  });
   const sched=JSON.parse(JSON.stringify(editSched));
   DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
   if(isPrimaryAdmin(uid)){
@@ -3694,7 +3715,21 @@ function delUser(id){
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelUser()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelUser(){const id=state.modal&&state.modal.id;if(!id)return;if(isPrimaryAdmin(id)){toast('The primary workspace admin cannot be removed.','error');closeModal();return;}db.users=db.users.filter(u=>u.id!==id);saveData();closeModal();renderUserList();typeof renderStaffUserList==='function'&&renderStaffUserList();toast('User removed.','success')}
+function confirmDelUser(){
+  const id=state.modal&&state.modal.id;if(!id)return;
+  if(isPrimaryAdmin(id)){toast('The primary workspace admin cannot be removed.','error');closeModal();return;}
+  var _u=db.users.find(function(u){return u.id===id;});
+  db.users=db.users.filter(u=>u.id!==id);
+  saveData();closeModal();renderUserList();
+  typeof renderStaffUserList==='function'&&renderStaffUserList();
+  // Audit: user deletion (admin action)
+  logSubaccountAudit('subaccount.user.delete', {
+    targetId: id,
+    targetType: 'user',
+    metadata: { username: _u ? _u.username : null, name: _u ? _u.name : null, role: _u ? _u.role : null }
+  });
+  toast('User removed.','success');
+}
 
 // TAG MODAL
 function openTagModal(){
@@ -6312,6 +6347,12 @@ function fbOpenSubs(id){
   const el=document.getElementById('forms-forms-view');if(!el)return;
   const f=(db.forms||[]).find(x=>x.id===id);if(!f)return;
   const subs=(db.formSubmissions||[]).filter(s=>s.formId===id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  // Audit: PHI access - viewing form submissions
+  logSubaccountAudit('subaccount.form.submission.view', {
+    targetId: id,
+    targetType: 'form',
+    metadata: { form_name: f.name, submission_count: subs.length }
+  });
   const fields=f.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]).filter(fd=>fd.type!=='hidden'&&fd.type!=='captcha');
   let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Submissions: '+esc(f.name)+'</div></div>';
   if(!subs.length){
@@ -7322,6 +7363,14 @@ function getRptDateRange(){
 function renderStaffReporting(){
   const el=document.getElementById('staff-rpt-body');if(!el)return;
   const {from,to}=getRptDateRange();
+  // Audit: report run
+  try {
+    if (state && state.user && state.user.id) {
+      logSubaccountAudit('subaccount.report.run', {
+        metadata: { report_type: 'staff_sales', from: from, to: to }
+      });
+    }
+  } catch(e){}
   const sub=document.getElementById('staff-rpt-sub');
   if(sub)sub.textContent=fmtDate(from)+' \u2013 '+fmtDate(to);
   const users=allUsers();
@@ -7572,6 +7621,10 @@ function openStaffDrillDown(userId){
 
 function exportAllStaffCSV(){
   var range=getRptDateRange();var from=range.from,to=range.to;
+  // Audit: report export
+  logSubaccountAudit('subaccount.report.export', {
+    metadata: { report_type: 'staff_sales_summary', from: from, to: to, format: 'csv' }
+  });
   var users=allUsers();
   var payments=(db.payments||[]).filter(function(p){return p.createdAt&&p.createdAt>=from&&p.createdAt<=to+'T23:59:59';});
   var appts=(db.appointments||[]).filter(function(a){return a.date>=from&&a.date<=to;});
@@ -7593,6 +7646,12 @@ function exportAllStaffCSV(){
 function exportStaffCSV(userId){
   const d=state._drillData;if(!d)return;
   const u=getUserById(userId);
+  // Audit: per-staff report export
+  logSubaccountAudit('subaccount.report.export', {
+    targetId: userId,
+    targetType: 'user',
+    metadata: { report_type: 'staff_detail', staff_name: u ? (u.name || u.username) : null, from: d.from, to: d.to, row_count: d.rows.length, format: 'csv' }
+  });
   var header='Date,Type,Description,Qty,Sales Amount,Tip Amount\n';
   var csvRows=d.rows.map(function(r){
     var isTip2=r.type==='Tip';
@@ -9220,6 +9279,10 @@ async function txnConfirmRefund(id){
 function txnExportCSV(){
   var filtered = txnGetFiltered();
   if(!filtered.length){ toast('No transactions to export.','error'); return; }
+  // Audit: transaction export (PHI - contains contact names)
+  logSubaccountAudit('subaccount.report.export', {
+    metadata: { report_type: 'transactions', count: filtered.length, format: 'csv' }
+  });
   var headers = ['Date','Time','Contact','Staff','Items','Subtotal','Discount ($)','After Discount','Tip','Credits Applied','Total','Payment Method','Card Last 4','Status','Discount Reason','Notes','Square Payment ID'];
   var rows = filtered.map(function(p){
     var t = txnNorm(p);
