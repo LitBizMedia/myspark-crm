@@ -2279,7 +2279,7 @@ function renderDash(){
   document.getElementById('dash-greet').innerHTML=greet+', <span>'+esc(name)+'!</span>';
   const now2=new Date();
   document.getElementById('dash-time').textContent=now2.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+' \u00b7 '+now2.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'});
-  const all=db.contacts;
+  const all=db.contacts.filter(function(c){return!c.archived;});
   document.getElementById('dash-stats').innerHTML=
     '<div class="stat-card"><div class="stat-label">Total Contacts</div><div class="stat-val">'+all.length+'</div></div>'+
     '<div class="stat-card" style="border-top-color:var(--orange)"><div class="stat-label">Leads</div><div class="stat-val">'+all.filter(c=>c.type==='lead').length+'</div></div>'+
