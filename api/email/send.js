@@ -9,6 +9,7 @@ const {
   parseAgencySessionCookie,
   validateSession
 } = require('../../lib/subaccount-auth');
+const { checkAndIncrementUsage } = require('../../lib/plan-limits');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -54,11 +55,33 @@ module.exports = async (req, res) => {
   if (!templateType && !subject) return res.status(400).json({ error: 'subject is required' });
   if (!templateType && !html) return res.status(400).json({ error: 'html is required' });
 
+  // Plan limits check. Atomic-ish at app layer: checks current usage and
+  // increments on success. If subaccount is exempt_from_billing (LitBiz,
+  // comp accounts), increments but does not block.
+  const usageCheck = await checkAndIncrementUsage(slug, 'email');
+  if (!usageCheck.ok) {
+    return res.status(429).json({
+      error: usageCheck.error,
+      code:  usageCheck.code,
+      current: usageCheck.current,
+      limit:   usageCheck.limit,
+      tier:    usageCheck.tier
+    });
+  }
+
   const result = await sendEmail(slug, { to, subject, html, text, fromName, templateType, contactId, vars });
 
   if (!result.ok) {
+    // Send failed downstream. We already incremented the counter; that's a
+    // small overcount but acceptable given the alternative (rolling back the
+    // increment would require another DB call and isn't reliable under
+    // concurrent load).
     return res.status(500).json({ error: result.error });
   }
 
-  return res.status(200).json({ success: true, id: result.id });
+  return res.status(200).json({
+    success: true,
+    id: result.id,
+    usage: { current: usageCheck.current, limit: usageCheck.limit }
+  });
 };
