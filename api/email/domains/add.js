@@ -2,6 +2,7 @@
 // Adds a sending domain to Resend for a subaccount and stores DNS records in Supabase.
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const { requireSubaccountAuth } = require('../../../lib/require-subaccount-auth');
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -15,8 +16,21 @@ function svcHeaders(extra) {
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // Require valid subaccount session (admin only)
+  const auth = await requireSubaccountAuth(req, res, { requireRole: ['admin'] });
+  if (!auth) return; // 401 already sent
+
   const { slug, domain } = req.body || {};
   if (!slug) return res.status(400).json({ error: 'slug is required' });
+
+
+  // Enforce slug matches the session's subaccount (prevents IDOR across tenants)
+
+  if (auth.subaccount_id !== ('sub-' + slug)) {
+
+    return res.status(403).json({ error: 'Slug does not match session' });
+
+  }
   if (!domain) return res.status(400).json({ error: 'domain is required' });
 
   if (!RESEND_API_KEY) return res.status(500).json({ error: 'RESEND_API_KEY not configured' });

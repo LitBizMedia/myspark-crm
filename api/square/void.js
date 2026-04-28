@@ -3,11 +3,29 @@
 
 const { getSquareCreds, squareHost, squareHeaders, sendError } = require('../../lib/square');
 
+const { requireSubaccountAuth } = require('../../lib/require-subaccount-auth');
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
 
+  // Require valid subaccount session (admin/manager only)
+  const auth = await requireSubaccountAuth(req, res, { requireRole: ['admin','manager'] });
+  if (!auth) return; // 401 already sent
+
   const body = req.body || {};
   const slug = (body.slug || '').toString().trim().toLowerCase();
+
+  // Enforce slug matches the session's subaccount (prevents IDOR across tenants)
+
+  if (slug && auth.subaccount_id !== ('sub-' + slug)) {
+
+    return sendError(res, 403, 'Slug does not match session');
+
+  }
+
+  // If slug missing, derive it from the session
+
+  const effectiveSlug = slug || auth.subaccount_id.replace(/^sub-/, '');
+
   const paymentId = body.paymentId;
 
   if (!slug) return sendError(res, 400, 'Missing slug');
