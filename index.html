@@ -12663,8 +12663,8 @@ function agencyDeleteSub(id,name,slug){
     +'All contacts, payments, appointments, notes, forms, and data for this subaccount will be removed. '
     +'Saved customer cards will be disabled in Square. The Twilio number will be released. The Resend email domain will be removed.<br><br>'
     +'<strong>This cannot be undone.</strong></div>'
-    +'<div style="font-size:13px;color:var(--main-text);margin-bottom:6px">Type <strong style="font-family:monospace;background:var(--main-bg-input);padding:2px 6px;border-radius:4px">'+esc(slug)+'</strong> below to confirm:</div>'
-    +'<input id="agency-del-slug-confirm" type="text" placeholder="'+esc(slug)+'" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;background:var(--main-bg-input);border:1px solid var(--main-border);border-radius:6px;color:var(--main-text);padding:9px 12px;font-family:monospace;font-size:14px">';
+    +'<div style="font-size:13px;color:#e5e7eb;margin-bottom:8px">Type <strong style="font-family:monospace;background:rgba(255,255,255,.08);color:#fbbf24;padding:2px 8px;border-radius:4px">'+esc(slug)+'</strong> below to confirm:</div>'
+    +'<input id="agency-del-slug-confirm" type="text" placeholder="'+esc(slug)+'" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:#fff;padding:10px 12px;font-family:monospace;font-size:14px">';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="agencyConfirmDeleteSub(\''+id+'\',\''+esc(slug)+'\')">Delete Permanently</button>';
   document.getElementById('modal-overlay').classList.add('open');
   // Focus the input so admin can type immediately
@@ -12672,11 +12672,13 @@ function agencyDeleteSub(id,name,slug){
 }
 
 async function agencyConfirmDeleteSub(id,expectedSlug){
-  // Read slug confirmation from input
+  // Read slug confirmation from input. Send to server for validation - the
+  // server audits every attempt (including mismatches) for HIPAA compliance.
+  // Do NOT short-circuit client-side or the failed attempt audit doesn't fire.
   var typed=(document.getElementById('agency-del-slug-confirm')||{}).value||'';
   typed=typed.trim();
-  if(typed!==expectedSlug){
-    toast('Slug does not match. Type "'+expectedSlug+'" to confirm.','error');
+  if(!typed){
+    toast('Type the slug to confirm.','error');
     return;
   }
   // Disable the delete button to prevent double-click during the request
