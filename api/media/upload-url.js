@@ -1,7 +1,8 @@
 const { requireSubaccountAuth } = require('../../lib/require-subaccount-auth');
 const { logAudit } = require('../../lib/audit');
 const { createClient } = require('@supabase/supabase-js');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { s3 } = require('../../lib/s3-client');
+const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { randomUUID } = require('crypto');
 
@@ -9,14 +10,6 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
 
 const ALLOWED_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
@@ -62,7 +55,6 @@ module.exports = async function handler(req, res) {
   const fileKey = subaccountSlug + '/' + safeFolder + '/' + fileId + '.' + ext;
 
   try {
-    // ContentType is the only signed header - browser PUT only needs to match this
     const command = new PutObjectCommand({
       Bucket: process.env.AWS_S3_BUCKET,
       Key: fileKey,

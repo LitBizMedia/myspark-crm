@@ -1,20 +1,13 @@
 const { requireSubaccountAuth } = require('../../lib/require-subaccount-auth');
 const { createClient } = require('@supabase/supabase-js');
-const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { s3 } = require('../../lib/s3-client');
+const { GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {

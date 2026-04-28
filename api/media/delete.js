@@ -1,20 +1,13 @@
 const { requireSubaccountAuth } = require('../../lib/require-subaccount-auth');
 const { logAudit } = require('../../lib/audit');
 const { createClient } = require('@supabase/supabase-js');
-const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { s3 } = require('../../lib/s3-client');
+const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'DELETE') {
@@ -44,7 +37,6 @@ module.exports = async function handler(req, res) {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    // Attempt S3 delete - don't fail if object is already missing
     try {
       await s3.send(new DeleteObjectCommand({
         Bucket: process.env.AWS_S3_BUCKET,
