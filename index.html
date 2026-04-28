@@ -11873,26 +11873,32 @@ async function agencyConfirmResetPassword(subId,slug){
   if(pass!==pass2){toast('Passwords do not match.','error');return;}
   var passErr=checkPasswordStrength(pass);
   if(passErr){toast(passErr,'error');return;}
-  var passHash=await sha256(pass);
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  // Disable buttons during request
+  var btns=document.querySelectorAll('#modal-foot button');
+  btns.forEach(function(b){b.disabled=true;});
   try{
-    // Fetch current data
-    var r=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId+'&select=data',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    var r=await fetch('/api/agency/reset-subaccount-password',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subaccountId:subId,newPassword:pass})
     });
-    var rows=await r.json();
-    if(!rows||!rows.length){toast('Subaccount data not found.','error');return;}
-    var data=rows[0].data||{};
-    if(!data._subaccountAdmin){toast('No admin record found for this subaccount.','error');return;}
-    data._subaccountAdmin.passwordHash=passHash;
-    await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId,{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({data:data,updated_at:new Date().toISOString()})
-    });
+    var data=await r.json().catch(function(){return {error:'Server error'};});
+    if(!r.ok){
+      btns.forEach(function(b){b.disabled=false;});
+      toast('Reset failed: '+(data.error||'Status '+r.status),'error');
+      return;
+    }
     closeModal();
-    toast('Password reset for '+slug+'.','success');
-  }catch(e){toast('Error: '+e.message,'error');}
+    var msg='Password reset for '+slug+'.';
+    if(data.sessions_revoked&&data.sessions_revoked>0){
+      msg+=' ('+data.sessions_revoked+' active session'+(data.sessions_revoked===1?'':'s')+' revoked.)';
+    }
+    toast(msg,'success');
+  }catch(e){
+    btns.forEach(function(b){b.disabled=false;});
+    toast('Error: '+e.message,'error');
+  }
 }
 
 async function agencyLoadSmsRequests(){
