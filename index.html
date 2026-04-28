@@ -1504,9 +1504,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <button class="stab active" id="stab-general" onclick="switchSettingsTab('general')">General</button>
           <button class="stab" id="stab-email" onclick="switchSettingsTab('email')">Email</button>
           <button class="stab" id="stab-sms" onclick="switchSettingsTab('sms')">SMS</button>
+          <button class="stab hidden" id="stab-activity" onclick="switchSettingsTab('activity')">Activity Log</button>
         </div>
         <div id="stab-content-email" class="hidden" style="padding-top:4px"><div id="email-domain-container"></div><div id="email-templates-container" style="margin-top:32px"></div></div>
         <div id="stab-content-sms" class="hidden" style="padding-top:4px"><div id="sms-settings-container"></div></div>
+        <div id="stab-content-activity" class="hidden" style="padding-top:4px"><div id="activity-log-container"></div></div>
         <div class="settings-grid" id="stab-content-general">
 
           <div class="s-card">
@@ -4219,6 +4221,12 @@ function renderUserList(){
 // =====================================================
 function renderSettings(){
   renderUserList();renderTagMgr();renderBH();renderNotifSettings();cfRenderSettings();renderSquareCard();
+  // Activity Log tab visible only for admins
+  var actBtn=document.getElementById('stab-activity');
+  if(actBtn){
+    if(state.user&&state.user.role==='admin'){actBtn.classList.remove('hidden');}
+    else{actBtn.classList.add('hidden');}
+  }
   const s=db.settings;
   const su=document.getElementById('sb-url');if(su&&s.supabaseUrl)su.value=s.supabaseUrl;
   const sk=document.getElementById('sb-key');if(sk&&s.supabaseKey)sk.value=s.supabaseKey;
@@ -4227,6 +4235,227 @@ function renderSettings(){
     const at=document.getElementById('sq-token');if(at&&s.square.accessToken)at.value=s.square.accessToken;
     const li=document.getElementById('sq-loc');if(li&&s.square.locationId)li.value=s.square.locationId;
     const se=document.getElementById('sq-env');if(se)se.value=String(s.square.sandbox);
+  }
+}
+
+// =====================================================
+// ACTIVITY LOG (HIPAA: subaccount audit log viewer, admin-only)
+// =====================================================
+// Mirrors the agency dashboard audit log viewer but scoped server-side
+// to the calling subaccount. Server enforces the scope, frontend cannot
+// widen it via query params.
+
+var _activityLog = {
+  entries: [],
+  total: 0,
+  limit: 50,
+  offset: 0,
+  filters: { action: '', actor: '', outcome: '', from: '', to: '' }
+};
+
+function renderActivityLog(){
+  var el=document.getElementById('activity-log-container');
+  if(!el)return;
+  if(!state.user||state.user.role!=='admin'){
+    el.innerHTML='<div class="empty-state"><h3>Admin Required</h3><p>Activity log access is limited to subaccount admins.</p></div>';
+    return;
+  }
+  el.innerHTML=
+    '<div class="s-card full">'
+    +'<div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Activity Log</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Append-only record of access and changes to contacts, appointments, notes, forms, reports, and users in this workspace. Retained 6 years per HIPAA.</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:14px">'
+      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Action</label><br><input id="al-fil-action" type="text" placeholder="e.g. contact" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-size:13px;width:160px" onkeydown="if(event.key===\'Enter\')_alApplyFilters()"></div>'
+      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Actor</label><br><select id="al-fil-actor" class="filter-sel" style="height:35px;width:160px" onchange="_alApplyFilters()"><option value="">All users</option>'+_alUserOptions()+'</select></div>'
+      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Outcome</label><br><select id="al-fil-outcome" class="filter-sel" style="height:35px;width:130px" onchange="_alApplyFilters()"><option value="">All</option><option value="success">Success</option><option value="failure">Failure</option><option value="denied">Denied</option></select></div>'
+      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">From</label><br><input id="al-fil-from" type="date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-size:13px" onchange="_alApplyFilters()"></div>'
+      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">To</label><br><input id="al-fil-to" type="date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-size:13px" onchange="_alApplyFilters()"></div>'
+      +'<button class="btn btn-purple btn-sm" onclick="_alApplyFilters()">Apply</button>'
+      +'<button class="btn btn-ghost btn-sm" onclick="_alResetFilters()">Reset</button>'
+      +'<button class="btn btn-ghost btn-sm" onclick="_alExportCsv()">Export CSV</button>'
+    +'</div>'
+    +'<div id="al-table-wrap"><div class="empty-state"><p>Loading...</p></div></div>'
+    +'</div>';
+  _alLoad();
+}
+
+function _alUserOptions(){
+  var users=allUsers();
+  return users.map(function(u){return '<option value="'+esc(u.id)+'">'+esc(u.name||u.username)+'</option>';}).join('');
+}
+
+function _alApplyFilters(){
+  _activityLog.filters.action=(document.getElementById('al-fil-action').value||'').trim();
+  _activityLog.filters.actor=document.getElementById('al-fil-actor').value||'';
+  _activityLog.filters.outcome=document.getElementById('al-fil-outcome').value||'';
+  _activityLog.filters.from=document.getElementById('al-fil-from').value||'';
+  _activityLog.filters.to=document.getElementById('al-fil-to').value||'';
+  _activityLog.offset=0;
+  _alLoad();
+}
+
+function _alResetFilters(){
+  _activityLog.filters={action:'',actor:'',outcome:'',from:'',to:''};
+  _activityLog.offset=0;
+  document.getElementById('al-fil-action').value='';
+  document.getElementById('al-fil-actor').value='';
+  document.getElementById('al-fil-outcome').value='';
+  document.getElementById('al-fil-from').value='';
+  document.getElementById('al-fil-to').value='';
+  _alLoad();
+}
+
+function _alBuildQs(){
+  var qs=[];
+  qs.push('limit='+_activityLog.limit);
+  qs.push('offset='+_activityLog.offset);
+  if(_activityLog.filters.action)qs.push('action='+encodeURIComponent(_activityLog.filters.action));
+  if(_activityLog.filters.actor)qs.push('actor='+encodeURIComponent(_activityLog.filters.actor));
+  if(_activityLog.filters.outcome)qs.push('outcome='+encodeURIComponent(_activityLog.filters.outcome));
+  if(_activityLog.filters.from)qs.push('from='+encodeURIComponent(_activityLog.filters.from+'T00:00:00Z'));
+  if(_activityLog.filters.to)qs.push('to='+encodeURIComponent(_activityLog.filters.to+'T23:59:59Z'));
+  return qs.join('&');
+}
+
+async function _alLoad(){
+  var wrap=document.getElementById('al-table-wrap');
+  if(!wrap)return;
+  wrap.innerHTML='<div class="empty-state"><p>Loading...</p></div>';
+  try{
+    var r=await fetch('/api/subaccount/audit-log?'+_alBuildQs(),{credentials:'include'});
+    if(!r.ok){
+      var errData=await r.json().catch(function(){return {error:'Server error'};});
+      if(r.status===403){
+        wrap.innerHTML='<div class="empty-state"><h3>Access Denied</h3><p>'+esc(errData.error||'Admin role required')+'</p></div>';
+        return;
+      }
+      wrap.innerHTML='<div class="empty-state"><h3>Could not load activity log</h3><p>'+esc(errData.error||('Status '+r.status))+'</p></div>';
+      return;
+    }
+    var data=await r.json();
+    _activityLog.entries=data.entries||[];
+    _activityLog.total=data.total||0;
+    _alRenderTable();
+  }catch(e){
+    wrap.innerHTML='<div class="empty-state"><h3>Could not load activity log</h3><p>'+esc(e.message)+'</p></div>';
+  }
+}
+
+function _alRenderTable(){
+  var wrap=document.getElementById('al-table-wrap');
+  if(!wrap)return;
+  if(!_activityLog.entries.length){
+    wrap.innerHTML='<div class="empty-state"><h3>No activity yet</h3><p>Audit entries will appear here as users access and modify data.</p></div>';
+    return;
+  }
+  var rows=_activityLog.entries.map(function(e){
+    var when=e.created_at?new Date(e.created_at):null;
+    var whenStr=when?(when.toLocaleDateString()+' '+when.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})):'';
+    var actor=e.actor_username||e.actor_id||'system';
+    var role=e.actor_role?'<span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-left:6px">'+esc(e.actor_role)+'</span>':'';
+    var outcomeColor='#34d399';
+    if(e.outcome==='failure')outcomeColor='#f87171';
+    else if(e.outcome==='denied')outcomeColor='#fbbf24';
+    var outcomePill='<span style="display:inline-block;background:'+outcomeColor+'18;color:'+outcomeColor+';font-size:10px;padding:2px 7px;border-radius:8px;text-transform:uppercase;font-weight:700;letter-spacing:.04em">'+esc(e.outcome||'success')+'</span>';
+    var meta=e.metadata?_alFormatMetadata(e.metadata):'';
+    var details='';
+    if(e.target_type&&e.target_id){
+      details='<span style="font-size:11px;color:var(--text-muted)">'+esc(e.target_type)+' '+esc((e.target_id||'').slice(0,8))+'</span>';
+    }
+    if(e.error_message){
+      details+='<div style="font-size:11px;color:#f87171;margin-top:3px">'+esc(e.error_message)+'</div>';
+    }
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);white-space:nowrap">'+esc(whenStr)+'</td>'
+      +'<td style="padding:10px 12px;font-size:13px"><strong>'+esc(actor)+'</strong>'+role+'</td>'
+      +'<td style="padding:10px 12px;font-size:12px;font-family:monospace">'+esc(e.action)+'</td>'
+      +'<td style="padding:10px 12px">'+outcomePill+'</td>'
+      +'<td style="padding:10px 12px;font-size:12px">'+details+meta+'</td>'
+      +'</tr>';
+  }).join('');
+  var startNum=_activityLog.offset+1;
+  var endNum=Math.min(_activityLog.offset+_activityLog.entries.length,_activityLog.total);
+  var pagInfo=_activityLog.total>0?(startNum+'-'+endNum+' of '+_activityLog.total):'';
+  var prevDisabled=_activityLog.offset<=0?'disabled':'';
+  var nextDisabled=(_activityLog.offset+_activityLog.entries.length>=_activityLog.total)?'disabled':'';
+  wrap.innerHTML=
+    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg-card);border-bottom:1px solid var(--border)">'
+      +'<th style="padding:9px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);text-align:left">When</th>'
+      +'<th style="padding:9px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);text-align:left">Actor</th>'
+      +'<th style="padding:9px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);text-align:left">Action</th>'
+      +'<th style="padding:9px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);text-align:left">Outcome</th>'
+      +'<th style="padding:9px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);text-align:left">Details</th>'
+      +'</tr></thead><tbody>'+rows+'</tbody></table></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--text-muted)">'
+        +'<span>'+pagInfo+'</span>'
+        +'<span style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm" onclick="_alPrev()" '+prevDisabled+'>Previous</button>'
+        +'<button class="btn btn-ghost btn-sm" onclick="_alNext()" '+nextDisabled+'>Next</button></span>'
+      +'</div>';
+}
+
+function _alFormatMetadata(meta){
+  if(!meta||typeof meta!=='object')return '';
+  var keys=Object.keys(meta).slice(0,4);
+  if(!keys.length)return '';
+  var parts=keys.map(function(k){
+    var v=meta[k];
+    if(v===null||v===undefined)return '';
+    if(typeof v==='object')v='[object]';
+    var str=String(v);
+    if(str.length>40)str=str.slice(0,37)+'...';
+    return '<span style="margin-right:10px;color:var(--text-muted);font-size:11px">'+esc(k)+': <span style="color:var(--text)">'+esc(str)+'</span></span>';
+  }).filter(Boolean).join('');
+  return '<div style="margin-top:3px">'+parts+'</div>';
+}
+
+function _alPrev(){
+  if(_activityLog.offset<=0)return;
+  _activityLog.offset=Math.max(0,_activityLog.offset-_activityLog.limit);
+  _alLoad();
+}
+
+function _alNext(){
+  if(_activityLog.offset+_activityLog.entries.length>=_activityLog.total)return;
+  _activityLog.offset+=_activityLog.limit;
+  _alLoad();
+}
+
+async function _alExportCsv(){
+  try{
+    var qs=_alBuildQs().replace(/limit=\d+/, 'limit=1000').replace(/offset=\d+/, 'offset=0');
+    var r=await fetch('/api/subaccount/audit-log?'+qs,{credentials:'include'});
+    if(!r.ok){toast('Export failed: '+r.status,'error');return;}
+    var data=await r.json();
+    var rows=data.entries||[];
+    if(!rows.length){toast('No entries to export.','error');return;}
+    var headers=['When','Actor','Actor Role','Action','Target Type','Target ID','Outcome','Error','IP','Metadata'];
+    var csvLines=[headers.join(',')];
+    rows.forEach(function(e){
+      var meta=e.metadata?JSON.stringify(e.metadata):'';
+      var line=[
+        e.created_at||'',
+        e.actor_username||e.actor_id||'',
+        e.actor_role||'',
+        e.action||'',
+        e.target_type||'',
+        e.target_id||'',
+        e.outcome||'success',
+        e.error_message||'',
+        e.ip_address||'',
+        meta
+      ].map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');
+      csvLines.push(line);
+    });
+    var blob=new Blob([csvLines.join('\n')],{type:'text/csv'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    var today=new Date().toISOString().split('T')[0];
+    a.download='activity-log-'+today+'.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(rows.length+' entries exported.','success');
+  }catch(e){
+    toast('Export failed: '+e.message,'error');
   }
 }
 
@@ -4649,12 +4878,15 @@ async function toggleSmsEnabled(){
 }
 
 function switchSettingsTab(tab){
-  ['general','email','sms'].forEach(function(t){
+  ['general','email','sms','activity'].forEach(function(t){
     var btn=document.getElementById('stab-'+t);
     var content=document.getElementById('stab-content-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
     if(content)content.classList.toggle('hidden',t!==tab);
   });
+  if(tab==='activity'){
+    renderActivityLog();
+  }
   if(tab==='email'){
     state.emailDomain=undefined;
     renderEmailDomainSettings();
