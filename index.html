@@ -10877,7 +10877,7 @@ function openPackTemplateModal(id){
   if(!isAdminOrManager()){toast('Permission denied.','error');return;}
   var t=id?(db.sessionPackTemplates||[]).find(function(x){return x.id===id;}):null;
   var isNew=!t;
-  var inpS='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
   var hasSpecific=t&&t.serviceRestriction==='specific';
   var svcOpts=(db.products||[]).map(function(p){
     var sel=(t&&t.services&&t.services.includes(p.name))?'selected':'';
@@ -10900,7 +10900,7 @@ function openPackTemplateModal(id){
     +'</select></div>'
     +'<div id="spt-svc-wrap" class="form-group" style="'+(hasSpecific?'':'display:none;')+'">'
     +'<label>Select Services</label>'
-    +(svcOpts?'<select id="spt-services" multiple style="'+inpS+';height:100px">'+svcOpts+'</select>':'<div style="font-size:13px;color:var(--main-text-muted)">No products defined yet. Add products in the Products section first.</div>')
+    +(svcOpts?'<select id="spt-services" multiple style="'+inpS+';height:100px">'+svcOpts+'</select>':'<div style="font-size:13px;color:var(--text-muted)">No products defined yet. Add products in the Products section first.</div>')
     +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Expiration</label>'
@@ -11106,16 +11106,20 @@ function spSellSelC(id,name){
 var spSellSqCard=null;
 
 async function spInitSellCardForm(){
-  if(!sqIsConnected())return;
+  var errEl=document.getElementById('sp-sq-card-errors');
   var container=document.getElementById('sp-sq-card-container');if(!container)return;
   try{
-    var appId=db.settings.square&&db.settings.square.appId||'';
-    var locId=db.settings.square&&db.settings.square.locationId||'';
-    var payments=window.Square?window.Square.payments(appId,locId):null;
-    if(!payments)return;
+    var cfgRes=await fetch('/api/square/config');
+    var cfg=await cfgRes.json();
+    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
+    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
+    var payments=window.Square.payments(cfg.appId,'production');
     spSellSqCard=await payments.card();
     await spSellSqCard.attach('#sp-sq-card-container');
-  }catch(e){spSellSqCard=null;console.warn('SP sell card init:',e);}
+  }catch(e){
+    spSellSqCard=null;
+    if(errEl)errEl.textContent='Could not load card form: '+e.message;
+  }
 }
 
 async function spProcessSale(){
@@ -11211,9 +11215,9 @@ function spUseSession(packId){
   var remaining=pack.sessionsTotal-(pack.sessionsUsed||0);
   if(remaining<=0){toast('No sessions remaining.','error');return;}
   var pName=pack.templateSnapshot&&pack.templateSnapshot.name||'Session Pack';
-  var inpS='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
-  var body='<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:14px">'
-    +'Pack: <strong style="color:var(--main-text)">'+esc(pName)+'</strong><br>'
+  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">'
+    +'Pack: <strong style="color:var(--text)">'+esc(pName)+'</strong><br>'
     +'Sessions remaining: <strong style="color:var(--orange)">'+remaining+' of '+pack.sessionsTotal+'</strong>'
     +(pack.expiresDate?'<br>Expires: '+fmtDate(pack.expiresDate):'')+'</div>'
     +'<div class="form-group"><label>Note <span style="font-weight:400;color:var(--main-text-muted)">(optional)</span></label>'
@@ -11268,21 +11272,21 @@ function renderContactSessionPacks(contactId){
   var h='<div class="sec-row" style="margin-top:14px"><div class="sec-label" style="margin-bottom:0">Session Packs ('+active.length+' active)</div>'
     +'<button class="btn btn-purple btn-sm" onclick="spAddPackFromDrawer(\''+contactId+'\')">+ Add Pack</button></div>';
   if(!packs.length){
-    return h+'<div style="font-size:13px;color:var(--main-text-muted);padding:6px 0;margin-bottom:4px">No session packs.</div>';
+    return h+'<div style="font-size:13px;color:var(--text-muted);padding:6px 0;margin-bottom:4px">No session packs.</div>';
   }
   active.forEach(function(p){
     var pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
     var remaining=p.sessionsTotal-(p.sessionsUsed||0);
     var pct=Math.max(0,Math.min(100,(remaining/p.sessionsTotal)*100));
-    h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:10px 12px;margin-top:6px">'
+    h+='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-top:6px">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
-      +'<div style="font-size:13px;font-weight:600;color:var(--main-text)">'+esc(pName)+'</div>'
+      +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(pName)+'</div>'
       +'<span class="status-badge sb-active">active</span></div>'
       +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
-      +'<div style="flex:1;height:6px;background:var(--main-border);border-radius:3px;overflow:hidden">'
+      +'<div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">'
       +'<div style="height:100%;width:'+pct+'%;background:var(--orange);border-radius:3px;transition:width .3s"></div></div>'
       +'<div style="font-size:13px;font-weight:700;color:var(--orange);white-space:nowrap">'+remaining+' / '+p.sessionsTotal+'</div></div>'
-      +(p.expiresDate?'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:8px">Expires '+fmtDate(p.expiresDate)+'</div>':'')
+      +(p.expiresDate?'<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Expires '+fmtDate(p.expiresDate)+'</div>':'')
       +'<button class="btn btn-primary btn-sm" onclick="spUseSession(\''+p.id+'\')">Use Session</button>'
       +'</div>';
   });
@@ -11292,7 +11296,7 @@ function renderContactSessionPacks(contactId){
       var pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
       var stCls={exhausted:'sb-inactive',expired:'sb-overdue',cancelled:'sb-inactive'}[p.status]||'sb-inactive';
       h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--main-border);opacity:.6">'
-        +'<div style="font-size:12px;color:var(--main-text)">'+esc(pName)+'</div>'
+        +'<div style="font-size:12px;color:var(--text)">'+esc(pName)+'</div>'
         +'<span class="status-badge '+stCls+'" style="font-size:9px">'+p.status+'</span></div>';
     });
     h+='</div>';
@@ -11303,7 +11307,7 @@ function renderContactSessionPacks(contactId){
 function spAddPackFromDrawer(contactId){
   var tmpls=(db.sessionPackTemplates||[]).filter(function(t){return t.status!=='inactive';});
   if(!tmpls.length){toast('No active pack templates. Create one in Session Packs first.','error');return;}
-  var inpS='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
   var body='<div class="form-group"><label>Pack Template</label>'
     +'<select id="sp-drawer-tmpl" class="filter-sel" style="width:100%;height:38px" onchange="spDrawerUpdateSummary()">'
     +tmpls.map(function(t){return'<option value="'+t.id+'">'+esc(t.name)+' - '+fmt$(t.price)+'</option>';}).join('')
