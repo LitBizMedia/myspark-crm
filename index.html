@@ -6864,9 +6864,32 @@ document.addEventListener('DOMContentLoaded',async function(){
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.add('hidden');
     document.getElementById('agency-screen').classList.remove('hidden');
+    // Phase 2: Validate server-side session cookie first.
+    // Fall back to legacy localStorage during transition.
+    try{
+      var sessRes=await fetch('/api/agency/session',{credentials:'include'});
+      if(sessRes.ok){
+        var sessData=await sessRes.json();
+        if(sessData.authenticated&&sessData.user){
+          // Cookie is the source of truth. Mirror to localStorage so
+          // existing code paths that call loadAgencySession() still work.
+          window._agencyUser=sessData.user;
+          saveAgencySession(sessData.user);
+          renderAgencyDashboard();
+          return;
+        }
+      }
+    }catch(e){
+      console.warn('Agency session check failed, trying localStorage fallback:',e.message);
+    }
+    // Cookie failed, fall back to legacy localStorage
     var asess=loadAgencySession();
-    if(asess){renderAgencyDashboard();}
-    else{renderAgencyLogin();}
+    if(asess){
+      window._agencyUser=asess;
+      renderAgencyDashboard();
+    }else{
+      renderAgencyLogin();
+    }
     return;
   }
   // Pre-fetch Supabase data before showing login so _subaccountAdmin is available
@@ -10107,17 +10130,27 @@ function getPathSlug(){
 // =====================================================
 
 function loadAgencySession(){
+  // Phase 2: Try localStorage first (legacy path), fall through to
+  // window._agencyUser if localStorage is empty but cookie is valid.
   try{
     var r=localStorage.getItem(AGENCY_SESSION_KEY);
-    if(!r)return null;
-    var s=JSON.parse(r);
-    if(Date.now()-s.ts>8*3600000){localStorage.removeItem(AGENCY_SESSION_KEY);return null;}
-    return s;
-  }catch(e){return null;}
+    if(r){
+      var s=JSON.parse(r);
+      if(Date.now()-s.ts>8*3600000){localStorage.removeItem(AGENCY_SESSION_KEY);}
+      else{return s;}
+    }
+  }catch(e){}
+  // Fall back to in-memory user populated from /api/agency/session response
+  if(window._agencyUser){
+    return Object.assign({},window._agencyUser,{ts:Date.now()});
+  }
+  return null;
 }
 
 function saveAgencySession(user){
+  // Phase 2: write to both localStorage (legacy) and window._agencyUser (new path).
   localStorage.setItem(AGENCY_SESSION_KEY,JSON.stringify({...user,ts:Date.now()}));
+  window._agencyUser=user;
 }
 
 // =====================================================
@@ -10186,7 +10219,10 @@ function forceAgencyIdleLogout(){
   if(agencyIdleState._countdownInterval){clearInterval(agencyIdleState._countdownInterval);agencyIdleState._countdownInterval=null;}
   if(agencyIdleState.timer){clearTimeout(agencyIdleState.timer);agencyIdleState.timer=null;}
   if(agencyIdleState.warningTimer){clearTimeout(agencyIdleState.warningTimer);agencyIdleState.warningTimer=null;}
+  // Phase 2: revoke server-side session before clearing local state
+  fetch('/api/agency/logout',{method:'POST',credentials:'include'}).catch(function(){});
   try{localStorage.removeItem(AGENCY_SESSION_KEY);}catch(e){}
+  window._agencyUser=null;
   try{
     var flash = document.createElement('div');
     flash.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1f1432;border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,.4)';
@@ -10197,8 +10233,14 @@ function forceAgencyIdleLogout(){
 }
 
 function agencyLogout(){
-  localStorage.removeItem(AGENCY_SESSION_KEY);
-  renderAgencyLogin();
+  // Phase 2: revoke server-side session, then clear localStorage and reload.
+  fetch('/api/agency/logout',{method:'POST',credentials:'include'})
+    .catch(function(e){console.warn('Agency logout endpoint failed:',e.message);})
+    .finally(function(){
+      try{localStorage.removeItem(AGENCY_SESSION_KEY);}catch(e){}
+      window._agencyUser=null;
+      renderAgencyLogin();
+    });
 }
 
 // =====================================================
