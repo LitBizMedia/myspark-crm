@@ -13450,34 +13450,7 @@ function renderPaySettings(){
   var af=db.paySettings.additionalFee;
   var inp='background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;width:100%;box-sizing:border-box';
   el.innerHTML=
-    '<div style="max-width:680px;display:flex;flex-direction:column;gap:18px">'
-    +'<div class="s-card">'
-    +'<div class="s-card-title">Additional Fee</div>'
-    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
-    +'<div class="bh-toggle'+(af.enabled?' on':'')+'" id="fee-toggle" onclick="toggleAdditionalFee()" style="position:relative;flex-shrink:0"></div>'
-    +'<span style="font-size:13px;color:var(--main-text-muted)">'+(af.enabled?'Enabled':'Disabled')+'</span>'
-    +'</div>'
-    +'<div id="fee-fields" style="'+(af.enabled?'':'display:none;')+'display:flex;flex-direction:column;gap:12px">'
-    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
-    +'<div class="form-group" style="flex:2;min-width:160px"><label>Fee Label</label><input id="fee-label" type="text" style="'+inp+'" value="'+esc(af.label||'Additional Fee')+'" placeholder="e.g. Processing Fee" oninput="savePaySettings()"></div>'
-    +'<div class="form-group" style="flex:1;min-width:130px"><label>Type</label><select id="fee-type" class="filter-sel" style="width:100%;height:42px" onchange="savePaySettings();renderPaySettings()">'
-    +'<option value="flat"'+(af.type==='flat'?' selected':'')+'>Flat Amount ($)</option>'
-    +'<option value="pct"'+(af.type==='pct'?' selected':'')+'>Percentage (%)</option>'
-    +'</select></div>'
-    +'<div class="form-group" style="flex:1;min-width:100px"><label>'+(af.type==='pct'?'Rate (%)':'Amount ($)')+'</label><input id="fee-amount" type="number" style="'+inp+'" min="0" step="0.01" value="'+(af.amount||'')+'" placeholder="0.00" oninput="savePaySettings()"></div>'
-    +'</div>'
-    +'<p style="font-size:12px;color:var(--main-text-muted);margin:4px 0 0">This fee is automatically added to every POS transaction when enabled.</p>'
-    +'</div>'
-    +'</div>'
-    +'<div class="s-card">'
-    +'<div class="s-card-title">Taxes</div>'
-    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Tax configuration coming in a future update.</p>'
-    +'</div>'
-    +'<div class="s-card">'
-    +'<div class="s-card-title">Receipts and Notifications</div>'
-    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Receipt and notification settings coming in a future update.</p>'
-    +'</div>'
-    +'</div>';
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">'    +'<div style="display:flex;flex-direction:column;gap:18px">'    +'<div class="s-card">'    +'<div class="s-card-title">Additional Fee</div>'    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'    +'<div class="bh-toggle'+(af.enabled?' on':'')+'" id="fee-toggle" onclick="toggleAdditionalFee()" style="position:relative;flex-shrink:0"></div>'    +'<span style="font-size:13px;color:var(--main-text-muted)">'+(af.enabled?'Enabled':'Disabled')+'</span>'    +'</div>'    +'<div id="fee-fields" style="'+(af.enabled?'':'display:none;')+'display:flex;flex-direction:column;gap:12px">'    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'    +'<div class="form-group" style="flex:2;min-width:140px"><label>Fee Label</label><input id="fee-label" type="text" style="'+inp+'" value="'+esc(af.label||'Additional Fee')+'" placeholder="e.g. Processing Fee" oninput="savePaySettings()"></div>'    +'<div class="form-group" style="flex:1;min-width:110px"><label>Type</label><select id="fee-type" class="filter-sel" style="width:100%;height:42px" onchange="savePaySettings();renderPaySettings()">'    +'<option value="flat"'+(af.type==='flat'?' selected':'')+'>Flat ($)</option>'    +'<option value="pct"'+(af.type==='pct'?' selected':'')+'>Percent (%)</option>'    +'</select></div>'    +'<div class="form-group" style="flex:1;min-width:80px"><label>'+(af.type==='pct'?'Rate (%)':'Amount ($)')+'</label><input id="fee-amount" type="number" style="'+inp+'" min="0" step="0.01" value="'+(af.amount||'')+'" placeholder="0.00" oninput="savePaySettings()"></div>'    +'</div>'    +'<p style="font-size:12px;color:var(--main-text-muted);margin:4px 0 0">This fee is automatically added to every POS transaction when enabled.</p>'    +'</div>'    +'</div>'    +'<div class="s-card">'    +'<div class="s-card-title">Taxes</div>'    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Tax configuration coming in a future update.</p>'    +'</div>'    +'</div>'    +'<div style="display:flex;flex-direction:column;gap:18px">'    +'<div class="s-card">'    +'<div class="s-card-title">Receipts and Notifications</div>'    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Receipt and notification settings coming in a future update.</p>'    +'</div>'    +'</div>'    +'</div>';
 }
 
 function toggleAdditionalFee(){
