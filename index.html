@@ -5,7 +5,299 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MySpark+ CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<script src="https://web.squarecdn.com/v1/square.js"></script>
+<script src="https://web.squarecdn.com/v1/square.js">
+// =====================================================
+// MEDIA LIBRARY
+// =====================================================
+
+var mediaState = {
+  files: [],
+  total: 0,
+  loading: false,
+  view: 'grid',
+  folder: 'all',
+  search: '',
+  searchTimer: null
+};
+
+function mediaFmtSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function mediaFileClass(type) {
+  if (!type) return 'default';
+  if (type === 'application/pdf') return 'pdf';
+  if (type.includes('word') || type === 'application/msword') return 'doc';
+  if (type.includes('excel') || type.includes('spreadsheet')) return 'xls';
+  if (type.includes('text')) return 'txt';
+  return 'default';
+}
+
+function mediaFileExt(name) {
+  return (name || '').split('.').pop().toUpperCase().slice(0, 4);
+}
+
+function mediaIsImage(type) {
+  return type && type.startsWith('image/');
+}
+
+async function mediaLoadFiles() {
+  mediaState.loading = true;
+  mediaRenderView();
+  var qs = '?limit=100&offset=0';
+  if (mediaState.folder !== 'all') qs += '&folder=' + encodeURIComponent(mediaState.folder);
+  if (mediaState.search) qs += '&search=' + encodeURIComponent(mediaState.search);
+  try {
+    var r = await fetch('/api/media/list' + qs, { credentials: 'include' });
+    if (!r.ok) throw new Error('Failed to load');
+    var data = await r.json();
+    mediaState.files = data.files || [];
+    mediaState.total = data.total || 0;
+  } catch (e) {
+    console.error('media load error:', e);
+    toast('Failed to load media files.', 'error');
+  }
+  mediaState.loading = false;
+  mediaRenderView();
+}
+
+function renderMedia() {
+  var el = document.getElementById('media-view');
+  if (!el) return;
+  el.innerHTML = '<div class="page-header"><div><div class="page-title">Media Library</div>'
+    + '<div class="page-subtitle" id="media-subtitle"></div></div>'
+    + '<button class="btn btn-primary" onclick="mediaOpenUpload()">'
+    + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Upload</button></div>'
+    + '<div class="media-toolbar">'
+    + '<div class="media-toolbar-left">'
+    + '<input class="media-search" type="text" placeholder="Search files..." id="media-search-input" value="' + esc(mediaState.search) + '" oninput="mediaOnSearch(this.value)">'
+    + '<select class="media-folder-sel" id="media-folder-sel" onchange="mediaOnFolder(this.value)">'
+    + '<option value="all"' + (mediaState.folder === 'all' ? ' selected' : '') + '>All Files</option>'
+    + '<option value="root"' + (mediaState.folder === 'root' ? ' selected' : '') + '>Uncategorized</option>'
+    + '<option value="images"' + (mediaState.folder === 'images' ? ' selected' : '') + '>Images</option>'
+    + '<option value="documents"' + (mediaState.folder === 'documents' ? ' selected' : '') + '>Documents</option>'
+    + '<option value="contracts"' + (mediaState.folder === 'contracts' ? ' selected' : '') + '>Contracts</option>'
+    + '<option value="other"' + (mediaState.folder === 'other' ? ' selected' : '') + '>Other</option>'
+    + '</select>'
+    + '</div>'
+    + '<div class="media-view-toggle">'
+    + '<button class="media-view-btn' + (mediaState.view === 'grid' ? ' active' : '') + '" title="Grid view" onclick="mediaSetView(\'grid\')">'
+    + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>'
+    + '</button>'
+    + '<button class="media-view-btn' + (mediaState.view === 'list' ? ' active' : '') + '" title="List view" onclick="mediaSetView(\'list\')">'
+    + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>'
+    + '</button>'
+    + '</div>'
+    + '</div>'
+    + '<div id="media-files-container"></div>';
+  mediaLoadFiles();
+}
+
+function mediaRenderView() {
+  var el = document.getElementById('media-files-container');
+  var sub = document.getElementById('media-subtitle');
+  if (!el) return;
+  if (sub) sub.textContent = mediaState.total + ' file' + (mediaState.total !== 1 ? 's' : '');
+  if (mediaState.loading) {
+    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--main-text-muted);font-size:13px">Loading...</div>';
+    return;
+  }
+  if (!mediaState.files.length) {
+    el.innerHTML = '<div class="media-empty">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+      + '<h3>No files yet</h3>'
+      + '<p>Upload images, PDFs, and documents to your media library.</p>'
+      + '</div>';
+    return;
+  }
+  if (mediaState.view === 'grid') {
+    var h = '<div class="media-grid">';
+    mediaState.files.forEach(function(f) {
+      h += '<div class="media-card" onclick="mediaPreview(\'' + f.id + '\')">'
+        + '<button class="media-card-delete" onclick="event.stopPropagation();mediaConfirmDelete(\'' + f.id + '\',\'' + esc(f.file_name) + '\')" title="Delete">'
+        + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+        + '</button>';
+      if (mediaIsImage(f.file_type) && f.url) {
+        h += '<img class="media-thumb" src="' + esc(f.url) + '" alt="' + esc(f.file_name) + '" loading="lazy" onerror="this.parentElement.querySelector(\'.media-thumb\').style.display=\'none\'">';
+      } else {
+        var fc = mediaFileClass(f.file_type);
+        h += '<div class="media-icon-wrap"><div class="media-file-icon ' + fc + '">'
+          + '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+          + '<span>' + mediaFileExt(f.file_name) + '</span>'
+          + '</div></div>';
+      }
+      h += '<div class="media-card-info">'
+        + '<div class="media-card-name" title="' + esc(f.file_name) + '">' + esc(f.file_name) + '</div>'
+        + '<div class="media-card-meta">' + mediaFmtSize(f.file_size) + '</div>'
+        + '</div></div>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+  } else {
+    var h = '<div class="media-list">';
+    mediaState.files.forEach(function(f) {
+      var fc = mediaFileClass(f.file_type);
+      var isImg = mediaIsImage(f.file_type);
+      var date = f.created_at ? new Date(f.created_at).toLocaleDateString() : '';
+      h += '<div class="media-list-row">';
+      if (isImg && f.url) {
+        h += '<img style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0" src="' + esc(f.url) + '" loading="lazy">';
+      } else {
+        h += '<div class="media-list-icon ' + fc + '">'
+          + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+          + '</div>';
+      }
+      h += '<div class="media-list-name" title="' + esc(f.file_name) + '">' + esc(f.file_name) + '</div>'
+        + '<div class="media-list-meta">' + mediaFmtSize(f.file_size) + '</div>'
+        + '<div class="media-list-meta" style="margin-left:8px">' + date + '</div>'
+        + '<div style="display:flex;gap:6px;margin-left:10px">'
+        + '<button class="btn btn-ghost btn-sm" onclick="mediaPreview(\'' + f.id + '\')">View</button>'
+        + '<button class="btn btn-danger btn-sm" onclick="mediaConfirmDelete(\'' + f.id + '\',\'' + esc(f.file_name) + '\')">Delete</button>'
+        + '</div></div>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+  }
+}
+
+function mediaSetView(v) {
+  mediaState.view = v;
+  mediaRenderView();
+  document.querySelectorAll('.media-view-btn').forEach(function(b) {
+    b.classList.toggle('active', b.title.toLowerCase().startsWith(v));
+  });
+}
+
+function mediaOnSearch(val) {
+  clearTimeout(mediaState.searchTimer);
+  mediaState.search = val;
+  mediaState.searchTimer = setTimeout(mediaLoadFiles, 350);
+}
+
+function mediaOnFolder(val) {
+  mediaState.folder = val;
+  mediaLoadFiles();
+}
+
+function mediaOpenUpload() {
+  var folderOpts = ['root','images','documents','contracts','other'].map(function(f) {
+    return '<option value="' + f + '">' + f.charAt(0).toUpperCase() + f.slice(1) + '</option>';
+  }).join('');
+  var body = '<div class="media-upload-zone" id="media-drop-zone" onclick="document.getElementById(\'media-file-input\').click()">'
+    + '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="margin:0 auto;display:block;opacity:.4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
+    + '<p>Click to select a file or drag and drop here</p>'
+    + '<p style="font-size:11px;margin-top:4px">Images, PDF, Word, Excel, TXT up to 50MB</p>'
+    + '<div class="media-progress-bar hidden" id="media-progress-bar"><div class="media-progress-fill" id="media-progress-fill"></div></div>'
+    + '<div id="media-upload-status" style="font-size:12px;color:var(--purple-light);margin-top:8px"></div>'
+    + '</div>'
+    + '<input type="file" id="media-file-input" style="display:none" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onchange="mediaHandleFile(this.files[0])">'
+    + '<div class="form-group"><label>Folder</label>'
+    + '<select class="form-group" id="media-upload-folder" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;color:var(--text);outline:none">'
+    + folderOpts + '</select></div>';
+  openModal('Upload File', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>');
+  setTimeout(function() {
+    var zone = document.getElementById('media-drop-zone');
+    if (!zone) return;
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function() { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      if (e.dataTransfer.files[0]) mediaHandleFile(e.dataTransfer.files[0]);
+    });
+  }, 100);
+}
+
+async function mediaHandleFile(file) {
+  if (!file) return;
+  var bar = document.getElementById('media-progress-bar');
+  var fill = document.getElementById('media-progress-fill');
+  var status = document.getElementById('media-upload-status');
+  var folder = (document.getElementById('media-upload-folder') || {}).value || 'root';
+  if (bar) bar.classList.remove('hidden');
+  if (status) status.textContent = 'Requesting upload URL...';
+  if (fill) fill.style.width = '10%';
+  try {
+    var r = await fetch('/api/media/upload-url', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: file.name, fileType: file.type, fileSize: file.size, folder: folder })
+    });
+    if (!r.ok) {
+      var e = await r.json();
+      throw new Error(e.error || 'Failed to get upload URL');
+    }
+    var data = await r.json();
+    if (status) status.textContent = 'Uploading...';
+    if (fill) fill.style.width = '40%';
+    var upload = await fetch(data.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file
+    });
+    if (!upload.ok) throw new Error('Upload to storage failed');
+    if (fill) fill.style.width = '100%';
+    if (status) status.textContent = 'Upload complete.';
+    setTimeout(function() {
+      closeModal();
+      mediaLoadFiles();
+      toast('File uploaded successfully.', 'success');
+    }, 600);
+  } catch (err) {
+    console.error('upload error:', err);
+    if (status) status.textContent = 'Upload failed: ' + err.message;
+    if (fill) fill.style.width = '0';
+    toast('Upload failed: ' + err.message, 'error');
+  }
+}
+
+function mediaPreview(fileId) {
+  var f = mediaState.files.find(function(x) { return x.id === fileId; });
+  if (!f || !f.url) return;
+  if (mediaIsImage(f.file_type)) {
+    var body = '<div style="text-align:center">'
+      + '<img src="' + esc(f.url) + '" style="max-width:100%;max-height:60vh;border-radius:var(--radius);object-fit:contain" alt="' + esc(f.file_name) + '">'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-top:10px">' + esc(f.file_name) + ' &bull; ' + mediaFmtSize(f.file_size) + '</div>'
+      + '</div>';
+    openModal(f.file_name, body,
+      '<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
+      + '<a href="' + esc(f.url) + '" target="_blank" class="btn btn-primary" style="text-decoration:none">Open</a>'
+      + '<button class="btn btn-danger" onclick="closeModal();mediaConfirmDelete(\'' + f.id + '\',\'' + esc(f.file_name) + '\')">Delete</button>');
+  } else {
+    window.open(f.url, '_blank');
+  }
+}
+
+function mediaConfirmDelete(fileId, fileName) {
+  var body = '<p style="font-size:14px">Delete <strong>' + esc(fileName) + '</strong>?</p>'
+    + '<p style="font-size:12px;color:var(--text-muted);margin-top:8px">This removes the file from storage permanently.</p>';
+  openModal('Delete File', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-danger" onclick="mediaDoDelete(\'' + fileId + '\')">Delete</button>');
+}
+
+async function mediaDoDelete(fileId) {
+  closeModal();
+  try {
+    var r = await fetch('/api/media/delete?fileId=' + encodeURIComponent(fileId), {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    if (!r.ok) throw new Error('Delete failed');
+    mediaState.files = mediaState.files.filter(function(f) { return f.id !== fileId; });
+    mediaState.total = Math.max(0, mediaState.total - 1);
+    mediaRenderView();
+    toast('File deleted.', 'success');
+  } catch (e) {
+    toast('Failed to delete file.', 'error');
+  }
+}
+
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -909,6 +1201,66 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .dns-rec-copy{flex-shrink:0;background:none;border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--main-text-muted,#5a4d7a);transition:background .15s;font-family:inherit}
 .dns-rec-copy:hover{background:#6b21ea22;color:#6b21ea;border-color:#6b21ea}
 .domain-verified-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(52,211,153,.12);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;margin-bottom:16px}
+
+/* MEDIA LIBRARY */
+.media-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.media-toolbar-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.media-search{flex:1;max-width:280px;background:var(--main-input);border:1px solid var(--main-input-border);
+  border-radius:var(--radius);padding:7px 12px;font-size:13px;color:var(--main-text);outline:none}
+.media-search:focus{border-color:var(--purple-border)}
+.media-folder-sel{background:var(--main-input);border:1px solid var(--main-input-border);
+  border-radius:var(--radius);padding:7px 10px;font-size:13px;color:var(--main-text);outline:none;cursor:pointer}
+.media-view-toggle{display:flex;border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden}
+.media-view-btn{background:transparent;border:none;padding:6px 10px;cursor:pointer;
+  color:var(--main-text-muted);display:flex;align-items:center;justify-content:center}
+.media-view-btn.active{background:var(--purple-dim);color:var(--purple-light)}
+.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+.media-list{display:flex;flex-direction:column;gap:6px}
+.media-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);
+  overflow:hidden;cursor:pointer;position:relative;transition:border-color .15s,box-shadow .15s}
+.media-card:hover{border-color:var(--purple-border);box-shadow:0 2px 12px rgba(107,33,234,.1)}
+.media-card:hover .media-card-delete{opacity:1}
+.media-thumb{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--main-bg)}
+.media-icon-wrap{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  background:var(--main-bg)}
+.media-file-icon{width:44px;height:54px;border-radius:6px;display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:3px;font-size:9px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase}
+.media-file-icon.pdf{background:rgba(239,68,68,.12);color:#f87171}
+.media-file-icon.doc{background:rgba(59,130,246,.12);color:#60a5fa}
+.media-file-icon.xls{background:rgba(34,197,94,.12);color:#4ade80}
+.media-file-icon.txt{background:rgba(107,33,234,.12);color:var(--purple-light)}
+.media-file-icon.default{background:rgba(255,255,255,.06);color:var(--text-muted)}
+.media-card-info{padding:8px 10px}
+.media-card-name{font-size:12px;font-weight:600;color:var(--main-text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.media-card-meta{font-size:11px;color:var(--main-text-muted)}
+.media-card-delete{position:absolute;top:6px;right:6px;background:rgba(239,68,68,.85);
+  border:none;border-radius:6px;padding:4px;cursor:pointer;opacity:0;transition:opacity .15s;
+  display:flex;align-items:center;justify-content:center}
+.media-card-delete:hover{background:rgba(239,68,68,1)}
+.media-list-row{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);
+  padding:10px 14px;display:flex;align-items:center;gap:12px}
+.media-list-row:hover{border-color:var(--purple-border)}
+.media-list-icon{width:36px;height:36px;border-radius:6px;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;font-size:10px;font-weight:700}
+.media-list-name{flex:1;font-size:13px;font-weight:600;color:var(--main-text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.media-list-meta{font-size:12px;color:var(--main-text-muted);white-space:nowrap}
+.media-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:80px 20px;text-align:center}
+.media-empty svg{width:44px;height:44px;opacity:.18;margin-bottom:16px}
+.media-empty h3{font-family:'Exo 2',sans-serif;font-size:17px;font-weight:700;margin-bottom:7px}
+.media-empty p{font-size:13px;color:var(--main-text-muted);max-width:300px}
+.media-upload-zone{border:2px dashed var(--main-border);border-radius:var(--radius);
+  padding:40px 20px;text-align:center;margin-bottom:18px;transition:border-color .15s;cursor:pointer}
+.media-upload-zone:hover,.media-upload-zone.drag-over{border-color:var(--purple-border);
+  background:var(--purple-dim)}
+.media-upload-zone p{font-size:13px;color:var(--main-text-muted);margin-top:8px}
+.media-progress-bar{height:4px;background:var(--main-border);border-radius:2px;margin-top:8px;overflow:hidden}
+.media-progress-fill{height:100%;background:var(--purple);border-radius:2px;transition:width .2s;width:0}
+.media-stats{font-size:12px;color:var(--main-text-muted);margin-bottom:4px}
+
 </style>
 </head>
 <body>
@@ -976,6 +1328,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       </button>
       <button class="sb-item" id="sb-forms" data-panel="forms" onclick="switchPanel('forms')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Forms
+      </button>
+      <button class="sb-item" id="sb-media" data-panel="media" onclick="switchPanel('media')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Media
       </button>
       <button class="sb-item" id="sb-staff" data-panel="staff" onclick="switchPanel('staff')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Staff
@@ -1495,6 +1850,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <p>Upload and store documents, signed contracts, client files, and supporting materials. Attach documents directly to contact records for easy access.</p>
           </div>
         </div>
+      </div>
+
+      <!-- MEDIA LIBRARY -->
+      <div id="panel-media" class="panel hidden">
+        <div id="media-view"></div>
       </div>
 
       <!-- SETTINGS -->
@@ -2174,9 +2534,9 @@ function handleLogout(){
 // =====================================================
 // initApp defined below (Supabase-aware version at line ~3180)
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',staff:'Staff',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',media:'Media Library',staff:'Staff',settings:'Settings'};
 function renderPanel(){
-  const fns={dashboard:renderDash,contacts:renderContacts,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,staff:renderStaff,settings:renderSettings,products:renderProducts};
+  const fns={dashboard:renderDash,contacts:renderContacts,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,media:renderMedia,staff:renderStaff,settings:renderSettings,products:renderProducts};
   if(fns[state.panel])fns[state.panel]();
 }
 
