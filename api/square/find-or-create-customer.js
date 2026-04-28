@@ -3,9 +3,28 @@
 // Returns { customerId, action } where action is 'found' or 'created'.
 
 const { getSquareCreds, squareHost, squareHeaders, sendError } = require('../../lib/square');
+const {
+  parseSessionCookie,
+  parseAgencySessionCookie,
+  validateSession
+} = require('../../lib/subaccount-auth');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
+
+  // Auth: subaccount session must match slug, or agency session can hit any slug.
+  const subToken = parseSessionCookie(req);
+  const agencyToken = parseAgencySessionCookie(req);
+  let session = null;
+  if (agencyToken) {
+    session = await validateSession(agencyToken);
+    if (session && session.user_type !== 'agency') session = null;
+  }
+  if (!session && subToken) {
+    session = await validateSession(subToken);
+    if (session && session.user_type !== 'subaccount') session = null;
+  }
+  if (!session) return sendError(res, 401, 'Not authenticated');
 
   const body = req.body || {};
   const slug = (body.slug || '').toString().trim().toLowerCase();
@@ -14,6 +33,12 @@ module.exports = async (req, res) => {
   const phone = (body.phone || '').toString().trim();
 
   if (!slug) return sendError(res, 400, 'Missing slug');
+
+  // Subaccount sessions can only access their own slug
+  if (session.user_type === 'subaccount' && session.subaccount_id !== ('sub-' + slug)) {
+    return sendError(res, 403, 'Slug does not match session');
+  }
+
   if (!name && !email && !phone) return sendError(res, 400, 'At least one of name, email, phone is required');
 
   const creds = await getSquareCreds(slug);
