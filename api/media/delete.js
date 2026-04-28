@@ -1,7 +1,7 @@
-import { requireSubaccountAuth } from '../../lib/require-subaccount-auth.js';
-import { logAudit } from '../../lib/audit.js';
-import { createClient } from '@supabase/supabase-js';
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
+const { requireSubaccountAuth } = require('../../lib/require-subaccount-auth');
+const { logAudit } = require('../../lib/audit');
+const { createClient } = require('@supabase/supabase-js');
+const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -16,15 +16,16 @@ const s3 = new S3Client({
   }
 });
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'DELETE') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const auth = await requireSubaccountAuth(req, res);
-  if (!auth) return;
+  const session = await requireSubaccountAuth(req, res);
+  if (!session) return;
 
-  const { subaccountId, userId } = auth;
+  const subaccountId = session.subaccount_id;
+  const userId = session.user_id;
   const { fileId } = req.query;
 
   if (!fileId) {
@@ -60,12 +61,15 @@ export default async function handler(req, res) {
     }
 
     await logAudit({
-      subaccountId,
-      userId,
+      req,
+      actorType: session.user_type,
+      actorId: userId,
+      actorUsername: session.username,
+      actorRole: session.role,
       action: 'media.deleted',
-      resourceType: 'media_file',
-      resourceId: fileId,
-      detail: { fileName: file.file_name, fileKey: file.file_key }
+      targetSubaccountId: subaccountId,
+      outcome: 'success',
+      metadata: { fileId, fileName: file.file_name, fileKey: file.file_key }
     });
 
     return res.status(200).json({ success: true });
@@ -74,4 +78,4 @@ export default async function handler(req, res) {
     console.error('delete error:', err);
     return res.status(500).json({ error: 'Failed to delete file' });
   }
-}
+};

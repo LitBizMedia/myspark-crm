@@ -1,9 +1,9 @@
-import { requireSubaccountAuth } from '../../lib/require-subaccount-auth.js';
-import { logAudit } from '../../lib/audit.js';
-import { createClient } from '@supabase/supabase-js';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { randomUUID } from 'crypto';
+const { requireSubaccountAuth } = require('../../lib/require-subaccount-auth');
+const { logAudit } = require('../../lib/audit');
+const { createClient } = require('@supabase/supabase-js');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { randomUUID } = require('crypto');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -28,17 +28,20 @@ const ALLOWED_TYPES = [
   'text/plain', 'text/csv'
 ];
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const auth = await requireSubaccountAuth(req, res);
-  if (!auth) return;
+  const session = await requireSubaccountAuth(req, res);
+  if (!session) return;
 
-  const { subaccountId, subaccountSlug, userId } = auth;
+  const subaccountId = session.subaccount_id;
+  const userId = session.user_id;
+  const subaccountSlug = subaccountId.replace(/^sub-/, '');
+
   const { fileName, fileType, fileSize, folder = 'root' } = req.body;
 
   if (!fileName || !fileType || !fileSize) {
@@ -55,8 +58,8 @@ export default async function handler(req, res) {
 
   const ext = fileName.split('.').pop().toLowerCase();
   const fileId = randomUUID();
-  const safeFolder = folder.replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'root';
-  const fileKey = `${subaccountSlug}/${safeFolder}/${fileId}.${ext}`;
+  const safeFolder = (folder || 'root').replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'root';
+  const fileKey = subaccountSlug + '/' + safeFolder + '/' + fileId + '.' + ext;
 
   try {
     const command = new PutObjectCommand({
@@ -87,12 +90,15 @@ export default async function handler(req, res) {
     }
 
     await logAudit({
-      subaccountId,
-      userId,
+      req,
+      actorType: session.user_type,
+      actorId: userId,
+      actorUsername: session.username,
+      actorRole: session.role,
       action: 'media.upload_initiated',
-      resourceType: 'media_file',
-      resourceId: fileId,
-      detail: { fileName, fileType, fileSize, folder: safeFolder }
+      targetSubaccountId: subaccountId,
+      outcome: 'success',
+      metadata: { fileId, fileName, fileType, fileSize, folder: safeFolder }
     });
 
     return res.status(200).json({ uploadUrl, fileKey, fileId });
@@ -101,4 +107,4 @@ export default async function handler(req, res) {
     console.error('upload-url error:', err);
     return res.status(500).json({ error: 'Failed to generate upload URL' });
   }
-}
+};

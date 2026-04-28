@@ -1,7 +1,7 @@
-import { requireSubaccountAuth } from '../../lib/require-subaccount-auth.js';
-import { createClient } from '@supabase/supabase-js';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+const { requireSubaccountAuth } = require('../../lib/require-subaccount-auth');
+const { createClient } = require('@supabase/supabase-js');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -16,16 +16,16 @@ const s3 = new S3Client({
   }
 });
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const auth = await requireSubaccountAuth(req, res);
-  if (!auth) return;
+  const session = await requireSubaccountAuth(req, res);
+  if (!session) return;
 
-  const { subaccountId } = auth;
-  const { folder, search, limit = 50, offset = 0 } = req.query;
+  const subaccountId = session.subaccount_id;
+  const { folder, search, limit = 100, offset = 0 } = req.query;
 
   try {
     let query = supabase
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     }
 
     if (search) {
-      query = query.ilike('file_name', `%${search}%`);
+      query = query.ilike('file_name', '%' + search + '%');
     }
 
     const { data: files, error, count } = await query;
@@ -51,16 +51,16 @@ export default async function handler(req, res) {
     }
 
     const filesWithUrls = await Promise.all(
-      (files || []).map(async (file) => {
+      (files || []).map(async function(file) {
         try {
           const command = new GetObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET,
             Key: file.file_key
           });
           const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-          return { ...file, url };
-        } catch {
-          return { ...file, url: null };
+          return Object.assign({}, file, { url: url });
+        } catch (e) {
+          return Object.assign({}, file, { url: null });
         }
       })
     );
@@ -71,4 +71,4 @@ export default async function handler(req, res) {
     console.error('list error:', err);
     return res.status(500).json({ error: 'Failed to fetch media files' });
   }
-}
+};
