@@ -1833,6 +1833,167 @@ function setSyncSt(s){
 }
 
 // =====================================================
+// AUDIT (HIPAA: PHI access logging)
+// =====================================================
+// Subaccount-side audit logging for HIPAA compliance.
+//
+// All actions that touch PHI must call logSubaccountAudit() so that we have
+// a record of who accessed/modified what, and when. Server validates the
+// session and writes the row; the client cannot forge actor identity.
+//
+// Architecture:
+//   - logSubaccountAudit() pushes to a buffered queue, fires the request async
+//   - On request failure, queue items persist in localStorage and retry every 30s
+//   - On page unload, navigator.sendBeacon flushes remaining items
+//   - The queue is capped at 500 entries to prevent runaway growth
+//   - User-facing actions are NEVER blocked by audit logging (fire-and-forget)
+//
+// Note: this is "trust but verify" - a malicious user editing the JS could
+// skip log calls. Acceptable first-line audit; server-side enforcement comes
+// when subaccount data ops move behind proper API endpoints (post-AWS).
+// =====================================================
+
+const AUDIT_QUEUE_KEY = 'myspark_audit_queue_v1';
+const AUDIT_MAX_QUEUE = 500;
+const AUDIT_RETRY_INTERVAL_MS = 30000;
+let _auditRetryTimer = null;
+let _auditFlushInProgress = false;
+
+// Public API: log a PHI access action.
+//   action - required, must start with 'subaccount.'
+//   options - optional { targetId, targetType, metadata, outcome, errorMessage }
+function logSubaccountAudit(action, options) {
+  options = options || {};
+  if (!action || typeof action !== 'string' || !action.startsWith('subaccount.')) {
+    console.warn('logSubaccountAudit: invalid action', action);
+    return;
+  }
+  // Only log when authenticated. Public/embed routes shouldn't log.
+  if (!state || !state.user || !state.user.id) return;
+
+  const entry = {
+    action: action,
+    target_id: options.targetId || null,
+    target_type: options.targetType || null,
+    metadata: options.metadata || null,
+    outcome: options.outcome || 'success',
+    error_message: options.errorMessage || null,
+    client_ts: new Date().toISOString()
+  };
+
+  // Try direct send first (fast path). On failure or non-OK, queue for retry.
+  _auditTrySend([entry]).catch(function(){
+    _auditEnqueue(entry);
+  });
+}
+
+// Attempt to send entries. Resolves on success, rejects on failure.
+async function _auditTrySend(entries) {
+  if (!entries || !entries.length) return;
+  const r = await fetch('/api/subaccount/audit', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({entries: entries})
+  });
+  if (!r.ok) throw new Error('audit endpoint returned ' + r.status);
+  return r;
+}
+
+function _auditLoadQueue() {
+  try {
+    const raw = localStorage.getItem(AUDIT_QUEUE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) { return []; }
+}
+
+function _auditSaveQueue(queue) {
+  try {
+    if (!queue || !queue.length) {
+      localStorage.removeItem(AUDIT_QUEUE_KEY);
+      return;
+    }
+    // Cap queue size: drop oldest if over limit
+    if (queue.length > AUDIT_MAX_QUEUE) {
+      queue = queue.slice(-AUDIT_MAX_QUEUE);
+    }
+    localStorage.setItem(AUDIT_QUEUE_KEY, JSON.stringify(queue));
+  } catch (e) {
+    // Quota exceeded or other localStorage error - drop the queue, not much we can do
+    console.warn('Audit queue save failed:', e.message);
+  }
+}
+
+function _auditEnqueue(entry) {
+  const queue = _auditLoadQueue();
+  queue.push(entry);
+  _auditSaveQueue(queue);
+  _auditScheduleRetry();
+}
+
+function _auditScheduleRetry() {
+  if (_auditRetryTimer) return;
+  _auditRetryTimer = setTimeout(function(){
+    _auditRetryTimer = null;
+    _auditFlushQueue();
+  }, AUDIT_RETRY_INTERVAL_MS);
+}
+
+async function _auditFlushQueue() {
+  if (_auditFlushInProgress) return;
+  const queue = _auditLoadQueue();
+  if (!queue.length) return;
+  _auditFlushInProgress = true;
+  // Send in chunks of 50 (server limit)
+  const batch = queue.slice(0, 50);
+  const remaining = queue.slice(50);
+  try {
+    await _auditTrySend(batch);
+    _auditSaveQueue(remaining);
+    if (remaining.length) _auditScheduleRetry();
+  } catch (e) {
+    // Still failing, leave queue intact and retry later
+    _auditScheduleRetry();
+  } finally {
+    _auditFlushInProgress = false;
+  }
+}
+
+// On page load, attempt to drain any queue from previous session
+function _auditDrainOnLoad() {
+  const queue = _auditLoadQueue();
+  if (queue.length) _auditScheduleRetry();
+}
+
+// On page unload, sendBeacon any pending entries (best-effort)
+window.addEventListener('beforeunload', function(){
+  const queue = _auditLoadQueue();
+  if (!queue.length) return;
+  try {
+    if (navigator.sendBeacon) {
+      const blob = new Blob(
+        [JSON.stringify({entries: queue.slice(0, 50)})],
+        {type: 'application/json'}
+      );
+      const ok = navigator.sendBeacon('/api/subaccount/audit', blob);
+      if (ok) {
+        // Optimistically clear sent portion. Browser doesn't tell us if server accepted.
+        _auditSaveQueue(queue.slice(50));
+      }
+    }
+  } catch (e) {}
+});
+
+// Drain on load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _auditDrainOnLoad);
+} else {
+  _auditDrainOnLoad();
+}
+
+// =====================================================
 // AUTH
 // =====================================================
 // loadSession() removed in Checkpoint 2.
@@ -1876,6 +2037,15 @@ document.getElementById('login-form').addEventListener('submit',async function(e
       email:data.user.email,
       breakglass:!!data.user.breakglass
     };
+    // Audit successful login (server already logs this server-side, this adds
+    // a redundant client-side entry for symmetry with other PHI actions)
+    logSubaccountAudit('subaccount.user.login.success', {
+      metadata: {
+        username: data.user.username,
+        role: data.user.role,
+        breakglass: !!data.user.breakglass
+      }
+    });
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     initApp();
@@ -1982,6 +2152,11 @@ async function getSubaccountHipaaStatus(){
 }
 
 function handleLogout(){
+  // Audit BEFORE clearing session/state (need state.user for actor info)
+  logSubaccountAudit('subaccount.user.logout');
+  // Try to flush the queue immediately so logout-related entries get out
+  if (typeof _auditFlushQueue === 'function') _auditFlushQueue();
+
   // Best-effort server-side session revocation, then reload regardless.
   // We always reload even if the server call fails so the user is not stuck.
   fetch('/api/subaccount/logout',{method:'POST',credentials:'include'})
@@ -2132,6 +2307,23 @@ function _filteredContacts(){
 }
 
 function renderContacts(){
+  // Audit: PHI list view (logged once per render, not per row)
+  try {
+    if (state && state.user && state.user.id) {
+      var _filtered = filteredContacts();
+      logSubaccountAudit('subaccount.contact.list', {
+        metadata: {
+          count: _filtered.length,
+          search: state.cSearch || null,
+          type_filter: state.cType || null,
+          status_filter: state.cStatus || null,
+          tag_filter: state.cTag || null,
+          page: state.cPage || 1
+        }
+      });
+    }
+  } catch(e){}
+
   const tf=document.getElementById('c-tag');
   if(tf){const tv=tf.value;tf.innerHTML='<option value="">All Tags</option>'+db.tags.map(t=>'<option value="'+t.id+'"'+(tv===t.id?' selected':'')+'>'+esc(t.name)+'</option>').join('')}
   const filtered=filteredContacts(),pages=Math.ceil(filtered.length/PER_PAGE)||1;
@@ -2163,7 +2355,18 @@ function cPg(p){state.cPage=p;renderContacts()}
 // =====================================================
 // DRAWER
 // =====================================================
-function openDrawer(id){state.drawer=id;state.dTab='info';renderDrawer();document.getElementById('drawer-overlay').classList.add('open');document.getElementById('contact-drawer').classList.add('open')}
+function openDrawer(id){
+  state.drawer=id;state.dTab='info';renderDrawer();
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('contact-drawer').classList.add('open');
+  // Audit: PHI access via contact drawer
+  var c=getContact(id);
+  logSubaccountAudit('subaccount.contact.view', {
+    targetId: id,
+    targetType: 'contact',
+    metadata: { contact_name: (c && c.name) || null }
+  });
+}
 function closeDrawer(){document.getElementById('drawer-overlay').classList.remove('open');document.getElementById('contact-drawer').classList.remove('open');state.drawer=null}
 function switchDTab(t){state.dTab=t;renderDrawer()}
 
@@ -3040,9 +3243,31 @@ async function saveContact(){
   const name=document.getElementById('cf-name').value.trim();if(!name){toast('Name is required.','error');return}
   const data={name,type:document.getElementById('cf-type').value,email:document.getElementById('cf-email').value.trim(),phone:document.getElementById('cf-phone').value.trim(),company:document.getElementById('cf-company').value.trim(),title:document.getElementById('cf-title').value.trim(),website:document.getElementById('cf-web').value.trim(),source:document.getElementById('cf-source').value.trim(),address:document.getElementById('cf-addr').value.trim(),status:document.getElementById('cf-status').value,tags:getSelTags()};
   const isNew=!state.modal.id;
+  // Capture which fields are changing for the audit (not the values themselves - PHI)
+  var _changedFields=[];
+  if(!isNew){
+    var existing=getContact(state.modal.id);
+    if(existing){
+      for(var k in data){ if(JSON.stringify(existing[k])!==JSON.stringify(data[k])) _changedFields.push(k); }
+    }
+  }
   if(!isNew){const c=getContact(state.modal.id);if(c)Object.assign(c,data,{updatedAt:now_()})}
   else{const nc={id:uid(),...data,notes:[],squareCards:[],createdAt:now_()};db.contacts.push(nc);state._newContactId=nc.id;}
   saveData();closeModal();renderContacts();if(state.drawer)renderDrawer();updateNotifBadge();toast(isNew?'Contact added.':'Contact updated.','success');
+  // Audit
+  if(isNew){
+    logSubaccountAudit('subaccount.contact.create', {
+      targetId: state._newContactId,
+      targetType: 'contact',
+      metadata: { contact_name: data.name, contact_type: data.type }
+    });
+  } else {
+    logSubaccountAudit('subaccount.contact.update', {
+      targetId: state.modal.id,
+      targetType: 'contact',
+      metadata: { contact_name: data.name, fields_changed: _changedFields }
+    });
+  }
   if(isNew){linkContactToSquare(state._newContactId);}
 }
 
@@ -3071,11 +3296,32 @@ function confirmDelContact(id){
     '<p style="color:var(--text-muted)">Archive <strong style="color:var(--text)">'+ esc(ct.name)+'</strong>? They can be restored from the archive later.</p>',
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="archiveContact(\''+ct.id+'\');closeModal()">Archive</button>');
 }
-function delContact(id){db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);saveData();closeModal();closeDrawer();renderContacts();toast('Contact deleted.','success')}
+function delContact(id){
+  var _ct=db.contacts.find(function(x){return x.id===id;});
+  db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);
+  saveData();closeModal();closeDrawer();renderContacts();
+  // Audit: hard delete (admin only)
+  logSubaccountAudit('subaccount.contact.delete', {
+    targetId: id,
+    targetType: 'contact',
+    metadata: { contact_name: _ct ? _ct.name : null, action_subtype: 'permanent' }
+  });
+  toast('Contact deleted.','success');
+}
 
 // APPOINTMENT MODAL
 let apptOverride=false;
 function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId){
+  // Audit: viewing existing appointment (PHI)
+  if (apptId) {
+    var _a = getAppt(apptId);
+    logSubaccountAudit('subaccount.appointment.view', {
+      targetId: apptId,
+      targetType: 'appointment',
+      metadata: { title: _a ? _a.title : null, contact_id: _a ? _a.contactId : null }
+    });
+  }
+
   const a=apptId?getAppt(apptId):null,cid=a&&a.contactId||contactId;
   apptOverride=false;state.modal={type:'appt',id:apptId||null,extra:cid};
   const defUid=a&&a.assignedTo||(prefUserId||null)||(state.user&&state.user.id)||'';
@@ -3208,10 +3454,19 @@ function saveAppt(){
   const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
   if(!title||!date){toast('Title and date required.','error');return}
   const data={title,contactId:document.getElementById('af-cv').value||null,date,time:document.getElementById('af-time').value,duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim()};
+  var isNewAppt=!state.modal.id;
+  var apptIdForAudit=state.modal.id||null;
   if(state.modal.id){const a=getAppt(state.modal.id);if(a)Object.assign(a,data)}
-  else{var newAppt={id:uid(),...data,createdAt:now_()};db.appointments.push(newAppt);sendApptConfirmation(data);syncApptToSupabase(newAppt,false);}
+  else{var newAppt={id:uid(),...data,createdAt:now_()};db.appointments.push(newAppt);apptIdForAudit=newAppt.id;sendApptConfirmation(data);syncApptToSupabase(newAppt,false);}
   if(state.modal.id){const updated=getAppt(state.modal.id);if(updated)syncApptToSupabase(updated,false);}
-  saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();updateNotifBadge();toast(state.modal.id?'Appointment updated.':'Appointment saved.','success');
+  saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();updateNotifBadge();
+  // Audit
+  logSubaccountAudit(isNewAppt ? 'subaccount.appointment.create' : 'subaccount.appointment.update', {
+    targetId: apptIdForAudit,
+    targetType: 'appointment',
+    metadata: { title: data.title, date: data.date, time: data.time, contact_id: data.contactId, assigned_to: data.assignedTo, status: data.status }
+  });
+  toast(isNewAppt?'Appointment saved.':'Appointment updated.','success');
 }
 
 function delAppt(id){
@@ -3243,7 +3498,22 @@ function sendApptCancellation(a){
     +'</div>';
   fetch('/api/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Cancelled: '+a.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-cancellation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:a.title,business_name:bizName}})}).catch(function(){});
 }
-function confirmDelAppt(){const id=state.modal&&state.modal.id;if(!id)return;const appt=db.appointments.find(a=>a.id===id);db.appointments=db.appointments.filter(a=>a.id!==id);sendApptCancellation(appt);if(appt)syncApptToSupabase(appt,true);saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();typeof renderApptList==='function'&&renderApptList();toast('Appointment removed.','success')}
+function confirmDelAppt(){
+  const id=state.modal&&state.modal.id;if(!id)return;
+  const appt=db.appointments.find(a=>a.id===id);
+  db.appointments=db.appointments.filter(a=>a.id!==id);
+  sendApptCancellation(appt);if(appt)syncApptToSupabase(appt,true);
+  saveData();closeModal();
+  if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();
+  typeof renderApptList==='function'&&renderApptList();
+  // Audit
+  logSubaccountAudit('subaccount.appointment.delete', {
+    targetId: id,
+    targetType: 'appointment',
+    metadata: { title: appt ? appt.title : null, date: appt ? appt.date : null, time: appt ? appt.time : null, contact_id: appt ? appt.contactId : null }
+  });
+  toast('Appointment removed.','success');
+}
 
 // TASK MODAL
 function openTaskModal(contactId,taskId){
@@ -3286,9 +3556,18 @@ function openNoteModal(cid,nid){
 function saveNote(){
   const text=document.getElementById('nf-text').value.trim();if(!text){toast('Note empty.','error');return}
   const c=getContact(state.modal.extra);if(!c)return;
+  var isNewNote=!state.modal.id;
+  var noteId=state.modal.id||null;
   if(state.modal.id){const n=c.notes.find(x=>x.id===state.modal.id);if(n){n.text=text;n.updatedAt=now_()}}
-  else c.notes.push({id:uid(),text,createdAt:now_()});
-  saveData();closeModal();renderDrawer();toast(state.modal.id?'Note updated.':'Note added.','success');
+  else { var newNote={id:uid(),text,createdAt:now_()}; c.notes.push(newNote); noteId=newNote.id; }
+  saveData();closeModal();renderDrawer();
+  // Audit: note creation/update (text content NOT logged - it's PHI)
+  logSubaccountAudit(isNewNote ? 'subaccount.contact.note.create' : 'subaccount.contact.note.update', {
+    targetId: c.id,
+    targetType: 'contact',
+    metadata: { contact_name: c.name, note_id: noteId, text_length: text.length }
+  });
+  toast(isNewNote?'Note added.':'Note updated.','success');
 }
 function delNote(cid,nid){
   state.modal={type:'del-note',data:{cid,nid}};
@@ -3298,7 +3577,19 @@ function delNote(cid,nid){
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelNote()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelNote(){const d=state.modal&&state.modal.data;if(!d)return;const c=getContact(d.cid);if(c)c.notes=c.notes.filter(n=>n.id!==d.nid);saveData();closeModal();renderDrawer();toast('Note removed.','success')}
+function confirmDelNote(){
+  const d=state.modal&&state.modal.data;if(!d)return;
+  const c=getContact(d.cid);
+  if(c){
+    c.notes=c.notes.filter(n=>n.id!==d.nid);
+    logSubaccountAudit('subaccount.contact.note.delete', {
+      targetId: d.cid,
+      targetType: 'contact',
+      metadata: { contact_name: c.name, note_id: d.nid }
+    });
+  }
+  saveData();closeModal();renderDrawer();toast('Note removed.','success');
+}
 
 // USER MODAL
 let editSched=JSON.parse(JSON.stringify(DEF_SCHED));
@@ -8137,6 +8428,14 @@ function bulkAddTag(tagId){
 function bulkExportCSV(){
   const contacts=[...state.cSelected].map(function(id){return getContact(id)}).filter(Boolean);
   if(!contacts.length){toast('No contacts selected.','error');return}
+  // Audit: bulk PHI export
+  logSubaccountAudit('subaccount.contact.export', {
+    metadata: {
+      count: contacts.length,
+      format: 'csv',
+      fields: ['Name','Email','Phone','Company','Type','Status','Tags']
+    }
+  });
   const headers=['Name','Email','Phone','Company','Type','Status','Tags'];
   const rows=contacts.map(function(c){
     return[
@@ -12793,6 +13092,12 @@ function archiveContact(id){
   if(!contact)return;
   contact.archived=true;
   saveData();closeDrawer();renderContacts();
+  // Audit: archive (soft delete) of contact
+  logSubaccountAudit('subaccount.contact.delete', {
+    targetId: id,
+    targetType: 'contact',
+    metadata: { contact_name: contact.name, action_subtype: 'archive' }
+  });
   toast(esc(contact.name)+' archived.','success');
 }
 
