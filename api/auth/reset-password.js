@@ -82,20 +82,30 @@ module.exports = async function handler(req, res) {
 
     if (rec.user_type === 'agency') {
       // ── Agency user reset ──
+      // KNOWN TECH DEBT: api/agency/login.js still uses SHA-256 (sends pre-hashed
+      // password from frontend, compares directly). To stay compatible with that
+      // login flow, agency password resets MUST write SHA-256 hashes, not bcrypt.
+      // When agency auth is upgraded to bcrypt in a future session, this branch
+      // should switch to using newHash (the bcrypt) instead.
+      // agency_users schema: id, username, password_hash, name, role, active,
+      // email, created_at, updated_at. No legacy_password_hash column.
+      const sha256Hash = crypto.createHash('sha256').update(newPassword).digest('hex');
       const r = await fetch(
         SUPABASE_URL + '/rest/v1/agency_users?id=eq.' + encodeURIComponent(rec.user_identifier),
         {
           method: 'PATCH',
           headers: sbHeaders({ 'Prefer': 'return=minimal' }),
           body: JSON.stringify({
-            password_hash: newHash,
-            legacy_password_hash: null,
-            password_changed_at: nowIso,
+            password_hash: sha256Hash,
             updated_at: nowIso
           })
         }
       );
-      if (!r.ok) return res.status(500).json({ error: 'Failed to update password' });
+      if (!r.ok) {
+        const errText = await r.text();
+        console.error('reset-password agency_users update failed:', errText);
+        return res.status(500).json({ error: 'Failed to update password: ' + errText });
+      }
       userIdForRevoke = rec.user_identifier;
 
     } else if (rec.user_type === 'subaccount_user') {
