@@ -16,6 +16,8 @@
 // Response:
 //   { entries: [...], total: N, limit, offset }
 
+const { requireAgencyAuth } = require('../../lib/require-subaccount-auth');
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -25,6 +27,9 @@ function sendError(res, code, message) {
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return sendError(res, 405, 'Method not allowed');
+  // Require valid agency session
+  const auth = await requireAgencyAuth(req, res);
+  if (!auth) return; // 401 already sent
 
   const q = req.query || {};
   const limit = Math.min(Math.max(parseInt(q.limit) || 50, 1), 200);

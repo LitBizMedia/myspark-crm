@@ -5,6 +5,7 @@
 
 const { findOrCreateCustomer, saveCardOnFile } = require('../../lib/agency-billing');
 const { sendError } = require('../../lib/square');
+const { requireAgencyAuth } = require('../../lib/require-subaccount-auth');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -19,6 +20,9 @@ function sbHeaders(extra) {
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
+  // Require valid agency session
+  const auth = await requireAgencyAuth(req, res);
+  if (!auth) return; // 401 already sent
 
   const {
     subaccountId,

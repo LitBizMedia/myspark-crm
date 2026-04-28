@@ -4,7 +4,8 @@
 
 const { getAgencyCreds, makeIdempotencyKey } = require('../../lib/agency-billing');
 const { sendError, squareHost, squareHeaders } = require('../../lib/square');
-const { logAudit, extractActorFromBody } = require('../../lib/audit');
+const { logAudit } = require('../../lib/audit');
+const { requireAgencyAuth } = require('../../lib/require-subaccount-auth');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -23,7 +24,15 @@ module.exports = async function handler(req, res) {
   const { invoiceId, reason } = req.body || {};
   if (!invoiceId) return sendError(res, 400, 'invoiceId required');
 
-  const actor = extractActorFromBody(req.body);
+  // Require valid agency session
+  const auth = await requireAgencyAuth(req, res);
+  if (!auth) return; // 401 already sent
+  const actor = {
+    actorType:     'agency',
+    actorId:       auth.user_id,
+    actorUsername: auth.username,
+    actorRole:     auth.role
+  };
 
   try {
     // Load the invoice

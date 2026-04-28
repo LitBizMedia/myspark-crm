@@ -13,6 +13,7 @@
 // generates the session token and opens the workspace tab as before.
 
 const { logAudit } = require('../../lib/audit');
+const { requireAgencyAuth } = require('../../lib/require-subaccount-auth');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -31,9 +32,21 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { slug, actor } = req.body || {};
-  if (!slug)            return res.status(400).json({ error: 'slug required' });
-  if (!actor || !actor.id) return res.status(400).json({ error: 'actor.id required' });
+  // Require valid agency session (replaces body-asserted actor.id)
+  const auth = await requireAgencyAuth(req, res);
+  if (!auth) return; // 401 already sent
+
+  const { slug } = req.body || {};
+  if (!slug) return res.status(400).json({ error: 'slug required' });
+
+  // Synthesize actor object from validated session for backward compat
+  // with existing audit calls below.
+  const actor = {
+    id:       auth.user_id,
+    username: auth.username,
+    role:     auth.role,
+    name:     auth.display_name || auth.username
+  };
 
   try {
     // ─────────────────────────────────────────

@@ -4,9 +4,13 @@
 
 const { getAgencyCreds, agencySquareCall } = require('../../lib/agency-billing');
 const { sendError } = require('../../lib/square');
+const { requireAgencyAuth } = require('../../lib/require-subaccount-auth');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return sendError(res, 405, 'Method not allowed');
+  // Require valid agency session
+  const auth = await requireAgencyAuth(req, res);
+  if (!auth) return; // 401 already sent
 
   try {
     // Fetch all customers for LitBiz Square account
