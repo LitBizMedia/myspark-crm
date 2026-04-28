@@ -6,6 +6,7 @@
 const { sendEmail } = require('../../lib/resend');
 const {
   parseSessionCookie,
+  parseAgencySessionCookie,
   validateSession
 } = require('../../lib/subaccount-auth');
 
@@ -15,10 +16,20 @@ module.exports = async (req, res) => {
   }
 
   // Accept either a subaccount session OR an agency session.
+  // Each lives in its own cookie since the rename, so we check both.
   // Agency sessions are inherently allowed any slug (they manage all tenants).
   // Subaccount sessions must match the slug in the request body.
-  const token = parseSessionCookie(req);
-  const session = token ? await validateSession(token) : null;
+  const subToken = parseSessionCookie(req);
+  const agencyToken = parseAgencySessionCookie(req);
+  let session = null;
+  if (agencyToken) {
+    session = await validateSession(agencyToken);
+    if (session && session.user_type !== 'agency') session = null;
+  }
+  if (!session && subToken) {
+    session = await validateSession(subToken);
+    if (session && session.user_type !== 'subaccount') session = null;
+  }
   if (!session) {
     return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
   }

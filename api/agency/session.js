@@ -6,9 +6,9 @@
 // Mirrors /api/subaccount/session.js but rejects subaccount-typed sessions.
 
 const {
-  parseSessionCookie,
+  parseAgencySessionCookie,
   validateSession,
-  buildClearCookie
+  buildClearAgencyCookie
 } = require('../../lib/subaccount-auth');
 
 module.exports = async function handler(req, res) {
@@ -16,7 +16,7 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const token = parseSessionCookie(req);
+  const token = parseAgencySessionCookie(req);
   if (!token) {
     return res.status(401).json({
       authenticated: false,
@@ -28,7 +28,7 @@ module.exports = async function handler(req, res) {
   const session = await validateSession(token);
   if (!session) {
     // Session invalid (expired, revoked, or token doesn't match). Clear cookie.
-    res.setHeader('Set-Cookie', buildClearCookie());
+    res.setHeader('Set-Cookie', buildClearAgencyCookie());
     return res.status(401).json({
       authenticated: false,
       error: 'Session expired or invalid',

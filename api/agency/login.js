@@ -14,7 +14,7 @@
 const { logAudit } = require('../../lib/audit');
 const {
   createSession,
-  buildSessionCookie,
+  buildAgencySessionCookie,
   getIpFromReq,
   getUserAgent
 } = require('../../lib/subaccount-auth');
@@ -83,7 +83,7 @@ module.exports = async function handler(req, res) {
             ipAddress:    getIpFromReq(req),
             userAgent:    getUserAgent(req)
           });
-          res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token));
+          res.setHeader('Set-Cookie', buildAgencySessionCookie(sessionInfo.token));
         } catch (sessErr) {
           console.error('agency login: failed to create server session:', sessErr.message);
           // Continue with login; legacy localStorage path still works
@@ -152,7 +152,7 @@ module.exports = async function handler(req, res) {
         ipAddress:    getIpFromReq(req),
         userAgent:    getUserAgent(req)
       });
-      res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token));
+      res.setHeader('Set-Cookie', buildAgencySessionCookie(sessionInfo.token));
     } catch (sessErr) {
       console.error('agency login (fallback): failed to create server session:', sessErr.message);
       // Continue with login; legacy localStorage path still works

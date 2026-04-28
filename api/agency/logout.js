@@ -3,10 +3,10 @@
 // and writes an audit log entry.
 
 const {
-  parseSessionCookie,
+  parseAgencySessionCookie,
   validateSession,
   revokeSession,
-  buildClearCookie
+  buildClearAgencyCookie
 } = require('../../lib/subaccount-auth');
 const { logAudit } = require('../../lib/audit');
 
@@ -15,10 +15,10 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const token = parseSessionCookie(req);
+  const token = parseAgencySessionCookie(req);
   if (!token) {
     // No cookie present. Clear anything stale and return success.
-    res.setHeader('Set-Cookie', buildClearCookie());
+    res.setHeader('Set-Cookie', buildClearAgencyCookie());
     return res.status(200).json({ success: true, note: 'No active session' });
   }
 
@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
     // Still clear the cookie even if DB revoke fails
   }
 
-  res.setHeader('Set-Cookie', buildClearCookie());
+  res.setHeader('Set-Cookie', buildClearAgencyCookie());
 
   // Audit the logout (best effort, don't fail the response on audit error)
   if (sessionSnapshot && sessionSnapshot.user_type === 'agency') {
