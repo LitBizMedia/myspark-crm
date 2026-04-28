@@ -62,11 +62,11 @@ module.exports = async function handler(req, res) {
   const fileKey = subaccountSlug + '/' + safeFolder + '/' + fileId + '.' + ext;
 
   try {
+    // ContentType is the only signed header - browser PUT only needs to match this
     const command = new PutObjectCommand({
       Bucket: process.env.AWS_S3_BUCKET,
       Key: fileKey,
-      ContentType: fileType,
-      ContentLength: fileSize
+      ContentType: fileType
     });
 
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });

@@ -44,10 +44,15 @@ module.exports = async function handler(req, res) {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    await s3.send(new DeleteObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET,
-      Key: file.file_key
-    }));
+    // Attempt S3 delete - don't fail if object is already missing
+    try {
+      await s3.send(new DeleteObjectCommand({
+        Bucket: process.env.AWS_S3_BUCKET,
+        Key: file.file_key
+      }));
+    } catch (s3Err) {
+      console.warn('S3 delete warning (continuing):', s3Err.message);
+    }
 
     const { error: deleteError } = await supabase
       .from('media_files')
