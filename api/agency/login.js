@@ -12,6 +12,12 @@
 // never the password or hash.
 
 const { logAudit } = require('../../lib/audit');
+const {
+  createSession,
+  buildSessionCookie,
+  getIpFromReq,
+  getUserAgent
+} = require('../../lib/subaccount-auth');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -64,6 +70,25 @@ module.exports = async function handler(req, res) {
           role:     u.role || 'admin'
         };
 
+        // Create server-side session and set HttpOnly cookie
+        let sessionInfo = null;
+        try {
+          sessionInfo = await createSession({
+            userId:       user.id,
+            userType:     'agency',
+            subaccountId: null,
+            username:     user.username,
+            displayName:  user.name,
+            role:         user.role,
+            ipAddress:    getIpFromReq(req),
+            userAgent:    getUserAgent(req)
+          });
+          res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token));
+        } catch (sessErr) {
+          console.error('agency login: failed to create server session:', sessErr.message);
+          // Continue with login; legacy localStorage path still works
+        }
+
         await logAudit({
           req,
           actorType:     'agency',
@@ -73,7 +98,10 @@ module.exports = async function handler(req, res) {
           action:        'agency.login.success',
           targetType:    'agency_user',
           targetId:      user.id,
-          metadata:      { source: 'database' }
+          metadata:      {
+            source: 'database',
+            session_id: sessionInfo && sessionInfo.sessionId
+          }
         });
 
         return res.status(200).json({ success: true, user: user });
@@ -111,6 +139,25 @@ module.exports = async function handler(req, res) {
       role:     'super_admin'
     };
 
+    // Create server-side session and set HttpOnly cookie (best effort)
+    let sessionInfo = null;
+    try {
+      sessionInfo = await createSession({
+        userId:       user.id,
+        userType:     'agency',
+        subaccountId: null,
+        username:     user.username,
+        displayName:  user.name,
+        role:         user.role,
+        ipAddress:    getIpFromReq(req),
+        userAgent:    getUserAgent(req)
+      });
+      res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token));
+    } catch (sessErr) {
+      console.error('agency login (fallback): failed to create server session:', sessErr.message);
+      // Continue with login; legacy localStorage path still works
+    }
+
     await logAudit({
       req,
       actorType:     'agency',
@@ -118,7 +165,11 @@ module.exports = async function handler(req, res) {
       actorUsername: AGENCY_FALLBACK_USER,
       actorRole:     'super_admin',
       action:        'agency.login.success',
-      metadata:      { source: 'fallback', warning: 'database_unreachable' }
+      metadata:      {
+        source: 'fallback',
+        warning: 'database_unreachable',
+        session_id: sessionInfo && sessionInfo.sessionId
+      }
     });
 
     return res.status(200).json({ success: true, user: user });
