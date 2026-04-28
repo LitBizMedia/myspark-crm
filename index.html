@@ -1275,6 +1275,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <button class="pay-panel-tab" id="ppt-coupons" onclick="switchPayTab('coupons')">Coupons</button>
           <button class="pay-panel-tab" id="ppt-giftcards" onclick="switchPayTab('giftcards')">Gift Cards</button>
           <button class="pay-panel-tab" id="ppt-transactions" onclick="switchPayTab('transactions')">Transactions</button>
+          <button class="pay-panel-tab" id="ppt-paysettings" onclick="switchPayTab('paysettings')">Payment Settings</button>
         </div>
         <div id="pay-pos-view">
         <div class="pos-grid">
@@ -1373,6 +1374,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <div class="pos-tr hidden" id="pos-coupon-row"><span id="pos-coupon-row-label" style="color:#34d399">Coupon</span><span id="pos-coupon-row-amt" style="color:#34d399">-$0.00</span></div>
                 <div class="pos-tr hidden" id="pos-discount-row"><span id="pos-discount-label" style="color:#a78bfa">Discount</span><span id="pos-discount-amt" style="color:#a78bfa">-$0.00</span></div>
                 <div class="pos-tr" id="pos-after-row"><span>After Discounts</span><span id="pos-after-discount">$0.00</span></div>
+                <div class="pos-tr hidden" id="pos-fee-row"><span id="pos-fee-label">Additional Fee</span><span id="pos-fee-amt" style="color:var(--orange)">$0.00</span></div>
                 <div class="pos-tr"><span>Tip</span><span id="pos-tip-amt">$0.00</span></div>
                 <div class="pos-tr" id="pos-credit-row" style="display:none;align-items:center;justify-content:space-between">
                   <span style="display:flex;align-items:center;gap:8px">Credits
@@ -1492,6 +1494,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div id="pay-coupons-view" class="hidden"></div>
         <div id="pay-giftcards-view" class="hidden"></div>
         <div id="pay-transactions-view" class="hidden"></div>
+        <div id="pay-paysettings-view" class="hidden"></div>
       </div>
 
       <!-- FORMS -->
@@ -1711,6 +1714,9 @@ let db={
     supabaseUrl:'',supabaseKey:'',
     adminProfile:{},
     notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
+  },
+  paySettings:{
+    additionalFee:{enabled:false,label:'Additional Fee',type:'flat',amount:0}
   }
 };
 
@@ -2781,12 +2787,14 @@ function cycleTask(id){const t=getTask(id);if(!t)return;const m={'open':'in-prog
 // =====================================================
 function renderPayments(){
   setTimeout(function(){if(typeof setPosMode==='function')setPosMode('product');},50);
+  const ppsBtn=document.getElementById('ppt-paysettings');
+  if(ppsBtn)ppsBtn.classList.toggle('hidden',!isAdminOrManager());
   switchPayTab(state.paymentsTab||'pos');
 }
 
 function switchPayTab(tab){
   state.paymentsTab=tab;
-  const allTabs=['pos','subs','invoices','orders','coupons','giftcards','transactions'];
+  const allTabs=['pos','subs','invoices','orders','coupons','giftcards','transactions','paysettings'];
   allTabs.forEach(t=>{
     const btn=document.getElementById('ppt-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
@@ -2810,6 +2818,9 @@ function switchPayTab(tab){
     renderCoupons();
   }else if(tab==='giftcards'){
     renderGiftCards();
+  }else if(tab==='paysettings'){
+    if(!isAdminOrManager()){switchPayTab('pos');return;}
+    renderPaySettings();
   }
 }
 
@@ -2884,7 +2895,15 @@ function calcTotals(){
   else if(state.posTip==='20')tip=afterDiscount*.2;
   else if(state.posTip==='custom')tip=parseFloat(document.getElementById('pos-custom-tip')&&document.getElementById('pos-custom-tip').value)||0;
   const credit=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  const total=Math.max(0,afterDiscount+tip-credit);
+  // Additional fee
+  let additionalFee=0;
+  const ps=db.paySettings||{};
+  if(ps.additionalFee&&ps.additionalFee.enabled){
+    const feeAmt=parseFloat(ps.additionalFee.amount)||0;
+    if(ps.additionalFee.type==='pct')additionalFee=afterDiscount*(feeAmt/100);
+    else additionalFee=feeAmt;
+  }
+  const total=Math.max(0,afterDiscount+additionalFee+tip-credit);
   // Update DOM
   const es=document.getElementById('pos-subtotal');
   const ead=document.getElementById('pos-after-discount');
@@ -2903,12 +2922,18 @@ function calcTotals(){
   if(ecrl)ecrl.textContent='Coupon'+(appliedCoupon?' ('+appliedCoupon.code+')':'');
   if(ead)ead.textContent=fmt$(afterDiscount);
   if(ear)ear.style.display=totalDiscountAmt>0?'flex':'none';
+  const efr=document.getElementById('pos-fee-row');
+  const efa=document.getElementById('pos-fee-amt');
+  const efl=document.getElementById('pos-fee-label');
+  if(efr)efr.classList.toggle('hidden',additionalFee<=0);
+  if(efa)efa.textContent=fmt$(additionalFee);
+  if(efl)efl.textContent=(ps.additionalFee&&ps.additionalFee.label)||'Additional Fee';
   if(et)et.textContent=fmt$(tip);
   if(etot)etot.textContent=fmt$(total)+(credit>0?' ('+fmt$(credit)+' credit applied)':'');
   if(edr)edr.classList.toggle('hidden',discount<=0);
   if(eda)eda.textContent='-'+fmt$(discount);
   if(edl)edl.textContent='Discount'+(discType==='pct'&&discVal?' ('+discVal+'%)':'');
-  return{sub,couponDiscount,couponCode:appliedCoupon?appliedCoupon.code:'',couponId:appliedCoupon?appliedCoupon.id:'',discount,discountType:discType,discountVal:discVal,discountNote:discNote,afterCoupon,afterDiscount,tip,credit,total};
+  return{sub,couponDiscount,couponCode:appliedCoupon?appliedCoupon.code:'',couponId:appliedCoupon?appliedCoupon.id:'',discount,discountType:discType,discountVal:discVal,discountNote:discNote,afterCoupon,afterDiscount,additionalFee,tip,credit,total};
 }
 
 function setPM(v){
@@ -2922,7 +2947,7 @@ function setPM(v){
 async function reviewCharge(){
   if(state.posPM==='cof'){chargeCardOnFile();return}
   if(!state.posItems.length){toast('Add at least one item.','error');return}
-  const{sub,couponDiscount,couponCode,couponId,discount,discountType,discountVal,discountNote,afterDiscount,tip,credit:creditCalc,total}=calcTotals();
+  const{sub,couponDiscount,couponCode,couponId,discount,discountType,discountVal,discountNote,afterDiscount,additionalFee,tip,credit:creditCalc,total}=calcTotals();
   const cid=document.getElementById('pos-c-id').value,c=cid?getContact(cid):null;
   const staffId=document.getElementById('pos-staff').value,staff=staffId?getUserById(staffId):null;
   const sqConnected=sqIsConnected();
@@ -3142,7 +3167,7 @@ async function processCharge(){  // ── Gift Card payment path ──
     }
   }
   const payId=uid();
-  db.payments.push({id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
+  db.payments.push({id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,feeAmount:additionalFee||0,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
   // Log coupon usage
   if(couponId){
     const cpn=(db.coupons||[]).find(function(x){return x.id===couponId;});
@@ -3880,7 +3905,8 @@ function loadData(){
           supabaseKey:p.settings&&p.settings.supabaseKey||'',
           adminProfile:p.settings&&p.settings.adminProfile||{},
           notifSettings:p.settings&&p.settings.notifSettings||{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
-        }
+        },
+        paySettings:p.paySettings||{additionalFee:{enabled:false,label:'Additional Fee',type:'flat',amount:0}}
       };
     }
   }catch(e){}
@@ -13414,6 +13440,69 @@ function updateAuthSubtitle(){
 function userRole(){ return (state.user&&state.user.role)||'user'; }
 function hasRole(){ var r=userRole(); return Array.prototype.slice.call(arguments).indexOf(r)>-1; }
 function isAdminOrManager(){ return hasRole('admin','manager'); }
+
+function renderPaySettings(){
+  if(!isAdminOrManager()){switchPayTab('pos');return;}
+  var el=document.getElementById('pay-paysettings-view');
+  if(!el)return;
+  if(!db.paySettings)db.paySettings={};
+  if(!db.paySettings.additionalFee)db.paySettings.additionalFee={enabled:false,label:'Additional Fee',type:'flat',amount:0};
+  var af=db.paySettings.additionalFee;
+  var inp='background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;width:100%;box-sizing:border-box';
+  el.innerHTML=
+    '<div style="max-width:680px;display:flex;flex-direction:column;gap:18px">'
+    +'<div class="s-card">'
+    +'<div class="s-card-title">Additional Fee</div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+    +'<div class="bh-toggle'+(af.enabled?' on':'')+'" id="fee-toggle" onclick="toggleAdditionalFee()" style="position:relative;flex-shrink:0"></div>'
+    +'<span style="font-size:13px;color:var(--main-text-muted)">'+(af.enabled?'Enabled':'Disabled')+'</span>'
+    +'</div>'
+    +'<div id="fee-fields" style="'+(af.enabled?'':'display:none;')+'display:flex;flex-direction:column;gap:12px">'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +'<div class="form-group" style="flex:2;min-width:160px"><label>Fee Label</label><input id="fee-label" type="text" style="'+inp+'" value="'+esc(af.label||'Additional Fee')+'" placeholder="e.g. Processing Fee" oninput="savePaySettings()"></div>'
+    +'<div class="form-group" style="flex:1;min-width:130px"><label>Type</label><select id="fee-type" class="filter-sel" style="width:100%;height:42px" onchange="savePaySettings();renderPaySettings()">'
+    +'<option value="flat"'+(af.type==='flat'?' selected':'')+'>Flat Amount ($)</option>'
+    +'<option value="pct"'+(af.type==='pct'?' selected':'')+'>Percentage (%)</option>'
+    +'</select></div>'
+    +'<div class="form-group" style="flex:1;min-width:100px"><label>'+(af.type==='pct'?'Rate (%)':'Amount ($)')+'</label><input id="fee-amount" type="number" style="'+inp+'" min="0" step="0.01" value="'+(af.amount||'')+'" placeholder="0.00" oninput="savePaySettings()"></div>'
+    +'</div>'
+    +'<p style="font-size:12px;color:var(--main-text-muted);margin:4px 0 0">This fee is automatically added to every POS transaction when enabled.</p>'
+    +'</div>'
+    +'</div>'
+    +'<div class="s-card">'
+    +'<div class="s-card-title">Taxes</div>'
+    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Tax configuration coming in a future update.</p>'
+    +'</div>'
+    +'<div class="s-card">'
+    +'<div class="s-card-title">Receipts and Notifications</div>'
+    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Receipt and notification settings coming in a future update.</p>'
+    +'</div>'
+    +'</div>';
+}
+
+function toggleAdditionalFee(){
+  if(!db.paySettings)db.paySettings={};
+  if(!db.paySettings.additionalFee)db.paySettings.additionalFee={enabled:false,label:'Additional Fee',type:'flat',amount:0};
+  db.paySettings.additionalFee.enabled=!db.paySettings.additionalFee.enabled;
+  saveData();
+  renderPaySettings();
+  if(state.paymentsTab==='pos')calcTotals();
+  toast('Additional fee '+(db.paySettings.additionalFee.enabled?'enabled':'disabled')+'.','success');
+}
+
+function savePaySettings(){
+  if(!db.paySettings)db.paySettings={};
+  if(!db.paySettings.additionalFee)db.paySettings.additionalFee={enabled:false,label:'Additional Fee',type:'flat',amount:0};
+  var af=db.paySettings.additionalFee;
+  var lbl=document.getElementById('fee-label');
+  var typ=document.getElementById('fee-type');
+  var amt=document.getElementById('fee-amount');
+  if(lbl)af.label=lbl.value||'Additional Fee';
+  if(typ)af.type=typ.value||'flat';
+  if(amt)af.amount=parseFloat(amt.value)||0;
+  saveData();
+  if(state.paymentsTab==='pos')calcTotals();
+}
 function canDeleteContact(){ return hasRole('admin'); } // only admin permanently deletes
 function canManageGiftCards(){ return hasRole('admin','manager'); }
 function canManageCoupons(){ return hasRole('admin','manager'); }
