@@ -13733,10 +13733,13 @@ async function mediaHandleFile(file) {
     if (fill) fill.style.width = '40%';
     var upload = await fetch(data.uploadUrl, {
       method: 'PUT',
-      headers: { 'Content-Type': file.type },
       body: file
     });
-    if (!upload.ok) throw new Error('Upload to storage failed');
+    if (!upload.ok) {
+      var errText = await upload.text().catch(function() { return ''; });
+      console.error('S3 PUT failed, status:', upload.status, errText.slice(0, 300));
+      throw new Error('Upload to storage failed (S3 status ' + upload.status + ')');
+    }
     if (fill) fill.style.width = '100%';
     if (status) status.textContent = 'Upload complete.';
     setTimeout(function() {

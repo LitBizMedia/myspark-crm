@@ -57,8 +57,7 @@ module.exports = async function handler(req, res) {
   try {
     const command = new PutObjectCommand({
       Bucket: process.env.AWS_S3_BUCKET,
-      Key: fileKey,
-      ContentType: fileType
+      Key: fileKey
     });
 
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
