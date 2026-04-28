@@ -1270,6 +1270,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="pay-panel-tabs">
           <button class="pay-panel-tab active" id="ppt-pos" onclick="switchPayTab('pos')">Point of Sale</button>
           <button class="pay-panel-tab" id="ppt-subs" onclick="switchPayTab('subs')">Subscriptions</button>
+          <button class="pay-panel-tab" id="ppt-sessionpacks" onclick="switchPayTab('sessionpacks')">Session Packs</button>
           <button class="pay-panel-tab" id="ppt-invoices" onclick="switchPayTab('invoices')">Invoices</button>
           <button class="pay-panel-tab" id="ppt-orders" onclick="switchPayTab('orders')">Orders</button>
           <button class="pay-panel-tab" id="ppt-coupons" onclick="switchPayTab('coupons')">Coupons</button>
@@ -1494,6 +1495,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div id="pay-coupons-view" class="hidden"></div>
         <div id="pay-giftcards-view" class="hidden"></div>
         <div id="pay-transactions-view" class="hidden"></div>
+        <div id="pay-sessionpacks-view" class="hidden"></div>
         <div id="pay-paysettings-view" class="hidden"></div>
       </div>
 
@@ -1692,7 +1694,7 @@ let state={
 // DB
 // =====================================================
 let db={
-  contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],
+  contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],sessionPackTemplates:[],sessionPacks:[],
   tags:[
     {id:'tag-hotlead',name:'Hot Lead',color:'#ff4000'},
     {id:'tag-vip',name:'VIP Client',color:'#6b21ea'},
@@ -2467,6 +2469,7 @@ function renderDrawer(){
       +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(p.total)+'</div></div>').join('')
       :'<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No purchase history.</div>';
     body=renderContactCredits(c.id)
+      +renderContactSessionPacks(c.id)
       +'<div class="sec-row" style="margin-top:14px"><div class="sec-label" style="margin-bottom:0">Active Subscriptions ('+activeSubs.length+')</div><button class="btn btn-purple btn-sm" onclick="openSubModal(null,\''+c.id+'\')">+ New</button></div>'
       +'<div style="margin-top:8px">'+subHTML+'</div>'
       +'<div class="sec-label" style="margin-top:16px">Purchase History</div>'+payHTML
@@ -2794,7 +2797,7 @@ function renderPayments(){
 
 function switchPayTab(tab){
   state.paymentsTab=tab;
-  const allTabs=['pos','subs','invoices','orders','coupons','giftcards','transactions','paysettings'];
+  const allTabs=['pos','subs','invoices','orders','coupons','giftcards','transactions','sessionpacks','paysettings'];
   allTabs.forEach(t=>{
     const btn=document.getElementById('ppt-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
@@ -2818,6 +2821,8 @@ function switchPayTab(tab){
     renderCoupons();
   }else if(tab==='giftcards'){
     renderGiftCards();
+  }else if(tab==='sessionpacks'){
+    renderSessionPacks();
   }else if(tab==='paysettings'){
     if(!isAdminOrManager()){switchPayTab('pos');return;}
     renderPaySettings();
@@ -3891,7 +3896,7 @@ function loadData(){
       db={...db,...p,
         tags:p.tags&&p.tags.length?p.tags:db.tags,
         users:p.users||[],payments:p.payments||[],
-        products:p.products||[],readNotifs:p.readNotifs||[],coupons:p.coupons||[],giftCards:p.giftCards||[],giftCardProducts:p.giftCardProducts||[],
+        products:p.products||[],readNotifs:p.readNotifs||[],coupons:p.coupons||[],giftCards:p.giftCards||[],giftCardProducts:p.giftCardProducts||[],sessionPackTemplates:p.sessionPackTemplates||[],sessionPacks:p.sessionPacks||[],
         subscriptions:p.subscriptions||[],
         forms:p.forms||[],
         formSubmissions:p.formSubmissions||[],
@@ -10811,6 +10816,528 @@ function gcHandleBgUpload(input){
   reader.readAsDataURL(file);
 }
 
+
+// =====================================================
+// SESSION PACKS
+// =====================================================
+
+function renderSessionPacks(){
+  var el=document.getElementById('pay-sessionpacks-view');
+  if(!el)return;
+  var tab=state.spTab||'templates';
+  var h='<div class="pay-panel-tabs" style="margin:-22px -24px 22px">'
+    +'<button class="pay-panel-tab'+(tab==='templates'?' active':'')+'" onclick="switchSpTab(\'templates\')">Pack Templates</button>'
+    +'<button class="pay-panel-tab'+(tab==='clients'?' active':'')+'" onclick="switchSpTab(\'clients\')">Client Packs</button>'
+    +'<button class="pay-panel-tab'+(tab==='sell'?' active':'')+'" onclick="switchSpTab(\'sell\')">Sell / Issue</button>'
+    +'</div>';
+  if(tab==='templates') h+=spRenderTemplates();
+  else if(tab==='clients') h+=spRenderClientPacks();
+  else if(tab==='sell') h+=spRenderSell();
+  el.innerHTML=h;
+  if(tab==='clients') setTimeout(spRenderClientPacksTable,0);
+  if(tab==='sell') setTimeout(spInitSellForm,0);
+}
+
+function switchSpTab(tab){state.spTab=tab;renderSessionPacks();}
+
+function spRenderTemplates(){
+  var tmpls=(db.sessionPackTemplates||[]).sort(function(a,b){return(a.name||'').localeCompare(b.name||'');});
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Pack Templates</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-top:2px">Define reusable session pack products.</div></div>'
+    +(isAdminOrManager()?'<button class="btn btn-primary" onclick="openPackTemplateModal(null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Template</button>':'')
+    +'</div>';
+  if(!tmpls.length){
+    return h+'<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg><h3>No pack templates yet</h3><p>Create your first template to start selling session packs.</p></div>';
+  }
+  h+='<div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Sessions</th><th>Price</th><th>Services</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>';
+  tmpls.forEach(function(t){
+    var sessTxt=t.sessionsPaid+' paid, '+t.sessionsTotal+' total';
+    var svcTxt=t.serviceRestriction==='specific'&&t.services&&t.services.length?t.services.join(', '):'Any service';
+    var expTxt=t.expiresMonths?t.expiresMonths+' mo':'Never';
+    var isActive=t.status!=='inactive';
+    h+='<tr>'
+      +'<td style="font-weight:600">'+esc(t.name)+'</td>'
+      +'<td style="font-size:12px">'+esc(sessTxt)+'</td>'
+      +'<td style="font-weight:600;color:var(--orange)">'+fmt$(t.price)+'</td>'
+      +'<td style="font-size:12px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(svcTxt)+'</td>'
+      +'<td style="font-size:12px">'+expTxt+'</td>'
+      +'<td><span class="status-badge '+(isActive?'sb-active':'sb-inactive')+'">'+(isActive?'Active':'Inactive')+'</span></td>'
+      +'<td style="text-align:right;white-space:nowrap">'
+      +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="spOpenSell(\''+t.id+'\')">Sell</button> ':'')
+      +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="openPackTemplateModal(\''+t.id+'\')">Edit</button> ':'')
+      +(isAdminOrManager()?'<button class="btn btn-danger btn-sm" onclick="deletePackTemplate(\''+t.id+'\')">Delete</button>':'')
+      +'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+
+function openPackTemplateModal(id){
+  if(!isAdminOrManager()){toast('Permission denied.','error');return;}
+  var t=id?(db.sessionPackTemplates||[]).find(function(x){return x.id===id;}):null;
+  var isNew=!t;
+  var inpS='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var hasSpecific=t&&t.serviceRestriction==='specific';
+  var svcOpts=(db.products||[]).map(function(p){
+    var sel=(t&&t.services&&t.services.includes(p.name))?'selected':'';
+    return'<option value="'+esc(p.name)+'" '+sel+'>'+esc(p.name)+'</option>';
+  }).join('');
+  var body='<div class="form-row">'
+    +'<div class="form-group" style="flex:2"><label>Pack Name</label><input id="spt-name" type="text" style="'+inpS+'" value="'+esc(t?t.name||'':'')+'" placeholder="e.g. Buy 5 Get 1 Swedish"></div>'
+    +'<div class="form-group" style="flex:1"><label>Price ($)</label><input id="spt-price" type="number" min="0" step="0.01" style="'+inpS+'" value="'+(t?t.price||'':'')+'" placeholder="0.00"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Sessions Paid</label><input id="spt-paid" type="number" min="1" step="1" style="'+inpS+'" value="'+(t?t.sessionsPaid||'':'')+'" placeholder="5"></div>'
+    +'<div class="form-group"><label>Sessions Total (incl. bonus)</label><input id="spt-total" type="number" min="1" step="1" style="'+inpS+'" value="'+(t?t.sessionsTotal||'':'')+'" placeholder="6"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Description <span style="font-weight:400;color:var(--main-text-muted)">(optional)</span></label>'
+    +'<input id="spt-desc" type="text" style="'+inpS+'" value="'+esc(t?t.description||'':'')+'" placeholder="Brief description for staff reference"></div>'
+    +'<div class="form-group"><label>Applies To</label>'
+    +'<select id="spt-svcrestrict" class="filter-sel" style="width:100%;height:38px" onchange="spToggleSvcList()">'
+    +'<option value="any"'+(hasSpecific?'':' selected')+'>Any service</option>'
+    +'<option value="specific"'+(hasSpecific?' selected':'')+'>Specific services</option>'
+    +'</select></div>'
+    +'<div id="spt-svc-wrap" class="form-group" style="'+(hasSpecific?'':'display:none;')+'">'
+    +'<label>Select Services</label>'
+    +(svcOpts?'<select id="spt-services" multiple style="'+inpS+';height:100px">'+svcOpts+'</select>':'<div style="font-size:13px;color:var(--main-text-muted)">No products defined yet. Add products in the Products section first.</div>')
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Expiration</label>'
+    +'<select id="spt-exptype" class="filter-sel" style="width:100%;height:38px" onchange="spToggleExp()">'
+    +'<option value="never"'+(!t||!t.expiresMonths?' selected':'')+'>Never expires</option>'
+    +'<option value="months"'+(t&&t.expiresMonths?' selected':'')+'>Expires after X months</option>'
+    +'</select></div>'
+    +'<div class="form-group" id="spt-exp-wrap" style="'+(t&&t.expiresMonths?'':'display:none;')+'">'
+    +'<label>Months from purchase</label>'
+    +'<input id="spt-expmonths" type="number" min="1" step="1" style="'+inpS+'" value="'+(t&&t.expiresMonths?t.expiresMonths:'')+'" placeholder="12"></div>'
+    +'</div>'
+    +(isNew?'':'<div class="form-group"><label>Status</label><select id="spt-status" class="filter-sel" style="width:100%;height:38px"><option value="active"'+(t&&t.status!=='inactive'?' selected':'')+'>Active</option><option value="inactive"'+(t&&t.status==='inactive'?' selected':'')+'>Inactive</option></select></div>');
+  openModal((isNew?'New Pack Template':'Edit Pack Template'),body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="savePackTemplate('+(isNew?'null':"'"+id+"'")+')">'+( isNew?'Create Template':'Save Changes')+'</button>',
+    'modal-lg');
+}
+
+function spToggleSvcList(){
+  var v=document.getElementById('spt-svcrestrict')&&document.getElementById('spt-svcrestrict').value;
+  var w=document.getElementById('spt-svc-wrap');if(w)w.style.display=v==='specific'?'':'none';
+}
+function spToggleExp(){
+  var v=document.getElementById('spt-exptype')&&document.getElementById('spt-exptype').value;
+  var w=document.getElementById('spt-exp-wrap');if(w)w.style.display=v==='months'?'':'none';
+}
+
+function savePackTemplate(id){
+  if(!isAdminOrManager()){toast('Permission denied.','error');return;}
+  var name=(document.getElementById('spt-name')&&document.getElementById('spt-name').value||'').trim();
+  var price=parseFloat(document.getElementById('spt-price')&&document.getElementById('spt-price').value)||0;
+  var paid=parseInt(document.getElementById('spt-paid')&&document.getElementById('spt-paid').value)||0;
+  var total=parseInt(document.getElementById('spt-total')&&document.getElementById('spt-total').value)||0;
+  var desc=(document.getElementById('spt-desc')&&document.getElementById('spt-desc').value||'').trim();
+  var restrict=document.getElementById('spt-svcrestrict')&&document.getElementById('spt-svcrestrict').value||'any';
+  var expType=document.getElementById('spt-exptype')&&document.getElementById('spt-exptype').value||'never';
+  var expMonths=expType==='months'?(parseInt(document.getElementById('spt-expmonths')&&document.getElementById('spt-expmonths').value)||null):null;
+  var services=[];
+  if(restrict==='specific'){var sel=document.getElementById('spt-services');if(sel)services=Array.from(sel.selectedOptions).map(function(o){return o.value;});}
+  if(!name){toast('Enter a pack name.','error');return;}
+  if(paid<1||total<1){toast('Enter valid session counts.','error');return;}
+  if(total<paid){toast('Total sessions must be >= sessions paid.','error');return;}
+  if(!db.sessionPackTemplates)db.sessionPackTemplates=[];
+  if(id){
+    var t=db.sessionPackTemplates.find(function(x){return x.id===id;});
+    if(!t){toast('Template not found.','error');return;}
+    t.name=name;t.price=price;t.sessionsPaid=paid;t.sessionsTotal=total;t.description=desc;
+    t.serviceRestriction=restrict;t.services=services;t.expiresMonths=expMonths;
+    var statusEl=document.getElementById('spt-status');if(statusEl)t.status=statusEl.value;
+    t.updatedAt=now_();
+  }else{
+    db.sessionPackTemplates.push({id:uid(),name:name,price:price,sessionsPaid:paid,sessionsTotal:total,description:desc,serviceRestriction:restrict,services:services,expiresMonths:expMonths,status:'active',createdAt:now_()});
+  }
+  saveData();closeModal();renderSessionPacks();toast(id?'Template updated.':'Template created.','success');
+}
+
+function deletePackTemplate(id){
+  if(!isAdminOrManager()){toast('Permission denied.','error');return;}
+  var t=(db.sessionPackTemplates||[]).find(function(x){return x.id===id;});
+  if(!t)return;
+  var inUse=(db.sessionPacks||[]).some(function(p){return p.templateId===id&&p.status==='active';});
+  var msg='Delete template <strong>'+esc(t.name)+'</strong>?'+(inUse?' <strong style="color:#f87171">Warning: clients have active packs from this template. Their packs will remain valid.</strong>':' No active client packs use this template.');
+  openModal('Delete Template','<div class="warn-box">'+msg+'</div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-danger" onclick="confirmDeletePackTemplate(\''+id+'\')">Delete</button>');
+}
+function confirmDeletePackTemplate(id){
+  db.sessionPackTemplates=(db.sessionPackTemplates||[]).filter(function(x){return x.id!==id;});
+  saveData();closeModal();renderSessionPacks();toast('Template deleted.','success');
+}
+
+function spRenderClientPacks(){
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Client Packs</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-top:2px">All session pack enrollments.</div></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<input type="text" id="sp-clients-search" placeholder="Search client or pack..." oninput="spRenderClientPacksTable()" style="background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:7px 12px;font-family:Lato,sans-serif;font-size:13px;outline:none;width:200px">'
+    +'<select id="sp-clients-filter" class="filter-sel" onchange="spRenderClientPacksTable()" style="height:36px"><option value="">All Status</option><option value="active">Active</option><option value="exhausted">Exhausted</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option></select>'
+    +'</div></div>'
+    +'<div id="sp-clients-table"></div>';
+  return h;
+}
+
+function spRenderClientPacksTable(){
+  var el=document.getElementById('sp-clients-table');if(!el)return;
+  var search=(document.getElementById('sp-clients-search')&&document.getElementById('sp-clients-search').value||'').toLowerCase();
+  var filter=document.getElementById('sp-clients-filter')&&document.getElementById('sp-clients-filter').value||'';
+  var today=todayStr();
+  (db.sessionPacks||[]).forEach(function(p){
+    if(p.status==='active'&&p.expiresDate&&p.expiresDate<today)p.status='expired';
+    if(p.status==='active'&&p.sessionsUsed>=p.sessionsTotal)p.status='exhausted';
+  });
+  var packs=[...(db.sessionPacks||[])].sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');});
+  if(filter)packs=packs.filter(function(p){return p.status===filter;});
+  if(search)packs=packs.filter(function(p){
+    var c=p.contactId?(db.contacts||[]).find(function(x){return x.id===p.contactId;}):null;
+    var cName=c?c.name.toLowerCase():'';
+    var pName=(p.templateSnapshot&&p.templateSnapshot.name||'').toLowerCase();
+    return cName.includes(search)||pName.includes(search);
+  });
+  if(!packs.length){el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg><h3>No packs found</h3><p>Sell a session pack to see it here.</p></div>';return;}
+  var h='<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Pack</th><th>Sessions</th><th>Purchased</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>';
+  packs.forEach(function(p){
+    var c=p.contactId?(db.contacts||[]).find(function(x){return x.id===p.contactId;}):null;
+    var cName=c?c.name:'Walk-in';
+    var pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
+    var remaining=p.sessionsTotal-(p.sessionsUsed||0);
+    var stCls={active:'sb-active',exhausted:'sb-inactive',expired:'sb-overdue',cancelled:'sb-inactive'}[p.status]||'sb-inactive';
+    h+='<tr>'
+      +'<td><span style="cursor:pointer;color:var(--purple-light)" onclick="'+(c?'openDrawer(\''+c.id+'\')':'')+'">'+esc(cName)+'</span></td>'
+      +'<td style="font-weight:600">'+esc(pName)+'</td>'
+      +'<td><span style="font-weight:700;color:'+(remaining>0?'var(--orange)':'var(--main-text-muted)')+'">'+remaining+'</span><span style="color:var(--main-text-muted);font-size:12px"> / '+p.sessionsTotal+'</span></td>'
+      +'<td style="font-size:12px">'+fmtDate(p.purchaseDate||p.createdAt)+'</td>'
+      +'<td style="font-size:12px">'+(p.expiresDate?fmtDate(p.expiresDate):'Never')+'</td>'
+      +'<td><span class="status-badge '+stCls+'">'+p.status+'</span></td>'
+      +'<td style="text-align:right;white-space:nowrap">'
+      +(p.status==='active'?'<button class="btn btn-ghost btn-sm" onclick="spUseSession(\''+p.id+'\')">Use Session</button> ':'')
+      +(isAdminOrManager()&&p.status==='active'?'<button class="btn btn-danger btn-sm" onclick="spCancelPack(\''+p.id+'\')">Cancel</button>':'')
+      +'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  el.innerHTML=h;
+}
+
+function spRenderSell(){
+  var tmpls=(db.sessionPackTemplates||[]).filter(function(t){return t.status!=='inactive';});
+  var inpS='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var h='<div style="max-width:540px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);margin-bottom:5px">Sell a Session Pack</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:18px">Select a client, choose a pack template, collect payment, and issue the pack in one step.</div>'
+    +'<div class="form-group"><label>Client</label>'
+    +'<div class="ss-wrap"><input class="ss-inp" id="sp-sell-c-inp" type="text" placeholder="Search contacts..." oninput="spSellCSearch(this.value)" onclick="spSellCSearch(this.value)" autocomplete="off"><input type="hidden" id="sp-sell-c-id"><div class="ss-drop hidden" id="sp-sell-c-drop"></div></div></div>'
+    +'<div class="form-group"><label>Pack Template</label>'
+    +'<select id="sp-sell-tmpl" class="filter-sel" style="width:100%;height:38px" onchange="spSellUpdatePrice()">'
+    +(tmpls.length?tmpls.map(function(t){return'<option value="'+t.id+'">'+esc(t.name)+' ('+t.sessionsPaid+' paid, '+t.sessionsTotal+' total) - '+fmt$(t.price)+'</option>';}).join(''):'<option value="">No active templates - create one first</option>')
+    +'</select></div>'
+    +'<div id="sp-sell-summary" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px;display:none"></div>'
+    +'<div class="form-group"><label>Payment Method</label>'
+    +'<div class="pay-tabs" style="margin-bottom:10px">'
+    +'<button class="pay-tab active" id="sp-pm-card" onclick="spSellSetPM(\'card\')">Card</button>'
+    +'<button class="pay-tab" id="sp-pm-cash" onclick="spSellSetPM(\'cash\')">Cash</button>'
+    +'<button class="pay-tab" id="sp-pm-other" onclick="spSellSetPM(\'other\')">Other</button>'
+    +'</div>'
+    +'<div id="sp-pm-card-fields">'+(sqIsConnected()?'<div id="sp-sq-card-container" class="sq-card-form" style="min-height:44px"></div><div id="sp-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>':'<div style="font-size:12px;color:var(--main-text-muted);padding:4px 0">Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.</div>')+'</div>'
+    +'<div id="sp-pm-cash-fields" class="hidden"><div style="font-size:12px;color:var(--main-text-muted);padding:4px 0">Cash payment will be recorded.</div></div>'
+    +'<div id="sp-pm-other-fields" class="hidden"><input id="sp-sell-ref" type="text" placeholder="Reference # (Venmo, check, etc.)" style="'+inpS+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Staff</label>'
+    +'<select id="sp-sell-staff" class="filter-sel" style="width:100%;height:38px">'
+    +allUsers().map(function(u){return'<option value="'+u.id+'"'+(state.user&&state.user.id===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>';}).join('')
+    +'</select></div>'
+    +'<div class="form-group"><label>Notes <span style="font-weight:400;color:var(--main-text-muted)">(optional)</span></label>'
+    +'<input id="sp-sell-notes" type="text" placeholder="Internal note..." style="'+inpS+'"></div>'
+    +'<button class="btn btn-primary" id="sp-sell-btn" onclick="spProcessSale()" style="min-width:160px">Process and Issue Pack</button>'
+    +'</div>';
+  return h;
+}
+
+function spInitSellForm(){
+  spSellUpdatePrice();
+  if(sqIsConnected()) spInitSellCardForm();
+}
+
+function spSellUpdatePrice(){
+  var tmplId=document.getElementById('sp-sell-tmpl')&&document.getElementById('sp-sell-tmpl').value;
+  var tmpl=tmplId?(db.sessionPackTemplates||[]).find(function(x){return x.id===tmplId;}):null;
+  var el=document.getElementById('sp-sell-summary');if(!el)return;
+  if(!tmpl){el.style.display='none';return;}
+  var svcTxt=tmpl.serviceRestriction==='specific'&&tmpl.services&&tmpl.services.length?tmpl.services.join(', '):'Any service';
+  var expTxt=tmpl.expiresMonths?tmpl.expiresMonths+' months from purchase':'Never expires';
+  el.style.display='';
+  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+    +'<div><strong style="color:var(--main-text)">'+esc(tmpl.name)+'</strong>'
+    +(tmpl.description?'<div style="color:var(--main-text-muted);font-size:12px;margin-top:2px">'+esc(tmpl.description)+'</div>':'')
+    +'<div style="color:var(--main-text-muted);font-size:12px;margin-top:4px">'+tmpl.sessionsPaid+' sessions paid, '+tmpl.sessionsTotal+' total sessions issued<br>Applies to: '+esc(svcTxt)+'<br>'+expTxt+'</div></div>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:700;color:var(--orange)">'+fmt$(tmpl.price)+'</div></div>';
+}
+
+function spSellSetPM(m){
+  state.spSellPM=m;
+  ['card','cash','other'].forEach(function(x){
+    var btn=document.getElementById('sp-pm-'+x);if(btn)btn.classList.toggle('active',x===m);
+    var f=document.getElementById('sp-pm-'+x+'-fields');if(f)f.classList.toggle('hidden',x!==m);
+  });
+}
+
+function spSellCSearch(v){
+  var dd=document.getElementById('sp-sell-c-drop');if(!dd)return;
+  if(!v.trim()){dd.classList.add('hidden');return;}
+  var m=(db.contacts||[]).filter(function(c){return!c.archived&&((c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase()));}).slice(0,8);
+  if(!m.length)dd.innerHTML='<div class="ss-empty">No contacts found</div>';
+  else dd.innerHTML=m.map(function(c){return'<div class="ss-opt" onclick="spSellSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';}).join('');
+  dd.classList.remove('hidden');
+  setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
+}
+
+function spSellSelC(id,name){
+  var ci=document.getElementById('sp-sell-c-id');if(ci)ci.value=id;
+  var ni=document.getElementById('sp-sell-c-inp');if(ni)ni.value=name;
+  var dd=document.getElementById('sp-sell-c-drop');if(dd)dd.classList.add('hidden');
+}
+
+var spSellSqCard=null;
+
+async function spInitSellCardForm(){
+  if(!sqIsConnected())return;
+  var container=document.getElementById('sp-sq-card-container');if(!container)return;
+  try{
+    var appId=db.settings.square&&db.settings.square.appId||'';
+    var locId=db.settings.square&&db.settings.square.locationId||'';
+    var payments=window.Square?window.Square.payments(appId,locId):null;
+    if(!payments)return;
+    spSellSqCard=await payments.card();
+    await spSellSqCard.attach('#sp-sq-card-container');
+  }catch(e){spSellSqCard=null;console.warn('SP sell card init:',e);}
+}
+
+async function spProcessSale(){
+  var tmplId=document.getElementById('sp-sell-tmpl')&&document.getElementById('sp-sell-tmpl').value;
+  var tmpl=tmplId?(db.sessionPackTemplates||[]).find(function(x){return x.id===tmplId;}):null;
+  if(!tmpl){toast('Select a pack template.','error');return;}
+  var contactId=document.getElementById('sp-sell-c-id')&&document.getElementById('sp-sell-c-id').value||'';
+  if(!contactId){toast('Select a client.','error');return;}
+  var staffId=document.getElementById('sp-sell-staff')&&document.getElementById('sp-sell-staff').value||'';
+  var notes=(document.getElementById('sp-sell-notes')&&document.getElementById('sp-sell-notes').value||'').trim();
+  var pm=state.spSellPM||'card';
+  var ref=(document.getElementById('sp-sell-ref')&&document.getElementById('sp-sell-ref').value||'').trim();
+  var btn=document.getElementById('sp-sell-btn');
+  var errEl=document.getElementById('sp-sq-card-errors');
+  if(pm==='card'&&sqIsConnected()&&spSellSqCard){
+    if(btn){btn.disabled=true;btn.textContent='Processing...';}
+    try{
+      var result=await spSellSqCard.tokenize();
+      if(result.status!=='OK'){
+        if(errEl)errEl.textContent=result.errors?result.errors.map(function(e){return e.message;}).join(', '):'Card error.';
+        if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+        return;
+      }
+      var idempKey='sp-'+uid();
+      var chargeRes=await fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sourceId:result.token,amountCents:Math.round(tmpl.price*100),idempotencyKey:idempKey,note:'Session Pack: '+tmpl.name,contactId:contactId,staffId:staffId}),credentials:'include'});
+      var chargeData=await chargeRes.json();
+      if(!chargeData.success){
+        if(errEl)errEl.textContent='Charge failed: '+(chargeData.error||'Unknown error');
+        if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+        return;
+      }
+      spSellSqCard=null;
+      spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,chargeData.payment&&chargeData.payment.id||'');
+    }catch(e){
+      if(errEl)errEl.textContent='Charge failed: '+e.message;
+      if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+    }
+    return;
+  }
+  spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,'');
+}
+
+function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId){
+  var payId=uid();
+  var packId='sp-'+uid();
+  var today=todayStr();
+  var expiresDate=null;
+  if(tmpl.expiresMonths){
+    var d=new Date();d.setMonth(d.getMonth()+tmpl.expiresMonths);
+    expiresDate=d.toISOString().split('T')[0];
+  }
+  db.payments.push({
+    id:payId,contactId:contactId||null,staffId:staffId||null,
+    items:[{desc:'Session Pack: '+tmpl.name,price:tmpl.price}],
+    subtotal:tmpl.price,discountAmount:0,afterDiscount:tmpl.price,
+    feeAmount:0,tipAmount:0,creditApplied:0,total:tmpl.price,
+    paymentMethod:pm,paymentRef:ref||'',squarePaymentId:squarePaymentId||'',
+    status:'completed',notes:notes||'Session pack sale',
+    isSessionPackSale:true,sessionPackId:packId,
+    createdAt:now_()
+  });
+  if(!db.sessionPacks)db.sessionPacks=[];
+  db.sessionPacks.push({
+    id:packId,templateId:tmpl.id,
+    templateSnapshot:{name:tmpl.name,sessionsPaid:tmpl.sessionsPaid,sessionsTotal:tmpl.sessionsTotal,price:tmpl.price,serviceRestriction:tmpl.serviceRestriction,services:tmpl.services||[]},
+    contactId:contactId,sessionsTotal:tmpl.sessionsTotal,sessionsUsed:0,
+    purchaseDate:today,expiresDate:expiresDate,status:'active',
+    paymentId:payId,paymentMethod:pm,staffId:staffId||null,
+    notes:notes,usageLog:[],createdAt:now_()
+  });
+  saveData();
+  var c=(db.contacts||[]).find(function(x){return x.id===contactId;});
+  toast('Session pack issued to '+(c?c.name:'client')+'.','success');
+  ['sp-sell-c-inp','sp-sell-notes','sp-sell-ref'].forEach(function(fid){var el=document.getElementById(fid);if(el)el.value='';});
+  var cid=document.getElementById('sp-sell-c-id');if(cid)cid.value='';
+  switchSpTab('clients');
+}
+
+function spOpenSell(tmplId){
+  state.spTab='sell';
+  renderSessionPacks();
+  setTimeout(function(){
+    var sel=document.getElementById('sp-sell-tmpl');
+    if(sel&&tmplId)sel.value=tmplId;
+    spSellUpdatePrice();
+  },50);
+}
+
+function spUseSession(packId){
+  var pack=(db.sessionPacks||[]).find(function(x){return x.id===packId;});
+  if(!pack){toast('Pack not found.','error');return;}
+  if(pack.status!=='active'){toast('This pack is not active.','error');return;}
+  var remaining=pack.sessionsTotal-(pack.sessionsUsed||0);
+  if(remaining<=0){toast('No sessions remaining.','error');return;}
+  var pName=pack.templateSnapshot&&pack.templateSnapshot.name||'Session Pack';
+  var inpS='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var body='<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:14px">'
+    +'Pack: <strong style="color:var(--main-text)">'+esc(pName)+'</strong><br>'
+    +'Sessions remaining: <strong style="color:var(--orange)">'+remaining+' of '+pack.sessionsTotal+'</strong>'
+    +(pack.expiresDate?'<br>Expires: '+fmtDate(pack.expiresDate):'')+'</div>'
+    +'<div class="form-group"><label>Note <span style="font-weight:400;color:var(--main-text-muted)">(optional)</span></label>'
+    +'<input id="sp-use-note" type="text" style="'+inpS+'" placeholder="e.g. 60 min Swedish, staff name..."></div>';
+  openModal('Use a Session',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="confirmSpUseSession(\''+packId+'\')">Confirm Use</button>');
+}
+
+function confirmSpUseSession(packId){
+  var pack=(db.sessionPacks||[]).find(function(x){return x.id===packId;});
+  if(!pack){toast('Pack not found.','error');return;}
+  var note=(document.getElementById('sp-use-note')&&document.getElementById('sp-use-note').value||'').trim();
+  pack.sessionsUsed=(pack.sessionsUsed||0)+1;
+  if(!pack.usageLog)pack.usageLog=[];
+  pack.usageLog.push({id:uid(),date:now_(),note:note,staffId:state.user&&state.user.id||null,sessionNumber:pack.sessionsUsed});
+  if(pack.sessionsUsed>=pack.sessionsTotal)pack.status='exhausted';
+  saveData();closeModal();
+  var remaining=pack.sessionsTotal-pack.sessionsUsed;
+  toast('Session used. '+(remaining>0?remaining+' remaining.':'All sessions used.'),'success');
+  if(state.drawer)renderDrawer();
+  if(state.paymentsTab==='sessionpacks')renderSessionPacks();
+}
+
+function spCancelPack(packId){
+  var pack=(db.sessionPacks||[]).find(function(x){return x.id===packId;});
+  if(!pack)return;
+  var pName=pack.templateSnapshot&&pack.templateSnapshot.name||'Session Pack';
+  openModal('Cancel Pack','<div class="warn-box">Cancel <strong>'+esc(pName)+'</strong>? The client will lose their remaining sessions. This cannot be undone.</div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Keep It</button>'
+    +'<button class="btn btn-danger" onclick="confirmSpCancelPack(\''+packId+'\')">Cancel Pack</button>');
+}
+function confirmSpCancelPack(packId){
+  var pack=(db.sessionPacks||[]).find(function(x){return x.id===packId;});
+  if(!pack)return;
+  pack.status='cancelled';pack.updatedAt=now_();
+  saveData();closeModal();
+  if(state.drawer)renderDrawer();
+  if(state.paymentsTab==='sessionpacks')renderSessionPacks();
+  toast('Pack cancelled.','success');
+}
+
+function renderContactSessionPacks(contactId){
+  var packs=(db.sessionPacks||[]).filter(function(p){return p.contactId===contactId;});
+  var today=todayStr();
+  packs.forEach(function(p){
+    if(p.status==='active'&&p.expiresDate&&p.expiresDate<today)p.status='expired';
+    if(p.status==='active'&&p.sessionsUsed>=p.sessionsTotal)p.status='exhausted';
+  });
+  var active=packs.filter(function(p){return p.status==='active';});
+  var others=packs.filter(function(p){return p.status!=='active';});
+  var h='<div class="sec-row" style="margin-top:14px"><div class="sec-label" style="margin-bottom:0">Session Packs ('+active.length+' active)</div>'
+    +'<button class="btn btn-purple btn-sm" onclick="spAddPackFromDrawer(\''+contactId+'\')">+ Add Pack</button></div>';
+  if(!packs.length){
+    return h+'<div style="font-size:13px;color:var(--main-text-muted);padding:6px 0;margin-bottom:4px">No session packs.</div>';
+  }
+  active.forEach(function(p){
+    var pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
+    var remaining=p.sessionsTotal-(p.sessionsUsed||0);
+    var pct=Math.max(0,Math.min(100,(remaining/p.sessionsTotal)*100));
+    h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:10px 12px;margin-top:6px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--main-text)">'+esc(pName)+'</div>'
+      +'<span class="status-badge sb-active">active</span></div>'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      +'<div style="flex:1;height:6px;background:var(--main-border);border-radius:3px;overflow:hidden">'
+      +'<div style="height:100%;width:'+pct+'%;background:var(--orange);border-radius:3px;transition:width .3s"></div></div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--orange);white-space:nowrap">'+remaining+' / '+p.sessionsTotal+'</div></div>'
+      +(p.expiresDate?'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:8px">Expires '+fmtDate(p.expiresDate)+'</div>':'')
+      +'<button class="btn btn-primary btn-sm" onclick="spUseSession(\''+p.id+'\')">Use Session</button>'
+      +'</div>';
+  });
+  if(others.length){
+    h+='<div style="margin-top:10px">';
+    others.forEach(function(p){
+      var pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
+      var stCls={exhausted:'sb-inactive',expired:'sb-overdue',cancelled:'sb-inactive'}[p.status]||'sb-inactive';
+      h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--main-border);opacity:.6">'
+        +'<div style="font-size:12px;color:var(--main-text)">'+esc(pName)+'</div>'
+        +'<span class="status-badge '+stCls+'" style="font-size:9px">'+p.status+'</span></div>';
+    });
+    h+='</div>';
+  }
+  return h;
+}
+
+function spAddPackFromDrawer(contactId){
+  var tmpls=(db.sessionPackTemplates||[]).filter(function(t){return t.status!=='inactive';});
+  if(!tmpls.length){toast('No active pack templates. Create one in Session Packs first.','error');return;}
+  var inpS='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var body='<div class="form-group"><label>Pack Template</label>'
+    +'<select id="sp-drawer-tmpl" class="filter-sel" style="width:100%;height:38px" onchange="spDrawerUpdateSummary()">'
+    +tmpls.map(function(t){return'<option value="'+t.id+'">'+esc(t.name)+' - '+fmt$(t.price)+'</option>';}).join('')
+    +'</select></div>'
+    +'<div id="sp-drawer-summary" style="font-size:12px;color:var(--main-text-muted);margin:-6px 0 10px"></div>'
+    +'<div class="form-group"><label>Payment Method</label>'
+    +'<select id="sp-drawer-pm" class="filter-sel" style="width:100%;height:38px"><option value="card">Card</option><option value="cash">Cash</option><option value="other">Other</option></select></div>'
+    +'<div class="form-group"><label>Notes <span style="font-weight:400;color:var(--main-text-muted)">(optional)</span></label>'
+    +'<input id="sp-drawer-notes" type="text" style="'+inpS+'" placeholder="Internal note..."></div>';
+  openModal('Add Session Pack',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="spDrawerIssuePack(\''+contactId+'\')">Issue Pack</button>');
+  setTimeout(spDrawerUpdateSummary,50);
+}
+
+function spDrawerUpdateSummary(){
+  var tmplId=document.getElementById('sp-drawer-tmpl')&&document.getElementById('sp-drawer-tmpl').value;
+  var tmpl=tmplId?(db.sessionPackTemplates||[]).find(function(x){return x.id===tmplId;}):null;
+  var el=document.getElementById('sp-drawer-summary');if(!el)return;
+  if(!tmpl){el.textContent='';return;}
+  var svcTxt=tmpl.serviceRestriction==='specific'&&tmpl.services&&tmpl.services.length?tmpl.services.join(', '):'Any service';
+  el.textContent=tmpl.sessionsPaid+' paid, '+tmpl.sessionsTotal+' total sessions. '+svcTxt+(tmpl.expiresMonths?' Expires in '+tmpl.expiresMonths+' months.':' No expiration.');
+}
+
+function spDrawerIssuePack(contactId){
+  var tmplId=document.getElementById('sp-drawer-tmpl')&&document.getElementById('sp-drawer-tmpl').value;
+  var tmpl=tmplId?(db.sessionPackTemplates||[]).find(function(x){return x.id===tmplId;}):null;
+  if(!tmpl){toast('Select a template.','error');return;}
+  var pm=document.getElementById('sp-drawer-pm')&&document.getElementById('sp-drawer-pm').value||'card';
+  var notes=(document.getElementById('sp-drawer-notes')&&document.getElementById('sp-drawer-notes').value||'').trim();
+  var staffId=state.user&&state.user.id||'';
+  closeModal();
+  spSellFinalize(tmpl,contactId,staffId,pm,'',notes,'');
+}
 
 // =====================================================
 // MULTI-TENANCY ROUTING
