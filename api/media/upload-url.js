@@ -66,9 +66,7 @@ module.exports = async function handler(req, res) {
       Bucket: process.env.AWS_S3_BUCKET,
       Key: fileKey,
       ContentType: fileType,
-      ContentLength: fileSize,
-      ServerSideEncryption: 'aws:kms',
-      SSEKMSKeyId: process.env.AWS_KMS_KEY_ARN
+      ContentLength: fileSize
     });
 
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
