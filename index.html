@@ -4064,7 +4064,7 @@ function initApp(){
   renderWorkspacePill();
   if(db.settings.supabaseUrl&&db.settings.supabaseKey)setSyncSt('synced');
   applyRolePermissions();
-  updateNotifBadge();renderPanel();
+  updateNotifBadge();initBrowserNotifs();renderPanel();
   fetchFromSupabase().then(ok=>{if(ok){renderPanel();renderWorkspacePill();}});
   handleSquareHash();
   var sbCard=document.getElementById('supabase-card');
@@ -5198,11 +5198,61 @@ function getNotifs(){
 }
 
 // =====================================================
-// OVERRIDE: updateNotifBadge — count unread only
+// OVERRIDE: updateNotifBadge — count unread only + fire browser push for new notifs
 // =====================================================
 function updateNotifBadge(){
   const unread=getNotifs().filter(n=>!n.read),badge=document.getElementById('notif-badge');
   if(badge){badge.textContent=unread.length;badge.classList.toggle('hidden',unread.length===0)}
+  checkForNewNotifs();
+}
+
+// =====================================================
+// BROWSER PUSH + AUDIO NOTIFICATIONS
+// =====================================================
+function notifDing(){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.type='sine';
+    osc.frequency.setValueAtTime(1046,ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(523,ctx.currentTime+0.35);
+    gain.gain.setValueAtTime(0.28,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.5);
+    osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.5);
+  }catch(e){}
+}
+
+function checkForNewNotifs(){
+  if(!state.notifSeen)return; // not initialized yet — skip
+  const current=getNotifs();
+  const fresh=current.filter(n=>!state.notifSeen.has(n.key));
+  if(!fresh.length)return;
+  fresh.forEach(n=>state.notifSeen.add(n.key));
+  notifDing();
+  if(Notification&&Notification.permission==='granted'){
+    fresh.forEach(n=>{
+      try{
+        const notif=new Notification('MySpark+',{body:n.text,icon:'/favicon.ico',tag:n.key,renotify:false});
+        notif.onclick=function(){window.focus();notif.close();handleNotifClick(n.kind,n.id);};
+      }catch(e){}
+    });
+  }
+}
+
+function initBrowserNotifs(){
+  if(!state.notifSeen){
+    // Seed with all currently known keys so existing notifs don't fire on login
+    state.notifSeen=new Set(getNotifs().map(n=>n.key));
+  }
+  if(Notification&&Notification.permission==='default'){
+    Notification.requestPermission().catch(function(){});
+  }
+  // Poll every 60 seconds as a safety net alongside event-driven calls
+  if(!state._notifPollTimer){
+    state._notifPollTimer=setInterval(checkForNewNotifs,60000);
+  }
 }
 
 // =====================================================
