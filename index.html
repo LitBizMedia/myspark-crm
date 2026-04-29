@@ -4233,8 +4233,7 @@ async function saveProfile(){
     }
   }
 
-  // Profile metadata (name, color) still updates locally.
-  // TODO: future migration moves this to a server-side update too.
+  // Update locally first for immediate visual feedback
   const updates={name:name,color:state.selUserColor};
   const isAdmin=isPrimaryAdmin(u.id);
   if(isAdmin){
@@ -4247,7 +4246,33 @@ async function saveProfile(){
   document.getElementById('sb-name').textContent=name||u.username;
   document.getElementById('sb-avatar').textContent=initials(name||u.username);
   document.getElementById('sb-avatar').style.background=state.selUserColor;
-  saveData();closeModal();
+  saveData();
+
+  // Sync display_name to subaccount_users so refresh picks it up.
+  // Without this, refreshing pulls the old name from the auth table and
+  // overwrites the local change.
+  // Color is local-only (not in subaccount_users schema), so we only sync name.
+  try{
+    var syncRes=await fetch('/api/subaccount/update-user',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:u.username,displayName:name})
+    });
+    var syncData=await syncRes.json().catch(function(){return {};});
+    if(!syncRes.ok){
+      var errMsg=syncData.error||('Status '+syncRes.status);
+      toast('Profile saved locally, but auth sync failed: '+errMsg,'warning');
+      closeModal();
+      return;
+    }
+  }catch(syncErr){
+    toast('Profile saved locally, but auth sync failed: '+syncErr.message,'warning');
+    closeModal();
+    return;
+  }
+
+  closeModal();
   toast(pass?'Password changed and profile updated.':'Profile updated.','success');
 }
 
