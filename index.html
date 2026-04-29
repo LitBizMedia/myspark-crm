@@ -1563,7 +1563,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <div id="panel-media" class="panel hidden">
         <div class="page-header">
           <div><div class="page-title">Media Library</div><div class="page-subtitle">Upload and manage images and documents</div></div>
-          <button class="btn btn-primary" onclick="openMediaUpload()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Upload</button>
+          <button class="btn btn-primary media-write-only" id="media-upload-btn" onclick="openMediaUpload()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Upload</button>
         </div>
         <div class="toolbar">
           <div class="search-box" style="max-width:280px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="media-search" type="text" placeholder="Search files..." oninput="renderMediaFiles()"></div>
@@ -2265,7 +2265,7 @@ function switchPanel(name){
   var _r=state.user&&state.user.role||'user';
   var _am=_r==='admin'||_r==='manager';
   if(name==='settings'&&_r!=='admin'){toast('Access denied.','error');return;}
-  if((name==='products'||name==='staff'||name==='media')&&!_am){toast('Access denied.','error');return;}
+  if((name==='products'||name==='staff')&&!_am){toast('Access denied.','error');return;}
   if(name==='forms'&&_r==='practitioner'){toast('Access denied.','error');return;}
   if((name==='tasks'||name==='payments')&&_r==='practitioner'){toast('Access denied.','error');return;}
   if(name==='payments'&&_r==='user'){
@@ -2279,9 +2279,10 @@ function switchPanel(name){
   // Hide Products sidebar for non-admin
   const sbProd=document.getElementById('panel-products')&&document.querySelector('[data-panel="products"]');
   if(sbProd)sbProd.style.display=(state.user&&state.user.role==='admin')?'':'none';
-  // Hide Media nav for non-admin/manager
+  // Media Library is visible to all authenticated users.
+  // Read access is open; upload/delete are restricted in the UI by isAdminOrManager().
   const sbMedia=document.querySelector('[data-panel="media"]');
-  if(sbMedia)sbMedia.style.display=(state.user&&(state.user.role==='admin'||state.user.role==='manager'))?'':'none';
+  if(sbMedia)sbMedia.style.display='';
   renderPanel();
   if(name==='settings')renderSquareCard();
 }
@@ -14439,12 +14440,15 @@ function mediaIconColor(name) {
   return MEDIA_ICON_COLORS[mediaFileExt(name)] || MEDIA_ICON_COLORS.default;
 }
 
+// Permission helper: only admin and manager can upload/delete media.
+// Staff (user, practitioner) get read-only access.
+function canMediaWrite() {
+  return isAdminOrManager();
+}
+
 async function renderMedia() {
-  if (!isAdminOrManager()) {
-    var el = document.getElementById('panel-media');
-    if (el) el.innerHTML = '<div style="padding:32px;color:var(--main-text-muted)">Admin or manager access required.</div>';
-    return;
-  }
+  // All authenticated users can view the Media Library.
+  // Upload and delete buttons are hidden for non-admin/manager via canMediaWrite().
   // Load files from server
   await loadMediaFiles();
   // Set the view button states
@@ -14515,13 +14519,15 @@ function renderMediaFiles() {
       var thumb = mediaIsImage(f.type, f.name) && f.url
         ? '<img src="' + esc(f.url) + '" style="width:32px;height:32px;border-radius:6px;object-fit:cover">'
         : '<div class="media-list-icon" style="background:' + color + '">' + esc(ext.slice(0, 4)) + '</div>';
+      var deleteBtn = canMediaWrite()
+        ? ' <button class="btn btn-danger btn-sm" onclick="confirmDeleteMedia(\'' + esc(f.id) + '\')">Delete</button>'
+        : '';
       return '<tr>' +
         '<td><div style="display:flex;align-items:center;gap:10px">' + thumb + '<span>' + esc(f.name) + '</span></div></td>' +
         '<td>' + esc(f.folder) + '</td>' +
         '<td>' + mediaFmtSize(f.size) + '</td>' +
         '<td>' + new Date(f.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + '</td>' +
-        '<td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openMediaPreview(\'' + esc(f.id) + '\')">View</button> ' +
-        '<button class="btn btn-danger btn-sm" onclick="confirmDeleteMedia(\'' + esc(f.id) + '\')">Delete</button></td>' +
+        '<td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openMediaPreview(\'' + esc(f.id) + '\')">View</button>' + deleteBtn + '</td>' +
         '</tr>';
     }).join('');
     grid.innerHTML = '<table class="media-list-table"><thead><tr><th>Name</th><th>Folder</th><th>Size</th><th>Uploaded</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
@@ -14557,14 +14563,18 @@ function openMediaPreview(fileId) {
     '<div><strong style="color:var(--main-text)">' + esc(file.name) + '</strong></div>' +
     '<div style="margin-top:4px">Folder: ' + esc(file.folder) + ' · ' + mediaFmtSize(file.size) + ' · ' + new Date(file.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + '</div>' +
     '</div>';
+  var deleteFooter = canMediaWrite()
+    ? '<button class="btn btn-danger" onclick="confirmDeleteMedia(\'' + esc(file.id) + '\')">Delete</button>'
+    : '';
   var foot = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>' +
     (file.url ? '<a href="' + esc(file.url) + '" target="_blank" rel="noopener" class="btn btn-ghost" download="' + esc(file.name) + '">Open</a>' : '') +
-    '<button class="btn btn-danger" onclick="confirmDeleteMedia(\'' + esc(file.id) + '\')">Delete</button>';
+    deleteFooter;
   state.modal = { type: 'media-preview', id: fileId };
   openModal(file.name, body, foot, 'modal-lg');
 }
 
 function confirmDeleteMedia(fileId) {
+  if (!canMediaWrite()) { toast('Admin or manager access required to delete files.', 'error'); return; }
   var file = state.media.files.find(function(f) { return f.id === fileId; });
   if (!file) return;
   state.modal = { type: 'media-delete', id: fileId };
@@ -14604,6 +14614,7 @@ async function doDeleteMedia() {
 }
 
 function openMediaUpload() {
+  if (!canMediaWrite()) { toast('Admin or manager access required to upload files.', 'error'); return; }
   state.modal = { type: 'media-upload' };
   var folderOpts = state.media.folders.map(function(f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join('');
   var inpS = 'width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none';

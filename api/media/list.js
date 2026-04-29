@@ -45,9 +45,12 @@ module.exports = async function handler(req, res) {
   if (!session || session.user_type !== 'subaccount') {
     return res.status(401).json({ error: 'Not authenticated' });
   }
-  if (session.role !== 'admin' && session.role !== 'manager') {
-    return res.status(403).json({ error: 'Admin or manager role required' });
-  }
+  // List access is open to any authenticated subaccount user.
+  // Upload and delete remain admin/manager only (enforced in those endpoints).
+  // Read access lets staff use media in their work without being able to
+  // modify the library.
+  // (Role check intentionally removed here - any valid subaccount session
+  // can list files for their subaccount.)
 
   const subaccountId = session.subaccount_id;
   const folder = req.query.folder || '';
