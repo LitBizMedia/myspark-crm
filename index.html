@@ -845,6 +845,31 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .credit-hist-row:last-child{border-bottom:none}
 .credit-pos{color:#34d399;font-weight:700}
 .credit-neg{color:#f87171;font-weight:700}
+
+/* Media Library */
+.media-grid-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-top:14px}
+.media-tile{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s;position:relative}
+.media-tile:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(107,33,234,.1)}
+.media-thumb{height:120px;display:flex;align-items:center;justify-content:center;background:var(--main-bg);overflow:hidden;position:relative}
+.media-thumb img{width:100%;height:100%;object-fit:cover}
+.media-thumb-icon{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--main-text-muted)}
+.media-thumb-ext{font-family:Exo 2,sans-serif;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:4px;color:#fff}
+.media-tile-info{padding:8px 10px}
+.media-tile-name{font-size:12px;font-weight:600;color:var(--main-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.media-tile-meta{font-size:10px;color:var(--main-text-muted);display:flex;justify-content:space-between}
+.media-list-table{width:100%;border-collapse:collapse;margin-top:14px;background:var(--main-card);border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--main-border)}
+.media-list-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);background:var(--main-bg);border-bottom:1px solid var(--main-border)}
+.media-list-table td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--main-border);color:var(--main-text)}
+.media-list-table tr:last-child td{border-bottom:none}
+.media-list-table tr:hover{background:var(--main-card-hover)}
+.media-list-icon{width:32px;height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;font-weight:800;color:#fff;text-transform:uppercase}
+.media-empty{text-align:center;padding:48px 20px;color:var(--main-text-muted)}
+.media-empty svg{margin:0 auto 12px;display:block;opacity:.3}
+.media-drop-zone{border:2px dashed var(--purple-border);border-radius:var(--radius-lg);padding:32px 20px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s}
+.media-drop-zone:hover,.media-drop-zone.dragover{background:rgba(107,33,234,.04);border-color:var(--purple)}
+.media-drop-zone svg{margin:0 auto 10px;display:block;color:var(--purple-light)}
+.media-progress-wrap{margin-top:14px;background:var(--main-bg);border-radius:var(--radius);overflow:hidden;height:6px}
+.media-progress-bar{height:100%;background:var(--orange);width:0%;transition:width .2s}
 /* DRILL-DOWN TABLE */
 .drill-table{width:100%;border-collapse:collapse;font-size:12px}
 .drill-table th{text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);border-bottom:1px solid var(--border)}
@@ -1002,6 +1027,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       </button>
       <button class="sb-item" id="sb-forms" data-panel="forms" onclick="switchPanel('forms')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Forms
+      </button>
+      <button class="sb-item" id="sb-media" data-panel="media" onclick="switchPanel('media')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Media Library
       </button>
       <button class="sb-item" id="sb-staff" data-panel="staff" onclick="switchPanel('staff')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Staff
@@ -1532,6 +1560,22 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       </div>
 
       <!-- SETTINGS -->
+      <div id="panel-media" class="panel hidden">
+        <div class="page-header">
+          <div><div class="page-title">Media Library</div><div class="page-subtitle">Upload and manage images and documents</div></div>
+          <button class="btn btn-primary" onclick="openMediaUpload()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Upload</button>
+        </div>
+        <div class="toolbar">
+          <div class="search-box" style="max-width:280px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="media-search" type="text" placeholder="Search files..." oninput="renderMediaFiles()"></div>
+          <select class="filter-sel" id="media-folder-filter" onchange="renderMediaFiles()"><option value="">All Folders</option></select>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" id="media-view-grid" onclick="setMediaView('grid')" title="Grid view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+            <button class="btn btn-ghost btn-sm" id="media-view-list" onclick="setMediaView('list')" title="List view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+          </div>
+        </div>
+        <div id="media-grid"></div>
+      </div>
+
       <div id="panel-settings" class="panel hidden">
         <div class="page-header"><div><div class="page-title">Settings</div></div></div>
         <div class="settings-tab-bar">
@@ -2211,9 +2255,9 @@ function handleLogout(){
 // =====================================================
 // initApp defined below (Supabase-aware version at line ~3180)
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',staff:'Staff',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',media:'Media Library',staff:'Staff',settings:'Settings'};
 function renderPanel(){
-  const fns={dashboard:renderDash,contacts:renderContacts,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,staff:renderStaff,settings:renderSettings,products:renderProducts};
+  const fns={dashboard:renderDash,contacts:renderContacts,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,staff:renderStaff,settings:renderSettings,products:renderProducts,media:renderMedia};
   if(fns[state.panel])fns[state.panel]();
 }
 
@@ -2221,7 +2265,7 @@ function switchPanel(name){
   var _r=state.user&&state.user.role||'user';
   var _am=_r==='admin'||_r==='manager';
   if(name==='settings'&&_r!=='admin'){toast('Access denied.','error');return;}
-  if((name==='products'||name==='staff')&&!_am){toast('Access denied.','error');return;}
+  if((name==='products'||name==='staff'||name==='media')&&!_am){toast('Access denied.','error');return;}
   if(name==='forms'&&_r==='practitioner'){toast('Access denied.','error');return;}
   if((name==='tasks'||name==='payments')&&_r==='practitioner'){toast('Access denied.','error');return;}
   if(name==='payments'&&_r==='user'){
@@ -2235,6 +2279,9 @@ function switchPanel(name){
   // Hide Products sidebar for non-admin
   const sbProd=document.getElementById('panel-products')&&document.querySelector('[data-panel="products"]');
   if(sbProd)sbProd.style.display=(state.user&&state.user.role==='admin')?'':'none';
+  // Hide Media nav for non-admin/manager
+  const sbMedia=document.querySelector('[data-panel="media"]');
+  if(sbMedia)sbMedia.style.display=(state.user&&(state.user.role==='admin'||state.user.role==='manager'))?'':'none';
   renderPanel();
   if(name==='settings')renderSquareCard();
 }
@@ -14295,6 +14342,345 @@ function updateAuthSubtitle(){
   var el=document.querySelector('.auth-subtitle');
   if(el&&state.subaccountSlug&&state.subaccountSlug!==DEFAULT_SLUG){
     el.textContent=state.subaccountSlug.charAt(0).toUpperCase()+state.subaccountSlug.slice(1).replace(/-/g,' ')+' CRM';
+  }
+}
+
+
+// =====================================================
+// MEDIA LIBRARY
+// =====================================================
+//
+// Backed by AWS S3. The browser uploads directly to S3 via presigned PUT URLs
+// and reads via presigned GET URLs. Metadata lives in Supabase media_files.
+// All reads/writes go through /api/media/* which enforces auth + slug isolation.
+//
+// State on `state.media`:
+//   files:    list returned by /api/media/list
+//   folders:  distinct folder names
+//   view:     'grid' | 'list'
+//   filter:   { folder: '', q: '' }
+//   loaded:   true after first load completes
+
+state.media = state.media || { files: [], folders: ['Uncategorized'], view: 'grid', filter: { folder: '', q: '' }, loaded: false };
+
+const MEDIA_ICON_COLORS = {
+  pdf:  '#ef4444',
+  doc:  '#3b82f6', docx: '#3b82f6',
+  xls:  '#10b981', xlsx: '#10b981',
+  csv:  '#10b981',
+  txt:  '#9ca3af',
+  svg:  '#a855f7',
+  default: '#6b7280'
+};
+
+function mediaFileExt(name) {
+  if (!name) return '';
+  var idx = name.lastIndexOf('.');
+  return idx < 0 ? '' : name.slice(idx + 1).toLowerCase();
+}
+
+function mediaIsImage(type, name) {
+  if (type && /^image\//.test(type)) return true;
+  var ext = mediaFileExt(name);
+  return ['jpg','jpeg','png','gif','webp','svg'].indexOf(ext) >= 0;
+}
+
+function mediaFmtSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function mediaIconColor(name) {
+  return MEDIA_ICON_COLORS[mediaFileExt(name)] || MEDIA_ICON_COLORS.default;
+}
+
+async function renderMedia() {
+  if (!isAdminOrManager()) {
+    var el = document.getElementById('panel-media');
+    if (el) el.innerHTML = '<div style="padding:32px;color:var(--main-text-muted)">Admin or manager access required.</div>';
+    return;
+  }
+  // Load files from server
+  await loadMediaFiles();
+  // Set the view button states
+  setMediaView(state.media.view);
+  // Render the grid/list
+  renderMediaFiles();
+  // Populate folder filter
+  var ff = document.getElementById('media-folder-filter');
+  if (ff) {
+    var current = ff.value;
+    ff.innerHTML = '<option value="">All Folders</option>' +
+      state.media.folders.map(function(f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join('');
+    if (current && state.media.folders.indexOf(current) >= 0) ff.value = current;
+  }
+}
+
+async function loadMediaFiles() {
+  try {
+    var r = await fetch('/api/media/list', { credentials: 'include' });
+    if (!r.ok) {
+      if (r.status === 401) { toast('Session expired. Please log in.', 'error'); return; }
+      if (r.status === 403) { toast('Admin or manager access required.', 'error'); return; }
+      toast('Could not load media files.', 'error'); return;
+    }
+    var data = await r.json();
+    state.media.files = data.files || [];
+    state.media.folders = data.folders && data.folders.length ? data.folders : ['Uncategorized'];
+    state.media.loaded = true;
+  } catch (e) {
+    console.error('loadMediaFiles error:', e);
+    toast('Could not load media files: ' + e.message, 'error');
+  }
+}
+
+function setMediaView(view) {
+  state.media.view = view;
+  var g = document.getElementById('media-view-grid');
+  var l = document.getElementById('media-view-list');
+  if (g) g.classList.toggle('active', view === 'grid');
+  if (l) l.classList.toggle('active', view === 'list');
+  renderMediaFiles();
+}
+
+function renderMediaFiles() {
+  var grid = document.getElementById('media-grid');
+  if (!grid) return;
+  var q = (document.getElementById('media-search') && document.getElementById('media-search').value || '').trim().toLowerCase();
+  var folder = document.getElementById('media-folder-filter') && document.getElementById('media-folder-filter').value || '';
+  var files = state.media.files.filter(function(f) {
+    if (folder && f.folder !== folder) return false;
+    if (q && !(f.name || '').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  if (!files.length) {
+    grid.innerHTML = '<div class="media-empty">' +
+      '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+      '<div style="font-size:14px;margin-bottom:6px">' + (state.media.loaded ? 'No files match your filters.' : 'Loading...') + '</div>' +
+      (state.media.loaded ? '<button class="btn btn-purple btn-sm" onclick="openMediaUpload()" style="margin-top:8px">Upload your first file</button>' : '') +
+      '</div>';
+    return;
+  }
+
+  if (state.media.view === 'list') {
+    var rows = files.map(function(f) {
+      var ext = mediaFileExt(f.name) || '?';
+      var color = mediaIconColor(f.name);
+      var thumb = mediaIsImage(f.type, f.name) && f.url
+        ? '<img src="' + esc(f.url) + '" style="width:32px;height:32px;border-radius:6px;object-fit:cover">'
+        : '<div class="media-list-icon" style="background:' + color + '">' + esc(ext.slice(0, 4)) + '</div>';
+      return '<tr>' +
+        '<td><div style="display:flex;align-items:center;gap:10px">' + thumb + '<span>' + esc(f.name) + '</span></div></td>' +
+        '<td>' + esc(f.folder) + '</td>' +
+        '<td>' + mediaFmtSize(f.size) + '</td>' +
+        '<td>' + new Date(f.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + '</td>' +
+        '<td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openMediaPreview(\'' + esc(f.id) + '\')">View</button> ' +
+        '<button class="btn btn-danger btn-sm" onclick="confirmDeleteMedia(\'' + esc(f.id) + '\')">Delete</button></td>' +
+        '</tr>';
+    }).join('');
+    grid.innerHTML = '<table class="media-list-table"><thead><tr><th>Name</th><th>Folder</th><th>Size</th><th>Uploaded</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+    return;
+  }
+
+  // Grid view
+  grid.innerHTML = '<div class="media-grid-wrap">' + files.map(function(f) {
+    var ext = mediaFileExt(f.name) || '?';
+    var color = mediaIconColor(f.name);
+    var isImg = mediaIsImage(f.type, f.name);
+    var thumb = isImg && f.url
+      ? '<img src="' + esc(f.url) + '" alt="' + esc(f.name) + '">'
+      : '<div class="media-thumb-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><div class="media-thumb-ext" style="background:' + color + '">' + esc(ext.slice(0, 4)) + '</div></div>';
+    return '<div class="media-tile" onclick="openMediaPreview(\'' + esc(f.id) + '\')">' +
+      '<div class="media-thumb">' + thumb + '</div>' +
+      '<div class="media-tile-info">' +
+      '<div class="media-tile-name" title="' + esc(f.name) + '">' + esc(f.name) + '</div>' +
+      '<div class="media-tile-meta"><span>' + esc(f.folder) + '</span><span>' + mediaFmtSize(f.size) + '</span></div>' +
+      '</div></div>';
+  }).join('') + '</div>';
+}
+
+function openMediaPreview(fileId) {
+  var file = state.media.files.find(function(f) { return f.id === fileId; });
+  if (!file) return;
+  var isImg = mediaIsImage(file.type, file.name);
+  var preview = isImg && file.url
+    ? '<img src="' + esc(file.url) + '" style="max-width:100%;max-height:60vh;border-radius:var(--radius);display:block;margin:0 auto">'
+    : '<div style="padding:48px 20px;text-align:center;background:var(--main-bg);border-radius:var(--radius);color:var(--main-text-muted)"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="margin:0 auto 12px;display:block"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><div style="font-size:14px">' + esc(mediaFileExt(file.name).toUpperCase() || 'File') + ' file</div></div>';
+  var body = preview +
+    '<div style="margin-top:14px;font-size:13px;color:var(--main-text-muted)">' +
+    '<div><strong style="color:var(--main-text)">' + esc(file.name) + '</strong></div>' +
+    '<div style="margin-top:4px">Folder: ' + esc(file.folder) + ' · ' + mediaFmtSize(file.size) + ' · ' + new Date(file.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + '</div>' +
+    '</div>';
+  var foot = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>' +
+    (file.url ? '<a href="' + esc(file.url) + '" target="_blank" rel="noopener" class="btn btn-ghost" download="' + esc(file.name) + '">Open</a>' : '') +
+    '<button class="btn btn-danger" onclick="confirmDeleteMedia(\'' + esc(file.id) + '\')">Delete</button>';
+  state.modal = { type: 'media-preview', id: fileId };
+  openModal(file.name, body, foot, 'modal-lg');
+}
+
+function confirmDeleteMedia(fileId) {
+  var file = state.media.files.find(function(f) { return f.id === fileId; });
+  if (!file) return;
+  state.modal = { type: 'media-delete', id: fileId };
+  document.getElementById('modal-title').textContent = 'Delete File';
+  document.getElementById('modal-box').className = 'modal';
+  document.getElementById('modal-body').innerHTML = '<div class="warn-box">Delete <strong>' + esc(file.name) + '</strong>? This cannot be undone.</div>';
+  document.getElementById('modal-foot').innerHTML = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="doDeleteMedia()">Delete File</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function doDeleteMedia() {
+  var d = state.modal;
+  if (!d || !d.id) return;
+  var btns = document.querySelectorAll('#modal-foot button');
+  btns.forEach(function(b) { b.disabled = true; });
+  try {
+    var r = await fetch('/api/media/delete', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId: d.id })
+    });
+    var data = await r.json().catch(function() { return { error: 'Server error' }; });
+    if (!r.ok) {
+      btns.forEach(function(b) { b.disabled = false; });
+      toast('Delete failed: ' + (data.error || 'Status ' + r.status), 'error');
+      return;
+    }
+    closeModal();
+    toast('File deleted.', 'success');
+    state.media.files = state.media.files.filter(function(f) { return f.id !== d.id; });
+    renderMediaFiles();
+  } catch (e) {
+    btns.forEach(function(b) { b.disabled = false; });
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+function openMediaUpload() {
+  state.modal = { type: 'media-upload' };
+  var folderOpts = state.media.folders.map(function(f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join('');
+  var inpS = 'width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none';
+  var body =
+    '<div class="form-group"><label>Folder</label>' +
+    '<select id="media-up-folder" class="filter-sel" style="width:100%;height:38px">' +
+    folderOpts +
+    '<option value="__new__">+ New folder...</option>' +
+    '</select>' +
+    '<input id="media-up-newfolder" type="text" placeholder="New folder name" style="' + inpS + ';margin-top:6px;display:none">' +
+    '</div>' +
+    '<div id="media-drop" class="media-drop-zone" onclick="document.getElementById(\'media-up-input\').click()">' +
+    '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+    '<div style="font-size:14px;font-weight:600;color:var(--main-text)">Click or drop a file here</div>' +
+    '<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">Images and documents up to 50MB</div>' +
+    '</div>' +
+    '<input id="media-up-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv" style="display:none" onchange="handleMediaUploadFile(this.files[0])">' +
+    '<div id="media-up-status" style="margin-top:14px;font-size:12px;color:var(--main-text-muted);min-height:18px"></div>' +
+    '<div id="media-up-progress" class="hidden media-progress-wrap"><div class="media-progress-bar" id="media-up-bar"></div></div>';
+  var foot = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>';
+  openModal('Upload File', body, foot, 'modal-md');
+  setTimeout(function() {
+    var sel = document.getElementById('media-up-folder');
+    if (sel) sel.addEventListener('change', function() {
+      var nf = document.getElementById('media-up-newfolder');
+      if (nf) nf.style.display = sel.value === '__new__' ? '' : 'none';
+    });
+    var dz = document.getElementById('media-drop');
+    if (dz) {
+      dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
+      dz.addEventListener('dragleave', function(e) { dz.classList.remove('dragover'); });
+      dz.addEventListener('drop', function(e) {
+        e.preventDefault(); dz.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files.length) handleMediaUploadFile(e.dataTransfer.files[0]);
+      });
+    }
+  }, 30);
+}
+
+async function handleMediaUploadFile(file) {
+  if (!file) return;
+  var statusEl = document.getElementById('media-up-status');
+  var progEl = document.getElementById('media-up-progress');
+  var barEl = document.getElementById('media-up-bar');
+
+  // Validate size client-side too
+  if (file.size > 50 * 1024 * 1024) {
+    if (statusEl) { statusEl.textContent = 'File too large. Maximum 50MB.'; statusEl.style.color = '#f87171'; }
+    return;
+  }
+
+  // Resolve folder
+  var folderSel = document.getElementById('media-up-folder');
+  var folder = folderSel ? folderSel.value : 'Uncategorized';
+  if (folder === '__new__') {
+    var nf = document.getElementById('media-up-newfolder');
+    folder = (nf && nf.value || '').trim() || 'Uncategorized';
+  }
+
+  if (statusEl) { statusEl.textContent = 'Preparing upload...'; statusEl.style.color = 'var(--main-text-muted)'; }
+  if (progEl) progEl.classList.remove('hidden');
+  if (barEl) barEl.style.width = '0%';
+
+  try {
+    // Step 1: get presigned URL
+    var presignRes = await fetch('/api/media/upload-url', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type || 'application/octet-stream',
+        fileSize: file.size,
+        folder:   folder
+      })
+    });
+    var presignData = await presignRes.json().catch(function() { return { error: 'Server error' }; });
+    if (!presignRes.ok) {
+      if (statusEl) { statusEl.textContent = 'Could not start upload: ' + (presignData.error || 'Status ' + presignRes.status); statusEl.style.color = '#f87171'; }
+      return;
+    }
+
+    // Step 2: PUT to S3 with progress tracking via XHR
+    if (statusEl) statusEl.textContent = 'Uploading...';
+    await new Promise(function(resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('PUT', presignData.uploadUrl);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable && barEl) {
+          var pct = (e.loaded / e.total) * 100;
+          barEl.style.width = pct.toFixed(1) + '%';
+        }
+      };
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error('S3 upload failed: ' + xhr.status));
+      };
+      xhr.onerror = function() { reject(new Error('Upload network error')); };
+      xhr.send(file);
+    });
+
+    if (barEl) barEl.style.width = '100%';
+    if (statusEl) { statusEl.textContent = 'Upload complete.'; statusEl.style.color = '#34d399'; }
+    closeModal();
+    toast('File uploaded.', 'success');
+    // Refresh the list
+    await loadMediaFiles();
+    renderMediaFiles();
+    var ff = document.getElementById('media-folder-filter');
+    if (ff) {
+      var current = ff.value;
+      ff.innerHTML = '<option value="">All Folders</option>' +
+        state.media.folders.map(function(f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join('');
+      if (current && state.media.folders.indexOf(current) >= 0) ff.value = current;
+    }
+
+  } catch (e) {
+    if (statusEl) { statusEl.textContent = 'Upload failed: ' + e.message; statusEl.style.color = '#f87171'; }
+    if (progEl) progEl.classList.add('hidden');
   }
 }
 
