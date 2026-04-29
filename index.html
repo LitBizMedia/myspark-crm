@@ -4187,7 +4187,16 @@ function toggleUserMenu(e){
 function openProfileModal(){
   const m=document.getElementById('user-menu');if(m)m.classList.add('hidden');
   const u=state.user;
-  const isAdmin=isPrimaryAdmin(u.id);
+  // Determine if this is the primary admin. The auth-rebuilt session stores
+  // state.user.id as a uuid from subaccount_users, but isPrimaryAdmin only
+  // recognizes the legacy 'admin-<slug>' format. When the logged-in user
+  // has admin role and matches the workspace's primary admin username, we
+  // route to getEffectiveAdmin() so the modal pulls from db.settings.adminProfile.
+  var primaryAdminUsername = (state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug)
+    ? 'patrick'
+    : (db._subaccountAdmin&&db._subaccountAdmin.username);
+  const isAdmin=isPrimaryAdmin(u.id) ||
+    (u.role==='admin' && u.username===primaryAdminUsername);
   const eff=isAdmin?getEffectiveAdmin():getUserById(u.id);
   const curColor=(eff&&eff.color)||USER_COLORS[0];
   state.selUserColor=curColor;
@@ -4235,7 +4244,14 @@ async function saveProfile(){
 
   // Update locally first for immediate visual feedback
   const updates={name:name,color:state.selUserColor};
-  const isAdmin=isPrimaryAdmin(u.id);
+  // Match openProfileModal's logic - identify primary admin via username
+  // since state.user.id is a uuid post-auth-rebuild and won't match
+  // isPrimaryAdmin's legacy 'admin-<slug>' format
+  var primaryAdminUsername = (state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug)
+    ? 'patrick'
+    : (db._subaccountAdmin&&db._subaccountAdmin.username);
+  const isAdmin=isPrimaryAdmin(u.id) ||
+    (u.role==='admin' && u.username===primaryAdminUsername);
   if(isAdmin){
     db.settings.adminProfile={...db.settings.adminProfile,...updates};
   }else{
