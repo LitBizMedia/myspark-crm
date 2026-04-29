@@ -48,6 +48,14 @@ module.exports = async function handler(req, res) {
   const { fileId } = req.body || {};
   if (!fileId) return res.status(400).json({ error: 'fileId required' });
 
+  // Validate UUID format. Without this, an invalid string causes Supabase to
+  // 500, which leaks the column type to attackers. Returning 404 for both
+  // invalid and not-found cases prevents enumeration.
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_REGEX.test(String(fileId))) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
   // Look up the file metadata, scoped to this subaccount
   let fileRow;
   try {
