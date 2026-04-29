@@ -126,12 +126,16 @@ module.exports = async function handler(req, res) {
   // Generate presigned PUT URL
   let uploadUrl;
   try {
+    // Don't specify SSE in the presigned URL.
+    // The bucket has default SSE-KMS encryption configured, so S3 applies it
+    // automatically on PUT. If we include SSE here, the SDK adds those headers
+    // to the signature but the browser doesn't send them, causing
+    // SignatureDoesNotMatch (403). Letting bucket defaults handle encryption
+    // keeps the signed-headers list to just `host`, which the browser sends.
     const cmd = new PutObjectCommand({
       Bucket: BUCKET,
       Key: fileKey,
-      ContentType: fileType,
-      ServerSideEncryption: 'aws:kms',
-      SSEKMSKeyId: KMS_KEY_ARN
+      ContentType: fileType
     });
     uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: URL_EXPIRY_SECONDS });
   } catch (e) {
