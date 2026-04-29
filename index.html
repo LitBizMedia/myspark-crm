@@ -4316,7 +4316,50 @@ async function saveEditUser(){
     document.getElementById('sb-avatar').textContent=initials(updates.name||state.user.username);
     document.getElementById('sb-avatar').style.background=updates.color||'#6b21ea';
   }
-  saveData();closeModal();renderUserList();toast('User updated.','success');
+  // Sync to subaccount_users table so login picks up the changes.
+  // Without this, the JSON blob has the new role but the auth table doesn't,
+  // and the user keeps logging in with their old role.
+  // We skip this for the primary admin (handled separately via different flow).
+  if(!isAdmin){
+    var targetUser=db.users.find(x=>x.id===userId);
+    var targetUsername=targetUser&&targetUser.username;
+    if(targetUsername){
+      try{
+        var syncBody={username:targetUsername};
+        if(role)syncBody.role=role;
+        if(name)syncBody.displayName=name;
+        if(euEmail)syncBody.email=euEmail;
+        if(updates.passwordHash&&pass)syncBody.newPassword=pass;
+        var syncRes=await fetch('/api/subaccount/update-user',{
+          method:'POST',
+          credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(syncBody)
+        });
+        var syncData=await syncRes.json().catch(function(){return {};});
+        if(!syncRes.ok){
+          // Surface the issue but don't roll back the local change
+          var errMsg=syncData.error||('Status '+syncRes.status);
+          if(syncData.code==='USER_NEEDS_MIGRATION'){
+            toast('User updated locally, but they need to set a password before changes apply at login.','warning');
+          }else{
+            toast('User updated locally, but auth sync failed: '+errMsg,'warning');
+          }
+        }else if(syncData.sessionsRevoked&&syncData.sessionsRevoked>0){
+          toast('User updated. '+syncData.sessionsRevoked+' active session'+(syncData.sessionsRevoked===1?'':'s')+' revoked.','success');
+        }else{
+          toast('User updated.','success');
+        }
+      }catch(syncErr){
+        toast('User updated locally, but auth sync failed: '+syncErr.message,'warning');
+      }
+    }else{
+      toast('User updated.','success');
+    }
+  }else{
+    toast('User updated.','success');
+  }
+  saveData();closeModal();renderUserList();
 }
 
 // =====================================================
