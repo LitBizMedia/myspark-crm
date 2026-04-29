@@ -37,7 +37,7 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
   padding:44px 40px;width:380px;box-shadow:var(--shadow),var(--shadow-p)}
 .auth-logo{text-align:center;margin-bottom:32px}
 .auth-logo img{width:80px;height:80px;object-fit:contain;border-radius:12px}
-.auth-logo h1{font-family:Exo 2,sans-serif;font-size:22px;font-weight:800;margin-top:12px}
+.auth-logo h1{font-family:Exo 2,sans-serif;font-size:22px;font-weight:800;margin-top:12px;color:#fff}
 .auth-logo h1 span{color:var(--orange)}
 .auth-subtitle{font-size:12px;color:var(--text-muted);margin-top:3px}
 .auth-error{background:var(--orange-dim);border:1px solid var(--orange-border);color:var(--orange-light);
@@ -952,7 +952,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
     <div class="auth-logo">
       <img src="MySpark+.png" alt="MySpark+" onerror="this.style.display='none'">
       <h1>MySpark<span>+</span></h1>
-      <div class="auth-subtitle">LitBiz Media CRM</div>
+      <div class="auth-subtitle">by LitBiz Media</div>
     </div>
     <div id="login-error" class="auth-error hidden"></div>
     <form id="login-form">
@@ -8116,7 +8116,7 @@ function renderContactCredits(contactId){
       const delta=entry.type==='add'?'+'+entry.amount.toFixed(2):'-'+entry.amount.toFixed(2);
       h+='<div class="credit-hist-row">'
         +'<span class="'+(entry.type==='add'?'credit-pos':'credit-neg')+'">'+delta+'</span>'
-        +'<span style="flex:1;font-size:12px">'+esc(entry.note||'No reason given')+'</span>'
+        +'<span style="flex:1;font-size:12px;color:var(--text)">'+esc(entry.note||'No reason given')+'</span>'
         +'<span style="font-size:11px;color:var(--text-muted)">'+fmtDate(entry.date&&entry.date.split('T')[0]||'')+'</span>'
         +'</div>';
     });
@@ -11049,14 +11049,38 @@ function spRenderSell(){
     +'<button class="pay-tab active" id="sp-pm-card" onclick="spSellSetPM(\'card\')">Card</button>'
     +'<button class="pay-tab" id="sp-pm-cash" onclick="spSellSetPM(\'cash\')">Cash</button>'
     +'<button class="pay-tab" id="sp-pm-other" onclick="spSellSetPM(\'other\')">Other</button>'
+    +'<button class="pay-tab hidden" id="sp-pm-cof" onclick="spSellSetPM(\'cof\')">Card on File</button>'
     +'<button class="pay-tab" id="sp-pm-gc" onclick="spSellSetPM(\'gc\')">Gift Card</button>'
     +'</div>'
     +'<div id="sp-pm-card-fields">'+(sqIsConnected()?'<div id="sp-sq-card-container" class="sq-card-form" style="min-height:44px"></div><div id="sp-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>':'<div style="font-size:12px;color:var(--main-text-muted);padding:4px 0">Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.</div>')+'</div>'
     +'<div id="sp-pm-cash-fields" class="hidden"><div style="font-size:12px;color:var(--main-text-muted);padding:4px 0">Cash payment will be recorded.</div></div>'
     +'<div id="sp-pm-other-fields" class="hidden"><input id="sp-sell-ref" type="text" placeholder="Reference # (Venmo, check, etc.)" style="'+inpS+'"></div>'
+    +'<div id="sp-pm-cof-fields" class="hidden">'
+    +'<div id="sp-cof-display" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px"></div>'
+    +'</div>'
     +'<div id="sp-pm-gc-fields" class="hidden">'
-    +'<input id="sp-gc-code" type="text" placeholder="Gift card code" style="'+inpS+';text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px" oninput="this.value=this.value.toUpperCase()">'
-    +'<div id="sp-gc-info" style="font-size:12px;color:var(--main-text-muted);min-height:16px"></div>'
+    +'<div style="display:flex;gap:7px;margin-bottom:8px">'
+    +'<input id="sp-gc-code" type="text" placeholder="XXXX-XXXX-XXXX" maxlength="14" style="flex:1;'+inpS+';text-transform:uppercase;letter-spacing:.08em" oninput="this.value=this.value.toUpperCase()">'
+    +'<button class="btn btn-purple btn-sm" onclick="spApplyGiftCard()">Apply</button>'
+    +'</div>'
+    +'<div id="sp-gc-applied" class="hidden" style="background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25);border-radius:var(--radius);padding:9px 12px;margin-bottom:8px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center">'
+    +'<div><div style="font-size:12px;font-weight:700;color:#34d399" id="sp-gc-balance-label">Balance: $0.00</div>'
+    +'<div style="font-size:11px;color:var(--text-muted)" id="sp-gc-name-label"></div></div>'
+    +'<button class="btn btn-danger btn-sm" onclick="spClearGiftCard()">Remove</button>'
+    +'</div>'
+    +'<div id="sp-gc-partial-wrap" class="hidden" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(52,211,153,.2)">'
+    +'<div style="font-size:11px;color:#fbbf24;font-weight:600;margin-bottom:7px">Insufficient balance. Pay remainder with:</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +'<button class="btn btn-sm" id="sp-gc-rem-card" onclick="spGcSetRemainder(\'card\')" style="font-size:11px;background:var(--bg-card);border:1px solid var(--border);color:var(--text)">Card</button>'
+    +'<button class="btn btn-sm hidden" id="sp-gc-rem-cof" onclick="spGcSetRemainder(\'cof\')" style="font-size:11px;background:var(--bg-card);border:1px solid var(--border);color:var(--text)">Card on File</button>'
+    +'<button class="btn btn-sm" id="sp-gc-rem-cash" onclick="spGcSetRemainder(\'cash\')" style="font-size:11px;background:var(--bg-card);border:1px solid var(--border);color:var(--text)">Cash</button>'
+    +'<button class="btn btn-sm" id="sp-gc-rem-other" onclick="spGcSetRemainder(\'other\')" style="font-size:11px;background:var(--bg-card);border:1px solid var(--border);color:var(--text)">Other</button>'
+    +'</div>'
+    +'<div id="sp-gc-rem-extra" class="hidden" style="margin-top:8px"></div>'
+    +'</div>'
+    +'</div>'
+    +'<div id="sp-gc-error" class="hidden" style="font-size:12px;color:#f87171;margin-top:5px"></div>'
     +'</div>'
     +'</div>'
     +'<div class="form-group"><label>Staff</label>'
@@ -11092,7 +11116,7 @@ function spSellUpdatePrice(){
 
 function spSellSetPM(m){
   state.spSellPM=m;
-  ['card','cash','other','gc'].forEach(function(x){
+  ['card','cash','other','cof','gc'].forEach(function(x){
     var btn=document.getElementById('sp-pm-'+x);if(btn)btn.classList.toggle('active',x===m);
     var f=document.getElementById('sp-pm-'+x+'-fields');if(f)f.classList.toggle('hidden',x!==m);
   });
@@ -11112,6 +11136,8 @@ function spSellSelC(id,name){
   var ci=document.getElementById('sp-sell-c-id');if(ci)ci.value=id;
   var ni=document.getElementById('sp-sell-c-inp');if(ni)ni.value=name;
   var dd=document.getElementById('sp-sell-c-drop');if(dd)dd.classList.add('hidden');
+  state.spSellCOFIndex=0;
+  setTimeout(updateSpCofTab,30);
 }
 
 var spSellSqCard=null;
@@ -11133,40 +11159,274 @@ async function spInitSellCardForm(){
   }
 }
 
+// =====================================================
+// SESSION PACKS - Card on File support
+// =====================================================
+function updateSpCofTab(){
+  var contactId=document.getElementById('sp-sell-c-id')&&document.getElementById('sp-sell-c-id').value;
+  var contact=contactId?getContact(contactId):null;
+  var cards=(contact&&contact.squareCards)||[];
+  var tab=document.getElementById('sp-pm-cof');
+  var remBtn=document.getElementById('sp-gc-rem-cof');
+  if(!tab)return;
+  if(cards.length>0){
+    tab.classList.remove('hidden');
+    if(remBtn)remBtn.classList.remove('hidden');
+    var display=document.getElementById('sp-cof-display');
+    if(display){
+      display.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Select Card</div>'+
+        cards.map(function(card,i){
+          var label=(card.brand||'Card')+(card.last4?' ending in '+card.last4:' on file');
+          var exp=card.expMonth&&card.expYear?card.expMonth+'/'+card.expYear:'';
+          return'<div class="card-on-file" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.spSellCOFIndex===i?'var(--purple)':'var(--border)')+'" onclick="spSelectCofCard('+i+')">'
+            +'<div class="card-brand-icon">'+esc((card.brand||'Card').slice(0,4).toUpperCase())+'</div>'
+            +'<div class="card-details"><div class="card-number">'+esc(label)+'</div>'+(exp?'<div class="card-exp">Expires '+esc(exp)+'</div>':'')+'</div>'
+            +'<div style="width:16px;height:16px;border-radius:50%;border:2px solid '+(state.spSellCOFIndex===i?'var(--purple)':'var(--border)')+';background:'+(state.spSellCOFIndex===i?'var(--purple)':'transparent')+';flex-shrink:0"></div>'
+            +'</div>';
+        }).join('');
+    }
+    if(state.spSellCOFIndex===undefined)state.spSellCOFIndex=0;
+  }else{
+    tab.classList.add('hidden');
+    if(remBtn)remBtn.classList.add('hidden');
+    if(state.spSellPM==='cof')spSellSetPM('card');
+  }
+}
+
+function spSelectCofCard(idx){
+  state.spSellCOFIndex=idx;
+  updateSpCofTab();
+}
+
+// =====================================================
+// SESSION PACKS - Gift Card Apply / partial-balance flow
+// =====================================================
+function spApplyGiftCard(){
+  var codeEl=document.getElementById('sp-gc-code');
+  var code=(codeEl&&codeEl.value||'').trim().toUpperCase();
+  var errEl=document.getElementById('sp-gc-error');
+  var appliedEl=document.getElementById('sp-gc-applied');
+  if(errEl){errEl.classList.add('hidden');errEl.textContent='';}
+  if(!code){
+    if(errEl){errEl.textContent='Enter a gift card code.';errEl.classList.remove('hidden');}
+    return;
+  }
+  var gc=(db.giftCards||[]).find(function(x){return x.code===code;});
+  if(!gc||gc.status==='redeemed'||gc.status==='refunded'){
+    if(errEl){errEl.textContent='Gift card not found or already redeemed.';errEl.classList.remove('hidden');}
+    return;
+  }
+  var tmplId=document.getElementById('sp-sell-tmpl')&&document.getElementById('sp-sell-tmpl').value;
+  var tmpl=tmplId?(db.sessionPackTemplates||[]).find(function(x){return x.id===tmplId;}):null;
+  if(!tmpl){
+    if(errEl){errEl.textContent='Select a pack template first.';errEl.classList.remove('hidden');}
+    return;
+  }
+  state.spSellGC={code:code,balance:gc.balance||0,id:gc.id};
+  state.spSellGCRemainder=null;
+  if(appliedEl){
+    appliedEl.classList.remove('hidden');
+    var balLbl=document.getElementById('sp-gc-balance-label');
+    if(balLbl)balLbl.textContent='Balance: '+fmt$(gc.balance||0);
+    var nameLbl=document.getElementById('sp-gc-name-label');
+    if(nameLbl)nameLbl.textContent=gc.recipientName||'Gift Card';
+  }
+  // Hide the entry input now that a card is applied
+  var entryInp=document.getElementById('sp-gc-code');
+  if(entryInp)entryInp.parentElement.style.display='none';
+  // If insufficient balance, show partial-balance picker
+  var partialWrap=document.getElementById('sp-gc-partial-wrap');
+  if(gc.balance<tmpl.price){
+    if(partialWrap)partialWrap.classList.remove('hidden');
+  }else{
+    if(partialWrap)partialWrap.classList.add('hidden');
+  }
+}
+
+function spClearGiftCard(){
+  state.spSellGC=null;
+  state.spSellGCRemainder=null;
+  var appliedEl=document.getElementById('sp-gc-applied');
+  if(appliedEl)appliedEl.classList.add('hidden');
+  var partialWrap=document.getElementById('sp-gc-partial-wrap');
+  if(partialWrap)partialWrap.classList.add('hidden');
+  var codeEl=document.getElementById('sp-gc-code');
+  if(codeEl){codeEl.value='';codeEl.parentElement.style.display='';}
+  var extraEl=document.getElementById('sp-gc-rem-extra');
+  if(extraEl){extraEl.innerHTML='';extraEl.classList.add('hidden');}
+}
+
+function spGcSetRemainder(method){
+  state.spSellGCRemainder=method;
+  ['card','cof','cash','other'].forEach(function(x){
+    var btn=document.getElementById('sp-gc-rem-'+x);
+    if(btn)btn.classList.toggle('active',x===method);
+  });
+  var extra=document.getElementById('sp-gc-rem-extra');
+  if(!extra)return;
+  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:Lato,sans-serif;font-size:13px;outline:none';
+  if(method==='card'){
+    if(sqIsConnected()){
+      extra.innerHTML='<div id="sp-gc-rem-card-container" class="sq-card-form" style="min-height:44px"></div><div id="sp-gc-rem-card-errors" style="color:#f87171;font-size:11px;margin-top:4px;min-height:14px"></div>';
+      extra.classList.remove('hidden');
+      // Init Square card form for the remainder
+      spInitGcRemainderCardForm();
+    }else{
+      extra.innerHTML='<div style="font-size:11px;color:var(--text-muted)">Square not connected. Card payment will be recorded only.</div>';
+      extra.classList.remove('hidden');
+    }
+  }else if(method==='cof'){
+    extra.innerHTML='<div style="font-size:11px;color:var(--text-muted)">Remainder will be charged to the saved card on file.</div>';
+    extra.classList.remove('hidden');
+  }else if(method==='other'){
+    extra.innerHTML='<input id="sp-gc-rem-ref" type="text" placeholder="Reference # (Venmo, check, etc.)" style="'+inpS+'">';
+    extra.classList.remove('hidden');
+  }else if(method==='cash'){
+    extra.innerHTML='<div style="font-size:11px;color:var(--text-muted)">Remainder will be recorded as cash.</div>';
+    extra.classList.remove('hidden');
+  }
+}
+
+var spGcRemSqCard=null;
+async function spInitGcRemainderCardForm(){
+  var errEl=document.getElementById('sp-gc-rem-card-errors');
+  var container=document.getElementById('sp-gc-rem-card-container');
+  if(!container)return;
+  try{
+    var cfgRes=await fetch('/api/square/config');
+    var cfg=await cfgRes.json();
+    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
+    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
+    var payments=window.Square.payments(cfg.appId,'production');
+    spGcRemSqCard=await payments.card();
+    await spGcRemSqCard.attach('#sp-gc-rem-card-container');
+  }catch(e){
+    spGcRemSqCard=null;
+    if(errEl)errEl.textContent='Could not load card form: '+e.message;
+  }
+}
+
 async function spProcessSale(){
   var tmplId=document.getElementById('sp-sell-tmpl')&&document.getElementById('sp-sell-tmpl').value;
   var tmpl=tmplId?(db.sessionPackTemplates||[]).find(function(x){return x.id===tmplId;}):null;
   if(!tmpl){toast('Select a pack template.','error');return;}
   var contactId=document.getElementById('sp-sell-c-id')&&document.getElementById('sp-sell-c-id').value||'';
   if(!contactId){toast('Select a client.','error');return;}
+  var contact=getContact(contactId);
   var staffId=document.getElementById('sp-sell-staff')&&document.getElementById('sp-sell-staff').value||'';
   var notes=(document.getElementById('sp-sell-notes')&&document.getElementById('sp-sell-notes').value||'').trim();
   var pm=state.spSellPM||'card';
   var ref=(document.getElementById('sp-sell-ref')&&document.getElementById('sp-sell-ref').value||'').trim();
   var btn=document.getElementById('sp-sell-btn');
   var errEl=document.getElementById('sp-sq-card-errors');
+  var price=tmpl.price;
+
+  // ── GIFT CARD path (now uses applied state, supports partial balance) ──
   if(pm==='gc'){
-    var gcCode=(document.getElementById('sp-gc-code')&&document.getElementById('sp-gc-code').value||'').trim().toUpperCase();
-    if(!gcCode){toast('Enter a gift card code.','error');return;}
-    var gc=(db.giftCards||[]).find(function(x){return x.code===gcCode;});
-    var gcInfoEl=document.getElementById('sp-gc-info');
-    if(!gc||gc.status==='redeemed'||gc.status==='refunded'){
-      if(gcInfoEl)gcInfoEl.textContent='Gift card not found or already redeemed.';
-      toast('Invalid gift card.','error');return;
-    }
+    if(!state.spSellGC){toast('Apply a gift card first.','error');return;}
+    var gc=(db.giftCards||[]).find(function(x){return x.id===state.spSellGC.id;});
+    if(!gc||gc.status==='redeemed'||gc.status==='refunded'){toast('Gift card no longer valid.','error');return;}
     var gcBalance=gc.balance||0;
-    if(gcBalance<tmpl.price){
-      if(gcInfoEl)gcInfoEl.textContent='Insufficient balance. Card has '+fmt$(gcBalance)+', pack costs '+fmt$(tmpl.price)+'.';
-      toast('Insufficient gift card balance.','error');return;
+    var gcApplied=Math.min(gcBalance,price);
+    var remainder=parseFloat((price-gcApplied).toFixed(2));
+
+    // Full coverage from gift card
+    if(remainder<=0){
+      gc.balance=parseFloat((gcBalance-price).toFixed(2));
+      gc.status=gc.balance<=0?'redeemed':'partial';
+      if(gc.balance<0)gc.balance=0;
+      if(!gc.log)gc.log=[];
+      gc.log.push({type:'redeemed',amount:price,note:'Session Pack: '+tmpl.name,date:now_()});
+      spSellFinalize(tmpl,contactId,staffId,'gift_card',gc.code,notes,'');
+      return;
     }
-    gc.balance=parseFloat((gcBalance-tmpl.price).toFixed(2));
-    if(gc.balance<=0){gc.status='redeemed';gc.balance=0;}
-    else gc.status='partial';
-    if(!gc.log)gc.log=[];
-    gc.log.push({type:'redeemed',amount:tmpl.price,note:'Session Pack: '+tmpl.name,date:now_()});
-    spSellFinalize(tmpl,contactId,staffId,'gift_card',gcCode,notes,'');
+
+    // Partial - need a remainder method
+    var remMethod=state.spSellGCRemainder;
+    if(!remMethod){toast('Select a method for the remainder.','error');return;}
+
+    if(btn){btn.disabled=true;btn.textContent='Processing...';}
+    var squarePaymentId='';
+
+    try{
+      if(remMethod==='card'){
+        if(!sqIsConnected()||!spGcRemSqCard){
+          if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+          toast('Card form not ready.','error');return;
+        }
+        var result=await spGcRemSqCard.tokenize();
+        if(result.status!=='OK'){
+          var errEl2=document.getElementById('sp-gc-rem-card-errors');
+          if(errEl2)errEl2.textContent=result.errors?result.errors.map(function(e){return e.message;}).join(', '):'Card error.';
+          if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+          return;
+        }
+        var chargeRes=await fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:result.token,amountCents:Math.round(remainder*100),idempotencyKey:'sp-gc-'+uid(),note:'Session Pack remainder: '+tmpl.name,contactId:contactId,staffId:staffId}),credentials:'include'});
+        var chargeData=await chargeRes.json();
+        if(!chargeData.success){
+          if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+          toast('Charge failed: '+(chargeData.error||'Unknown error'),'error');return;
+        }
+        squarePaymentId=chargeData.payment&&chargeData.payment.id||'';
+      }else if(remMethod==='cof'){
+        var cards=(contact&&contact.squareCards)||[];
+        var idx=state.spSellCOFIndex||0;
+        if(!cards[idx]||!contact.squareCustomerId){
+          if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+          toast('No card on file available.','error');return;
+        }
+        var chargeRes2=await fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:cards[idx].id,customerId:contact.squareCustomerId,amountCents:Math.round(remainder*100),idempotencyKey:'sp-gc-cof-'+uid(),note:'Session Pack remainder: '+tmpl.name,contactId:contactId,staffId:staffId}),credentials:'include'});
+        var chargeData2=await chargeRes2.json();
+        if(!chargeData2.success){
+          if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+          toast('Card on file charge failed: '+(chargeData2.error||'Unknown error'),'error');return;
+        }
+        squarePaymentId=chargeData2.payment&&chargeData2.payment.id||'';
+      }else if(remMethod==='other'){
+        var refRem=document.getElementById('sp-gc-rem-ref')&&document.getElementById('sp-gc-rem-ref').value||'';
+        ref=refRem;
+      }
+      // remMethod 'cash' - no extra processing needed
+
+      // Decrement gift card
+      gc.balance=parseFloat((gcBalance-gcApplied).toFixed(2));
+      gc.status=gc.balance<=0?'redeemed':'partial';
+      if(gc.balance<0)gc.balance=0;
+      if(!gc.log)gc.log=[];
+      gc.log.push({type:'redeemed',amount:gcApplied,note:'Session Pack: '+tmpl.name+' (partial)',date:now_()});
+
+      // Build a hybrid payment method label
+      var hybridPm='gift_card+'+remMethod;
+      spSellFinalize(tmpl,contactId,staffId,hybridPm,gc.code,notes,squarePaymentId,gcApplied);
+    }catch(e){
+      if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+      toast('Error: '+e.message,'error');
+    }
     return;
   }
+
+  // ── CARD ON FILE path ──
+  if(pm==='cof'){
+    var cards=(contact&&contact.squareCards)||[];
+    var idx=state.spSellCOFIndex||0;
+    if(!cards[idx]||!contact.squareCustomerId){toast('No card on file selected.','error');return;}
+    if(btn){btn.disabled=true;btn.textContent='Processing...';}
+    try{
+      var chargeRes3=await fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:cards[idx].id,customerId:contact.squareCustomerId,amountCents:Math.round(price*100),idempotencyKey:'sp-cof-'+uid(),note:'Session Pack: '+tmpl.name,contactId:contactId,staffId:staffId}),credentials:'include'});
+      var chargeData3=await chargeRes3.json();
+      if(!chargeData3.success){
+        if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+        toast('Charge failed: '+(chargeData3.error||'Unknown error'),'error');return;
+      }
+      spSellFinalize(tmpl,contactId,staffId,'card_on_file',ref,notes,chargeData3.payment&&chargeData3.payment.id||'');
+    }catch(e){
+      if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
+      toast('Error: '+e.message,'error');
+    }
+    return;
+  }
+
+  // ── CARD path (manual entry) ──
   if(pm==='card'&&sqIsConnected()&&spSellSqCard){
     if(btn){btn.disabled=true;btn.textContent='Processing...';}
     try{
@@ -11177,7 +11437,7 @@ async function spProcessSale(){
         return;
       }
       var idempKey='sp-'+uid();
-      var chargeRes=await fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:result.token,amountCents:Math.round(tmpl.price*100),idempotencyKey:idempKey,note:'Session Pack: '+tmpl.name,contactId:contactId,staffId:staffId}),credentials:'include'});
+      var chargeRes=await fetch('/api/square/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:result.token,amountCents:Math.round(price*100),idempotencyKey:idempKey,note:'Session Pack: '+tmpl.name,contactId:contactId,staffId:staffId}),credentials:'include'});
       var chargeData=await chargeRes.json();
       if(!chargeData.success){
         if(errEl)errEl.textContent='Charge failed: '+(chargeData.error||'Unknown error');
@@ -11192,6 +11452,8 @@ async function spProcessSale(){
     }
     return;
   }
+
+  // ── CASH / OTHER paths (no charge needed) ──
   spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,'');
 }
 
@@ -11296,15 +11558,16 @@ function confirmSpCancelPack(packId){
 function renderContactSessionPacks(contactId){
   var packs=(db.sessionPacks||[]).filter(function(p){return p.contactId===contactId;});
   var today=todayStr();
+  // Auto-update statuses
   packs.forEach(function(p){
     if(p.status==='active'&&p.expiresDate&&p.expiresDate<today)p.status='expired';
     if(p.status==='active'&&p.sessionsUsed>=p.sessionsTotal)p.status='exhausted';
   });
+  // Drawer shows ACTIVE packs only. History lives on the Session Packs panel.
   var active=packs.filter(function(p){return p.status==='active';});
-  var others=packs.filter(function(p){return p.status!=='active';});
-  var h='<div class="sec-row" style="margin-top:14px"><div class="sec-label" style="margin-bottom:0">Session Packs ('+active.length+' active)</div></div>';
-  if(!packs.length){
-    return h+'<div style="font-size:13px;color:var(--text-muted);padding:6px 0;margin-bottom:4px">No session packs.</div>';
+  var h='<div class="sec-row" style="margin-top:14px"><div class="sec-label" style="margin-bottom:0">Active Session Packs ('+active.length+')</div></div>';
+  if(!active.length){
+    return h+'<div style="font-size:13px;color:var(--text-muted);padding:6px 0;margin-bottom:4px">No active session packs.</div>';
   }
   active.forEach(function(p){
     var pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
@@ -11322,17 +11585,6 @@ function renderContactSessionPacks(contactId){
       +'<button class="btn btn-primary btn-sm" onclick="spUseSession(\''+p.id+'\')">Use Session</button>'
       +'</div>';
   });
-  if(others.length){
-    h+='<div style="margin-top:10px">';
-    others.forEach(function(p){
-      var pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
-      var stCls={exhausted:'sb-inactive',expired:'sb-overdue',cancelled:'sb-inactive'}[p.status]||'sb-inactive';
-      h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--main-border);opacity:.6">'
-        +'<div style="font-size:12px;color:var(--text)">'+esc(pName)+'</div>'
-        +'<span class="status-badge '+stCls+'" style="font-size:9px">'+p.status+'</span></div>';
-    });
-    h+='</div>';
-  }
   return h;
 }
 
