@@ -1986,7 +1986,7 @@ function logSubaccountAudit(action, options) {
 // Attempt to send entries. Resolves on success, rejects on failure.
 async function _auditTrySend(entries) {
   if (!entries || !entries.length) return;
-  const r = await fetch(apiUrl('/api/subaccount/audit'), {
+  const r = await fetch(apiUrl('/api/subaccount/audit'), {credentials:'include',
     method: 'POST',
     credentials: 'include',
     headers: {'Content-Type': 'application/json'},
@@ -2109,7 +2109,7 @@ document.getElementById('login-form').addEventListener('submit',async function(e
   if(submitBtn)submitBtn.disabled=true;
   try{
     const slug=state.subaccountSlug||getPathSlug()||DEFAULT_SLUG;
-    const r=await fetch(apiUrl('/api/subaccount/login'),{
+    const r=await fetch(apiUrl('/api/subaccount/login'),{credentials:'include',
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
@@ -2171,7 +2171,7 @@ async function submitForgotPassword(context){
   var body={email:email,context:context};
   if(context==='subaccount')body.slug=state.subaccountSlug||getPathSlug();
   try{
-    var r=await fetch(apiUrl('/api/auth/forgot-password'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var r=await fetch(apiUrl('/api/auth/forgot-password'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     closeModal();
     toast('If that email is on file, a reset link is on its way. Check your inbox.','success');
   }catch(e){
@@ -2199,7 +2199,7 @@ async function submitResetPassword(token){
   var passErr=checkPasswordStrength(pass);
   if(passErr){toast(passErr,'error');return;}
   try{
-    var r=await fetch(apiUrl('/api/auth/reset-password'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,newPassword:pass})});
+    var r=await fetch(apiUrl('/api/auth/reset-password'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,newPassword:pass})});
     var data=await r.json();
     if(!r.ok){toast(data.error||'Reset failed.','error');return;}
     closeModal();
@@ -3089,7 +3089,7 @@ async function initPosSquareCardForm(){
   if(posSqCard)return; // Already initialized, don't re-init
   container.innerHTML='';
   try{
-    const cfgRes=await fetch(apiUrl('/api/square/config'));
+    const cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     const cfg=await cfgRes.json();
     if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
     if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
@@ -3164,7 +3164,7 @@ async function processCharge(){  // ── Gift Card payment path ──
             finishGcFlow();
             return;
           }
-          return fetch(apiUrl('/api/square/charge'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
+          return fetch(apiUrl('/api/square/charge'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,sourceId:res.token,amountCents:Math.round(remainder*100),note:'GC remainder - POS'})});
         }).then(function(r){if(r)return r.json();}).then(function(d){
           if(!d)return;
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
@@ -3216,7 +3216,7 @@ async function processCharge(){  // ── Gift Card payment path ──
       }
       const sq=db.settings.square||{};
       const amtCents=Math.round(total*100);
-      const chargeRes=await fetch(apiUrl('/api/square/charge'),{
+      const chargeRes=await fetch(apiUrl('/api/square/charge'),{credentials:'include',
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({slug:state.subaccountSlug,sourceId:result.token,amountCents:amtCents,note:'POS Sale'})
@@ -3410,7 +3410,7 @@ async function linkContactToSquare(contactId){
   const c=db.contacts.find(function(x){return x.id===contactId});
   if(!c||c.squareCustomerId)return;
   try{
-    const r=await fetch(apiUrl('/api/square/find-or-create-customer'),{
+    const r=await fetch(apiUrl('/api/square/find-or-create-customer'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({slug:state.subaccountSlug,name:c.name,email:c.email||'',phone:c.phone||''})
@@ -3546,7 +3546,7 @@ function sendApptConfirmation(data){
     +'<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">Need to reschedule? Reply to this email or give us a call.</p>'
     +'<p style="color:#5a4d7a;font-size:14px;margin:0">'+bizName+'</p>'
     +'</div>';
-  fetch(apiUrl('/api/email/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Confirmed: '+data.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-confirmation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:data.title,staff_name:staffName,business_name:bizName}})}).catch(function(){});
+  fetch(apiUrl('/api/email/send'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Confirmed: '+data.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-confirmation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:data.title,staff_name:staffName,business_name:bizName}})}).catch(function(){});
 }
 
 function syncApptToSupabase(appt,deleted){
@@ -3629,7 +3629,7 @@ function sendApptCancellation(a){
     +'<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">To reschedule, reply to this email or give us a call.</p>'
     +'<p style="color:#5a4d7a;font-size:14px;margin:0">'+bizName+'</p>'
     +'</div>';
-  fetch(apiUrl('/api/email/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Cancelled: '+a.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-cancellation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:a.title,business_name:bizName}})}).catch(function(){});
+  fetch(apiUrl('/api/email/send'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Cancelled: '+a.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-cancellation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:a.title,business_name:bizName}})}).catch(function(){});
 }
 function confirmDelAppt(){
   const id=state.modal&&state.modal.id;if(!id)return;
@@ -4238,7 +4238,7 @@ async function saveProfile(){
     const passErr=checkPasswordStrength(pass);
     if(passErr){toast(passErr,'error');return;}
     try{
-      const r=await fetch(apiUrl('/api/subaccount/change-password'),{
+      const r=await fetch(apiUrl('/api/subaccount/change-password'),{credentials:'include',
         method:'POST',
         credentials:'include',
         headers:{'Content-Type':'application/json'},
@@ -4282,7 +4282,7 @@ async function saveProfile(){
   // overwrites the local change.
   // Color is local-only (not in subaccount_users schema), so we only sync name.
   try{
-    var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{
+    var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
@@ -4385,7 +4385,7 @@ async function saveEditUser(){
         if(name)syncBody.displayName=name;
         if(euEmail)syncBody.email=euEmail;
         if(updates.passwordHash&&pass)syncBody.newPassword=pass;
-        var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{
+        var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
           method:'POST',
           credentials:'include',
           headers:{'Content-Type':'application/json'},
@@ -5212,7 +5212,7 @@ async function submitEmailDomain(){
   var btn=document.querySelector('#email-domain-container .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='Adding domain...';}
   try{
-    var res=await fetch(apiUrl('/api/email/domains/add'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domain:domain})});
+    var res=await fetch(apiUrl('/api/email/domains/add'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domain:domain})});
     var data=await res.json();
     if(!res.ok){toast(data.error||'Failed to add domain.','error');if(btn){btn.disabled=false;btn.textContent='Continue';}return;}
     state.emailDomain=data.domain;
@@ -5226,7 +5226,7 @@ async function verifyEmailDomain(domainId){
   var btn=document.querySelector('#email-domain-container .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='Checking...';}
   try{
-    var res=await fetch(apiUrl('/api/email/domains/verify'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})});
+    var res=await fetch(apiUrl('/api/email/domains/verify'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})});
     var data=await res.json();
     if(!res.ok){toast(data.error||'Verification check failed.','error');if(btn){btn.disabled=false;btn.textContent='Check Verification';}return;}
     if(data.status==='verified'){
@@ -5255,7 +5255,7 @@ async function confirmRemoveEmailDomain(){
   var slug=state.subaccountSlug||'litbiz';
   closeModal();
   try{
-    await fetch(apiUrl('/api/email/domains/remove'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})});
+    await fetch(apiUrl('/api/email/domains/remove'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})});
     state.emailDomain=null;
     renderEmailDomainSettings();
     toast('Domain removed. Emails will send from mysparkplus.app.','success');
@@ -8398,7 +8398,7 @@ function disconnectSquare(){
 }
 async function confirmDisconnectSquare(){
   try{
-    await fetch(apiUrl('/api/square/disconnect'),{
+    await fetch(apiUrl('/api/square/disconnect'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({slug:state.subaccountSlug||DEFAULT_SLUG})
@@ -8474,7 +8474,7 @@ async function importFromSquare(){
   if(!sqIsConnected()){toast('Square not connected.','error');return}
   toast('Syncing cards from Square...','warn');
   try{
-    const r=await fetch(apiUrl('/api/square/customers'),{
+    const r=await fetch(apiUrl('/api/square/customers'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({slug:state.subaccountSlug})
@@ -8599,7 +8599,7 @@ let sqCard=null;
 async function initSquareCardForm(){
   const errEl=document.getElementById('sq-card-errors');
   try{
-    const cfgRes=await fetch(apiUrl('/api/square/config'));
+    const cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     const cfg=await cfgRes.json();
     if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return}
     if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return}
@@ -8630,7 +8630,7 @@ async function submitAddCard(){
     const contact=getContact(contactId);
     if(!contact){if(errEl)errEl.textContent='Contact not found.';return}
     const sq=db.settings.square||{};
-    const saveRes=await fetch(apiUrl('/api/square/save-card'),{
+    const saveRes=await fetch(apiUrl('/api/square/save-card'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({slug:state.subaccountSlug,customerId:contact.squareCustomerId,sourceId:result.token,cardholderName:contact.name||''})
@@ -8752,7 +8752,7 @@ async function confirmChargeCoF(){
   if(!d){closeModal();return}
   const sq=db.settings.square||{};
   try{
-    const r=await fetch(apiUrl('/api/square/charge'),{
+    const r=await fetch(apiUrl('/api/square/charge'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -9570,7 +9570,7 @@ async function txnConfirmVoid(id){
     var sq = db.settings.square || {};
     if(sqIsConnected()){
       try{
-        var r = await fetch(apiUrl('/api/square/void'),{
+        var r = await fetch(apiUrl('/api/square/void'),{credentials:'include',
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({slug: state.subaccountSlug, paymentId: t.squarePaymentId})
@@ -9721,7 +9721,7 @@ async function txnConfirmRefund(id){
   if(remRefund > 0 && t.squarePaymentId){
     squareRefundAttempted = true;
     try{
-      var r = await fetch(apiUrl('/api/square/refund'),{
+      var r = await fetch(apiUrl('/api/square/refund'),{credentials:'include',
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({slug: state.subaccountSlug, paymentId: t.squarePaymentId, amountCents: Math.round(remRefund*100), reason: reason})
@@ -10467,7 +10467,7 @@ async function gcInitSellCardForm(){
   var container=document.getElementById('gc-sq-card-container');
   if(!container)return;
   try{
-    var cfgRes=await fetch(apiUrl('/api/square/config'));
+    var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     var cfg=await cfgRes.json();
     if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
     if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
@@ -10508,7 +10508,7 @@ async function gcProcessSale(){
       }
       var sq=db.settings.square||{};
       var amtCents=Math.round(amt*100);
-      var chargeRes=await fetch(apiUrl('/api/square/charge'),{
+      var chargeRes=await fetch(apiUrl('/api/square/charge'),{credentials:'include',
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
@@ -10924,7 +10924,7 @@ async function gcInitRemainderCardForm(){
   var errEl=document.getElementById('gc-rem-sq-errors');
   var container=document.getElementById('gc-rem-sq-container');  if(!container){return;}
   try{
-    var cfgRes=await fetch(apiUrl('/api/square/config'));
+    var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     var cfg=await cfgRes.json();
     if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
     if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
@@ -11291,7 +11291,7 @@ async function spInitSellCardForm(){
   var errEl=document.getElementById('sp-sq-card-errors');
   var container=document.getElementById('sp-sq-card-container');if(!container)return;
   try{
-    var cfgRes=await fetch(apiUrl('/api/square/config'));
+    var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     var cfg=await cfgRes.json();
     if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
     if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
@@ -11438,7 +11438,7 @@ async function spInitGcRemainderCardForm(){
   var container=document.getElementById('sp-gc-rem-card-container');
   if(!container)return;
   try{
-    var cfgRes=await fetch(apiUrl('/api/square/config'));
+    var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     var cfg=await cfgRes.json();
     if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
     if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
@@ -11937,7 +11937,7 @@ async function agencyLogin(){
   var hash=await sha256(password);
   // Primary path: server-side validation and audit logging
   try{
-    var r=await fetch(apiUrl('/api/agency/login'),{
+    var r=await fetch(apiUrl('/api/agency/login'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({username:username,hash:hash})
@@ -12401,7 +12401,7 @@ async function loadAgencyInvoices(){
     if(f.status)qs+='&status='+encodeURIComponent(f.status);
     if(f.from)qs+='&from='+encodeURIComponent(new Date(f.from).toISOString());
     if(f.to){var to=new Date(f.to);to.setHours(23,59,59,999);qs+='&to='+encodeURIComponent(to.toISOString());}
-    var r=await fetch(apiUrl('/api/agency/list-invoices?')+qs);
+    var r=await fetch(apiUrl('/api/agency/list-invoices?')+qs,{credentials:'include'});
     if(!r.ok){
       if(tbl)tbl.innerHTML='<div style="padding:24px;color:#f87171;font-size:13px;text-align:center">Failed to load transactions.</div>';
       return;
@@ -12504,7 +12504,7 @@ async function confirmRefund(invoiceId){
   var reasonEl=document.getElementById('refund-reason');
   var reason=reasonEl?reasonEl.value:'';
   try{
-    var r=await fetch(apiUrl('/api/billing/refund'),{
+    var r=await fetch(apiUrl('/api/billing/refund'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({invoiceId:invoiceId,reason:reason||null,actor:loadAgencySession()})
@@ -12737,7 +12737,7 @@ async function saveManagePlan(subId){
 
 async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discountNote,customBillingDate,silent){
   try{
-    var r=await fetch(apiUrl('/api/billing/swap-plan'),{
+    var r=await fetch(apiUrl('/api/billing/swap-plan'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||'',customBillingDate:customBillingDate||null,actor:loadAgencySession()})
@@ -12774,7 +12774,7 @@ async function initMpCardForm(){
   container.innerHTML='';
   try{
     if(!window.Square){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square SDK not loaded.</span>';return;}
-    var cfgRes=await fetch(apiUrl('/api/square/config'));
+    var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     var cfg=await cfgRes.json();
     if(!cfg.appId){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square not configured.</span>';return;}
     var payments=window.Square.payments(cfg.appId,'production');
@@ -12813,7 +12813,7 @@ async function loadMpSquareCustomers(){
   if(!sel)return;
   sel.innerHTML='<option value="">Loading...</option>';
   try{
-    var r=await fetch(apiUrl('/api/billing/list-cards'));
+    var r=await fetch(apiUrl('/api/billing/list-cards'),{credentials:'include'});
     if(!r.ok){sel.innerHTML='<option value="">Could not load</option>';return;}
     var data=await r.json();
     var customers=data.customers||[];
@@ -12861,7 +12861,7 @@ async function saveMpCard(subId,subName){
     payload.sourceId=tokenResult.token;
   }
   try{
-    var r=await fetch(apiUrl('/api/billing/update-card'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    var r=await fetch(apiUrl('/api/billing/update-card'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!r.ok){var t=await r.text();toast('Card update failed: '+t,'error');return;}
     toast('Card updated successfully.','success');
     var section=document.getElementById('mp-card-form-section');
@@ -12872,7 +12872,7 @@ async function saveMpCard(subId,subName){
 
 async function cancelSubscription(subId){
   try{
-    var r=await fetch(apiUrl('/api/billing/cancel'),{
+    var r=await fetch(apiUrl('/api/billing/cancel'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({subaccountId:subId,actor:loadAgencySession()})
@@ -12887,7 +12887,7 @@ async function cancelSubscription(subId){
 
 async function reactivateSubscription(subId){
   try{
-    var r=await fetch(apiUrl('/api/billing/reactivate'),{
+    var r=await fetch(apiUrl('/api/billing/reactivate'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({subaccountId:subId,actor:loadAgencySession()})
@@ -12940,7 +12940,7 @@ async function agencyConfirmResetPassword(subId,slug){
   var btns=document.querySelectorAll('#modal-foot button');
   btns.forEach(function(b){b.disabled=true;});
   try{
-    var r=await fetch(apiUrl('/api/agency/reset-subaccount-password'),{
+    var r=await fetch(apiUrl('/api/agency/reset-subaccount-password'),{credentials:'include',
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
@@ -13266,7 +13266,7 @@ async function agencyConfirmLoginAs(slug){
   // Server-side validation and audit log first. Blocks if denied.
   try{
     var sess=loadAgencySession()||{};
-    var r=await fetch(apiUrl('/api/agency/login-as'),{
+    var r=await fetch(apiUrl('/api/agency/login-as'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({slug:slug,actor:sess})
@@ -13449,7 +13449,7 @@ async function createSubaccount(){
         }
         billingPayload.sourceId=tokenResult.token;
       }
-      var billingRes=await fetch(apiUrl('/api/billing/setup-billing'),{
+      var billingRes=await fetch(apiUrl('/api/billing/setup-billing'),{credentials:'include',
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(billingPayload)
@@ -13483,7 +13483,7 @@ async function createSubaccount(){
       +'<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">Log in with the password you were given. You can change it in your settings.</p>'
       +'<p style="color:#5a4d7a;font-size:14px;margin:0">MySpark+</p>'
       +'</div>';
-    fetch(apiUrl('/api/email/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:'litbiz',to:adminEmail,subject:'Your MySpark+ workspace is ready: '+name,html:welcomeHtml,fromName:'MySpark+',templateType:'welcome'})}).catch(function(){});
+    fetch(apiUrl('/api/email/send'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:'litbiz',to:adminEmail,subject:'Your MySpark+ workspace is ready: '+name,html:welcomeHtml,fromName:'MySpark+',templateType:'welcome'})}).catch(function(){});
   }catch(e){
     toast('Error creating subaccount: '+e.message,'error');
   }
@@ -13545,7 +13545,7 @@ async function loadSquareCustomers(){
   if(!sel)return;
   sel.innerHTML='<option value="">Loading...</option>';
   try{
-    var r=await fetch(apiUrl('/api/billing/list-cards'));
+    var r=await fetch(apiUrl('/api/billing/list-cards'),{credentials:'include'});
     if(!r.ok){sel.innerHTML='<option value="">Could not load customers</option>';return;}
     var data=await r.json();
     var customers=data.customers||[];
@@ -13585,7 +13585,7 @@ async function initSubaccountCardForm(){
   container.innerHTML='';
   try{
     if(!window.Square){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square SDK not loaded.</span>';return;}
-    var cfgRes=await fetch(apiUrl('/api/square/config'));
+    var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     var cfg=await cfgRes.json();
     if(!cfg.appId){container.innerHTML='<span style="color:var(--orange);font-size:12px">Square not configured.</span>';return;}
     var payments=window.Square.payments(cfg.appId,'production');
@@ -13754,7 +13754,7 @@ async function agencyConfirmDeleteSub(id,expectedSlug){
   var btns=document.querySelectorAll('#modal-foot button');
   btns.forEach(function(b){b.disabled=true;});
   try{
-    var r=await fetch(apiUrl('/api/agency/delete-subaccount'),{
+    var r=await fetch(apiUrl('/api/agency/delete-subaccount'),{credentials:'include',
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
@@ -13913,7 +13913,7 @@ async function loadAuditLog(){
   var tbl = document.getElementById('audit-log-table');
   if(tbl) tbl.innerHTML = '<div style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center">Loading audit log...</div>';
   try {
-    var r = await fetch(apiUrl('/api/agency/audit-log?') + buildAuditLogQs());
+    var r = await fetch(apiUrl('/api/agency/audit-log?') + buildAuditLogQs(),{credentials:'include'});
     if(!r.ok){
       if(tbl) tbl.innerHTML = '<div style="padding:24px;color:#f87171;font-size:13px;text-align:center">Failed to load audit log.</div>';
       return;
@@ -14010,7 +14010,7 @@ async function exportAuditLogCsv(){
     var qs = buildAuditLogQs();
     auditLogState.offset = oldOffset;
     auditLogState.limit = oldLimit;
-    var r = await fetch(apiUrl('/api/agency/audit-log?') + qs);
+    var r = await fetch(apiUrl('/api/agency/audit-log?') + qs,{credentials:'include'});
     if(!r.ok){toast('Export failed.','error');return;}
     var data = await r.json();
     var rows = data.entries || [];
@@ -14645,7 +14645,7 @@ async function doDeleteMedia() {
   var btns = document.querySelectorAll('#modal-foot button');
   btns.forEach(function(b) { b.disabled = true; });
   try {
-    var r = await fetch(apiUrl('/api/media/delete'), {
+    var r = await fetch(apiUrl('/api/media/delete'), {credentials:'include',
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -14734,7 +14734,7 @@ async function handleMediaUploadFile(file) {
 
   try {
     // Step 1: get presigned URL
-    var presignRes = await fetch(apiUrl('/api/media/upload-url'), {
+    var presignRes = await fetch(apiUrl('/api/media/upload-url'), {credentials:'include',
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
