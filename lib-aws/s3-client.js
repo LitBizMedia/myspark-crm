@@ -24,8 +24,8 @@ const s3 = new S3Client({
   requestChecksumCalculation: 'WHEN_REQUIRED'
 });
 
-const BUCKET = process.env.AWS_S3_BUCKET;
-const KMS_KEY_ARN = process.env.AWS_KMS_KEY_ARN;
+const BUCKET = process.env.S3_BUCKET;
+const KMS_KEY_ARN = process.env.KMS_KEY_ARN;
 
 module.exports = {
   s3,
