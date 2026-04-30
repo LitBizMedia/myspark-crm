@@ -14,12 +14,12 @@ const { S3Client } = require('@aws-sdk/client-s3');
 
 const REGION = process.env.AWS_REGION || 'us-east-2';
 
+// Let the SDK auto-discover credentials. On Lambda, this picks up the
+// role's STS temporary credentials INCLUDING the session token, which is
+// required for presigned URLs to work. Passing credentials explicitly
+// loses the session token and breaks presigning.
 const s3 = new S3Client({
   region: REGION,
-  credentials: {
-    accessKeyId:     process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  },
   // ⚠ REQUIRED: prevents AWS SDK v3 from breaking presigned URLs
   requestChecksumCalculation: 'WHEN_REQUIRED'
 });

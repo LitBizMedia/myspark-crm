@@ -12,7 +12,7 @@ const db = require('./lib/db');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const crypto = require('crypto');
-const { s3, BUCKET } = require('./lib/s3-client');
+const { s3, BUCKET, KMS_KEY_ARN } = require('./lib/s3-client');
 const {
   parseSessionCookie,
   validateSession
@@ -104,6 +104,7 @@ async function handler(req, res) {
       Bucket: BUCKET,
       Key: fileKey,
       ContentType: fileType
+      // Encryption applied automatically by bucket default policy (aws:kms with CMK)
     });
     uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: URL_EXPIRY_SECONDS });
   } catch (e) {
