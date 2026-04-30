@@ -2215,16 +2215,12 @@ async function submitResetPassword(token){
 async function checkSubaccountActive(){
   // Returns one of: 'active', 'suspended', 'unknown'.
   // Callers must treat 'unknown' as a hard failure for HIPAA compliance.
-  // Previously this failed open (returned true on error). Now it fails closed.
   try{
-    var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-    var r=await fetch(url+'/rest/v1/subaccounts?id=eq.'+encodeURIComponent(state.subaccountId||'sub-litbiz')+'&select=active',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
+    var r=await fetch(apiUrl('/api/subaccount/session'),{credentials:'include'});
     if(!r.ok)return 'unknown';
-    var rows=await r.json();
-    if(!rows||!rows.length)return 'unknown'; // record missing = treat as unverified
-    return rows[0].active===false?'suspended':'active';
+    var data=await r.json();
+    if(!data||!data.subaccount)return 'unknown';
+    return data.subaccount.active===false?'suspended':'active';
   }catch(e){
     return 'unknown';
   }
@@ -2234,14 +2230,11 @@ async function checkSubaccountActive(){
 // Callers should default to enabled (true) on null for HIPAA safety.
 async function getSubaccountHipaaStatus(){
   try{
-    var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-    var r=await fetch(url+'/rest/v1/subaccount_plans?subaccount_id=eq.'+encodeURIComponent(state.subaccountId||'sub-litbiz')+'&select=hipaa_addon',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
+    var r=await fetch(apiUrl('/api/subaccount/session'),{credentials:'include'});
     if(!r.ok)return null;
-    var rows=await r.json();
-    if(!rows||!rows.length)return false; // no plan record means no HIPAA addon
-    return !!rows[0].hipaa_addon;
+    var data=await r.json();
+    if(!data||!data.subaccount)return false;
+    return !!data.subaccount.hipaa_addon;
   }catch(e){
     return null;
   }
@@ -3550,36 +3543,32 @@ function sendApptConfirmation(data){
 }
 
 function syncApptToSupabase(appt,deleted){
-  var slug=state.subaccountSlug||'litbiz';
-  var subId='sub-'+slug;
-  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
-  var baseUrl=db.settings.supabaseUrl||SB_FALLBACK_URL;
-  var url=baseUrl+'/rest/v1/appointments';
   if(deleted){
-    fetch(url+'?id=eq.'+encodeURIComponent(appt.id)+'&subaccount_id=eq.'+encodeURIComponent(subId),{
-      method:'DELETE',
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    fetch(apiUrl('/api/subaccount/appointments-delete'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:appt.id})
     }).catch(function(){});
     return;
   }
-  var row={
+  var payload={
     id:appt.id,
-    subaccount_id:subId,
     title:appt.title||'Untitled',
-    contact_id:appt.contactId||null,
-    assigned_to:appt.assignedTo||null,
+    contactId:appt.contactId||null,
+    assignedTo:appt.assignedTo||null,
     date:appt.date,
     time:appt.time||null,
     duration:parseInt(appt.duration)||60,
     status:appt.status||'scheduled',
     location:appt.location||null,
-    notes:appt.notes||null,
-    updated_at:new Date().toISOString()
+    notes:appt.notes||null
   };
-  fetch(url,{
+  fetch(apiUrl('/api/subaccount/appointments-upsert'),{
     method:'POST',
-    headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
-    body:JSON.stringify(row)
+    credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
   }).catch(function(){});
 }
 
@@ -3990,37 +3979,34 @@ function loadData(){
 function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(doSync,2200)}
 
 async function doSync(){
-  const url=db.settings.supabaseUrl,key=db.settings.supabaseKey;
-  if(!url||!key)return;
   const hasData=db.contacts.length>0||db.payments.length>0||db.tasks.length>0;
   if(!hasData){return;}
   setSyncSt('syncing');
-  const subId=state.subaccountId||'sub-litbiz';
-  const dataId='data-'+(state.subaccountSlug||'litbiz');
   try{
-    await fetch(url+'/rest/v1/subaccount_data',{
+    var r=await fetch(apiUrl('/api/subaccount/data-save'),{
       method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify({id:dataId,subaccount_id:subId,data:db,updated_at:new Date().toISOString()})
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({data:db})
     });
+    if(!r.ok){setSyncSt('error');return;}
     setSyncSt('synced');
   }catch(e){setSyncSt('error')}
 }
 
 async function fetchFromSupabase(){
-  const url=db.settings.supabaseUrl,key=db.settings.supabaseKey;
-  if(!url||!key)return false;
   setSyncSt('syncing');
-  const subId=state.subaccountId||'sub-litbiz';
   try{
-    const r=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+subId+'&select=data',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
-    const rows=await r.json();
-    if(rows&&rows.length&&rows[0].data){
-      const rem=rows[0].data;
+    const r=await fetch(apiUrl('/api/subaccount/data-load'),{credentials:'include'});
+    if(!r.ok){setSyncSt('error');return false;}
+    const result=await r.json();
+    if(result&&result.data){
+      const rem=result.data;
       db={...db,...rem,settings:{...db.settings,...rem.settings}};
       localStorage.setItem(SK,JSON.stringify(db));
       setSyncSt('synced');return true;
     }
+    setSyncSt('synced');
   }catch(e){setSyncSt('error')}
   return false;
 }
@@ -4722,16 +4708,13 @@ var _tplCache={};
 var _tplActive=null;
 
 async function loadEmailTemplates(){
-  var slug=state.subaccountSlug||'litbiz';
-  var subId='sub-'+slug;
-  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/email_templates?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*';
-  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
   try{
-    var res=await fetch(url,{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    var res=await fetch(apiUrl('/api/subaccount/email-templates-list'),{credentials:'include'});
     if(!res.ok)return;
-    var rows=await res.json();
+    var data=await res.json();
+    var rows=data.templates||[];
     _tplCache={};
-    if(rows&&rows.length)rows.forEach(function(r){_tplCache[r.template_type]=r;});
+    rows.forEach(function(r){_tplCache[r.template_type]=r;});
   }catch(e){console.error('loadEmailTemplates:',e.message);}
 }
 
@@ -4864,18 +4847,17 @@ async function saveTpl(type){
   var slug=state.subaccountSlug||'litbiz';
   var subId='sub-'+slug;
   var tname=TPL_TYPES.find(function(t){return t.type===type;});
-  var row={subaccount_id:subId,template_type:type,name:tname?tname.name:type,subject:subject,body_html:bodyHtml,is_default:false,enabled:true,updated_at:new Date().toISOString()};
-  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/email_templates';
-  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
+  var row={template_type:type,name:tname?tname.name:type,subject:subject,body_html:bodyHtml,is_default:false,enabled:true};
   try{
-    var res=await fetch(url,{
+    var res=await fetch(apiUrl('/api/subaccount/email-templates-upsert'),{
       method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=representation'},
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify(row)
     });
     if(!res.ok){var err=await res.text();toast('Save failed: '+err,'error');return;}
-    var saved=await res.json();
-    _tplCache[type]=(saved&&saved.length)?saved[0]:row;
+    var data=await res.json();
+    _tplCache[type]=data.template||row;
     toast('Template saved.','success');
     renderEmailTemplatesSection();
     openTplEditor(type);
@@ -4895,12 +4877,13 @@ async function confirmResetTpl(){
   var type=state.modal&&state.modal.extra;
   if(!type)return;
   closeModal();
-  var slug=state.subaccountSlug||'litbiz';
-  var subId='sub-'+slug;
-  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/email_templates?subaccount_id=eq.'+encodeURIComponent(subId)+'&template_type=eq.'+encodeURIComponent(type);
-  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
   try{
-    await fetch(url,{method:'DELETE',headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    await fetch(apiUrl('/api/subaccount/email-templates-delete'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({template_type:type})
+    });
     delete _tplCache[type];
     _tplActive=null;
     toast('Template reset to default.','success');
@@ -4916,14 +4899,10 @@ async function loadSmsSettings(){
   var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
   var baseUrl=db.settings.supabaseUrl||SB_FALLBACK_URL;
   try{
-    var res=await fetch(baseUrl+'/rest/v1/sms_settings?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*&limit=1',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    var res=await fetch(apiUrl('/api/subaccount/sms-status'),{credentials:'include'});
     if(!res.ok)return null;
-    var rows=await res.json();
-    var settings=(rows&&rows.length)?rows[0]:null;
-    var res2=await fetch(baseUrl+'/rest/v1/sms_registration_requests?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*&limit=1',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
-    var rows2=res2.ok?await res2.json():[];
-    var request=(rows2&&rows2.length)?rows2[0]:null;
-    return{settings:settings,request:request};
+    var data=await res.json();
+    return{settings:data.settings||null,request:data.request||null};
   }catch(e){return null;}
 }
 
@@ -5044,22 +5023,20 @@ async function submitSmsRequest(){
   var email=(document.getElementById('sms-req-email')&&document.getElementById('sms-req-email').value||'').trim();
   if(!biz||!ein||!name||!phone){toast('Please fill in all required fields.','error');return;}
   var slug=state.subaccountSlug||'litbiz';
-  var subId='sub-'+slug;
   var bizName=(db.settings&&db.settings.businessName)||slug;
-  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
-  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/sms_registration_requests';
-  var row={subaccount_id:subId,subaccount_name:bizName,legal_business_name:biz,ein:ein,website:web||null,contact_name:name,contact_phone:phone,contact_email:email||null,status:'requested'};
+  var row={subaccount_name:bizName,legal_business_name:biz,ein:ein,website:web||null,contact_name:name,contact_phone:phone,contact_email:email||null};
   var btn=document.querySelector('#sms-settings-container .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='Submitting...';}
   try{
-    var res=await fetch(url,{
+    var res=await fetch(apiUrl('/api/subaccount/sms-registration-submit'),{
       method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=representation'},
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify(row)
     });
     if(!res.ok){var e=await res.text();toast('Submission failed: '+e,'error');if(btn){btn.disabled=false;btn.textContent='Submit Request';}return;}
-    var saved=await res.json();
-    state.smsRequest=(saved&&saved.length)?saved[0]:row;
+    var data=await res.json();
+    state.smsRequest=data.request||row;
     toast('SMS setup request submitted.','success');
     renderSmsSettings();
   }catch(e){toast('Error: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='Submit Request';}}
@@ -5071,13 +5048,12 @@ async function toggleSmsEnabled(){
   var newVal=!s.enabled;
   var slug=state.subaccountSlug||'litbiz';
   var subId='sub-'+slug;
-  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/sms_settings?subaccount_id=eq.'+encodeURIComponent(subId);
-  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
   try{
-    var res=await fetch(url,{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({enabled:newVal,updated_at:new Date().toISOString()})
+    var res=await fetch(apiUrl('/api/subaccount/sms-toggle'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({enabled:newVal})
     });
     if(!res.ok){toast('Failed to update SMS settings.','error');return;}
     state.smsSettings.enabled=newVal;
@@ -5119,13 +5095,11 @@ function switchSettingsTab(tab){
 async function loadEmailDomainStatus(){
   var slug=state.subaccountSlug||'litbiz';
   var subId='sub-'+slug;
-  var url=(db.settings.supabaseUrl||SB_FALLBACK_URL)+'/rest/v1/subaccount_email_domains?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*&limit=1';
-  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
   try{
-    var res=await fetch(url,{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    var res=await fetch(apiUrl('/api/subaccount/email-domain-status'),{credentials:'include'});
     if(!res.ok)return null;
-    var rows=await res.json();
-    return(rows&&rows.length)?rows[0]:null;
+    var data=await res.json();
+    return data.domain||null;
   }catch(e){return null;}
 }
 
@@ -12008,11 +11982,10 @@ async function loadAllPlans(){
   // Returns {subaccountId: planRecord}
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    var r=await fetch(url+'/rest/v1/subaccount_plans?select=*',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
+    var r=await fetch(apiUrl('/api/agency/plans-list'),{credentials:'include'});
     if(!r.ok)return{};
-    var rows=await r.json();
+    var data=await r.json();
+    var rows=data.plans||[];
     var map={};
     (rows||[]).forEach(function(row){map[row.subaccount_id]=row;});
     return map;
@@ -12274,9 +12247,10 @@ async function loadBillingSummary(){
   // Pull all plans (we already have similar data via agencyLoadSubaccounts but fetch fresh here)
   try{
     var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
-    var r=await fetch(url+'/rest/v1/subaccount_plans?select=*',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
+    var r=await fetch(apiUrl('/api/agency/plans-list'),{credentials:'include'});
     if(!r.ok){el.innerHTML='<div style="color:#f87171;font-size:13px">Failed to load summary.</div>';return;}
-    var plans=await r.json();
+    var data=await r.json();
+    var plans=data.plans||[];
     var summary=computeBillingSummary(plans||[]);
     billingState.summary=summary;
     el.innerHTML=renderBillingSummaryCards(summary);
@@ -12531,10 +12505,8 @@ async function openManagePlanModal(subId,subName){
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   var plan=null;
   try{
-    var r=await fetch(url+'/rest/v1/subaccount_plans?subaccount_id=eq.'+encodeURIComponent(subId)+'&select=*',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    if(r.ok){var rows=await r.json();if(rows&&rows.length)plan=rows[0];}
+    var r=await fetch(apiUrl('/api/agency/plans-list?subaccount_id=')+encodeURIComponent(subId),{credentials:'include'});
+    if(r.ok){var data=await r.json();var rows=data.plans||[];if(rows&&rows.length)plan=rows[0];}
   }catch(e){console.warn('Could not load plan:',e);}
   // Default values if no plan record exists yet
   var curTier=(plan&&plan.plan_tier)||'starter';
@@ -12969,14 +12941,10 @@ async function agencyLoadSmsRequests(){
   if(!el)return;
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    var res=await fetch(url+'/rest/v1/sms_registration_requests?status=in.(requested,in_progress)&order=created_at.asc&select=*',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var pending=res.ok?await res.json():[];
-    var res2=await fetch(url+'/rest/v1/sms_settings?select=*&order=created_at.asc',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var provisioned=res2.ok?await res2.json():[];
+    var res=await fetch(apiUrl('/api/agency/sms-requests'),{credentials:'include'});
+    var data=res.ok?await res.json():{pending:[],provisioned:[]};
+    var pending=data.pending||[];
+    var provisioned=data.provisioned||[];
     var out='';
     if(pending&&pending.length){
       var sColor={requested:'#f59e0b',in_progress:'#6b21ea'};
@@ -13047,12 +13015,12 @@ async function confirmAgencyUpdateSmsStatus(){
   if(!subaccountId){toast('Missing subaccount.','error');return;}
   var status=document.getElementById('update-sms-status')&&document.getElementById('update-sms-status').value;
   var enabled=document.getElementById('update-sms-enabled')&&document.getElementById('update-sms-enabled').value==='true';
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    var res=await fetch(url+'/rest/v1/sms_settings?subaccount_id=eq.'+encodeURIComponent(subaccountId),{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({campaign_status:status,enabled:enabled,updated_at:new Date().toISOString()})
+    var res=await fetch(apiUrl('/api/agency/sms-status-update'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subaccount_id:subaccountId,campaign_status:status,enabled:enabled})
     });
     if(!res.ok){var e=await res.text();toast('Update failed: '+e,'error');return;}
     closeModal();
@@ -13091,22 +13059,14 @@ async function confirmAgencySmsProvision(){
   var requestId=state.modal&&state.modal.id;
   var subaccountId=state.modal&&state.modal.extra&&state.modal.extra.subaccountId;
   if(!requestId||!subaccountId){toast('Missing request data.','error');return;}
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    // Upsert sms_settings for the subaccount
-    var r1=await fetch(url+'/rest/v1/sms_settings',{
+    var r=await fetch(apiUrl('/api/agency/sms-provision'),{
       method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({subaccount_id:subaccountId,twilio_number:number,twilio_number_sid:sid,campaign_status:status,enabled:status==='approved',updated_at:new Date().toISOString()})
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subaccount_id:subaccountId,twilio_number:number,twilio_number_sid:sid,campaign_status:status,request_id:requestId,notes:notes||null})
     });
-    if(!r1.ok){var e1=await r1.text();toast('Failed to save SMS settings: '+e1,'error');return;}
-    // Update request status to provisioned
-    var r2=await fetch(url+'/rest/v1/sms_registration_requests?id=eq.'+encodeURIComponent(requestId),{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({status:'provisioned',notes:notes||null,updated_at:new Date().toISOString()})
-    });
-    if(!r2.ok){toast('SMS settings saved but failed to update request status.','warn');}
+    if(!r.ok){var e1=await r.text();toast('Failed to provision SMS: '+e1,'error');return;}
     closeModal();
     toast('SMS number provisioned for '+subaccountId+'.','success');
     agencyLoadSmsRequests();
@@ -13117,19 +13077,15 @@ async function agencyLoadSubaccounts(){
   var el=document.getElementById('agency-subs-grid');if(!el)return;
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    var r=await fetch(url+'/rest/v1/subaccounts?select=*&order=created_at.asc',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var subs=await r.json();
+    var r=await fetch(apiUrl('/api/agency/subaccounts-list?include_data=true'),{credentials:'include'});
+    var data=r.ok?await r.json():{subaccounts:[],data_map:{}};
+    var subs=data.subaccounts||[];
     if(!Array.isArray(subs)||!subs.length){
       el.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:20px 0">No subaccounts yet. Create one to get started.</div>';
       return;
     }
     // Load stats for each sub
-    var statsRes=await fetch(url+'/rest/v1/subaccount_data?select=subaccount_id,data',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var statsRows=await statsRes.json();
+    var statsRows=Object.keys(data.data_map||{}).map(function(sid){return{subaccount_id:sid,data:data.data_map[sid]};});
     var statsMap={};
     (statsRows||[]).forEach(function(row){
       if(row.data)statsMap[row.subaccount_id]=row.data;
@@ -13383,11 +13339,12 @@ async function createSubaccount(){
   var subId='sub-'+slug;
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    // Create subaccount record
-    var r1=await fetch(url+'/rest/v1/subaccounts',{
+    // Create subaccount + data + plan in one server call
+    var r1=await fetch(apiUrl('/api/agency/subaccount-create'),{
       method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({id:subId,agency_id:'agency-main',name:name,slug:slug,plan:tier,active:true,admin_email:adminEmail,admin_username:adminUser})
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:subId,name:name,slug:slug,tier:tier,adminEmail:adminEmail,adminUsername:adminUser,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote||null,exemptFromBilling:isExempt!==false,status:isExempt?'exempt':'trialing'})
     });
     if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
     // Create initial data record with admin user
@@ -13420,10 +13377,11 @@ async function createSubaccount(){
         createdAt:new Date().toISOString()
       }
     };
-    var r2=await fetch(url+'/rest/v1/subaccount_data',{
+    var r2=await fetch(apiUrl('/api/agency/subaccount-update'),{
       method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({id:'data-'+slug,subaccount_id:subId,data:initData,updated_at:new Date().toISOString()})
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:subId,data:initData})
     });
     if(!r2.ok){var e2=await r2.text();toast('Subaccount created but data init failed: '+e2,'warn');}
     // Handle billing setup
@@ -13462,11 +13420,7 @@ async function createSubaccount(){
       }
     }else{
       // Exempt subaccount: write exempt plan record
-      await fetch(SB_FALLBACK_URL+'/rest/v1/subaccount_plans',{
-        method:'POST',
-        headers:{'apikey':SB_FALLBACK_KEY,'Authorization':'Bearer '+SB_FALLBACK_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
-        body:JSON.stringify({subaccount_id:subId,plan_tier:tier,billing_period:billingPeriod,hipaa_addon:hipaaAddon,status:'exempt',exempt_from_billing:true,discount_percent:discountPct,discount_note:discountNote||null,updated_at:new Date().toISOString()})
-      }).catch(function(){});
+      // Plan record already created by /api/agency/subaccount-create above
       toast('Subaccount "'+name+'" created (exempt from billing).','success');
     }
     closeModal();
@@ -13604,11 +13558,10 @@ async function openEditSubaccountModal(id,name,slug,plan){
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   var adminName='',adminUser='';
   try{
-    var r=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+encodeURIComponent(id)+'&select=data',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
+    var r=await fetch(apiUrl('/api/agency/subaccount-data-get?id=')+encodeURIComponent(id),{credentials:'include'});
     if(r.ok){
-      var rows=await r.json();
+      var resData=await r.json();
+      var rows=resData.data?[{data:resData.data}]:[];
       if(rows&&rows.length&&rows[0].data&&rows[0].data._subaccountAdmin){
         adminName=rows[0].data._subaccountAdmin.name||'';
         adminUser=rows[0].data._subaccountAdmin.username||'';
@@ -13653,19 +13606,19 @@ async function saveEditSubaccount(id){
   }
   try{
     // Patch the subaccounts table (name + plan)
-    var r1=await fetch(url+'/rest/v1/subaccounts?id=eq.'+encodeURIComponent(id),{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({name:name})
+    var r1=await fetch(apiUrl('/api/agency/subaccount-update'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:id,name:name})
     });
     if(!r1.ok){var e1=await r1.text();toast('Could not update subaccount: '+e1,'error');return;}
     // Patch the _subaccountAdmin inside subaccount_data (non-LitBiz only)
     if(!isLitBiz){
-      var rGet=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+encodeURIComponent(id)+'&select=data',{
-        headers:{'apikey':key,'Authorization':'Bearer '+key}
-      });
+      var rGet=await fetch(apiUrl('/api/agency/subaccount-data-get?id=')+encodeURIComponent(id),{credentials:'include'});
       if(rGet.ok){
-        var rows=await rGet.json();
+        var rgData=await rGet.json();
+        var rows=rgData.data?[{data:rgData.data}]:[];
         if(rows&&rows.length&&rows[0].data){
           var data=rows[0].data;
           data._subaccountAdmin=data._subaccountAdmin||{};
@@ -13673,10 +13626,11 @@ async function saveEditSubaccount(id){
           data._subaccountAdmin.username=newAdminUser;
           // Also update business name in settings so it matches
           if(data.settings)data.settings.businessName=name;
-          var r2=await fetch(url+'/rest/v1/subaccount_data?subaccount_id=eq.'+encodeURIComponent(id),{
-            method:'PATCH',
-            headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-            body:JSON.stringify({data:data,updated_at:new Date().toISOString()})
+          var r2=await fetch(apiUrl('/api/agency/subaccount-update'),{
+            method:'POST',
+            credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({id:id,data:data})
           });
           if(!r2.ok){var e2=await r2.text();toast('Subaccount name updated, but admin update failed: '+e2,'warn');}
         }
@@ -13708,10 +13662,11 @@ async function agencyToggleSub(id,active,name){
 async function agencyConfirmToggleSub(id,active){
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    await fetch(url+'/rest/v1/subaccounts?id=eq.'+id,{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({active:active})
+    await fetch(apiUrl('/api/agency/subaccount-update'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:id,active:active})
     });
     closeModal();
     toast('Subaccount '+(active?'activated':'suspended')+'.','success');
@@ -13796,17 +13751,16 @@ async function savePlanPricing(){
   HIPAA_ADDON_PRICES.monthly=hm;
   HIPAA_ADDON_PRICES.annual=ha;
   if(!valid){toast('All prices must be greater than 0.','error');return;}
-  // Save to Supabase plan_pricing table
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   var rows=tiers.map(function(t){
     return {id:t,tier:t,monthly_cents:PLAN_PRICES[t].monthly*100,annual_cents:PLAN_PRICES[t].annual*100,
-      hipaa_monthly_cents:hm*100,hipaa_annual_cents:ha*100,updated_at:new Date().toISOString()};
+      hipaa_monthly_cents:hm*100,hipaa_annual_cents:ha*100};
   });
   try{
-    var r=await fetch(url+'/rest/v1/plan_pricing',{
+    var r=await fetch(apiUrl('/api/agency/plan-pricing-update'),{
       method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify(rows)
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({rows:rows})
     });
     if(!r.ok){var t2=await r.text();toast('Could not save to database: '+t2,'error');return;}
     toast('Plan pricing updated.','success');
@@ -14138,9 +14092,7 @@ async function agencyLoadUsers(){
   if(!listEl)return;
   var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    var r=await fetch(url+'/rest/v1/agency_users?select=*&order=created_at.asc',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
+    var r=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
     if(!r.ok){
       listEl.innerHTML='<div style="color:#f87171;font-size:13px;padding:12px 0">Could not load users. Make sure the agency_users table exists in Supabase.</div>';
       return;
@@ -14220,21 +14172,15 @@ async function agencyCreateUser(){
   var passErr=checkPasswordStrength(pass);
   if(passErr){toast(passErr,'error');return;}
   var hash=await sha256(pass);
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  var newId='ag-'+uid();
   try{
-    // Check username uniqueness
-    var chk=await fetch(url+'/rest/v1/agency_users?username=eq.'+encodeURIComponent(username)+'&select=id',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var existing=await chk.json();
-    if(Array.isArray(existing)&&existing.length){toast('Username already exists.','error');return;}
-    var newId='ag-'+uid();
-    var r=await fetch(url+'/rest/v1/agency_users',{
+    var r=await fetch(apiUrl('/api/agency/users-create'),{
       method:'POST',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({id:newId,username:username,password_hash:hash,name:name,email:email,role:role,active:true})
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:newId,username:username,password:document.getElementById('ag-new-pass').value,name:name,email:email,role:role})
     });
-    if(!r.ok){var err=await r.text();toast('Could not create user: '+err,'error');return;}
+    if(!r.ok){var err=await r.text();var errObj={};try{errObj=JSON.parse(err);}catch(e){}toast('Could not create user: '+(errObj.error||err),'error');return;}
     closeModal();
     toast('Agency user "'+name+'" created.','success');
     agencyLoadUsers();
@@ -14244,17 +14190,16 @@ async function agencyCreateUser(){
 // ── Edit Agency User ──
 async function openAgencyEditUserModal(userId){
   if(!agencyCanManageUsers()){toast('Only Super Admins can edit agency users.','error');return;}
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId)+'&select=*',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
-    });
-    var rows=await r.json();
-    if(!rows||!rows.length){toast('User not found.','error');return;}
-    var u=rows[0];
+    var r=await fetch(apiUrl('/api/agency/users-get?id=')+encodeURIComponent(userId),{credentials:'include'});
+    if(!r.ok){toast('Could not load user.','error');return;}
+    var ugData=await r.json();
+    var u=ugData.user;
+    if(!u){toast('User not found.','error');return;}
     // Count super admins to determine if this user's role can be changed
-    var rAll=await fetch(url+'/rest/v1/agency_users?select=id,role,active',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
-    var all=await rAll.json();
+    var rAll=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
+    var allData=rAll.ok?await rAll.json():{users:[]};
+    var all=allData.users||[];
     var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
     var isLastSuper=u.role==='super_admin'&&superCount<=1&&u.active!==false;
     var isSelf=u.id===agencyCurrentUserId();
@@ -14310,8 +14255,9 @@ async function agencySaveEditUser(userId){
   // Re-validate last super admin guard server-side-ish
   try{
     if(updates.role&&updates.role!=='super_admin'){
-      var rAll=await fetch(url+'/rest/v1/agency_users?select=id,role,active',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
-      var all=await rAll.json();
+      var rAll=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
+      var allData=rAll.ok?await rAll.json():{users:[]};
+      var all=allData.users||[];
       var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
       var target=(all||[]).filter(function(x){return x.id===userId;})[0];
       if(target&&target.role==='super_admin'&&superCount<=1){
@@ -14328,18 +14274,16 @@ async function agencySaveEditUser(userId){
       if(isSelfEdit){
         var oldPass=document.getElementById('ag-edit-old-pass')&&document.getElementById('ag-edit-old-pass').value||'';
         if(!oldPass){toast('Enter your current password to set a new one.','error');return;}
-        var oldHash=await sha256(oldPass);
-        var rSelf=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId)+'&password_hash=eq.'+encodeURIComponent(oldHash)+'&select=id',{
-          headers:{'apikey':key,'Authorization':'Bearer '+key}
-        });
-        var selfRows=await rSelf.json();
-        if(!selfRows||!selfRows.length){toast('Current password is incorrect.','error');return;}
+        // Old-pass verification done server-side in users-update
+        updates.currentPassword=oldPass;
       }
-      updates.password_hash=await sha256(pass);
+      updates.password=pass;
     }
-    var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId),{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+    updates.id=userId;
+    var r=await fetch(apiUrl('/api/agency/users-update'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify(updates)
     });
     if(!r.ok){var err=await r.text();toast('Could not save: '+err,'error');return;}
@@ -14353,11 +14297,11 @@ async function agencySaveEditUser(userId){
 async function agencyDeleteUser(userId,userName){
   if(!agencyCanManageUsers()){toast('Permission denied.','error');return;}
   if(userId===agencyCurrentUserId()){toast('You cannot remove yourself.','error');return;}
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   // Server-side-ish check: is this user the last active super admin?
   try{
-    var rAll=await fetch(url+'/rest/v1/agency_users?select=id,role,active',{headers:{'apikey':key,'Authorization':'Bearer '+key}});
-    var all=await rAll.json();
+    var rAll=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
+    var allData=rAll.ok?await rAll.json():{users:[]};
+    var all=allData.users||[];
     var target=(all||[]).filter(function(x){return x.id===userId;})[0];
     if(target&&target.role==='super_admin'){
       var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
@@ -14372,11 +14316,12 @@ async function agencyDeleteUser(userId,userName){
 }
 
 async function agencyConfirmDeleteUser(userId){
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(userId),{
-      method:'DELETE',
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    var r=await fetch(apiUrl('/api/agency/users-delete'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:userId})
     });
     if(!r.ok){var err=await r.text();toast('Could not remove: '+err,'error');return;}
     closeModal();
@@ -14413,23 +14358,14 @@ async function agencySaveOwnPassword(){
   if(!sess||!sess.id){toast('Session expired. Please sign in again.','error');return;}
   var oldHash=await sha256(oldPass);
   var newHash=await sha256(newPass);
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
-    // Verify current password against database record
-    var r=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(sess.id)+'&select=password_hash',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key}
+    var r2=await fetch(apiUrl('/api/agency/users-change-own-password'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({oldPassword:oldPass,newPassword:newPass})
     });
-    var rows=await r.json();
-    var storedHash=rows&&rows.length?rows[0].password_hash:null;
-    // Allow fallback hash match if DB record missing (disaster recovery bootstrap)
-    var okOld=(storedHash&&oldHash===storedHash)||(sess.id==='agency-admin-primary'&&!storedHash&&oldHash===AGENCY_FALLBACK_HASH);
-    if(!okOld){toast('Current password is incorrect.','error');return;}
-    var r2=await fetch(url+'/rest/v1/agency_users?id=eq.'+encodeURIComponent(sess.id),{
-      method:'PATCH',
-      headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body:JSON.stringify({password_hash:newHash,updated_at:new Date().toISOString()})
-    });
-    if(!r2.ok){var err=await r2.text();toast('Could not update password: '+err,'error');return;}
+    if(!r2.ok){var err=await r2.text();var eo={};try{eo=JSON.parse(err);}catch(e){}toast('Could not update password: '+(eo.error||err),'error');return;}
     closeModal();
     toast('Password updated successfully.','success');
   }catch(e){toast('Error: '+e.message,'error');}

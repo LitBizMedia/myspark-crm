@@ -6,8 +6,10 @@
 // Used by the frontend on page load to validate a stored session
 // before allowing access to the app.
 //
-// MIGRATED: from Vercel handler to AWS Lambda via lambda-adapter.
+// Phase 11 (Path A): Extended to include subaccount.active and
+// subaccount_plans.hipaa_addon so frontend doesn't need direct Supabase reads.
 
+const db = require('./lib/db');
 const {
   parseSessionCookie,
   validateSession,
@@ -27,12 +29,34 @@ async function handler(req, res) {
 
   const session = await validateSession(token);
   if (!session) {
-    // Stale or invalid - clear the cookie so the browser stops sending it
     res.setHeader('Set-Cookie', buildClearCookie());
     return res.status(401).json({ error: 'Invalid or expired session', authenticated: false });
   }
 
-  // Only return non-sensitive session info
+  // Look up subaccount status (active flag) and HIPAA addon status
+  let subaccountActive = null;
+  let hipaaAddon = false;
+  try {
+    const subResult = await db.query(
+      'SELECT active FROM subaccounts WHERE id = $1 LIMIT 1',
+      [session.subaccount_id]
+    );
+    if (subResult.rows.length > 0) {
+      subaccountActive = subResult.rows[0].active !== false;
+    }
+
+    const planResult = await db.query(
+      'SELECT hipaa_addon FROM subaccount_plans WHERE subaccount_id = $1 LIMIT 1',
+      [session.subaccount_id]
+    );
+    if (planResult.rows.length > 0) {
+      hipaaAddon = !!planResult.rows[0].hipaa_addon;
+    }
+  } catch (e) {
+    console.error('session: status lookup failed:', e.message);
+    // Don't fail the session on status lookup error - just leave fields null
+  }
+
   return res.status(200).json({
     authenticated: true,
     user: {
@@ -42,6 +66,10 @@ async function handler(req, res) {
       name: session.display_name || session.username,
       type: session.user_type,
       subaccount_id: session.subaccount_id
+    },
+    subaccount: {
+      active: subaccountActive,
+      hipaa_addon: hipaaAddon
     },
     expires_at: session.expires_at
   });
