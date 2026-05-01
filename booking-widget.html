@@ -88,11 +88,12 @@ body{min-height:100vh;display:flex;flex-direction:column}
 .bw-cal-nav:hover{background:var(--brand-light);border-color:var(--brand-mid)}
 .bw-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:0}
 .bw-cal-dow{text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);padding:10px 4px;border-bottom:1px solid var(--border)}
-.bw-cal-day{text-align:center;padding:4px 2px;font-size:13px;cursor:pointer;transition:.12s;border-radius:50%;margin:2px;aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+.bw-cal-day{text-align:center;padding:8px 4px;font-size:13px;cursor:pointer;transition:.12s;border-radius:4px;margin:2px;position:relative;z-index:0}
 .bw-cal-day.empty{cursor:default}
 .bw-cal-day.past{color:var(--text-light);cursor:default}
-.bw-cal-day.available:hover{background:var(--brand-light);color:var(--brand)}
-.bw-cal-day.selected{background:var(--brand);color:#fff;border-radius:50%;font-weight:700}
+.bw-cal-day.available:hover{background:var(--brand-light);color:var(--brand);border-radius:4px}
+.bw-cal-day.selected{color:#fff;font-weight:700;background:transparent}
+.bw-cal-day.selected::before{content:'';position:absolute;width:28px;height:28px;background:var(--brand);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);z-index:-1}
 .bw-cal-day.today{font-weight:700;color:var(--brand)}
 
 /* ── Time slots ── */
@@ -404,22 +405,18 @@ function selectVariation(id) {
 // ── Step: Staff ───────────────────────────────────────────────────────────────
 function renderStaff(el) {
   const assigned = S.service.assigned_staff || [];
-  const pool = (D.staff||[]).filter(u => !assigned.length || assigned.includes(u.id));
-  const allowChoose = S.service.allow_client_choose_staff !== false;
+  const pool = (D.staff||[]).filter(u => assigned.includes(u.id));
+
+  if (!pool.length) {
+    el.innerHTML = `<div class="bw-section-title">No Providers Available</div>
+      <div class="bw-section-sub">This service has no assigned providers. Please contact the business to book.</div>
+      <div class="bw-nav"><button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button></div>`;
+    return;
+  }
 
   let html = `<div class="bw-section-title">Choose a Provider</div>
     <div class="bw-section-sub">Select who you'd like to see</div>
     <div class="bw-options">`;
-
-  if (allowChoose) {
-    html += `<div class="bw-option bw-any-staff ${S.staff===null?'selected':''}" onclick="selectStaff(null)">
-      <div class="bw-option-dot" style="background:#9ca3af"></div>
-      <div>
-        <div class="bw-option-name">Any Available Provider</div>
-        <div class="bw-option-sub">First available staff member</div>
-      </div>
-    </div>`;
-  }
 
   pool.forEach(u => {
     const sel = S.staff?.id === u.id ? 'selected' : '';
@@ -433,7 +430,7 @@ function renderStaff(el) {
 
   html += `</div><div class="bw-nav">
     <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
-    <button class="bw-btn bw-btn-primary" onclick="goNext()">Continue &rarr;</button>
+    <button class="bw-btn bw-btn-primary" onclick="goNext()" ${!S.staff?'disabled':''}>Continue &rarr;</button>
   </div>`;
   el.innerHTML = html;
 }
