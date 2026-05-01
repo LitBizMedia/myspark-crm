@@ -1209,6 +1209,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <div id="appt-list-body"></div>
         </div>
         <div id="cal-service-view" class="hidden"><div id="svc-cal-body"></div></div>
+        <div id="cal-booking-view" class="hidden"><div id="bw-cal-body"></div></div>
       </div>
 
       <!-- STAFF -->
@@ -1606,6 +1607,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="settings-grid" id="stab-content-general">
 
           <div class="s-card">
+            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Timezone</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Sets the timezone for your calendar, booking availability, and client-facing scheduling. All appointment times display in this timezone.</div>
+            <div class="form-group" style="max-width:320px"><select id="biz-timezone" onchange="saveTimezone()"><option value="">Select timezone...</option></select></div>
+          </div>
+          <div class="s-card">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Business Hours</div>
             <div id="bh-grid"></div>
             <button class="btn btn-purple btn-sm" style="margin-top:10px" onclick="saveBH()">Save Hours</button>
@@ -1774,7 +1780,7 @@ let state={
 // =====================================================
 let db={
   contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],sessionPackTemplates:[],sessionPacks:[],
-  services:[],serviceVariations:[],classSessions:[],serviceCategories:[],
+  services:[],serviceVariations:[],classSessions:[],serviceCategories:[],serviceWidgets:[],
   tags:[
     {id:'tag-hotlead',name:'Hot Lead',color:'#ff4000'},
     {id:'tag-vip',name:'VIP Client',color:'#6b21ea'},
@@ -1795,7 +1801,16 @@ let db={
     square:{appId:'',accessToken:'',locationId:'',sandbox:true},
     supabaseUrl:'',supabaseKey:'',
     adminProfile:{},
-    notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
+    notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24},
+    timezone:'America/Chicago',
+    bookingSettings:{
+      cancellation_policy:'flexible',cancellation_hours:24,cancellation_refund_pct:100,cancellation_policy_text:'',
+      noshow_action:'none',noshow_charge_pct:0,noshow_charge_flat:0,
+      default_payment_mode:'none',deposit_type:'percent',deposit_value:25,
+      tip_enabled:false,tip_percentages:[10,15,20],tip_allow_custom:true,
+      send_confirmation_email:true,confirmation_subject:'',confirmation_message:'',
+      widget_primary_color:'#6b21ea',widget_logo_url:'',widget_tagline:'',widget_footer_text:''
+    }
   },
   paySettings:{
     additionalFee:{enabled:false,label:'Additional Fee',type:'flat',amount:0}
@@ -4484,7 +4499,7 @@ function renderUserList(){
 // OVERRIDE: renderSettings — include Supabase + notif
 // =====================================================
 function renderSettings(){
-  renderUserList();renderTagMgr();renderBH();renderNotifSettings();cfRenderSettings();renderSquareCard();
+  renderUserList();renderTagMgr();renderBH();renderNotifSettings();cfRenderSettings();renderSquareCard();renderTimezoneSelect();
   // Activity Log tab visible only for admins
   var actBtn=document.getElementById('stab-activity');
   if(actBtn){
@@ -5946,7 +5961,7 @@ function confirmRestartSub(id){
 // =====================================================
 function switchCalTab(tab){
   state.calTab=tab;
-  ['calendar','appointments','service'].forEach(t=>{
+  ['calendar','appointments','service','booking'].forEach(t=>{
     const btn=document.getElementById('cpt-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
     const v=document.getElementById('cal-'+t+'-view');
@@ -8580,14 +8595,309 @@ function renderDashWeek(){
 // =====================================================
 // CALENDAR — Booking Widgets tab
 // =====================================================
+function renderTimezoneSelect(){
+  var el=document.getElementById('biz-timezone');if(!el)return;
+  var cur=db.settings&&db.settings.timezone||'America/Chicago';
+  el.add(new Option("Eastern Time (ET)","America/New_York"));el.add(new Option("Central Time (CT)","America/Chicago"));el.add(new Option("Mountain Time (MT)","America/Denver"));el.add(new Option("Mountain Time - Arizona","America/Phoenix"));el.add(new Option("Pacific Time (PT)","America/Los_Angeles"));el.add(new Option("Alaska Time","America/Anchorage"));el.add(new Option("Hawaii Time","Pacific/Honolulu"));el.add(new Option("Toronto (ET)","America/Toronto"));el.add(new Option("Vancouver (PT)","America/Vancouver"));el.add(new Option("Sao Paulo (BRT)","America/Sao_Paulo"));el.add(new Option("London (GMT/BST)","Europe/London"));el.add(new Option("Paris (CET)","Europe/Paris"));el.add(new Option("Berlin (CET)","Europe/Berlin"));el.add(new Option("Rome (CET)","Europe/Rome"));el.add(new Option("Madrid (CET)","Europe/Madrid"));el.add(new Option("Amsterdam (CET)","Europe/Amsterdam"));el.add(new Option("Stockholm (CET)","Europe/Stockholm"));el.add(new Option("Warsaw (CET)","Europe/Warsaw"));el.add(new Option("Istanbul (TRT)","Europe/Istanbul"));el.add(new Option("Cairo (EET)","Africa/Cairo"));el.add(new Option("Johannesburg (SAST)","Africa/Johannesburg"));el.add(new Option("Dubai (GST)","Asia/Dubai"));el.add(new Option("India (IST)","Asia/Kolkata"));el.add(new Option("Bangkok (ICT)","Asia/Bangkok"));el.add(new Option("Singapore (SGT)","Asia/Singapore"));el.add(new Option("China (CST)","Asia/Shanghai"));el.add(new Option("Tokyo (JST)","Asia/Tokyo"));el.add(new Option("Seoul (KST)","Asia/Seoul"));el.add(new Option("Sydney (AEST)","Australia/Sydney"));el.add(new Option("Melbourne (AEST)","Australia/Melbourne"));el.add(new Option("Auckland (NZST)","Pacific/Auckland"));
+  el.value=cur;
+}
+function saveTimezone(){
+  var el=document.getElementById('biz-timezone');if(!el)return;
+  if(!db.settings)db.settings={};
+  db.settings.timezone=el.value;
+  schedSync();
+  toast('Timezone saved.','success');
+}
+
 function renderBookingWidgets(){
-  const el=document.getElementById('cal-view');if(!el)return;
-  el.innerHTML='<div class="booking-widget-placeholder">'
-    +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 14px;display:block;opacity:.4" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01"/></svg>'
-    +'<div style="font-size:16px;font-weight:700;margin-bottom:8px">Booking Widgets</div>'
-    +'<div style="font-size:13px;max-width:380px;margin:0 auto;line-height:1.7">Build embeddable booking widgets that tie directly to your service calendars. Clients will be able to self-schedule appointments from your website.<br><br>Coming soon.</div>'
+  var el=document.getElementById('bw-cal-body');if(!el)return;
+  if(!state.bwTab)state.bwTab='service';
+  var tabs=[
+    {id:'service',label:'Service Widgets'},
+    {id:'appointment',label:'Appointment Widgets'},
+    {id:'settings',label:'Booking Settings'}
+  ];
+  var tabBar='<div class="cal-panel-tabs" style="margin-bottom:18px">'
+    +tabs.map(function(t){
+      return'<button class="cal-panel-tab'+(state.bwTab===t.id?' active':'')+'" onclick="state.bwTab=\''+t.id+'\';renderBookingWidgets()">'+t.label+'</button>';
+    }).join('')+'</div>';
+
+  var body='';
+  if(state.bwTab==='service') body=_renderSvcWidgetsTab();
+  else if(state.bwTab==='appointment') body=_renderApptWidgetsTab();
+  else body=_renderBookingSettingsTab();
+
+  el.innerHTML=tabBar+body;
+}
+
+function _renderSvcWidgetsTab(){
+  var widgets=(db.serviceWidgets||[]);
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+    +'<div><div style="font-size:14px;font-weight:700">Service Booking Widgets</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Embeddable widgets for your service calendars</div></div>'
+    +'<button class="btn btn-primary" onclick="openServiceWidgetModal(null)">+ Create Widget</button>'
+    +'</div>';
+  if(!widgets.length){
+    h+='<div style="text-align:center;padding:48px;border:1px dashed var(--main-border);border-radius:8px;color:var(--text-muted)">'
+      +'<div style="font-size:13px;font-weight:600;margin-bottom:6px">No widgets yet</div>'
+      +'<div style="font-size:12px">Create your first service booking widget to generate an embed code for your website.</div>'
+      +'</div>';
+    return h;
+  }
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
+  widgets.forEach(function(w){
+    var svcNames=(w.service_ids&&w.service_ids.length)
+      ?(db.services||[]).filter(function(s){return w.service_ids.includes(s.id);}).map(function(s){return esc(s.name);}).join(', ')||'No services found'
+      :'All services';
+    h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:14px;border-left:4px solid '+(w.primary_color||'#6b21ea')+'">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+      +'<div style="font-weight:700;font-size:13px">'+esc(w.name)+'</div>'
+      +(w.active!==false?'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.15);color:#4ade80;font-weight:600">Active</span>':'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(156,163,175,.15);color:#9ca3af;font-weight:600">Inactive</span>')
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Services: '+svcNames+'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      +'<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="copyWidgetCode(\''+w.id+'\')">Copy Embed Code</button>'
+      +'<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="openServiceWidgetModal(\''+w.id+'\')">Edit</button>'
+      +'<button class="btn btn-ghost btn-sm" style="font-size:11px;color:#f87171" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>'
+      +'</div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+function _renderApptWidgetsTab(){
+  return'<div style="text-align:center;padding:48px;border:1px dashed var(--main-border);border-radius:8px;color:var(--text-muted)">'
+    +'<div style="font-size:13px;font-weight:600;margin-bottom:6px">Appointment Widgets</div>'
+    +'<div style="font-size:12px;max-width:360px;margin:0 auto;line-height:1.7">Direct appointment booking widgets (not tied to a specific service) are coming soon. Configure your service calendars first, then return here to create appointment widgets.</div>'
     +'</div>';
 }
+
+function _renderBookingSettingsTab(){
+  var bs=db.settings&&db.settings.bookingSettings||{};
+  var pct=bs.tip_percentages||[10,15,20];
+
+  var h='<div style="display:flex;flex-direction:column;gap:20px">';
+
+  // Cancellation
+  h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:12px">Cancellation Policy</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Policy Type</label>'
+    +'<select id="bs-cancel-policy" onchange="bsToggleCancelCustom()">'
+    +'<option value="flexible"'+(bs.cancellation_policy==='flexible'?' selected':'')+'>Flexible - Full refund up to 24 hours before</option>'
+    +'<option value="moderate"'+(bs.cancellation_policy==='moderate'?' selected':'')+'>Moderate - Full refund up to 48 hours, 50% after</option>'
+    +'<option value="strict"'+(bs.cancellation_policy==='strict'?' selected':'')+'>Strict - 50% refund up to 72 hours, none after</option>'
+    +'<option value="custom"'+(bs.cancellation_policy==='custom'?' selected':'')+'>Custom</option>'
+    +'</select></div></div>'
+    +'<div id="bs-cancel-custom" style="'+(bs.cancellation_policy==='custom'?'':'display:none')+'">'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Cancel within (hours)</label><input id="bs-cancel-hours" type="number" min="0" value="'+(bs.cancellation_hours||24)+'"></div>'
+    +'<div class="form-group"><label>Refund % if cancelled in time</label><input id="bs-cancel-pct" type="number" min="0" max="100" value="'+(bs.cancellation_refund_pct!=null?bs.cancellation_refund_pct:100)+'"></div>'
+    +'</div></div>'
+    +'<div class="form-group"><label>Policy text shown to clients at booking</label>'
+    +'<textarea id="bs-cancel-text" rows="2" style="resize:vertical" placeholder="e.g. Cancellations made within 24 hours of the appointment may not be eligible for a refund.">'+esc(bs.cancellation_policy_text||'')+'</textarea></div>'
+    +'</div>';
+
+  // No-show
+  h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:12px">No-Show Policy</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>No-Show Action</label>'
+    +'<select id="bs-noshow-action" onchange="bsToggleNoshow()">'
+    +'<option value="none"'+((!bs.noshow_action||bs.noshow_action==="none")?' selected':'')+'>No charge</option>'
+    +'<option value="charge_pct"'+(bs.noshow_action==="charge_pct"?' selected':'')+'>Charge % of service price</option>'
+    +'<option value="charge_flat"'+(bs.noshow_action==="charge_flat"?' selected':'')+'>Charge flat fee</option>'
+    +'</select></div>'
+    +'<div class="form-group" id="bs-noshow-amt-wrap" style="'+((!bs.noshow_action||bs.noshow_action==='none')?'visibility:hidden':'')+'"><label id="bs-noshow-amt-lbl">'+(bs.noshow_action==='charge_flat'?'Flat Fee ($)':'Percentage (%)')+'</label>'
+    +'<input id="bs-noshow-amt" type="number" min="0" value="'+(bs.noshow_action==='charge_flat'?(bs.noshow_charge_flat||0):(bs.noshow_charge_pct||0))+'"></div>'
+    +'</div></div>';
+
+  // Payment defaults
+  h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:12px">Payment Defaults</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Global default for all services. Can be overridden per service.</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Payment Mode</label>'
+    +'<select id="bs-pay-mode" onchange="bsToggleDeposit()">'
+    +'<option value="none"'+((!bs.default_payment_mode||bs.default_payment_mode==="none")?' selected':'')+'>Pay at visit</option>'
+    +'<option value="deposit"'+(bs.default_payment_mode==="deposit"?' selected':'')+'>Require deposit</option>'
+    +'<option value="full"'+(bs.default_payment_mode==="full"?' selected':'')+'>Require full payment to book</option>'
+    +'</select></div></div>'
+    +'<div id="bs-deposit-wrap" style="'+(bs.default_payment_mode==='deposit'?'':'display:none')+'">'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Deposit Type</label>'
+    +'<select id="bs-dep-type">'
+    +'<option value="percent"'+(bs.deposit_type==='percent'?' selected':'')+'>Percentage of price</option>'
+    +'<option value="flat"'+(bs.deposit_type==='flat'?' selected':'')+'>Flat amount</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Amount</label><input id="bs-dep-val" type="number" min="0" step="0.01" value="'+(bs.deposit_value||25)+'"></div>'
+    +'</div></div></div>';
+
+  // Tipping
+  h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:12px">Tipping</div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
+    +'<input id="bs-tip-enabled" type="checkbox"'+(bs.tip_enabled?' checked':'')+' onchange="bsToggleTip()"> Enable tipping at checkout</label></div>'
+    +'<div id="bs-tip-options" style="'+(bs.tip_enabled?'':'display:none')+';margin-top:10px">'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Percentage options shown to clients:</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+    +[10,15,18,20,25].map(function(p){return'<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" class="tip-pct-chk" value="'+p+'"'+(pct.includes(p)?' checked':'')+'>'+p+'%</label>';}).join('')
+    +'</div>'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'
+    +'<input id="bs-tip-custom" type="checkbox"'+(bs.tip_allow_custom?' checked':'')+'>Allow client to enter custom tip amount</label>'
+    +'</div></div>';
+
+  // Confirmation
+  h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:12px">Confirmation Email</div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
+    +'<input id="bs-conf-email" type="checkbox"'+(bs.send_confirmation_email!==false?' checked':'')+'>Send confirmation email to client after booking</label></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Custom Subject (blank = default)</label><input id="bs-conf-subj" type="text" placeholder="Your appointment is confirmed!" value="'+esc(bs.confirmation_subject||'')+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Custom Message (blank = default)</label>'
+    +'<textarea id="bs-conf-msg" rows="3" style="resize:vertical" placeholder="Thank you for booking with us. We look forward to seeing you!">'+esc(bs.confirmation_message||'')+'</textarea></div>'
+    +'</div>';
+
+  // Widget branding defaults
+  h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Widget Branding Defaults</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Applied to all widgets unless overridden per widget.</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Primary Color</label><input id="bs-w-color" type="color" value="'+(bs.widget_primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
+    +'<div class="form-group"><label>Logo URL</label><input id="bs-w-logo" type="text" placeholder="https://..." value="'+esc(bs.widget_logo_url||'')+'"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Tagline</label><input id="bs-w-tag" type="text" placeholder="Book your appointment online" value="'+esc(bs.widget_tagline||'')+'"></div>'
+    +'<div class="form-group"><label>Footer Text</label><input id="bs-w-foot" type="text" placeholder="Secure booking powered by MySpark+" value="'+esc(bs.widget_footer_text||'')+'"></div>'
+    +'</div></div>';
+
+  h+='<div style="display:flex;justify-content:flex-end">'
+    +'<button class="btn btn-primary" onclick="saveBookingSettings()">Save Booking Settings</button>'
+    +'</div></div>';
+  return h;
+}
+
+function bsToggleCancelCustom(){
+  var v=document.getElementById('bs-cancel-policy');
+  var wrap=document.getElementById('bs-cancel-custom');
+  if(wrap)wrap.style.display=v&&v.value==='custom'?'':'none';
+}
+function bsToggleNoshow(){
+  var v=document.getElementById('bs-noshow-action');
+  var wrap=document.getElementById('bs-noshow-amt-wrap');
+  var lbl=document.getElementById('bs-noshow-amt-lbl');
+  if(!v||!wrap)return;
+  wrap.style.visibility=v.value==='none'?'hidden':'';
+  if(lbl)lbl.textContent=v.value==='charge_flat'?'Flat Fee ($)':'Percentage (%)';
+}
+function bsToggleDeposit(){
+  var v=document.getElementById('bs-pay-mode');
+  var wrap=document.getElementById('bs-deposit-wrap');
+  if(wrap)wrap.style.display=v&&v.value==='deposit'?'':'none';
+}
+function bsToggleTip(){
+  var chk=document.getElementById('bs-tip-enabled');
+  var wrap=document.getElementById('bs-tip-options');
+  if(wrap)wrap.style.display=chk&&chk.checked?'':'none';
+}
+function saveBookingSettings(){
+  var tipPcts=Array.from(document.querySelectorAll('.tip-pct-chk:checked')).map(function(c){return parseInt(c.value);});
+  var noshowA=(document.getElementById('bs-noshow-action')||{}).value||'none';
+  var bs={
+    cancellation_policy:(document.getElementById('bs-cancel-policy')||{}).value||'flexible',
+    cancellation_hours:parseInt((document.getElementById('bs-cancel-hours')||{}).value)||24,
+    cancellation_refund_pct:parseInt((document.getElementById('bs-cancel-pct')||{}).value)||100,
+    cancellation_policy_text:((document.getElementById('bs-cancel-text')||{}).value||'').trim(),
+    noshow_action:noshowA,
+    noshow_charge_pct:noshowA==='charge_pct'?parseFloat((document.getElementById('bs-noshow-amt')||{}).value)||0:0,
+    noshow_charge_flat:noshowA==='charge_flat'?parseFloat((document.getElementById('bs-noshow-amt')||{}).value)||0:0,
+    default_payment_mode:(document.getElementById('bs-pay-mode')||{}).value||'none',
+    deposit_type:(document.getElementById('bs-dep-type')||{}).value||'percent',
+    deposit_value:parseFloat((document.getElementById('bs-dep-val')||{}).value)||25,
+    tip_enabled:(document.getElementById('bs-tip-enabled')||{}).checked||false,
+    tip_percentages:tipPcts.length?tipPcts:[10,15,20],
+    tip_allow_custom:(document.getElementById('bs-tip-custom')||{}).checked||false,
+    send_confirmation_email:(document.getElementById('bs-conf-email')||{}).checked!==false,
+    confirmation_subject:((document.getElementById('bs-conf-subj')||{}).value||'').trim(),
+    confirmation_message:((document.getElementById('bs-conf-msg')||{}).value||'').trim(),
+    widget_primary_color:(document.getElementById('bs-w-color')||{}).value||'#6b21ea',
+    widget_logo_url:((document.getElementById('bs-w-logo')||{}).value||'').trim(),
+    widget_tagline:((document.getElementById('bs-w-tag')||{}).value||'').trim(),
+    widget_footer_text:((document.getElementById('bs-w-foot')||{}).value||'').trim()
+  };
+  if(!db.settings)db.settings={};
+  db.settings.bookingSettings=bs;
+  schedSync();
+  toast('Booking settings saved.','success');
+}
+
+function openServiceWidgetModal(id){
+  var w=id?(db.serviceWidgets||[]).find(function(x){return x.id===id;}):null;
+  var svcOpts=(db.services||[]).map(function(s){
+    var checked=w&&w.service_ids&&w.service_ids.includes(s.id);
+    return'<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer">'
+      +'<input type="checkbox" class="swg-svc-chk" value="'+s.id+'"'+(checked?' checked':'')+'>'+esc(s.name)+'</label>';
+  }).join('');
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'"></div>'
+    +'<div class="form-group"><label>Included Services <span style="color:var(--text-muted);font-weight:400">(leave all unchecked to show all services)</span></label>'
+    +'<div style="display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto;padding:8px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px">'+(svcOpts||'<div style="font-size:12px;color:var(--text-muted)">No services yet. Add services in the Service Calendars tab first.</div>')+'</div></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Primary Color</label><input id="swg-color" type="color" value="'+(w&&w.primary_color||db.settings&&db.settings.bookingSettings&&db.settings.bookingSettings.widget_primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
+    +'<div class="form-group"><label>Logo URL</label><input id="swg-logo" type="text" placeholder="https://..." value="'+esc(w&&w.logo_url||'')+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Book your appointment online" value="'+esc(w&&w.tagline||'')+'"></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+'>Active</label></div>'
+    +'</div>';
+  var footer=(w?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveServiceWidget('+(w?'\''+w.id+'\'':'null')+')">Save</button>';
+  openModal(w?'Edit Widget':'New Service Widget',body,footer,'modal-lg');
+}
+
+function saveServiceWidget(id){
+  var name=(document.getElementById('swg-name')||{}).value;
+  if(!name||!name.trim()){toast('Widget name is required.','error');return;}
+  var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
+  var w={
+    id:id||uid(),
+    name:name.trim(),
+    service_ids:svcIds,
+    primary_color:(document.getElementById('swg-color')||{}).value||'#6b21ea',
+    logo_url:((document.getElementById('swg-logo')||{}).value||'').trim(),
+    tagline:((document.getElementById('swg-tag')||{}).value||'').trim(),
+    active:(document.getElementById('swg-active')||{}).checked!==false
+  };
+  if(!db.serviceWidgets)db.serviceWidgets=[];
+  var ex=id?db.serviceWidgets.find(function(x){return x.id===id;}):null;
+  if(ex){Object.assign(ex,w);}else{db.serviceWidgets.push(w);}
+  schedSync();
+  closeModal();
+  renderBookingWidgets();
+}
+
+function deleteServiceWidget(id){
+  if(!confirm('Delete this widget?'))return;
+  db.serviceWidgets=(db.serviceWidgets||[]).filter(function(w){return w.id!==id;});
+  schedSync();
+  closeModal();
+  renderBookingWidgets();
+}
+
+function copyWidgetCode(id){
+  var slug=state.subaccountSlug||'your-clinic';
+  var code='<iframe src="https://book.mysparkplus.app/'+slug+'/'+id+'" width="100%" height="700" frameborder="0" style="border:none;border-radius:8px"></iframe>';
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(code).then(function(){toast('Embed code copied to clipboard.','success');});
+  } else {
+    var ta=document.createElement('textarea');
+    ta.value=code;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    toast('Embed code copied.','success');
+  }
+}
+
 
 // =====================================================
 // CF EDIT TOGGLE
