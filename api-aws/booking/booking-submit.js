@@ -19,15 +19,17 @@ function fmtTime(t) {
 
 const resend = require('./lib/resend');
 
-async function sendConfirmationEmail(to, subject, html, bizName) {
+async function sendConfirmationEmail(slug, to, subject, html, bizName, contactId) {
   try {
-    await resend.sendEmail({
+    const result = await resend.sendEmail(slug, {
       to,
       subject,
       html,
       fromName: bizName || 'MySpark+',
-      templateType: 'booking-confirmation'
+      templateType: 'booking-confirmation',
+      contactId: contactId || null
     });
+    if (!result.ok) console.error('Confirmation email failed:', result.error);
   } catch (e) {
     console.error('Confirmation email failed:', e.message);
   }
@@ -252,7 +254,7 @@ async function handler(req, res) {
           ${bs.cancellation_policy_text ? `<p style="font-size:12px;color:#6b7280"><strong>Cancellation policy:</strong> ${bs.cancellation_policy_text}</p>` : ''}
           <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
         </div>`;
-      await sendConfirmationEmail(client_info.email, subject, html, settings.businessName || slug);
+      await sendConfirmationEmail(slug, client_info.email, subject, html, settings.businessName || slug, contactId);
     }
 
     // 13. Audit log
