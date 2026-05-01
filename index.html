@@ -233,11 +233,11 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .cal-legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--main-text-muted)}
 .legend-dot{width:10px;height:10px;border-radius:50%}
-.cal-month{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 12px rgba(107,33,234,.07)}
+.cal-month{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 12px rgba(107,33,234,.07);min-height:calc(100vh - 260px);display:flex;flex-direction:column}
 .cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);background:var(--main-bg);border-bottom:1px solid var(--main-border)}
 .cal-dow-row div{text-align:center;padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted)}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-cell{min-height:90px;border-right:1px solid var(--main-border);border-bottom:1px solid var(--main-border);padding:6px;cursor:pointer;transition:background .12s}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);flex:1;grid-auto-rows:1fr}
+.cal-cell{min-height:80px;border-right:1px solid var(--main-border);border-bottom:1px solid var(--main-border);padding:6px;cursor:pointer;transition:background .12s}
 .cal-cell:nth-child(7n){border-right:none}
 .cal-cell:hover{background:#f5f3ff}
 .cal-cell.other-month .cal-day-num{opacity:.25}
@@ -247,17 +247,18 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .cal-ev:hover{filter:brightness(1.2)}
 .cal-ev-task{background:var(--orange-dim);color:var(--orange)}
 .cal-more{font-size:10px;color:var(--text-muted);padding:1px 4px;cursor:pointer}
-.cal-timed{display:flex;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;overflow-x:auto;box-shadow:0 2px 12px rgba(107,33,234,.07)}
+.cal-timed{display:flex;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;overflow-x:auto;box-shadow:0 2px 12px rgba(107,33,234,.07);min-height:calc(100vh - 260px)}
 .time-col{width:52px;flex-shrink:0;background:var(--main-bg);border-right:1px solid var(--main-border)}
 .time-col-head{height:34px;border-bottom:1px solid var(--main-border)}
 .time-slot{height:68px;padding:3px 5px;font-size:10px;color:var(--main-text-muted);
   border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:flex-end}
 .day-col{flex:1;min-width:88px;border-right:1px solid var(--main-border)}
 .day-col:last-child{border-right:none}
-.day-col-head{height:34px;background:var(--main-card);padding:4px;text-align:center;
+.day-col-head{min-height:34px;background:var(--main-card);padding:4px 4px 5px;text-align:center;
   border-bottom:1px solid var(--main-border);font-size:11px;font-weight:600;color:var(--main-text)}
 .day-col-head.today{color:var(--orange)}
 .tgrid-row{height:68px;border-bottom:1px solid var(--main-border);position:relative;cursor:pointer}
+.tgrid-row::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:0;background:repeating-linear-gradient(to bottom,transparent 0,transparent 16px,rgba(255,255,255,.05) 16px,rgba(255,255,255,.05) 17px)}
 .tgrid-row:hover{background:rgba(255,255,255,.012)}
 .tgrid-row.off-hours{background:rgba(0,0,0,.18)}
 .timed-ev{position:absolute;border-radius:4px;padding:4px 6px;font-size:11px;font-weight:600;
@@ -2792,7 +2793,21 @@ function renderWeekCal(){
     var appts=getCalAppts(state.calUser,str);
     var offBW=getOffBlocksForCol(str);
     var banW=offBW.length?'<div class="cal-off-banner">'+offBW.slice(0,4).map(function(b){return'<span class="cal-off-pill" style="background:'+b.color+'20;color:'+b.color+'">'+esc(b.name)+(b.reason!=='Not scheduled'?' – '+b.reason.slice(0,14):'')+'</span>';}).join('')+(offBW.length>4?'<span style="font-size:10px;color:var(--text-muted)">+'+( offBW.length-4)+' more</span>':'')+'</div>':'';
-    html+='<div class="day-col"><div class="day-col-head'+(str===td?' today':'')+'">'+DSHORT[day.getDay()]+' '+day.getDate()+'</div>'+banW+buildTimedCol(str,appts,allH)+'</div>';
+    var staffDots2='';
+    if(state.calUser==='all'&&appts.length){
+      var sLine=allUsers().filter(function(u){return appts.some(function(a){return a.assignedTo===u.id;});});
+      if(sLine.length){
+        staffDots2='<div style="display:flex;gap:2px;justify-content:center;margin-top:3px;flex-wrap:wrap">';
+        staffDots2+=sLine.slice(0,8).map(function(u){
+          var cnt=appts.filter(function(a){return a.assignedTo===u.id;}).length;
+          var c=u.color||'#6b21ea';
+          return'<span title="'+esc(u.name||u.username)+': '+cnt+' appt'+(cnt!==1?'s':'')+'" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:'+c+';font-size:8px;font-weight:700;color:#fff">'+esc(u.name||u.username).charAt(0)+'</span>';
+        }).join('');
+        if(sLine.length>8)staffDots2+='<span style="font-size:9px;color:var(--text-muted);line-height:16px">+'+( sLine.length-8)+'</span>';
+        staffDots2+='</div>';
+      }
+    }
+    html+='<div class="day-col"><div class="day-col-head'+(str===td?' today':'')+'">'+DSHORT[day.getDay()]+' '+day.getDate()+staffDots2+'</div>'+banW+buildTimedCol(str,appts,allH)+'</div>';
   });
   html+='</div>';
   document.getElementById('cal-body').innerHTML=html;
