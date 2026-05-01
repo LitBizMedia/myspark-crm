@@ -1774,7 +1774,7 @@ let state={
 // =====================================================
 let db={
   contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],sessionPackTemplates:[],sessionPacks:[],
-  services:[],serviceVariations:[],classSessions:[],
+  services:[],serviceVariations:[],classSessions:[],serviceCategories:[],
   tags:[
     {id:'tag-hotlead',name:'Hot Lead',color:'#ff4000'},
     {id:'tag-vip',name:'VIP Client',color:'#6b21ea'},
@@ -6009,56 +6009,175 @@ function svcMsFilter(inp){
 }
 function renderServiceCal(){
   var el=document.getElementById('svc-cal-body');if(!el)return;
-  var svcs=(db.services||[]).filter(function(s){return s.subaccount_id===state.subaccountId||!s.subaccount_id;});
-  var individuals=svcs.filter(function(s){return s.type!=='class';});
-  var classes=svcs.filter(function(s){return s.type==='class';});
-  var sessions=(db.classSessions||[]);
+  if(!state.svcPage)state.svcPage=0;
+  if(!state.svcCatF)state.svcCatF='';
+  if(!state.svcTypeF)state.svcTypeF='';
+  if(!state.svcStatF)state.svcStatF='';
 
-  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">'
+  var cats=(db.serviceCategories||[]);
+  var allSvcs=(db.services||[]);
+  var sessions=(db.classSessions||[]);
+  var PAGE=9;
+
+  // Apply filters
+  var filtered=allSvcs.filter(function(s){
+    if(state.svcCatF&&s.category!==state.svcCatF)return false;
+    if(state.svcTypeF&&s.type!==state.svcTypeF)return false;
+    if(state.svcStatF==='active'&&s.active===false)return false;
+    if(state.svcStatF==='inactive'&&s.active!==false)return false;
+    return true;
+  });
+
+  var total=filtered.length;
+  var totalPages=Math.max(1,Math.ceil(total/PAGE));
+  if(state.svcPage>=totalPages)state.svcPage=totalPages-1;
+  var paged=filtered.slice(state.svcPage*PAGE,(state.svcPage+1)*PAGE);
+  var individuals=paged.filter(function(s){return s.type!=='class';});
+  var classes=paged.filter(function(s){return s.type==='class';});
+
+  // Header
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Service Calendars</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Manage bookable services and class sessions</div></div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+total+' service'+(total!==1?'s':'')+(state.svcCatF||state.svcTypeF||state.svcStatF?' (filtered)':'')+'</div></div>'
     +'<div style="display:flex;gap:8px">'
     +'<button class="btn btn-ghost btn-sm" onclick="openClassSessionModal(null,null)">+ Class Session</button>'
     +'<button class="btn btn-primary" onclick="openServiceModal(null)">+ Add Service</button>'
     +'</div></div>';
 
-  // Individual Services
-  h+='<div style="margin-bottom:28px">'
-    +'<div style="font-size:13px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px">Individual Services</div>';
-  if(!individuals.length){
-    h+='<div style="color:var(--text-muted);font-size:13px;padding:20px;text-align:center;border:1px dashed var(--main-border);border-radius:8px">No services yet. Add your first service to get started.</div>';
-  } else {
-    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
-    individuals.forEach(function(s){h+=_svcCard(s);});
-    h+='</div>';
-  }
-  h+='</div>';
+  // Filter bar
+  var catOpts='<option value="">All Categories</option>'
+    +cats.map(function(c){return'<option value="'+esc(c)+'"'+(state.svcCatF===c?' selected':'')+'>'+esc(c)+'</option>';}).join('');
+  h+='<div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center">'
+    +'<select class="filter-sel" onchange="state.svcCatF=this.value;state.svcPage=0;renderServiceCal()">'+catOpts+'</select>'
+    +'<select class="filter-sel" onchange="state.svcTypeF=this.value;state.svcPage=0;renderServiceCal()">'
+    +'<option value=""'+(state.svcTypeF===''?' selected':'')+'>All Types</option>'
+    +'<option value="individual"'+(state.svcTypeF==='individual'?' selected':'')+'>Individual</option>'
+    +'<option value="class"'+(state.svcTypeF==='class'?' selected':'')+'>Class</option>'
+    +'</select>'
+    +'<select class="filter-sel" onchange="state.svcStatF=this.value;state.svcPage=0;renderServiceCal()">'
+    +'<option value=""'+(state.svcStatF===''?' selected':'')+'>All Status</option>'
+    +'<option value="active"'+(state.svcStatF==='active'?' selected':'')+'>Active</option>'
+    +'<option value="inactive"'+(state.svcStatF==='inactive'?' selected':'')+'>Inactive</option>'
+    +'</select>'
+    +(state.svcCatF||state.svcTypeF||state.svcStatF
+      ?'<button class="btn btn-ghost btn-sm" onclick="state.svcCatF=\'\';state.svcTypeF=\'\';state.svcStatF=\'\';state.svcPage=0;renderServiceCal()">Clear filters</button>'
+      :'')
+    +'</div>';
 
-  // Class Sessions
-  h+='<div>'
-    +'<div style="font-size:13px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px">Class Sessions</div>';
-  if(!classes.length&&!sessions.length){
-    h+='<div style="color:var(--text-muted);font-size:13px;padding:20px;text-align:center;border:1px dashed var(--main-border);border-radius:8px">No class services yet. Add a class-type service first, then schedule sessions.</div>';
+  // Services grid
+  if(!paged.length){
+    h+='<div style="color:var(--text-muted);font-size:13px;padding:32px;text-align:center;border:1px dashed var(--main-border);border-radius:8px;margin-bottom:24px">'
+      +(allSvcs.length?'No services match the current filters.':'No services yet. Add your first service to get started.')
+      +'</div>';
   } else {
-    // Class service cards
-    if(classes.length){
-      h+='<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Class Services</div>';
-      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
-      classes.forEach(function(s){h+=_svcCard(s);});
-      h+='</div></div>';
+    if(individuals.length){
+      h+='<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Individual Services</div>';
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px">';
+      individuals.forEach(function(s){h+=_svcCard(s);});
+      h+='</div>';
     }
-    // Sessions list
-    if(sessions.length){
-      h+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Upcoming Sessions</div>';
-      h+='<div style="display:flex;flex-direction:column;gap:8px">';
-      sessions.filter(function(s){return s.status!=='cancelled';}).sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(s){h+=_sessionRow(s);});
+    if(classes.length){
+      h+='<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Class Services</div>';
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px">';
+      classes.forEach(function(s){h+=_svcCard(s);});
       h+='</div>';
     }
   }
-  h+='</div>';
+
+  // Pagination
+  if(totalPages>1){
+    var pages='';
+    for(var p=0;p<totalPages;p++){
+      pages+='<button class="btn btn-'+(p===state.svcPage?'primary':'ghost')+' btn-sm" style="min-width:32px" onclick="state.svcPage='+p+';renderServiceCal()">'+( p+1)+'</button>';
+    }
+    h+='<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:24px">'
+      +'<button class="btn btn-ghost btn-sm" '+(state.svcPage===0?'disabled':'')+' onclick="state.svcPage=Math.max(0,state.svcPage-1);renderServiceCal()">&#8249;</button>'
+      +pages
+      +'<button class="btn btn-ghost btn-sm" '+(state.svcPage>=totalPages-1?'disabled':'')+' onclick="state.svcPage=Math.min('+(totalPages-1)+',state.svcPage+1);renderServiceCal()">&#8250;</button>'
+      +'<span style="font-size:11px;color:var(--text-muted);margin-left:8px">Showing '+(state.svcPage*PAGE+1)+'\u2013'+Math.min((state.svcPage+1)*PAGE,total)+' of '+total+'</span>'
+      +'</div>';
+  }
+
+  // Class sessions
+  if(sessions.length){
+    h+='<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Upcoming Sessions</div>';
+    h+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px">';
+    sessions.filter(function(s){return s.status!=='cancelled';}).sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(s){h+=_sessionRow(s);});
+    h+='</div>';
+  }
+
+  // Categories section
+  h+=_renderCategoriesSection(cats);
 
   el.innerHTML=h;
 }
+
+function _renderCategoriesSection(cats){
+  var rows=cats.length
+    ?cats.map(function(c,idx){
+      return'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--main-border)">'
+        +'<div id="svc-cat-disp-'+idx+'" style="flex:1;font-size:13px">'+esc(c)+'</div>'
+        +'<input id="svc-cat-inp-'+idx+'" type="text" value="'+esc(c)+'" style="display:none;flex:1;height:30px;font-size:12px">'
+        +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="svcCatEdit('+idx+')">Edit</button>'
+        +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;color:#f87171" onclick="svcCatDelete('+idx+')">Remove</button>'
+        +'</div>';
+    }).join('')
+    :'<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No categories yet. Add one below.</div>';
+
+  return'<div style="border:1px solid var(--main-border);border-radius:8px;overflow:hidden">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--main-bg);border-bottom:1px solid var(--main-border)">'
+    +'<div style="font-size:13px;font-weight:700">Service Categories</div>'
+    +'</div>'
+    +'<div style="padding:12px 16px">'
+    +rows
+    +'<div style="display:flex;gap:8px;margin-top:12px">'
+    +'<input id="svc-new-cat" type="text" placeholder="New category name..." style="flex:1;height:34px;font-size:12px">'
+    +'<button class="btn btn-primary btn-sm" onclick="svcCatAdd()">Add</button>'
+    +'</div></div></div>';
+}
+
+function svcCatAdd(){
+  var inp=document.getElementById('svc-new-cat');
+  var name=inp?inp.value.trim():'';
+  if(!name){toast('Enter a category name.','error');return;}
+  if(!db.serviceCategories)db.serviceCategories=[];
+  if(db.serviceCategories.includes(name)){toast('Category already exists.','error');return;}
+  db.serviceCategories.push(name);
+  schedSync();
+  renderServiceCal();
+}
+
+function svcCatEdit(idx){
+  var disp=document.getElementById('svc-cat-disp-'+idx);
+  var inp=document.getElementById('svc-cat-inp-'+idx);
+  if(!disp||!inp)return;
+  var editing=inp.style.display!=='none';
+  if(editing){
+    var newName=inp.value.trim();
+    if(!newName){toast('Category name cannot be empty.','error');return;}
+    var old=db.serviceCategories[idx];
+    db.serviceCategories[idx]=newName;
+    // Update any services using the old name
+    (db.services||[]).forEach(function(s){if(s.category===old)s.category=newName;});
+    schedSync();
+    renderServiceCal();
+  } else {
+    disp.style.display='none';
+    inp.style.display='';
+    inp.focus();inp.select();
+  }
+}
+
+function svcCatDelete(idx){
+  var name=db.serviceCategories&&db.serviceCategories[idx];
+  if(!name)return;
+  var inUse=(db.services||[]).some(function(s){return s.category===name;});
+  if(inUse&&!confirm('This category is used by one or more services. Remove it anyway?'))return;
+  db.serviceCategories.splice(idx,1);
+  schedSync();
+  renderServiceCal();
+}
+
 
 function _svcCard(s){
   var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===s.id;});
