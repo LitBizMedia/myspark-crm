@@ -920,7 +920,18 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-manage-btn{padding:6px 12px;font-size:12px;font-weight:600;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:Lato,sans-serif;transition:all .12s;white-space:nowrap}
 .cal-manage-btn:hover{background:var(--bg-panel);border-color:var(--purple-border)}
 .cal-manage-btn.active{background:var(--purple-dim);border-color:var(--purple-border);color:var(--purple-light)}
-.cal-body-outer{display:block} /* unused */
+.cal-body-outer{display:block}
+.svc-ms-wrap{position:relative}
+.svc-ms-display{min-height:38px;border:1px solid var(--main-border);border-radius:6px;padding:5px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:var(--main-bg)}
+.svc-ms-chips{display:flex;flex-wrap:wrap;gap:4px;flex:1;min-height:22px}
+.svc-ms-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;color:#fff;white-space:nowrap}
+.svc-ms-arrow{color:var(--text-muted);font-size:11px;flex-shrink:0;margin-left:4px}
+.svc-ms-dd{position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--main-card);border:1px solid var(--main-border);border-radius:6px;z-index:500;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.svc-ms-search{width:100%;border:none;border-bottom:1px solid var(--main-border);padding:8px 10px;background:transparent;color:var(--main-text);font-size:12px;outline:none;box-sizing:border-box}
+.svc-ms-options{max-height:180px;overflow-y:auto}
+.svc-ms-opt{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;font-size:12px;color:var(--main-text)}
+.svc-ms-opt:hover{background:var(--main-bg)}
+.svc-ms-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0} /* unused */
 .cal-appt-count{font-size:10px;font-weight:600;color:var(--orange);margin-top:1px}
 .tpl-list{display:flex;flex-direction:column;gap:8px}
 .tpl-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:8px;cursor:pointer;transition:border-color .15s}
@@ -5954,6 +5965,48 @@ function switchCalTab(tab){
 var _svcBufOpts=[0,5,10,15,20,30,45,60];
 function _svcBufSel(id,val){return'<select id="'+id+'">'+_svcBufOpts.map(function(v){return'<option value="'+v+'"'+(parseInt(val||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select>';}
 
+function svcMsOpen(e){
+  e.stopPropagation();
+  var dd=document.getElementById('svc-ms-dd');
+  if(!dd)return;
+  var isOpen=!dd.classList.contains('hidden');
+  dd.classList.toggle('hidden',isOpen);
+  if(!isOpen){
+    var sr=dd.querySelector('.svc-ms-search');if(sr)sr.focus();
+    var _cls=function(ev){if(!document.getElementById('svc-staff-ms').contains(ev.target)){dd.classList.add('hidden');document.removeEventListener('click',_cls);}}
+    setTimeout(function(){document.addEventListener('click',_cls);},10);
+  }
+}
+function svcMsToggle2(uid){
+  var chk=document.getElementById('ssc-'+uid);if(!chk)return;
+  chk.checked=!chk.checked;
+  var tick=document.getElementById('svc-ms-ck-'+uid);
+  if(tick)tick.style.display=chk.checked?'':'none';
+  svcMsRefresh();
+}
+function svcMsRemove(uid){
+  var chk=document.getElementById('ssc-'+uid);if(chk)chk.checked=false;
+  var tick=document.getElementById('svc-ms-ck-'+uid);if(tick)tick.style.display='none';
+  svcMsRefresh();
+}
+function svcMsRefresh(){
+  var area=document.getElementById('svc-ms-chips-area');if(!area)return;
+  var checked=Array.from(document.querySelectorAll('.svc-staff-chk:checked'));
+  if(!checked.length){area.innerHTML='<span style="color:var(--text-muted);font-size:12px">Select staff...</span>';return;}
+  var users=allUsers();
+  area.innerHTML=checked.map(function(c){
+    var u=users.find(function(x){return x.id===c.value;});
+    var col=u?u.color||'#6b21ea':'#6b21ea';
+    var nm=u?esc(u.name||u.username):c.value;
+    return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();svcMsRemove(\''+c.value+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';
+  }).join('');
+}
+function svcMsFilter(inp){
+  var q=inp.value.toLowerCase();
+  Array.from(inp.closest('.svc-ms-dd').querySelectorAll('.svc-ms-opt')).forEach(function(o){
+    o.style.display=o.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
 function renderServiceCal(){
   var el=document.getElementById('svc-cal-body');if(!el)return;
   var svcs=(db.services||[]).filter(function(s){return s.subaccount_id===state.subaccountId||!s.subaccount_id;});
@@ -6056,11 +6109,15 @@ function openServiceModal(id){
   var users=allUsers();
   var daysOfWeek=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var avail=s&&s.availability||{};
-  var staffChecks=users.map(function(u){
-    var checked=(s&&s.assigned_staff&&s.assigned_staff.includes(u.id))||false;
-    return'<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer">'
-      +'<input type="checkbox" value="'+u.id+'" class="svc-staff-chk"'+(checked?' checked':'')+'> '
-      +esc(u.name||u.username)+'</label>';
+  var _selStaff=(s&&s.assigned_staff)||[];
+  var staffMsOpts=users.map(function(u){
+    var col=u.color||'#6b21ea';
+    return'<div class="svc-ms-opt" onclick="svcMsToggle2(\''+u.id+'\')">'   
+      +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
+      +esc(u.name||u.username)
+      +'<span id="svc-ms-ck-'+u.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selStaff.includes(u.id)?'':'display:none')+'">&#10003;</span>'
+      +'<input type="checkbox" id="ssc-'+u.id+'" class="svc-staff-chk" value="'+u.id+'" style="display:none"'+(_selStaff.includes(u.id)?' checked':'')+'>'
+      +'</div>';
   }).join('');
 
   var body='<div style="display:flex;flex-direction:column;gap:14px">'
@@ -6085,7 +6142,16 @@ function openServiceModal(id){
     +'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>'
     +'</div>'
     +'<div class="form-group"><label>Description</label><textarea id="svc-desc" rows="2" style="resize:vertical">'+esc(s&&s.description||'')+'</textarea></div>'
-    +'<div class="form-group"><label>Assigned Staff</label><div style="display:flex;flex-direction:column;gap:6px;max-height:120px;overflow-y:auto;padding:6px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px">'+staffChecks+'</div></div>'
+    +'<div class="form-group"><label>Assigned Staff</label>'
+    +'<div class="svc-ms-wrap" id="svc-staff-ms">'
+    +'<div class="svc-ms-display" onclick="svcMsOpen(event)">'
+    +'<div class="svc-ms-chips" id="svc-ms-chips-area">'
++(_selStaff.length?_selStaff.map(function(uid){var u=users.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username):'?';return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();svcMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join(''):'<span style="color:var(--text-muted);font-size:12px">Select staff...</span>')
+    +'</div><span class="svc-ms-arrow">&#9660;</span></div>'
+    +'<div class="svc-ms-dd hidden" id="svc-ms-dd">'
+    +'<input type="text" class="svc-ms-search" placeholder="Search staff..." oninput="svcMsFilter(this)">'
+    +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
+    +'</div></div></div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-choose-staff" type="checkbox"'+((s&&s.allow_client_choose_staff!==false)||!s?' checked':'')+'>Allow client to choose staff member</label></div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label></div>'
     +(s?'<div id="svc-var-section"></div>':'')
