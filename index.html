@@ -2716,10 +2716,10 @@ function buildTimedCol(dateStr,appts,allHours){
   if(!allHours.length)return'<div style="min-height:200px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-style:italic">Closed</div>';
   var offBlocks=getOffBlocksForCol(dateStr);
   var totalH=(maxH-minH)*68;
-  var offHTML=offBlocks.filter(function(b){return b.fullDay;}).map(function(b){
-    return'<div class="cal-off-block" style="top:0;height:'+totalH+'px;background:'+b.color+'18;border:1px solid '+b.color+'30;border-left:3px solid '+b.color+'">'
-      +'<div class="cal-off-block-name" style="color:'+b.color+'">'+esc(b.name)+'</div>'
-      +'<div class="cal-off-block-reason" style="color:'+b.color+'">'+esc(b.reason)+'</div>'
+  var offHTML=offBlocks.filter(function(b){return b.reason!=='Not scheduled';}).map(function(b,i){
+    return'<div class="cal-off-block" style="top:'+(i*38)+'px;height:34px;background:'+b.color+'18;border:1px solid '+b.color+'30;border-left:3px solid '+b.color+'">'   
+      +'<div class="cal-off-block-name" style="color:'+b.color+'">'+esc(b.name.split(' ')[0])+' – Day Off</div>'
+      +(b.reason&&b.reason!=='Day Off'?'<div class="cal-off-block-reason" style="color:'+b.color+'">'+esc(b.reason)+'</div>':'')
       +'</div>';
   }).join('');
   var laidOut=layoutOverlap(appts);
@@ -2756,10 +2756,6 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
       +'<div class="cal-off-block-name" style="color:'+col+'">Day Off</div>'
       +'<div class="cal-off-block-reason" style="color:'+col+'">'+esc(ov.note||'')+'</div>'
       +'</div>';
-  }else if(!ds||!ds.on){
-    offHTML='<div class="cal-off-block" style="top:0;height:'+totalH+'px;background:rgba(100,100,120,.06);border:1px dashed rgba(120,120,140,.2)">'
-      +'<div class="cal-off-block-name" style="color:var(--text-dim)">Not Scheduled</div>'
-      +'</div>';
   }
   var laidOut=layoutOverlap(appts);
   var eventsHTML=laidOut.map(function(a){
@@ -2792,7 +2788,7 @@ function renderWeekCal(){
   cols.forEach(({day,str})=>{
     var appts=getCalAppts(state.calUser,str);
     var offBW=getOffBlocksForCol(str);
-    var banW=offBW.length?'<div class="cal-off-banner">'+offBW.slice(0,6).map(function(b){var fn=esc(b.name).split(' ')[0];var tip=esc(b.name)+(b.reason!=='Not scheduled'?'· '+b.reason:'');return'<span class="cal-off-pill" title="'+tip+'" style="background:'+b.color+'22;color:'+b.color+'">'+fn+'</span>';}).join('')+(offBW.length>6?'<span style="font-size:9px;color:var(--text-muted)">+'+( offBW.length-6)+'</span>':'')+'</div>':'';
+    var banW='';
     var staffDots2='';
     if(state.calUser==='all'&&appts.length){
       var sLine=allUsers().filter(function(u){return appts.some(function(a){return a.assignedTo===u.id;});});
