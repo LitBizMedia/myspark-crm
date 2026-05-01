@@ -2664,9 +2664,7 @@ function renderMonthCal(){
       }else{
         const offUsers=allUsers().filter(function(u){
           const ov=u.dateOverrides&&u.dateOverrides.find(function(o){return o.date===str;});
-          if(ov&&ov.type==='off')return true;
-          const dk=getDK(str);const ds=u.schedule&&u.schedule[dk];
-          return!(ds&&ds.on);
+          return ov&&ov.type==='off';
         });
         if(offUsers.length){
           schedHTML='<div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:2px">'
