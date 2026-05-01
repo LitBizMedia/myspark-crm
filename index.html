@@ -2729,7 +2729,11 @@ function buildTimedCol(dateStr,appts,allHours){
     var wStyle=a._tc>1?'width:calc('+Math.floor(100/a._tc)+'% - 3px);left:calc('+a._col*(100/a._tc)+'% + 1px);right:auto;':'';
     var isCancelled=a.status==='cancelled';
     var cA=a.contactId?getContact(a.contactId):null;
-    return'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+wStyle+'" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
+    var bufBpx=Math.round((parseInt(a.buffer_before)||0)/60*68);
+    var bufApx=Math.round((parseInt(a.buffer_after)||0)/60*68);
+    var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
+    var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
+    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+wStyle+'" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+  '</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
@@ -2763,7 +2767,11 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var evCol=getUserColor(a.assignedTo);
     var c=a.contactId?getContact(a.contactId):null;
     var isCancelledU=a.status==='cancelled';
-    return'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';left:3px;right:3px;width:auto" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
+    var bufBpxU=Math.round((parseInt(a.buffer_before)||0)/60*68);
+    var bufApxU=Math.round((parseInt(a.buffer_after)||0)/60*68);
+    var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
+    var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
+    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';left:3px;right:3px;width:auto" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+  '</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
@@ -3355,7 +3363,8 @@ function checkDoubleBook(apptId,date,time,duration,userId){
   return db.appointments.find(a=>{
     if(a.id===apptId)return false;
     if(a.date!==date||!a.assignedTo||a.assignedTo!==userId||a.status==='cancelled')return false;
-    const as=t2m(a.time||'00:00'),ae=as+(a.duration||60);
+    const bufB=parseInt(a.buffer_before)||0,bufA=parseInt(a.buffer_after)||0;
+    const as=t2m(a.time||'00:00')-bufB,ae=as+bufB+(a.duration||60)+bufA;
     return s<ae&&e>as;
   })||null;
 }
@@ -3506,6 +3515,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId){
     +'<div class="form-group"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
     +'<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label><input id="af-time" type="time" value="'+esc(a&&a.time||prefTime||'09:00')+'" onchange="checkApptConflict()"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','rescheduled','no-show','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
     +'<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
   openModal(a?'Edit Appointment':'Book Appointment',b,(a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>','modal-lg');
@@ -3611,7 +3621,9 @@ function syncApptToSupabase(appt,deleted){
     duration:parseInt(appt.duration)||60,
     status:appt.status||'scheduled',
     location:appt.location||null,
-    notes:appt.notes||null
+    notes:appt.notes||null,
+    buffer_before:parseInt(appt.buffer_before)||0,
+    buffer_after:parseInt(appt.buffer_after)||0
   };
   fetch(apiUrl('/api/subaccount/appointments-upsert'),{
     method:'POST',
@@ -3624,7 +3636,7 @@ function syncApptToSupabase(appt,deleted){
 function saveAppt(){
   const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
   if(!title||!date){toast('Title and date required.','error');return}
-  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:document.getElementById('af-time').value,duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim()};
+  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:document.getElementById('af-time').value,duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0};
   var isNewAppt=!state.modal.id;
   var apptIdForAudit=state.modal.id||null;
   if(state.modal.id){const a=getAppt(state.modal.id);if(a)Object.assign(a,data)}
