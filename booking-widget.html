@@ -574,7 +574,9 @@ function renderInfo(el) {
     ${cancellationPolicyHtml()}
     <div class="bw-nav">
       <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
-      <button class="bw-btn bw-btn-primary" onclick="validateInfo()">Continue &rarr;</button>
+      <button class="bw-btn bw-btn-primary bw-btn-full" onclick="validateInfo()" id="bw-info-submit">
+        ${(()=>{const vs=visibleSteps();return vs[vs.indexOf('info')+1]==='confirm'?'Confirm Booking':'Continue →';})()}
+      </button>
     </div>`;
 }
 
@@ -582,7 +584,13 @@ function validateInfo() {
   S.error = null;
   if (!S.client.name.trim()) { S.error = 'Please enter your name.'; render(); return; }
   if (!S.client.email.trim() || !S.client.email.includes('@')) { S.error = 'Please enter a valid email address.'; render(); return; }
-  goNext();
+  const vs = visibleSteps();
+  const nextStep = vs[vs.indexOf('info') + 1];
+  if (nextStep === 'confirm') {
+    submitBooking();
+  } else {
+    goNext();
+  }
 }
 
 // ── Step: Payment ─────────────────────────────────────────────────────────────
