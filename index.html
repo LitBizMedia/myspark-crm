@@ -435,6 +435,8 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .sched{background:var(--orange-dim);color:var(--orange)}
 .compl{background:rgba(52,211,153,.15);color:#34d399}
 .canc{background:rgba(255,255,255,.08);color:var(--text-muted)}
+.reschd{background:rgba(251,191,36,.15);color:#fbbf24}
+.noshow{background:rgba(249,115,22,.15);color:#f97316}
 .task-sm{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:var(--radius);
   padding:8px 11px;margin-bottom:6px;display:flex;align-items:flex-start;gap:8px;color:#ffffff}
 .tch-sm{width:15px;height:15px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;margin-top:2px;
@@ -1191,7 +1193,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="appt-list-search" type="text" placeholder="Search appointments..." oninput="renderApptList()"></div>
             <select class="filter-sel" id="appt-list-user" onchange="renderApptList()"><option value="">All Staff</option></select>
-            <select class="filter-sel" id="appt-list-status" onchange="renderApptList()"><option value="scheduled">Upcoming</option><option value="">All Status</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>
+            <select class="filter-sel" id="appt-list-status" onchange="renderApptList()"><option value="scheduled">Upcoming</option><option value="">All Status</option><option value="completed">Completed</option><option value="rescheduled">Rescheduled</option><option value="no-show">No-show</option><option value="cancelled">Cancelled</option></select>
           </div>
           <div id="appt-list-body"></div>
         </div>
@@ -2508,7 +2510,7 @@ function renderDrawer(){
     const up=sorted.filter(a=>a.date>=todayStr()&&a.status!=='cancelled'),past=sorted.filter(a=>a.date<todayStr()||a.status==='cancelled');
     const aHTML=arr=>arr.map(a=>{
       const u=a.assignedTo?getUserById(a.assignedTo):null,uc=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
-      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':'canc')+'">'+a.status+'</span></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
+      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
     }).join('');
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Upcoming ('+up.length+')</div><button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">+ Book</button></div>'
       +'<div style="margin-top:8px">'+(up.length?aHTML(up):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No upcoming appointments.</div>')+'</div>'
@@ -2601,7 +2603,7 @@ function setCalView(v){
 }
 
 function apptStatusDot(status){
-  var color=status==='completed'?'#60a5fa':status==='cancelled'?'#9ca3af':'#4ade80';
+  var color=status==='completed'?'#60a5fa':status==='cancelled'?'#9ca3af':status==='rescheduled'?'#fbbf24':status==='no-show'?'#f97316':'#4ade80';
   return'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+color+';margin-right:3px;flex-shrink:0;vertical-align:middle"></span>';
 }
 function renderCalLegend(){
@@ -2785,20 +2787,20 @@ function renderWeekCal(){
     var appts=getCalAppts(state.calUser,str);
     var offBW=getOffBlocksForCol(str);
     var banW='';
-    var staffDots2='';
+    var staffDots2Inner='';
     if(state.calUser==='all'&&appts.length){
       var sLine=allUsers().filter(function(u){return appts.some(function(a){return a.assignedTo===u.id;});});
       if(sLine.length){
-        staffDots2='<div style="display:flex;gap:2px;justify-content:center;margin-top:3px;flex-wrap:wrap">';
-        staffDots2+=sLine.slice(0,8).map(function(u){
+        staffDots2Inner+=sLine.slice(0,8).map(function(u){
           var cnt=appts.filter(function(a){return a.assignedTo===u.id;}).length;
           var c=u.color||'#6b21ea';
-          return'<span title="'+esc(u.name||u.username)+': '+cnt+' appt'+(cnt!==1?'s':'')+'" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:'+c+';font-size:8px;font-weight:700;color:#fff">'+esc(u.name||u.username).charAt(0)+'</span>';
+          return'<span title="'+esc(u.name||u.username)+': '+cnt+' appt'+(cnt!==1?'s':'')
++'" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:'+c+';font-size:8px;font-weight:700;color:#fff">'+esc(u.name||u.username).charAt(0)+'</span>';
         }).join('');
-        if(sLine.length>8)staffDots2+='<span style="font-size:9px;color:var(--text-muted);line-height:16px">+'+( sLine.length-8)+'</span>';
-        staffDots2+='</div>';
+        if(sLine.length>8)staffDots2Inner+='<span style="font-size:9px;color:var(--text-muted);line-height:16px">+'+(sLine.length-8)+'</span>';
       }
     }
+    var staffDots2='<div style="display:flex;gap:2px;justify-content:center;margin-top:3px;flex-wrap:wrap;min-height:16px">'+staffDots2Inner+'</div>';
     var dOffChips=offBW.filter(function(b){return b.reason!=='Not scheduled';}).map(function(b){
       var lbl=esc(b.name.split(' ')[0])+' – Day Off'+(b.reason&&b.reason!=='Day Off'?' ('+b.reason.slice(0,12)+')':'');
       return'<span class="cal-allday-chip" style="background:'+b.color+'18;border:1px solid '+b.color+'44;color:'+b.color+'">'+lbl+'</span>';
@@ -3504,9 +3506,9 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId){
     +'<div class="form-group"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
     +'<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label><input id="af-time" type="time" value="'+esc(a&&a.time||prefTime||'09:00')+'" onchange="checkApptConflict()"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','rescheduled','no-show','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
     +'<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
-  openModal(a?'Edit Appointment':'Book Appointment',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>','modal-lg');
+  openModal(a?'Edit Appointment':'Book Appointment',b,(a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>','modal-lg');
   setTimeout(checkApptConflict,80);
 }
 
@@ -5978,7 +5980,7 @@ function renderApptList(){
         +'<div class="appt-list-meta">'+(a.time?fmtTime(a.time)+' \u00b7 ':'')+( a.duration||60)+' min'+(c?' \u00b7 '+esc(c.name):'')+(a.location?' \u00b7 '+esc(a.location):'')+'</div>'
         +'</div>'
         +(u?'<div style="font-size:11px;font-weight:600;color:'+uc+';flex-shrink:0;padding-top:2px">'+esc(u.name||u.username)+'</div>':'')
-        +'<div style="flex-shrink:0;display:flex;align-items:center;gap:6px"><span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':'canc')+'">'+a.status+'</span>'
+        +'<div style="flex-shrink:0;display:flex;align-items:center;gap:6px"><span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span>'
         +'<button class="icon-btn-xs" title="Delete" onclick="event.stopPropagation();delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div>'
         +'</div>';
     });
