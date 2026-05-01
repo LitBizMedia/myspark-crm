@@ -1197,14 +1197,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           </div>
           <div id="appt-list-body"></div>
         </div>
-        <div id="cal-service-view" class="hidden">
-          <div class="coming-soon-wrap">
-            <span class="coming-soon-badge">Coming Soon</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <h3>Service Calendars</h3>
-            <p>Create bookable service calendars for specific staff members or service types. Clients will be able to book directly from a public link.</p>
-          </div>
-        </div>
+        <div id="cal-service-view" class="hidden"><div id="svc-cal-body"></div></div>
       </div>
 
       <!-- STAFF -->
@@ -1770,6 +1763,7 @@ let state={
 // =====================================================
 let db={
   contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],sessionPackTemplates:[],sessionPacks:[],
+  services:[],serviceVariations:[],classSessions:[],
   tags:[
     {id:'tag-hotlead',name:'Hot Lead',color:'#ff4000'},
     {id:'tag-vip',name:'VIP Client',color:'#6b21ea'},
@@ -4064,6 +4058,9 @@ async function fetchFromSupabase(){
     if(result&&result.data){
       const rem=result.data;
       db={...db,...rem,settings:{...db.settings,...rem.settings}};
+      if(result.services)db.services=result.services;
+      if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
+      if(result.classSessions)db.classSessions=result.classSessions;
       localStorage.setItem(SK,JSON.stringify(db));
       setSyncSt('synced');return true;
     }
@@ -5946,9 +5943,427 @@ function switchCalTab(tab){
   });
   if(tab==='calendar')renderCal();
   else if(tab==='appointments')renderApptList();
+  else if(tab==='service')renderServiceCal();
   else if(tab==='booking')renderBookingWidgets();
 }
 
+
+// =====================================================
+// SERVICE CALENDARS
+// =====================================================
+var _svcBufOpts=[0,5,10,15,20,30,45,60];
+function _svcBufSel(id,val){return'<select id="'+id+'">'+_svcBufOpts.map(function(v){return'<option value="'+v+'"'+(parseInt(val||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select>';}
+
+function renderServiceCal(){
+  var el=document.getElementById('svc-cal-body');if(!el)return;
+  var svcs=(db.services||[]).filter(function(s){return s.subaccount_id===state.subaccountId||!s.subaccount_id;});
+  var individuals=svcs.filter(function(s){return s.type!=='class';});
+  var classes=svcs.filter(function(s){return s.type==='class';});
+  var sessions=(db.classSessions||[]);
+
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Service Calendars</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Manage bookable services and class sessions</div></div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="openClassSessionModal(null,null)">+ Class Session</button>'
+    +'<button class="btn btn-primary" onclick="openServiceModal(null)">+ Add Service</button>'
+    +'</div></div>';
+
+  // Individual Services
+  h+='<div style="margin-bottom:28px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px">Individual Services</div>';
+  if(!individuals.length){
+    h+='<div style="color:var(--text-muted);font-size:13px;padding:20px;text-align:center;border:1px dashed var(--main-border);border-radius:8px">No services yet. Add your first service to get started.</div>';
+  } else {
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+    individuals.forEach(function(s){h+=_svcCard(s);});
+    h+='</div>';
+  }
+  h+='</div>';
+
+  // Class Sessions
+  h+='<div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px">Class Sessions</div>';
+  if(!classes.length&&!sessions.length){
+    h+='<div style="color:var(--text-muted);font-size:13px;padding:20px;text-align:center;border:1px dashed var(--main-border);border-radius:8px">No class services yet. Add a class-type service first, then schedule sessions.</div>';
+  } else {
+    // Class service cards
+    if(classes.length){
+      h+='<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Class Services</div>';
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+      classes.forEach(function(s){h+=_svcCard(s);});
+      h+='</div></div>';
+    }
+    // Sessions list
+    if(sessions.length){
+      h+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Upcoming Sessions</div>';
+      h+='<div style="display:flex;flex-direction:column;gap:8px">';
+      sessions.filter(function(s){return s.status!=='cancelled';}).sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(s){h+=_sessionRow(s);});
+      h+='</div>';
+    }
+  }
+  h+='</div>';
+
+  el.innerHTML=h;
+}
+
+function _svcCard(s){
+  var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===s.id;});
+  var staffNames=(s.assigned_staff||[]).map(function(uid){var u=allUsers().find(function(x){return x.id===uid;});return u?esc(u.name||u.username):'';}).filter(Boolean);
+  var col=s.color||'#6b21ea';
+  return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;overflow:hidden;border-left:4px solid '+col+'">'
+    +'<div style="padding:12px 14px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+    +'<div style="font-weight:700;font-size:13px">'+esc(s.name)+'</div>'
+    +'<div style="display:flex;gap:6px;align-items:center">'
+    +(s.active!==false?'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.15);color:#4ade80;font-weight:600">Active</span>':'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(156,163,175,.15);color:#9ca3af;font-weight:600">Inactive</span>')
+    +'<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="openServiceModal(\''+s.id+'\')">Edit</button>'
+    +'</div></div>'
+    +(s.category?'<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">'+esc(s.category)+'</div>':'')
+    +'<div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted);flex-wrap:wrap;margin-top:6px">'
+    +(vars.length?'<span>'+vars.length+' variation'+(vars.length!==1?'s':'')+'</span>':'<span>No variations</span>')
+    +(staffNames.length?'<span>'+staffNames.slice(0,3).join(', ')+(staffNames.length>3?' +more':'')+'</span>':'<span>All staff</span>')
+    +(s.price!=null?'<span>$'+parseFloat(s.price).toFixed(2)+'</span>':'')
+    +'</div>'
+    +'</div></div>';
+}
+
+function _sessionRow(s){
+  var svc=(db.services||[]).find(function(x){return x.id===s.service_id;});
+  var col=svc?svc.color||'#6b21ea':'#6b21ea';
+  var instructor=allUsers().find(function(u){return u.id===s.instructor_id;});
+  var enrolled=(s.participants||[]).filter(function(p){return p.status==='enrolled';}).length;
+  var cap=s.capacity||10;
+  var pct=Math.round(enrolled/cap*100);
+  return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:14px;border-left:4px solid '+col+'">'
+    +'<div style="flex:1;min-width:0">'
+    +'<div style="font-weight:600;font-size:13px;margin-bottom:2px">'+esc(s.title)+'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted)">'+s.date+(s.time?' at '+s.time:'')+(instructor?' &middot; '+esc(instructor.name||instructor.username):'')+'</div>'
+    +'</div>'
+    +'<div style="text-align:right;flex-shrink:0">'
+    +'<div style="font-size:12px;font-weight:600;color:'+(enrolled>=cap?'#f97316':enrolled>=cap*.8?'#fbbf24':'#4ade80')+'">'+enrolled+'/'+cap+'</div>'
+    +'<div style="width:60px;height:4px;background:var(--main-border);border-radius:2px;margin-top:3px"><div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:2px"></div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:6px;flex-shrink:0">'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openRosterModal(\''+s.id+'\')">Roster</button>'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openClassSessionModal(\''+s.id+'\',\''+( s.service_id||'')+'\')">Edit</button>'
+    +'</div>'
+    +'</div>';
+}
+
+function openServiceModal(id){
+  var s=id?(db.services||[]).find(function(x){return x.id===id;}):null;
+  var users=allUsers();
+  var daysOfWeek=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var avail=s&&s.availability||{};
+  var staffChecks=users.map(function(u){
+    var checked=(s&&s.assigned_staff&&s.assigned_staff.includes(u.id))||false;
+    return'<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer">'
+      +'<input type="checkbox" value="'+u.id+'" class="svc-staff-chk"'+(checked?' checked':'')+'> '
+      +esc(u.name||u.username)+'</label>';
+  }).join('');
+
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Service Name *</label><input id="svc-name" type="text" value="'+esc(s?s.name:'')+'"></div>'
+    +'<div class="form-group"><label>Category</label><input id="svc-cat" type="text" placeholder="e.g. Massage Therapy" value="'+esc(s&&s.category||'')+'"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Type</label><select id="svc-type"><option value="individual"'+((!s||s.type!=='class')?' selected':'')+'>Individual</option><option value="class"'+((s&&s.type==='class')?' selected':'')+'>Class</option></select></div>'
+    +'<div class="form-group"><label>Color</label><input id="svc-color" type="color" value="'+(s&&s.color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Display Price ($)</label><input id="svc-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+(s&&s.price!=null?s.price:'')+'"></div>'
+    +'<div class="form-group"><label>Default Duration (min)</label><input id="svc-dur" type="number" min="5" step="5" value="'+(s&&s.duration_default||60)+'"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Buffer Before</label>'+_svcBufSel('svc-buf-before',s&&s.buffer_before||0)+'</div>'
+    +'<div class="form-group"><label>Buffer After</label>'+_svcBufSel('svc-buf-after',s&&s.buffer_after||0)+'</div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Booking Lead Time (hours)</label><input id="svc-lead" type="number" min="0" value="'+(s&&s.booking_lead_time_hours||0)+'"></div>'
+    +'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Description</label><textarea id="svc-desc" rows="2" style="resize:vertical">'+esc(s&&s.description||'')+'</textarea></div>'
+    +'<div class="form-group"><label>Assigned Staff</label><div style="display:flex;flex-direction:column;gap:6px;max-height:120px;overflow-y:auto;padding:6px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px">'+staffChecks+'</div></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-choose-staff" type="checkbox"'+((s&&s.allow_client_choose_staff!==false)||!s?' checked':'')+'>Allow client to choose staff member</label></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label></div>'
+    +(s?'<div id="svc-var-section"></div>':'')
+    +'</div>';
+
+  var footer=(s?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteService(\''+s.id+'\')">Delete</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveService('+(s?'\''+s.id+'\'':'null')+')">Save</button>';
+
+  openModal(s?'Edit Service':'New Service', body, footer, 'modal-lg');
+
+  if(s){
+    setTimeout(function(){renderVariationsSection(s.id);},50);
+  }
+}
+
+function renderVariationsSection(serviceId){
+  var el=document.getElementById('svc-var-section');if(!el)return;
+  var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===serviceId;});
+  var h='<div style="border-top:1px solid var(--main-border);padding-top:14px;margin-top:4px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Variations</div>'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="openVariationModal(\''+serviceId+'\',null)">+ Add Variation</button>'
+    +'</div>';
+  if(!vars.length){
+    h+='<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No variations yet. Add variations for different durations or options.</div>';
+  } else {
+    h+='<div style="display:flex;flex-direction:column;gap:6px">';
+    vars.forEach(function(v){
+      h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px">'
+        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600">'+esc(v.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--text-muted)">'+(v.duration||60)+' min'+(v.price!=null?' &middot; $'+parseFloat(v.price).toFixed(2):'')+'</div></div>'
+        +(v.active===false?'<span style="font-size:9px;color:#9ca3af">Inactive</span>':'')
+        +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openVariationModal(\''+serviceId+'\',\''+v.id+'\')">Edit</button>'
+        +'</div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+function saveService(id){
+  var name=document.getElementById('svc-name').value.trim();
+  if(!name){toast('Service name is required.','error');return;}
+  var staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
+  var svc={
+    id:id||uid(),
+    name:name,
+    category:document.getElementById('svc-cat').value.trim(),
+    type:document.getElementById('svc-type').value,
+    color:document.getElementById('svc-color').value,
+    price:document.getElementById('svc-price').value!==''?parseFloat(document.getElementById('svc-price').value):null,
+    duration_default:parseInt(document.getElementById('svc-dur').value)||60,
+    buffer_before:parseInt(document.getElementById('svc-buf-before').value)||0,
+    buffer_after:parseInt(document.getElementById('svc-buf-after').value)||0,
+    booking_lead_time_hours:parseInt(document.getElementById('svc-lead').value)||0,
+    booking_advance_days:parseInt(document.getElementById('svc-adv').value)||60,
+    description:document.getElementById('svc-desc').value.trim(),
+    assigned_staff:staffChks,
+    allow_client_choose_staff:document.getElementById('svc-choose-staff').checked,
+    active:document.getElementById('svc-active').checked
+  };
+  var existing=id?(db.services||[]).find(function(x){return x.id===id;}):null;
+  if(existing){Object.assign(existing,svc);}
+  else{if(!db.services)db.services=[];db.services.push(svc);}
+  closeModal();
+  renderServiceCal();
+  fetch(apiUrl('/api/subaccount/services-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(svc)
+  }).then(function(r){if(!r.ok)toast('Sync error saving service.','error');}).catch(function(){});
+}
+
+function deleteService(id){
+  if(!confirm('Delete this service? Existing appointments will not be affected.'))return;
+  db.services=(db.services||[]).filter(function(s){return s.id!==id;});
+  db.serviceVariations=(db.serviceVariations||[]).filter(function(v){return v.service_id!==id;});
+  closeModal();renderServiceCal();
+  fetch(apiUrl('/api/subaccount/services-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id})
+  }).catch(function(){});
+}
+
+function openVariationModal(serviceId, varId){
+  var v=varId?(db.serviceVariations||[]).find(function(x){return x.id===varId;}):null;
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Name *</label><input id="var-name" type="text" placeholder="e.g. 60 min, Deep Tissue" value="'+esc(v?v.name:'')+'"></div>'
+    +'<div class="form-group"><label>Duration (min)</label><input id="var-dur" type="number" min="5" step="5" value="'+(v&&v.duration||60)+'"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Price ($)</label><input id="var-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+(v&&v.price!=null?v.price:'')+'"></div>'
+    +'<div class="form-group"><label>Buffer Before</label>'+_svcBufSel('var-buf-before',v&&v.buffer_before||0)+'</div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Buffer After</label>'+_svcBufSel('var-buf-after',v&&v.buffer_after||0)+'</div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:22px"><input id="var-active" type="checkbox"'+((v&&v.active!==false)||!v?' checked':'')+'>Active</label></div>'
+    +'</div>'
+    +'</div>';
+  var footer=(v?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteVariation(\''+v.id+'\',\''+serviceId+'\')">Delete</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal();openServiceModal(\''+serviceId+'\')">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveVariation(\''+serviceId+'\','+(v?'\''+v.id+'\'':'null')+')">Save</button>';
+  openModal(v?'Edit Variation':'New Variation',body,footer);
+}
+
+function saveVariation(serviceId, varId){
+  var name=document.getElementById('var-name').value.trim();
+  if(!name){toast('Variation name is required.','error');return;}
+  var v={
+    id:varId||uid(),
+    service_id:serviceId,
+    name:name,
+    duration:parseInt(document.getElementById('var-dur').value)||60,
+    price:document.getElementById('var-price').value!==''?parseFloat(document.getElementById('var-price').value):null,
+    buffer_before:parseInt(document.getElementById('var-buf-before').value)||0,
+    buffer_after:parseInt(document.getElementById('var-buf-after').value)||0,
+    active:document.getElementById('var-active').checked
+  };
+  if(!db.serviceVariations)db.serviceVariations=[];
+  var existing=varId?db.serviceVariations.find(function(x){return x.id===varId;}):null;
+  if(existing){Object.assign(existing,v);}else{db.serviceVariations.push(v);}
+  closeModal();
+  openServiceModal(serviceId);
+  fetch(apiUrl('/api/subaccount/service-variations-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(v)
+  }).catch(function(){});
+}
+
+function deleteVariation(varId, serviceId){
+  if(!confirm('Delete this variation?'))return;
+  db.serviceVariations=(db.serviceVariations||[]).filter(function(v){return v.id!==varId;});
+  closeModal();
+  openServiceModal(serviceId);
+  fetch(apiUrl('/api/subaccount/service-variations-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:varId})
+  }).catch(function(){});
+}
+
+function openClassSessionModal(id, svcId){
+  var s=id?(db.classSessions||[]).find(function(x){return x.id===id;}):null;
+  var classSvcs=(db.services||[]).filter(function(x){return x.type==='class';});
+  var users=allUsers();
+  var svcOpts='<option value="">No Service</option>'+classSvcs.map(function(x){return'<option value="'+x.id+'"'+((s&&s.service_id===x.id)||(svcId===x.id)?' selected':'')+'>'+esc(x.name)+'</option>';}).join('');
+  var staffOpts='<option value="">No Instructor</option>'+users.map(function(u){return'<option value="'+u.id+'"'+(s&&s.instructor_id===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>';}).join('');
+
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Title *</label><input id="cs-title" type="text" value="'+esc(s?s.title:'')+'"></div>'
+    +'<div class="form-group"><label>Service</label><select id="cs-svc">'+svcOpts+'</select></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Date *</label><input id="cs-date" type="date" value="'+(s?s.date:'')+'"></div>'
+    +'<div class="form-group"><label>Time</label><input id="cs-time" type="time" value="'+(s&&s.time||'')+'"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Duration (min)</label><input id="cs-dur" type="number" min="5" step="5" value="'+(s&&s.duration||60)+'"></div>'
+    +'<div class="form-group"><label>Capacity</label><input id="cs-cap" type="number" min="1" value="'+(s&&s.capacity||10)+'"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Instructor</label><select id="cs-inst">'+staffOpts+'</select></div>'
+    +'<div class="form-group"><label>Status</label><select id="cs-status"><option value="scheduled"'+((!s||s.status==='scheduled')?' selected':'')+'>Scheduled</option><option value="completed"'+(s&&s.status==='completed'?' selected':'')+'>Completed</option><option value="cancelled"'+(s&&s.status==='cancelled'?' selected':'')+'>Cancelled</option></select></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Location</label><input id="cs-loc" type="text" placeholder="Room, Zoom link..." value="'+esc(s&&s.location||'')+'"></div>'
+    +'<div class="form-group"><label>Notes</label><textarea id="cs-notes" rows="2" style="resize:vertical">'+esc(s&&s.notes||'')+'</textarea></div>'
+    +'</div>';
+
+  var footer=(s?'<button class="btn btn-ghost btn-sm" style="margin-right:auto" onclick="openRosterModal(\''+s.id+'\')">View Roster</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveClassSession('+(s?'\''+s.id+'\'':'null')+')">Save</button>';
+
+  openModal(s?'Edit Class Session':'New Class Session',body,footer,'modal-lg');
+}
+
+function saveClassSession(id){
+  var title=document.getElementById('cs-title').value.trim();
+  var date=document.getElementById('cs-date').value;
+  if(!title||!date){toast('Title and date are required.','error');return;}
+  var existing=id?(db.classSessions||[]).find(function(x){return x.id===id;}):null;
+  var cs={
+    id:id||uid(),
+    service_id:document.getElementById('cs-svc').value||null,
+    instructor_id:document.getElementById('cs-inst').value||null,
+    title:title,date:date,
+    time:document.getElementById('cs-time').value||null,
+    duration:parseInt(document.getElementById('cs-dur').value)||60,
+    capacity:parseInt(document.getElementById('cs-cap').value)||10,
+    location:document.getElementById('cs-loc').value.trim()||null,
+    notes:document.getElementById('cs-notes').value.trim()||null,
+    status:document.getElementById('cs-status').value,
+    participants:existing&&existing.participants||[]
+  };
+  if(!db.classSessions)db.classSessions=[];
+  if(existing){Object.assign(existing,cs);}else{db.classSessions.push(cs);}
+  closeModal();renderServiceCal();
+  fetch(apiUrl('/api/subaccount/class-sessions-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(cs)
+  }).catch(function(){});
+}
+
+function openRosterModal(sessionId){
+  var s=(db.classSessions||[]).find(function(x){return x.id===sessionId;});
+  if(!s){toast('Session not found.','error');return;}
+  var enrolled=(s.participants||[]).filter(function(p){return p.status==='enrolled';}).length;
+  var cap=s.capacity||10;
+
+  var rows=(s.participants||[]).map(function(p){
+    var c=getContact(p.contact_id);
+    if(!c)return'';
+    return'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--main-border)">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(c.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted)">'+(c.email||c.phone||'')+'</div></div>'
+      +'<span style="font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;'+(p.status==='enrolled'?'background:rgba(74,222,128,.15);color:#4ade80':'background:rgba(156,163,175,.15);color:#9ca3af')+'">'+p.status+'</span>'
+      +(p.status==='enrolled'
+        ?'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="svcCancelEnroll(\''+sessionId+'\',\''+p.contact_id+'\')">Remove</button>'
+        :'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="svcEnroll(\''+sessionId+'\',\''+p.contact_id+'\')">Re-enroll</button>')
+      +'</div>';
+  }).join('');
+
+  var contactOpts=(db.contacts||[]).filter(function(c){
+    return!(s.participants||[]).find(function(p){return p.contact_id===c.id&&p.status==='enrolled';});
+  }).map(function(c){return'<option value="'+c.id+'">'+esc(c.name)+'</option>';}).join('');
+
+  var body='<div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
+    +'<div style="font-size:13px;font-weight:700">'+esc(s.title)+'</div>'
+    +'<div style="font-size:12px;color:var(--text-muted)">'+s.date+(s.time?' at '+s.time:'')+'</div>'
+    +'<div style="margin-left:auto;font-size:12px;font-weight:700;color:'+(enrolled>=cap?'#f97316':'#4ade80')+'">'+enrolled+'/'+cap+' enrolled</div>'
+    +'</div>'
+    +(contactOpts&&enrolled<cap?'<div style="display:flex;gap:8px;margin-bottom:14px">'
+      +'<select id="roster-add-contact" style="flex:1"><option value="">Add participant...</option>'+contactOpts+'</select>'
+      +'<button class="btn btn-primary btn-sm" onclick="svcEnroll(\''+sessionId+'\',document.getElementById(\'roster-add-contact\').value)">Enroll</button>'
+      +'</div>':'')
+    +(rows?'<div>'+rows+'</div>':'<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">No participants yet.</div>')
+    +'</div>';
+
+  openModal('Class Roster',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>','modal-lg');
+}
+
+function svcEnroll(sessionId, contactId){
+  if(!contactId){toast('Select a contact first.','error');return;}
+  var s=(db.classSessions||[]).find(function(x){return x.id===sessionId;});
+  if(!s)return;
+  var enrolled=(s.participants||[]).filter(function(p){return p.status==='enrolled';}).length;
+  if(enrolled>=(s.capacity||10)){toast('Class is full.','error');return;}
+  if(!s.participants)s.participants=[];
+  var existing=s.participants.find(function(p){return p.contact_id===contactId;});
+  if(existing){existing.status='enrolled';existing.enrolled_at=new Date().toISOString();}
+  else{s.participants.push({contact_id:contactId,status:'enrolled',enrolled_at:new Date().toISOString()});}
+  openRosterModal(sessionId);
+  fetch(apiUrl('/api/subaccount/class-sessions-enroll'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({session_id:sessionId,contact_id:contactId,action:'enroll'})
+  }).catch(function(){});
+}
+
+function svcCancelEnroll(sessionId, contactId){
+  var s=(db.classSessions||[]).find(function(x){return x.id===sessionId;});
+  if(!s)return;
+  var p=s.participants&&s.participants.find(function(x){return x.contact_id===contactId;});
+  if(p)p.status='cancelled';
+  openRosterModal(sessionId);
+  fetch(apiUrl('/api/subaccount/class-sessions-enroll'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({session_id:sessionId,contact_id:contactId,action:'cancel'})
+  }).catch(function(){});
+}
 function renderApptList(){
   const el=document.getElementById('appt-list-body');if(!el)return;
   const uSel=document.getElementById('appt-list-user');
