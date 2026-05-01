@@ -6271,11 +6271,9 @@ function openServiceModal(id){
     +'<div class="form-group"><label>Display Price ($)</label><input id="svc-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+(s&&s.price!=null?s.price:'')+'"></div>'
     +'<div class="form-group"><label>Default Duration (min)</label><input id="svc-dur" type="number" min="5" step="5" value="'+(s&&s.duration_default||60)+'"></div>'
     +'</div>'
-function saveService(id){
-  var name=document.getElementById('svc-name').value.trim();
-  if(!name){toast('Service name is required.','error');return;}
-  var staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
-  if(!staffChks.length){toast('Assign at least one staff member to this service.','error');return;}
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Buffer Before</label>'+_svcBufSel('svc-buf-before',s&&s.buffer_before||0)+'</div>'
+    +'<div class="form-group"><label>Buffer After</label>'+_svcBufSel('svc-buf-after',s&&s.buffer_after||0)+'</div>'
     +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Booking Lead Time (hours)</label><input id="svc-lead" type="number" min="0" value="'+(s&&s.booking_lead_time_hours||0)+'"></div>'
@@ -6338,6 +6336,7 @@ function saveService(id){
   var name=document.getElementById('svc-name').value.trim();
   if(!name){toast('Service name is required.','error');return;}
   var staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
+  if(!staffChks.length){toast('Assign at least one staff member.','error');return;}
   var svc={
     id:id||uid(),
     name:name,
