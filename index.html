@@ -6242,7 +6242,11 @@ function openServiceModal(id){
   var body='<div style="display:flex;flex-direction:column;gap:14px">'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Service Name *</label><input id="svc-name" type="text" value="'+esc(s?s.name:'')+'"></div>'
-    +'<div class="form-group"><label>Category</label><input id="svc-cat" type="text" placeholder="e.g. Massage Therapy" value="'+esc(s&&s.category||'')+'"></div>'
+    +'<div class="form-group"><label>Category</label>'
+    +'<select id="svc-cat">'
+    +'<option value="">No Category</option>'
+    +(db.serviceCategories||[]).map(function(c){return'<option value="'+esc(c)+'"'+(( s&&s.category===c)?' selected':'')+'>'+esc(c)+'</option>';}).join('')
+    +'</select></div>'
     +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Type</label><select id="svc-type"><option value="individual"'+((!s||s.type!=='class')?' selected':'')+'>Individual</option><option value="class"'+((s&&s.type==='class')?' selected':'')+'>Class</option></select></div>'
