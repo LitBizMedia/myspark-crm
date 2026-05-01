@@ -17,16 +17,16 @@ function fmtTime(t) {
   return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
 }
 
-async function sendConfirmationEmail(to, subject, html, apiKey) {
-  if (!apiKey) return;
+const resend = require('./lib/resend');
+
+async function sendConfirmationEmail(to, subject, html, bizName) {
   try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ from: 'bookings@mysparkplus.app', to, subject, html })
+    await resend.sendEmail({
+      to,
+      subject,
+      html,
+      fromName: bizName || 'MySpark+',
+      templateType: 'booking-confirmation'
     });
   } catch (e) {
     console.error('Confirmation email failed:', e.message);
@@ -252,7 +252,7 @@ async function handler(req, res) {
           ${bs.cancellation_policy_text ? `<p style="font-size:12px;color:#6b7280"><strong>Cancellation policy:</strong> ${bs.cancellation_policy_text}</p>` : ''}
           <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
         </div>`;
-      await sendConfirmationEmail(client_info.email, subject, html, process.env.RESEND_API_KEY);
+      await sendConfirmationEmail(client_info.email, subject, html, settings.businessName || slug);
     }
 
     // 13. Audit log
