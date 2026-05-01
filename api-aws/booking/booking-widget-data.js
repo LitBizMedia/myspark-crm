@@ -81,7 +81,10 @@ async function handler(req, res) {
       widget_primary_color:    widget?.primary_color || bs.widget_primary_color || '#6b21ea',
       widget_logo_url:         widget?.logo_url || bs.widget_logo_url || '',
       widget_tagline:          widget?.tagline || bs.widget_tagline || '',
-      widget_footer_text:      bs.widget_footer_text || ''
+      widget_footer_text:      bs.widget_footer_text || '',
+      square_app_id:           settings.square?.appId || null,
+      square_location_id:      settings.square?.locationId || null,
+      square_sandbox:          settings.square?.sandbox !== false
     };
 
     return res.status(200).json({

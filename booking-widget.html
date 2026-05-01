@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Book an Appointment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --brand:#6b21ea;
+  --brand-light:color-mix(in srgb,var(--brand) 12%,#fff);
+  --brand-mid:color-mix(in srgb,var(--brand) 25%,#fff);
+  --text:#1c1c1e;
+  --text-muted:#6b7280;
+  --text-light:#9ca3af;
+  --bg:#f9f8fc;
+  --card:#fff;
+  --border:#e5e7eb;
+  --radius:12px;
+  --radius-sm:8px;
+  --shadow:0 1px 3px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.06);
+  --shadow-lg:0 4px 24px rgba(0,0,0,.12);
+  --font-head:'Libre Baskerville',serif;
+  --font-body:'Nunito',sans-serif;
+}
+html{font-family:var(--font-body);background:var(--bg);color:var(--text);min-height:100vh}
+body{min-height:100vh;display:flex;flex-direction:column}
+
+/* ── Header ── */
+#bw-header{background:var(--card);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:14px}
+#bw-logo{max-height:40px;max-width:140px;object-fit:contain;border-radius:4px}
+#bw-biz-name{font-family:var(--font-head);font-size:18px;font-weight:700;color:var(--text)}
+#bw-tagline{font-size:12px;color:var(--text-muted);margin-top:2px}
+
+/* ── Progress ── */
+#bw-progress{background:var(--card);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:0;overflow-x:auto}
+.bw-step{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-light);white-space:nowrap;flex-shrink:0}
+.bw-step.active{color:var(--brand)}
+.bw-step.done{color:var(--text-muted)}
+.bw-step-dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:var(--bg);flex-shrink:0;transition:.2s}
+.bw-step.active .bw-step-dot{border-color:var(--brand);background:var(--brand);color:#fff}
+.bw-step.done .bw-step-dot{border-color:var(--text-muted);background:var(--text-muted);color:#fff}
+.bw-step-sep{width:24px;height:2px;background:var(--border);margin:0 4px;flex-shrink:0}
+.bw-step.done + .bw-step-sep,.bw-step.active + .bw-step-sep{background:var(--text-muted)}
+
+/* ── Main ── */
+#bw-main{flex:1;padding:24px 16px;max-width:960px;margin:0 auto;width:100%}
+.bw-section-title{font-family:var(--font-head);font-size:22px;font-weight:700;margin-bottom:6px}
+.bw-section-sub{font-size:13px;color:var(--text-muted);margin-bottom:20px}
+
+/* ── Service cards ── */
+.bw-search-bar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+.bw-search-inp{flex:1;min-width:180px;height:38px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-family:var(--font-body);font-size:13px;outline:none;background:var(--card)}
+.bw-search-inp:focus{border-color:var(--brand)}
+.bw-cat-sel{height:38px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-family:var(--font-body);font-size:13px;background:var(--card);cursor:pointer;outline:none}
+.bw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.bw-svc-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);cursor:pointer;transition:transform .18s,box-shadow .18s;overflow:hidden;border:2px solid transparent}
+.bw-svc-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--brand-mid)}
+.bw-svc-img{height:140px;display:flex;align-items:center;justify-content:center;font-size:36px;font-family:var(--font-head);color:#fff;letter-spacing:-1px;position:relative;overflow:hidden}
+.bw-svc-body{padding:14px}
+.bw-svc-name{font-weight:700;font-size:14px;margin-bottom:4px;line-height:1.3}
+.bw-svc-desc{font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bw-svc-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.bw-svc-price{font-weight:700;color:var(--text)}
+.bw-svc-dur{color:var(--text-muted)}
+.bw-book-btn{margin-top:10px;width:100%;height:34px;border:none;border-radius:var(--radius-sm);background:var(--brand);color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.bw-book-btn:hover{opacity:.88}
+
+/* ── Options (variations, staff) ── */
+.bw-options{display:flex;flex-direction:column;gap:10px}
+.bw-option{background:var(--card);border:2px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:12px}
+.bw-option:hover{border-color:var(--brand-mid);background:var(--brand-light)}
+.bw-option.selected{border-color:var(--brand);background:var(--brand-light)}
+.bw-option-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.bw-option-name{font-weight:600;font-size:14px}
+.bw-option-sub{font-size:12px;color:var(--text-muted);margin-top:2px}
+.bw-option-price{margin-left:auto;font-weight:700;font-size:14px;flex-shrink:0}
+.bw-any-staff{border:2px dashed var(--border);background:var(--bg)}
+.bw-any-staff:hover{border-color:var(--brand-mid);background:var(--brand-light)}
+
+/* ── Calendar ── */
+.bw-cal{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.bw-cal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.bw-cal-title{font-family:var(--font-head);font-size:16px;font-weight:700}
+.bw-cal-nav{background:none;border:1px solid var(--border);border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.12s}
+.bw-cal-nav:hover{background:var(--brand-light);border-color:var(--brand-mid)}
+.bw-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:0}
+.bw-cal-dow{text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);padding:10px 4px;border-bottom:1px solid var(--border)}
+.bw-cal-day{text-align:center;padding:8px 4px;font-size:13px;cursor:pointer;transition:.12s;border-radius:6px;margin:2px}
+.bw-cal-day.empty{cursor:default}
+.bw-cal-day.past{color:var(--text-light);cursor:default}
+.bw-cal-day.available:hover{background:var(--brand-light);color:var(--brand)}
+.bw-cal-day.selected{background:var(--brand);color:#fff;border-radius:50%;font-weight:700}
+.bw-cal-day.today{font-weight:700;color:var(--brand)}
+
+/* ── Time slots ── */
+.bw-slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-top:16px}
+.bw-slot{height:40px;border:1.5px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;cursor:pointer;transition:.12s;background:var(--card)}
+.bw-slot:hover{border-color:var(--brand);color:var(--brand);background:var(--brand-light)}
+.bw-slot.selected{border-color:var(--brand);background:var(--brand);color:#fff}
+
+/* ── Forms ── */
+.bw-form{display:flex;flex-direction:column;gap:14px}
+.bw-field{display:flex;flex-direction:column;gap:5px}
+.bw-field label{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.bw-field input,.bw-field textarea{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-family:var(--font-body);font-size:14px;outline:none;transition:.15s;background:var(--card)}
+.bw-field input:focus,.bw-field textarea:focus{border-color:var(--brand)}
+.bw-field textarea{resize:vertical;min-height:80px}
+.bw-form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+/* ── Tip ── */
+.bw-tip-opts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.bw-tip-btn{height:38px;padding:0 16px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer;background:var(--card);transition:.12s}
+.bw-tip-btn:hover{border-color:var(--brand);color:var(--brand)}
+.bw-tip-btn.active{border-color:var(--brand);background:var(--brand);color:#fff}
+.bw-tip-custom{height:38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-family:var(--font-body);font-size:13px;width:110px;outline:none}
+.bw-tip-custom:focus{border-color:var(--brand)}
+
+/* ── Summary card ── */
+.bw-summary{background:var(--brand-light);border:1.5px solid var(--brand-mid);border-radius:var(--radius);padding:16px;margin-bottom:20px;font-size:13px}
+.bw-summary-row{display:flex;justify-content:space-between;padding:3px 0}
+.bw-summary-row strong{color:var(--text)}
+.bw-summary-row span{color:var(--text-muted)}
+.bw-summary-divider{border:none;border-top:1px solid var(--brand-mid);margin:8px 0}
+
+/* ── Square payment ── */
+#bw-sq-card{min-height:90px;background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-top:8px}
+
+/* ── Confirm ── */
+.bw-confirm{text-align:center;padding:32px 16px}
+.bw-confirm-icon{width:64px;height:64px;border-radius:50%;background:var(--brand);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px}
+.bw-confirm-title{font-family:var(--font-head);font-size:24px;margin-bottom:8px}
+.bw-confirm-sub{color:var(--text-muted);font-size:14px;line-height:1.6;margin-bottom:24px}
+.bw-confirm-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;text-align:left;margin-bottom:20px;font-size:13px}
+.bw-confirm-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)}
+.bw-confirm-row:last-child{border-bottom:none}
+
+/* ── Nav buttons ── */
+.bw-nav{display:flex;gap:10px;margin-top:24px}
+.bw-btn{height:44px;padding:0 24px;border-radius:var(--radius-sm);font-family:var(--font-body);font-size:14px;font-weight:700;cursor:pointer;transition:.15s;border:none;display:flex;align-items:center;gap:8px}
+.bw-btn-primary{background:var(--brand);color:#fff}
+.bw-btn-primary:hover{opacity:.88}
+.bw-btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.bw-btn-ghost{background:transparent;border:1.5px solid var(--border);color:var(--text-muted)}
+.bw-btn-ghost:hover{border-color:var(--text-muted);color:var(--text)}
+.bw-btn-full{width:100%;justify-content:center}
+
+/* ── Loading / Error ── */
+.bw-loading{text-align:center;padding:48px;color:var(--text-muted);font-size:14px}
+.bw-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bw-error{background:#fef2f2;border:1.5px solid #fca5a5;border-radius:var(--radius);padding:14px 16px;color:#dc2626;font-size:13px;margin-bottom:16px}
+.bw-empty{text-align:center;padding:32px;color:var(--text-muted);font-size:13px}
+
+/* ── Footer ── */
+#bw-footer{text-align:center;padding:14px;font-size:11px;color:var(--text-light);border-top:1px solid var(--border)}
+
+/* ── Responsive ── */
+@media(max-width:520px){
+  #bw-main{padding:16px 12px}
+  .bw-form-row{grid-template-columns:1fr}
+  .bw-grid{grid-template-columns:1fr 1fr}
+  #bw-progress{padding:8px 12px}
+}
+</style>
+</head>
+<body>
+
+<div id="bw-header">
+  <img id="bw-logo" style="display:none">
+  <div>
+    <div id="bw-biz-name">Book an Appointment</div>
+    <div id="bw-tagline"></div>
+  </div>
+</div>
+
+<div id="bw-progress"></div>
+
+<div id="bw-main">
+  <div class="bw-loading"><div class="bw-spinner"></div>Loading...</div>
+</div>
+
+<div id="bw-footer">Secure booking powered by MySpark+</div>
+
+<!-- Honeypot (hidden) -->
+<input type="text" id="_hp" name="_hp" style="display:none" tabindex="-1" autocomplete="off">
+
+<script>
+const API = 'https://api.mysparkplus.app';
+const parts = window.location.pathname.split('/').filter(Boolean);
+const SLUG = parts[0] || '';
+const WIDGET_ID = parts[1] || '';
+
+const STEPS = ['service','variation','staff','date','time','info','payment','confirm'];
+const STEP_LABELS = ['Service','Options','Provider','Date','Time','Your Info','Payment','Done'];
+
+let D = null; // widget data from API
+let S = {     // booking state
+  step:'service',
+  service:null, variation:null, staff:null,
+  date:null, time:null, available_staff:[],
+  slots:[], slots_loading:false,
+  cal_month: new Date().getMonth(), cal_year: new Date().getFullYear(),
+  client:{name:'',email:'',phone:'',notes:''},
+  tip:0, tip_custom:'',
+  sq_card:null, sq_payments:null,
+  loading:false, error:null,
+  appt_id:null
+};
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+async function init() {
+  if (!SLUG) { showError('No booking link found. Please check the URL.'); return; }
+  try {
+    const r = await fetch(`${API}/api/booking/widget-data?slug=${encodeURIComponent(SLUG)}&widget_id=${encodeURIComponent(WIDGET_ID)}`);
+    if (!r.ok) { showError('This booking link is unavailable. Please contact the business.'); return; }
+    D = await r.json();
+    applyBranding();
+    render();
+  } catch(e) {
+    showError('Could not connect to the booking system. Please try again.');
+  }
+}
+
+function applyBranding() {
+  if (!D) return;
+  const color = D.settings.widget_primary_color || '#6b21ea';
+  document.documentElement.style.setProperty('--brand', color);
+  document.getElementById('bw-biz-name').textContent = D.settings.businessName || 'Book an Appointment';
+  if (D.settings.widget_tagline) document.getElementById('bw-tagline').textContent = D.settings.widget_tagline;
+  if (D.settings.widget_logo_url) {
+    const logo = document.getElementById('bw-logo');
+    logo.src = D.settings.widget_logo_url;
+    logo.style.display = '';
+  }
+  if (D.settings.widget_footer_text) document.getElementById('bw-footer').textContent = D.settings.widget_footer_text;
+  document.title = `Book - ${D.settings.businessName || 'Appointment'}`;
+}
+
+function showError(msg) {
+  document.getElementById('bw-main').innerHTML = `<div class="bw-error">${msg}</div>`;
+}
+
+// ── Step helpers ──────────────────────────────────────────────────────────────
+function stepIndex() { return STEPS.indexOf(S.step); }
+
+function visibleSteps() {
+  const steps = ['service'];
+  if (S.service) {
+    const vars = (D.variations||[]).filter(v => v.service_id === S.service.id && v.active !== false);
+    if (vars.length) steps.push('variation');
+  }
+  steps.push('staff','date','time','info');
+  const pm = D.settings.default_payment_mode || 'none';
+  if (pm !== 'none' && D.settings.tip_enabled) steps.push('payment');
+  else if (pm !== 'none') steps.push('payment');
+  else if (D.settings.tip_enabled) steps.push('payment');
+  steps.push('confirm');
+  return steps;
+}
+
+function goNext() {
+  const vs = visibleSteps();
+  const idx = vs.indexOf(S.step);
+  if (idx < vs.length - 1) { S.step = vs[idx+1]; render(); }
+}
+
+function goBack() {
+  const vs = visibleSteps();
+  const idx = vs.indexOf(S.step);
+  if (idx > 0) { S.step = vs[idx-1]; render(); }
+}
+
+// ── Progress bar ──────────────────────────────────────────────────────────────
+function renderProgress() {
+  const vs = visibleSteps();
+  const cur = vs.indexOf(S.step);
+  const labels = {
+    service:'Service', variation:'Options', staff:'Provider',
+    date:'Date', time:'Time', info:'Info', payment:'Payment', confirm:'Done'
+  };
+  let h = '';
+  vs.forEach((step, i) => {
+    const done = i < cur, active = i === cur;
+    h += `<div class="bw-step ${done?'done':''} ${active?'active':''}">
+      <div class="bw-step-dot">${done?'✓':(i+1)}</div>
+      <span>${labels[step]}</span>
+    </div>`;
+    if (i < vs.length-1) h += `<div class="bw-step-sep"></div>`;
+  });
+  document.getElementById('bw-progress').innerHTML = h;
+}
+
+// ── Main render dispatcher ────────────────────────────────────────────────────
+function render() {
+  renderProgress();
+  const el = document.getElementById('bw-main');
+  el.innerHTML = '';
+  if (S.error) el.innerHTML += `<div class="bw-error">${S.error}</div>`;
+  switch (S.step) {
+    case 'service':   renderServices(el); break;
+    case 'variation': renderVariations(el); break;
+    case 'staff':     renderStaff(el); break;
+    case 'date':      renderDate(el); break;
+    case 'time':      renderTime(el); break;
+    case 'info':      renderInfo(el); break;
+    case 'payment':   renderPayment(el); break;
+    case 'confirm':   renderConfirm(el); break;
+  }
+}
+
+// ── Step: Services ────────────────────────────────────────────────────────────
+function renderServices(el) {
+  const svcs = D.services || [];
+  const cats = [...new Set(svcs.map(s => s.category).filter(Boolean))];
+  let html = `<div class="bw-section-title">Our Services</div>
+    <div class="bw-section-sub">Choose a service to get started</div>
+    <div class="bw-search-bar">
+      <input class="bw-search-inp" id="bw-svc-search" placeholder="Search services..." oninput="filterServices()">`;
+  if (cats.length) {
+    html += `<select class="bw-cat-sel" id="bw-cat-sel" onchange="filterServices()">
+      <option value="">All Categories</option>
+      ${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+    </select>`;
+  }
+  html += `</div><div class="bw-grid" id="bw-svc-grid">`;
+  html += svcCards(svcs);
+  html += `</div>`;
+  el.innerHTML = html;
+}
+
+function svcCards(svcs) {
+  if (!svcs.length) return `<div class="bw-empty" style="grid-column:1/-1">No services available at this time.</div>`;
+  return svcs.map(s => {
+    const col = s.color || '#6b21ea';
+    const vars = (D.variations||[]).filter(v => v.service_id === s.id && v.active !== false);
+    const priceRange = priceStr(s, vars);
+    const durRange = durStr(s, vars);
+    const initials = s.name.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    const bgStyle = `background:linear-gradient(135deg,${col}dd,${col}88)`;
+    return `<div class="bw-svc-card" onclick="selectService('${s.id}')">
+      <div class="bw-svc-img" style="${bgStyle}">${initials}</div>
+      <div class="bw-svc-body">
+        <div class="bw-svc-name">${esc(s.name)}</div>
+        ${s.description ? `<div class="bw-svc-desc">${esc(s.description)}</div>` : ''}
+        <div class="bw-svc-meta">
+          <span class="bw-svc-price">${priceRange}</span>
+          <span class="bw-svc-dur">${durRange}</span>
+        </div>
+        <button class="bw-book-btn">Book &rarr;</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterServices() {
+  const q = (document.getElementById('bw-svc-search')?.value || '').toLowerCase();
+  const cat = document.getElementById('bw-cat-sel')?.value || '';
+  const filtered = (D.services||[]).filter(s =>
+    (!q || s.name.toLowerCase().includes(q) || (s.description||'').toLowerCase().includes(q)) &&
+    (!cat || s.category === cat)
+  );
+  const grid = document.getElementById('bw-svc-grid');
+  if (grid) grid.innerHTML = svcCards(filtered);
+}
+
+function selectService(id) {
+  S.service = (D.services||[]).find(s => s.id === id);
+  S.variation = null; S.staff = null; S.date = null; S.time = null;
+  S.error = null;
+  goNext();
+}
+
+// ── Step: Variations ──────────────────────────────────────────────────────────
+function renderVariations(el) {
+  const vars = (D.variations||[]).filter(v => v.service_id === S.service.id && v.active !== false);
+  let html = `<div class="bw-section-title">${esc(S.service.name)}</div>
+    <div class="bw-section-sub">Select an option</div>
+    <div class="bw-options">`;
+  vars.forEach(v => {
+    const sel = S.variation?.id === v.id ? 'selected' : '';
+    html += `<div class="bw-option ${sel}" onclick="selectVariation('${v.id}')">
+      <div>
+        <div class="bw-option-name">${esc(v.name)}</div>
+        <div class="bw-option-sub">${v.duration} min</div>
+      </div>
+      ${v.price != null ? `<div class="bw-option-price">$${parseFloat(v.price).toFixed(2)}</div>` : ''}
+    </div>`;
+  });
+  html += `</div><div class="bw-nav">
+    <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
+    <button class="bw-btn bw-btn-primary" onclick="goNext()" ${!S.variation?'disabled':''}>Continue &rarr;</button>
+  </div>`;
+  el.innerHTML = html;
+}
+
+function selectVariation(id) {
+  S.variation = (D.variations||[]).find(v => v.id === id);
+  render();
+}
+
+// ── Step: Staff ───────────────────────────────────────────────────────────────
+function renderStaff(el) {
+  const assigned = S.service.assigned_staff || [];
+  const pool = (D.staff||[]).filter(u => !assigned.length || assigned.includes(u.id));
+  const allowChoose = S.service.allow_client_choose_staff !== false;
+
+  let html = `<div class="bw-section-title">Choose a Provider</div>
+    <div class="bw-section-sub">Select who you'd like to see</div>
+    <div class="bw-options">`;
+
+  if (allowChoose) {
+    html += `<div class="bw-option bw-any-staff ${S.staff===null?'selected':''}" onclick="selectStaff(null)">
+      <div class="bw-option-dot" style="background:#9ca3af"></div>
+      <div>
+        <div class="bw-option-name">Any Available Provider</div>
+        <div class="bw-option-sub">First available staff member</div>
+      </div>
+    </div>`;
+  }
+
+  pool.forEach(u => {
+    const sel = S.staff?.id === u.id ? 'selected' : '';
+    html += `<div class="bw-option ${sel}" onclick="selectStaff('${u.id}')">
+      <div class="bw-option-dot" style="background:${u.color||'#6b21ea'}"></div>
+      <div>
+        <div class="bw-option-name">${esc(u.name)}</div>
+      </div>
+    </div>`;
+  });
+
+  html += `</div><div class="bw-nav">
+    <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
+    <button class="bw-btn bw-btn-primary" onclick="goNext()">Continue &rarr;</button>
+  </div>`;
+  el.innerHTML = html;
+}
+
+function selectStaff(id) {
+  S.staff = id ? (D.staff||[]).find(u => u.id === id) : null;
+  S.date = null; S.time = null;
+  render();
+}
+
+// ── Step: Date ────────────────────────────────────────────────────────────────
+function renderDate(el) {
+  const now = new Date();
+  const yr = S.cal_year, mo = S.cal_month;
+  const firstDay = new Date(yr, mo, 1).getDay();
+  const daysInMonth = new Date(yr, mo+1, 0).getDate();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DOW = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+  let days = '';
+  DOW.forEach(d => { days += `<div class="bw-cal-dow">${d}</div>`; });
+  for (let i=0; i<firstDay; i++) days += `<div class="bw-cal-day empty"></div>`;
+
+  for (let d=1; d<=daysInMonth; d++) {
+    const dateStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt = new Date(yr, mo, d);
+    const isPast = dt < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const isTod = dateStr === now.toISOString().split('T')[0];
+    const isSel = dateStr === S.date;
+    const cls = [isPast?'past':'available', isTod?'today':'', isSel?'selected':''].join(' ');
+    days += `<div class="bw-cal-day ${cls}" ${!isPast?`onclick="selectDate('${dateStr}')"`:''}>${d}</div>`;
+  }
+
+  const canPrev = yr > now.getFullYear() || mo > now.getMonth();
+  el.innerHTML = `<div class="bw-section-title">Pick a Date</div>
+    <div class="bw-section-sub">Select your preferred appointment date</div>
+    <div class="bw-cal">
+      <div class="bw-cal-head">
+        <button class="bw-cal-nav" onclick="calNav(-1)" ${!canPrev?'disabled':''}>&#8249;</button>
+        <span class="bw-cal-title">${monthNames[mo]} ${yr}</span>
+        <button class="bw-cal-nav" onclick="calNav(1)">&#8250;</button>
+      </div>
+      <div class="bw-cal-grid">${days}</div>
+    </div>
+    <div class="bw-nav">
+      <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
+      <button class="bw-btn bw-btn-primary" onclick="goNext()" ${!S.date?'disabled':''}>Continue &rarr;</button>
+    </div>`;
+}
+
+function calNav(dir) {
+  S.cal_month += dir;
+  if (S.cal_month > 11) { S.cal_month = 0; S.cal_year++; }
+  if (S.cal_month < 0)  { S.cal_month = 11; S.cal_year--; }
+  render();
+}
+
+function selectDate(d) {
+  S.date = d; S.time = null; S.slots = [];
+  render();
+  loadSlots();
+}
+
+// ── Step: Time ────────────────────────────────────────────────────────────────
+async function loadSlots() {
+  if (!S.date || !S.service) return;
+  S.slots_loading = true;
+  const staffId = S.staff?.id || 'any';
+  const varId = S.variation?.id || '';
+  try {
+    const url = `${API}/api/booking/availability?slug=${encodeURIComponent(SLUG)}&service_id=${S.service.id}&staff_id=${staffId}&date=${S.date}${varId?'&variation_id='+varId:''}`;
+    const r = await fetch(url);
+    const data = await r.json();
+    S.slots = data.slots || [];
+  } catch(e) {
+    S.slots = [];
+  }
+  S.slots_loading = false;
+  if (S.step === 'time') render();
+}
+
+function renderTime(el) {
+  let slotsHtml = '';
+  if (S.slots_loading) {
+    slotsHtml = `<div class="bw-loading" style="padding:24px"><div class="bw-spinner"></div>Checking availability...</div>`;
+  } else if (!S.slots.length) {
+    slotsHtml = `<div class="bw-empty">No available times on this date. <a href="#" onclick="event.preventDefault();S.step='date';render()" style="color:var(--brand)">Choose another date</a></div>`;
+  } else {
+    slotsHtml = `<div class="bw-slots">` + S.slots.map(sl => {
+      const sel = sl.time === S.time ? 'selected' : '';
+      return `<div class="bw-slot ${sel}" onclick="selectTime('${sl.time}','${(sl.available_staff||[]).join(',')}')">
+        ${fmtTime(sl.time)}
+      </div>`;
+    }).join('') + `</div>`;
+  }
+
+  el.innerHTML = `<div class="bw-section-title">Available Times</div>
+    <div class="bw-section-sub">${S.date ? fmtDate(S.date) : ''}</div>
+    ${slotsHtml}
+    <div class="bw-nav">
+      <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
+      <button class="bw-btn bw-btn-primary" onclick="goNext()" ${!S.time?'disabled':''}>Continue &rarr;</button>
+    </div>`;
+}
+
+function selectTime(t, staffList) {
+  S.time = t;
+  S.available_staff = staffList ? staffList.split(',').filter(Boolean) : [];
+  render();
+}
+
+// ── Step: Info ────────────────────────────────────────────────────────────────
+function renderInfo(el) {
+  el.innerHTML = `
+    ${bookingSummaryHtml()}
+    <div class="bw-section-title">Your Information</div>
+    <div class="bw-section-sub">We'll send your confirmation here</div>
+    <div class="bw-form" id="bw-info-form">
+      <div class="bw-form-row">
+        <div class="bw-field">
+          <label>Full Name *</label>
+          <input type="text" id="c-name" value="${esc(S.client.name)}" placeholder="Jane Smith" oninput="S.client.name=this.value">
+        </div>
+        <div class="bw-field">
+          <label>Email *</label>
+          <input type="email" id="c-email" value="${esc(S.client.email)}" placeholder="jane@example.com" oninput="S.client.email=this.value">
+        </div>
+      </div>
+      <div class="bw-field">
+        <label>Phone</label>
+        <input type="tel" id="c-phone" value="${esc(S.client.phone)}" placeholder="(555) 000-0000" oninput="S.client.phone=this.value">
+      </div>
+      <div class="bw-field">
+        <label>Notes for provider</label>
+        <textarea id="c-notes" placeholder="Any special requests or information..." oninput="S.client.notes=this.value">${esc(S.client.notes)}</textarea>
+      </div>
+    </div>
+    ${cancellationPolicyHtml()}
+    <div class="bw-nav">
+      <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
+      <button class="bw-btn bw-btn-primary" onclick="validateInfo()">Continue &rarr;</button>
+    </div>`;
+}
+
+function validateInfo() {
+  S.error = null;
+  if (!S.client.name.trim()) { S.error = 'Please enter your name.'; render(); return; }
+  if (!S.client.email.trim() || !S.client.email.includes('@')) { S.error = 'Please enter a valid email address.'; render(); return; }
+  goNext();
+}
+
+// ── Step: Payment ─────────────────────────────────────────────────────────────
+function renderPayment(el) {
+  const pm = D.settings.default_payment_mode || 'none';
+  const tipEnabled = D.settings.tip_enabled;
+  const tipPcts = D.settings.tip_percentages || [10,15,20];
+  const price = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+
+  let tipHtml = '';
+  if (tipEnabled && price > 0) {
+    const tipOpts = tipPcts.map(p => {
+      const amt = (price * p / 100).toFixed(2);
+      const active = S.tip === parseFloat(amt) ? 'active' : '';
+      return `<button class="bw-tip-btn ${active}" onclick="setTip(${amt})">${p}% ($${amt})</button>`;
+    }).join('');
+    tipHtml = `<div class="bw-field" style="margin-top:16px">
+      <label>Add a Tip (optional)</label>
+      <div class="bw-tip-opts">
+        <button class="bw-tip-btn ${S.tip===0?'active':''}" onclick="setTip(0)">No tip</button>
+        ${tipOpts}
+        ${D.settings.tip_allow_custom ? `<input class="bw-tip-custom" type="number" min="0" step="0.01" placeholder="Custom $" id="tip-custom" oninput="setCustomTip(this.value)" value="${S.tip_custom}">` : ''}
+      </div>
+    </div>`;
+  }
+
+  let payHtml = '';
+  if (pm !== 'none' && price > 0) {
+    payHtml = `<div class="bw-field" style="margin-top:16px">
+      <label>${pm==='deposit'?'Deposit Required':'Payment'}</label>
+      <div id="bw-sq-card"><div class="bw-loading" style="padding:12px"><div class="bw-spinner"></div>Loading payment form...</div></div>
+    </div>`;
+  }
+
+  el.innerHTML = `${bookingSummaryHtml(true)}
+    <div class="bw-section-title">${pm==='none'?'Almost Done':'Payment'}</div>
+    <div class="bw-section-sub">${pm==='none'?'Review your booking details below':'Enter your payment information'}</div>
+    ${tipHtml}
+    ${payHtml}
+    <div class="bw-nav">
+      <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
+      <button class="bw-btn bw-btn-primary bw-btn-full" id="bw-submit-btn" onclick="submitBooking()" ${S.loading?'disabled':''}>
+        ${S.loading?'Booking...':'Confirm Booking'}
+      </button>
+    </div>`;
+
+  if (pm !== 'none' && price > 0) initSquare();
+}
+
+function setTip(amt) {
+  S.tip = parseFloat(amt) || 0;
+  S.tip_custom = '';
+  render();
+}
+
+function setCustomTip(val) {
+  S.tip_custom = val;
+  S.tip = parseFloat(val) || 0;
+}
+
+async function initSquare() {
+  const appId = D.settings.square_app_id;
+  const locId = D.settings.square_location_id;
+  if (!appId || !locId) return;
+  try {
+    if (!window.Square) {
+      const script = document.createElement('script');
+      script.src = D.settings.square_sandbox
+        ? 'https://sandbox.web.squarecdn.com/v1/square.js'
+        : 'https://web.squarecdn.com/v1/square.js';
+      document.head.appendChild(script);
+      await new Promise(r => { script.onload = r; });
+    }
+    S.sq_payments = window.Square.payments(appId, locId);
+    S.sq_card = await S.sq_payments.card();
+    await S.sq_card.attach('#bw-sq-card');
+  } catch(e) {
+    document.getElementById('bw-sq-card').innerHTML = `<div class="bw-error">Payment form unavailable. You can still book and pay at your appointment.</div>`;
+  }
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function submitBooking() {
+  S.error = null; S.loading = true; render();
+
+  let squareNonce = null;
+  const pm = D.settings.default_payment_mode || 'none';
+  const price = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+
+  if (pm !== 'none' && price > 0 && S.sq_card) {
+    try {
+      const result = await S.sq_card.tokenize();
+      if (result.status !== 'OK') {
+        S.error = result.errors?.[0]?.message || 'Payment error. Please check your card.';
+        S.loading = false; render(); return;
+      }
+      squareNonce = result.token;
+    } catch(e) {
+      S.error = 'Payment processing failed. Please try again.';
+      S.loading = false; render(); return;
+    }
+  }
+
+  // Determine staff for booking
+  let staffId = S.staff?.id || 'any';
+  if (!S.staff && S.available_staff?.length) staffId = S.available_staff[0];
+
+  const payload = {
+    slug: SLUG,
+    service_id: S.service.id,
+    variation_id: S.variation?.id || null,
+    variation_name: S.variation?.name || null,
+    staff_id: staffId,
+    date: S.date,
+    time: S.time,
+    client_info: S.client,
+    square_nonce: squareNonce,
+    tip_amount: S.tip || 0,
+    _hp: document.getElementById('_hp')?.value || ''
+  };
+
+  try {
+    const r = await fetch(`${API}/api/booking/submit`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      S.error = data.error || 'Booking failed. Please try again.';
+      S.loading = false; render(); return;
+    }
+    S.appt_id = data.appointment_id;
+    S.loading = false;
+    S.step = 'confirm';
+    render();
+  } catch(e) {
+    S.error = 'Connection error. Please try again.';
+    S.loading = false; render();
+  }
+}
+
+// ── Confirm ───────────────────────────────────────────────────────────────────
+function renderConfirm(el) {
+  const staffUser = S.staff || (S.available_staff?.length
+    ? (D.staff||[]).find(u => u.id === S.available_staff[0])
+    : null);
+
+  el.innerHTML = `<div class="bw-confirm">
+    <div class="bw-confirm-icon">&#10003;</div>
+    <div class="bw-confirm-title">You're Booked!</div>
+    <div class="bw-confirm-sub">A confirmation has been sent to <strong>${esc(S.client.email)}</strong>.<br>We look forward to seeing you.</div>
+    <div class="bw-confirm-card">
+      <div class="bw-confirm-row"><strong>Service</strong><span>${esc(S.service.name)}${S.variation?` - ${esc(S.variation.name)}`:''}</span></div>
+      <div class="bw-confirm-row"><strong>Date</strong><span>${fmtDate(S.date)}</span></div>
+      <div class="bw-confirm-row"><strong>Time</strong><span>${fmtTime(S.time)}</span></div>
+      ${staffUser?`<div class="bw-confirm-row"><strong>Provider</strong><span>${esc(staffUser.name)}</span></div>`:''}
+    </div>
+    ${D.settings.cancellation_policy_text?`<p style="font-size:12px;color:var(--text-muted);line-height:1.6">${esc(D.settings.cancellation_policy_text)}</p>`:''}
+  </div>`;
+}
+
+// ── Summary card ──────────────────────────────────────────────────────────────
+function bookingSummaryHtml(showTotal) {
+  if (!S.service) return '';
+  const price = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  const tipAmt = S.tip || 0;
+  return `<div class="bw-summary">
+    <div class="bw-summary-row"><strong>${esc(S.service.name)}${S.variation?` - ${esc(S.variation.name)}`:''}</strong></div>
+    ${S.date?`<div class="bw-summary-row"><span>${fmtDate(S.date)} ${S.time?'at '+fmtTime(S.time):''}</span></div>`:''}
+    ${S.staff?`<div class="bw-summary-row"><span>with ${esc(S.staff.name)}</span></div>`:''}
+    ${showTotal&&price>0?`<hr class="bw-summary-divider">
+    <div class="bw-summary-row"><span>Service</span><strong>$${price.toFixed(2)}</strong></div>
+    ${tipAmt>0?`<div class="bw-summary-row"><span>Tip</span><strong>$${tipAmt.toFixed(2)}</strong></div>`:''}
+    <div class="bw-summary-row"><span>Total</span><strong>$${(price+tipAmt).toFixed(2)}</strong></div>`:''}
+  </div>`;
+}
+
+function cancellationPolicyHtml() {
+  const txt = D.settings.cancellation_policy_text;
+  if (!txt) return '';
+  return `<div style="font-size:12px;color:var(--text-muted);line-height:1.6;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border)">${esc(txt)}</div>`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtTime(t) {
+  if (!t) return '';
+  const [h,m] = t.split(':').map(Number);
+  const ampm = h>=12?'PM':'AM';
+  return `${h%12||12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T12:00:00');
+  return dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+}
+
+function priceStr(s, vars) {
+  const prices = [s.price, ...vars.map(v=>v.price)].filter(p=>p!=null).map(p=>parseFloat(p));
+  if (!prices.length) return 'Free';
+  const mn = Math.min(...prices), mx = Math.max(...prices);
+  return mn===mx ? `$${mn.toFixed(2)}` : `$${mn.toFixed(2)} - $${mx.toFixed(2)}`;
+}
+
+function durStr(s, vars) {
+  const durs = [s.duration_default, ...vars.map(v=>v.duration)].filter(Boolean).map(Number);
+  if (!durs.length) return '';
+  const mn = Math.min(...durs), mx = Math.max(...durs);
+  const fmt = d => d >= 60 ? `${Math.floor(d/60)}h${d%60?` ${d%60}m`:''}` : `${d} min`;
+  return mn===mx ? fmt(mn) : `${fmt(mn)} - ${fmt(mx)}`;
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
