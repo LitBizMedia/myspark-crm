@@ -8868,10 +8868,13 @@ function openServiceWidgetModal(id){
     +'<div class="form-group"><label>Primary Color</label><input id="swg-color" type="color" value="'+(w&&w.primary_color||db.settings&&db.settings.bookingSettings&&db.settings.bookingSettings.widget_primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
     +'<div class="form-group"><label>Logo</label>'
     +'<div style="display:flex;gap:6px;align-items:center">'
-    +'<input id="swg-logo" type="text" placeholder="https://... or choose from media" value="'+esc(curLogo)+'" style="flex:1">'
+    +'<input id="swg-logo" type="text" placeholder="https://... or choose from media" value="'+esc(curLogo)+'" style="flex:1" oninput="swgLogoUpdate()">'
     +'<button class="btn btn-ghost btn-sm" style="white-space:nowrap;flex-shrink:0" onclick="openMediaPicker(\'swg-logo\')">Media Library</button>'
     +'</div>'
-    +(curLogo?'<img id="swg-logo-preview" src="'+esc(curLogo)+'" style="margin-top:6px;max-height:40px;max-width:120px;border-radius:4px;border:1px solid var(--main-border)" onerror="this.style.display=\'none\'">':'')
+    +'<div id="swg-logo-area" style="margin-top:8px;display:flex;align-items:center;gap:10px;'+(curLogo?'':'display:none')+'">'
+    +'<img id="swg-logo-preview" src="'+esc(curLogo)+'" style="max-height:48px;max-width:140px;border-radius:6px;border:1px solid var(--main-border);object-fit:contain;background:var(--main-bg);padding:4px" onerror="this.style.opacity=\'0.3\'">'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px;color:#f87171" onclick="swgLogoClear()">Remove</button>'
+    +'</div>'
     +'</div>'
     +'</div>'
     +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Book your appointment online" value="'+esc(w&&w.tagline||'')+'"></div>'
@@ -8947,13 +8950,25 @@ async function openMediaPicker(targetId){
 }
 function mediaPick(targetId,url){
   var inp=document.getElementById(targetId);
-  if(inp)inp.value=url;
-  var prev=document.getElementById('swg-logo-preview');
-  if(prev){prev.src=url;prev.style.display='';}
+  if(inp){inp.value=url;}
   closeModal();
+  swgLogoUpdate();
   toast('Logo selected.','success');
 }
-
+function swgLogoUpdate(){
+  var inp=document.getElementById('swg-logo');
+  var url=inp?inp.value.trim():'';
+  var area=document.getElementById('swg-logo-area');
+  var prev=document.getElementById('swg-logo-preview');
+  var rem=document.getElementById('swg-logo-area');
+  if(area)area.style.display=url?'flex':'none';
+  if(prev&&url){prev.src=url;prev.style.opacity='1';}
+}
+function swgLogoClear(){
+  var inp=document.getElementById('swg-logo');
+  if(inp)inp.value='';
+  swgLogoUpdate();
+}
 function saveServiceWidget(id){
   var name=(document.getElementById('swg-name')||{}).value;
   if(!name||!name.trim()){toast('Widget name is required.','error');return;}
