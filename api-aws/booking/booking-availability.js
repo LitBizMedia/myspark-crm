@@ -125,9 +125,17 @@ async function handler(req, res) {
     const bs       = settings.bookingSettings || {};
     const leadTimeHours = service.booking_lead_time_hours || 0;
 
-    // 5. Determine staff pool
+    // 5. Determine staff pool from agency_users table
     const assignedStaff = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
-    let staffPool = (blob.users || []).filter(u => u.active !== false);
+    const staffDbResult = await db.query(
+      `SELECT id, username, name, color, schedule, date_overrides
+       FROM agency_users
+       WHERE subaccount_id = $1 AND active = true`,
+      [subaccountId]
+    );
+    let staffPool = staffDbResult.rows.map(u => ({
+      ...u, dateOverrides: u.date_overrides || []
+    }));
     if (staff_id && staff_id !== 'any') {
       staffPool = staffPool.filter(u => u.id === staff_id);
     } else if (assignedStaff.length) {

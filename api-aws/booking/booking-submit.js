@@ -102,13 +102,17 @@ async function handler(req, res) {
     const settings = blob.settings || {};
     const bs       = settings.bookingSettings || {};
 
-    // 5. Resolve staff
+    // 5. Resolve staff from agency_users table
     const assignedStaff = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
-    const allUsers = blob.users || [];
+    const staffDbRes = await db.query(
+      'SELECT id, name, username FROM agency_users WHERE subaccount_id = $1 AND active = true',
+      [subaccountId]
+    );
+    const allUsers = staffDbRes.rows;
     let assignedStaffId = (staff_id && staff_id !== 'any') ? staff_id : null;
     if (!assignedStaffId) {
       const eligible = allUsers.filter(u =>
-        u.active !== false && (!assignedStaff.length || assignedStaff.includes(u.id))
+        !assignedStaff.length || assignedStaff.includes(u.id)
       );
       if (eligible.length) assignedStaffId = eligible[0].id;
     }
@@ -236,7 +240,7 @@ async function handler(req, res) {
     // 12. Confirmation email
     if (bs.send_confirmation_email !== false) {
       const bizName   = settings.businessName || slug;
-      const staffUser = allUsers.find(u => u.id === assignedStaffId);
+      const staffUser = allUsers.find(u => u.id === assignedStaffId) || null;
       const staffName = staffUser ? (staffUser.name || staffUser.username) : 'your provider';
       const subject   = bs.confirmation_subject || `Appointment Confirmed - ${bizName}`;
       const html = `
