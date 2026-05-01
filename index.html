@@ -2573,7 +2573,7 @@ function positionNowLine(){
   document.querySelectorAll('.cal-now-line').forEach(function(el){
     var parent=el.closest('[data-minh]');
     var minH=parent?parseInt(parent.getAttribute('data-minh'),10):8;
-    el.style.top=Math.round((nowM-minH*60)/60*56)+'px';
+    el.style.top=Math.round((nowM-minH*60)/60*68)+'px';
   });
 }
 function onCalUserFilter(){var s=document.getElementById('cal-user-sel');if(s)state.calUser=s.value;renderCal()}
@@ -2714,7 +2714,7 @@ function buildTimedCol(dateStr,appts,allHours){
   var hours=getCalHours(dateStr,state.calUser==='all'?null:state.calUser);
   if(!allHours.length)return'<div style="min-height:200px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-style:italic">Closed</div>';
   var offBlocks=getOffBlocksForCol(dateStr);
-  var totalH=(maxH-minH)*56;
+  var totalH=(maxH-minH)*68;
   var offHTML=offBlocks.filter(function(b){return b.fullDay;}).map(function(b){
     return'<div class="cal-off-block" style="top:0;height:'+totalH+'px;background:'+b.color+'18;border:1px solid '+b.color+'30;border-left:3px solid '+b.color+'">'
       +'<div class="cal-off-block-name" style="color:'+b.color+'">'+esc(b.name)+'</div>'
@@ -2724,7 +2724,7 @@ function buildTimedCol(dateStr,appts,allHours){
   var laidOut=layoutOverlap(appts);
   var eventsHTML=laidOut.map(function(a){
     var s=t2m(a.time||'09:00');
-    var topPx=(s-minH*60)/60*56,heightPx=Math.max((a.duration||60)/60*56,18);
+    var topPx=(s-minH*60)/60*68,heightPx=Math.max((a.duration||60)/60*68,18);
     if(s/60<allHours[0]||s/60>=(allHours[allHours.length-1]||24)+1)return'';
     var col=getUserColor(a.assignedTo);
     var wStyle=a._tc>1?'width:calc('+Math.floor(100/a._tc)+'% - 3px);left:calc('+a._col*(100/a._tc)+'% + 1px);right:auto;':'';
@@ -2736,7 +2736,7 @@ function buildTimedCol(dateStr,appts,allHours){
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
       +'</div>';
   }).join('');
-  var nowLine2='';if(dateStr===todayStr()){var nM=new Date().getHours()*60+new Date().getMinutes();var nTop=Math.round((nM-(allHours[0]||8)*60)/60*56);nowLine2='<div class="cal-now-line" style="top:'+nTop+'px"><div class="cal-now-dot"></div></div>';}
+  var nowLine2='';if(dateStr===todayStr()){var nM=new Date().getHours()*60+new Date().getMinutes();var nTop=Math.round((nM-(allHours[0]||8)*60)/60*68);nowLine2='<div class="cal-now-line" style="top:'+nTop+'px"><div class="cal-now-dot"></div></div>';}
   return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'">'+allHours.map(function(h){return'<div class="tgrid-row'+(hours.includes(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';}).join('')+offHTML+eventsHTML+nowLine2+'</div>';
 }
 
@@ -2744,7 +2744,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
   var minH=allHours[0]||8;
   var maxH=(allHours[allHours.length-1]||18)+1;
   var hours=getCalHours(dateStr,uid);
-  var totalH=(maxH-minH)*56;
+  var totalH=(maxH-minH)*68;
   var u=getUserById(uid);
   var ov=u&&u.dateOverrides&&u.dateOverrides.find(function(o){return o.date===dateStr;});
   var dk=getDK(dateStr);var ds=u&&u.schedule&&u.schedule[dk];
@@ -2763,7 +2763,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
   var laidOut=layoutOverlap(appts);
   var eventsHTML=laidOut.map(function(a){
     var s=t2m(a.time||'09:00');
-    var topPx=(s-minH*60)/60*56,heightPx=Math.max((a.duration||60)/60*56,18);
+    var topPx=(s-minH*60)/60*68,heightPx=Math.max((a.duration||60)/60*68,18);
     if(s/60<allHours[0]||s/60>=(allHours[allHours.length-1]||24)+1)return'';
     var evCol=getUserColor(a.assignedTo);
     var c=a.contactId?getContact(a.contactId):null;
@@ -2774,7 +2774,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
       +'</div>';
   }).join('');
-  var nowLineU='';if(dateStr===todayStr()){var nMU=new Date().getHours()*60+new Date().getMinutes();var nTopU=Math.round((nMU-(allHours[0]||8)*60)/60*56);nowLineU='<div class="cal-now-line" style="top:'+nTopU+'px"><div class="cal-now-dot"></div></div>';}
+  var nowLineU='';if(dateStr===todayStr()){var nMU=new Date().getHours()*60+new Date().getMinutes();var nTopU=Math.round((nMU-(allHours[0]||8)*60)/60*68);nowLineU='<div class="cal-now-line" style="top:'+nTopU+'px"><div class="cal-now-dot"></div></div>';}
   return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'">'+allHours.map(function(h){
     return'<div class="tgrid-row'+(hours.includes(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\',\''+uid+'\')"></div>';
   }).join('')+offHTML+eventsHTML+nowLineU+'</div>';
