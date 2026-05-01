@@ -901,7 +901,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-mc-name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ffffff}
 .cal-mc-role{font-size:10px;color:rgba(255,255,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* MANAGE VIEW PANEL */
-.cal-manage-panel{width:280px;position:fixed;top:0;right:0;height:100vh;background:var(--bg-panel);border-left:1px solid var(--border);overflow-y:auto;z-index:200;box-shadow:-4px 0 20px rgba(0,0,0,.35);display:flex;flex-direction:column}
+.cal-manage-panel{width:280px;position:fixed;top:0;right:0;height:100vh;background:var(--bg-panel);border-left:1px solid var(--border);overflow-y:auto;z-index:200;box-shadow:-4px 0 20px rgba(0,0,0,.35);display:flex;flex-direction:column;color:rgba(255,255,255,.85)}
 .cal-manage-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0}
 .cal-manage-head-title{font-family:Exo 2,sans-serif;font-size:14px;font-weight:700}
 .cal-manage-section{padding:12px 16px;border-bottom:1px solid var(--border)}
@@ -2792,7 +2792,7 @@ function renderWeekCal(){
   cols.forEach(({day,str})=>{
     var appts=getCalAppts(state.calUser,str);
     var offBW=getOffBlocksForCol(str);
-    var banW=offBW.length?'<div class="cal-off-banner">'+offBW.slice(0,4).map(function(b){return'<span class="cal-off-pill" style="background:'+b.color+'20;color:'+b.color+'">'+esc(b.name)+(b.reason!=='Not scheduled'?' – '+b.reason.slice(0,14):'')+'</span>';}).join('')+(offBW.length>4?'<span style="font-size:10px;color:var(--text-muted)">+'+( offBW.length-4)+' more</span>':'')+'</div>':'';
+    var banW=offBW.length?'<div class="cal-off-banner">'+offBW.slice(0,6).map(function(b){var fn=esc(b.name).split(' ')[0];var tip=esc(b.name)+(b.reason!=='Not scheduled'?'· '+b.reason:'');return'<span class="cal-off-pill" title="'+tip+'" style="background:'+b.color+'22;color:'+b.color+'">'+fn+'</span>';}).join('')+(offBW.length>6?'<span style="font-size:9px;color:var(--text-muted)">+'+( offBW.length-6)+'</span>':'')+'</div>':'';
     var staffDots2='';
     if(state.calUser==='all'&&appts.length){
       var sLine=allUsers().filter(function(u){return appts.some(function(a){return a.assignedTo===u.id;});});
