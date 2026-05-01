@@ -125,17 +125,22 @@ async function handler(req, res) {
     const bs       = settings.bookingSettings || {};
     const leadTimeHours = service.booking_lead_time_hours || 0;
 
-    // 5. Determine staff pool from agency_users table
+    // 5. Staff pool: IDs from agency_users, schedule from blob
     const assignedStaff = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
     const staffDbResult = await db.query(
-      `SELECT id, username, name, color, schedule, date_overrides
-       FROM agency_users
-       WHERE subaccount_id = $1 AND active = true`,
+      'SELECT id, username, name FROM agency_users WHERE subaccount_id = $1 AND active = true',
       [subaccountId]
     );
-    let staffPool = staffDbResult.rows.map(u => ({
-      ...u, dateOverrides: u.date_overrides || []
-    }));
+    const blobUsers2 = blob.users || [];
+    let staffPool = staffDbResult.rows.map(u => {
+      const blobUser = blobUsers2.find(b => b.id === u.id) || {};
+      return {
+        id: u.id,
+        name: u.name || u.username,
+        schedule: blobUser.schedule || {},
+        dateOverrides: blobUser.dateOverrides || []
+      };
+    });
     if (staff_id && staff_id !== 'any') {
       staffPool = staffPool.filter(u => u.id === staff_id);
     } else if (assignedStaff.length) {

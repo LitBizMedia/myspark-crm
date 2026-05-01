@@ -102,13 +102,17 @@ async function handler(req, res) {
     const settings = blob.settings || {};
     const bs       = settings.bookingSettings || {};
 
-    // 5. Resolve staff from agency_users table
+    // 5. Resolve staff: IDs from agency_users, names from blob merge
     const assignedStaff = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
     const staffDbRes = await db.query(
       'SELECT id, name, username FROM agency_users WHERE subaccount_id = $1 AND active = true',
       [subaccountId]
     );
-    const allUsers = staffDbRes.rows;
+    const blobUsersS = blob.users || [];
+    const allUsers = staffDbRes.rows.map(u => {
+      const b = blobUsersS.find(x => x.id === u.id) || {};
+      return { id: u.id, name: b.name || u.name || u.username };
+    });
     let assignedStaffId = (staff_id && staff_id !== 'any') ? staff_id : null;
     if (!assignedStaffId) {
       const eligible = allUsers.filter(u =>
