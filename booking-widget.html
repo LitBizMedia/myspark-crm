@@ -574,13 +574,17 @@ function renderInfo(el) {
     ${cancellationPolicyHtml()}
     <div class="bw-nav">
       <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
-      <button class="bw-btn bw-btn-primary bw-btn-full" onclick="validateInfo()" id="bw-info-submit">
-        ${(()=>{const vs=visibleSteps();return vs[vs.indexOf('info')+1]==='confirm'?'Confirm Booking':'Continue →';})()}
+      <button class="bw-btn bw-btn-primary bw-btn-full" onclick="validateInfo()" id="bw-info-submit" ${S.loading?'disabled':''} style="${S.loading?'opacity:.65;cursor:not-allowed':''}">
+        ${S.loading
+          ? '<span style="display:inline-flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite"></span>Booking...</span>'
+          : (()=>{const vs=visibleSteps();return vs[vs.indexOf('info')+1]==='confirm'?'Confirm Booking':'Continue →';})()
+        }
       </button>
     </div>`;
 }
 
 function validateInfo() {
+  if (S.loading) return;
   S.error = null;
   if (!S.client.name.trim()) { S.error = 'Please enter your name.'; render(); return; }
   if (!S.client.email.trim() || !S.client.email.includes('@')) { S.error = 'Please enter a valid email address.'; render(); return; }
