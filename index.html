@@ -8834,18 +8834,45 @@ function saveBookingSettings(){
 
 function openServiceWidgetModal(id){
   var w=id?(db.serviceWidgets||[]).find(function(x){return x.id===id;}):null;
-  var svcOpts=(db.services||[]).map(function(s){
-    var checked=w&&w.service_ids&&w.service_ids.includes(s.id);
-    return'<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer">'
-      +'<input type="checkbox" class="swg-svc-chk" value="'+s.id+'"'+(checked?' checked':'')+'>'+esc(s.name)+'</label>';
+  var _selSvcs=(w&&w.service_ids)||[];
+  var svcMsOpts=(db.services||[]).map(function(s){
+    var col=s.color||'#6b21ea';
+    return'<div class="svc-ms-opt" onclick="swgMsToggle(\''+s.id+'\')">'
+      +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
+      +esc(s.name)
+      +'<span id="swg-ms-ck-'+s.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selSvcs.includes(s.id)?'':'display:none')+'">&#10003;</span>'
+      +'<input type="checkbox" id="swg-svc-'+s.id+'" class="swg-svc-chk" value="'+s.id+'" style="display:none"'+(_selSvcs.includes(s.id)?' checked':'')+'>'
+      +'</div>';
   }).join('');
+
+  var initialChips=_selSvcs.length
+    ?_selSvcs.map(function(sid){var s=(db.services||[]).find(function(x){return x.id===sid;});var col=s?s.color||'#6b21ea':'#6b21ea';var nm=s?esc(s.name):'?';return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();swgMsRemove(\''+sid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
+    :'<span style="color:var(--text-muted);font-size:12px">All services (none selected)</span>';
+
+  var curLogo=w&&w.logo_url||'';
   var body='<div style="display:flex;flex-direction:column;gap:14px">'
     +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'"></div>'
-    +'<div class="form-group"><label>Included Services <span style="color:var(--text-muted);font-weight:400">(leave all unchecked to show all services)</span></label>'
-    +'<div style="display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto;padding:8px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px">'+(svcOpts||'<div style="font-size:12px;color:var(--text-muted)">No services yet. Add services in the Service Calendars tab first.</div>')+'</div></div>'
+    +'<div class="form-group"><label>Included Services <span style="color:var(--text-muted);font-weight:400">(none = show all)</span></label>'
+    +(svcMsOpts
+      ?'<div class="svc-ms-wrap" id="swg-svc-ms">'
+        +'<div class="svc-ms-display" onclick="swgMsOpen(event)">'
+        +'<div class="svc-ms-chips" id="swg-ms-chips">'+initialChips+'</div>'
+        +'<span class="svc-ms-arrow">&#9660;</span></div>'
+        +'<div class="svc-ms-dd hidden" id="swg-ms-dd">'
+        +'<input type="text" class="svc-ms-search" placeholder="Search services..." oninput="swgMsFilter(this)">'
+        +'<div class="svc-ms-options">'+svcMsOpts+'</div>'
+        +'</div></div>'
+      :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No services yet. Add services in Service Calendars first.</div>')
+    +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Primary Color</label><input id="swg-color" type="color" value="'+(w&&w.primary_color||db.settings&&db.settings.bookingSettings&&db.settings.bookingSettings.widget_primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
-    +'<div class="form-group"><label>Logo URL</label><input id="swg-logo" type="text" placeholder="https://..." value="'+esc(w&&w.logo_url||'')+'"></div>'
+    +'<div class="form-group"><label>Logo</label>'
+    +'<div style="display:flex;gap:6px;align-items:center">'
+    +'<input id="swg-logo" type="text" placeholder="https://... or choose from media" value="'+esc(curLogo)+'" style="flex:1">'
+    +'<button class="btn btn-ghost btn-sm" style="white-space:nowrap;flex-shrink:0" onclick="openMediaPicker(\'swg-logo\')">Media Library</button>'
+    +'</div>'
+    +(curLogo?'<img id="swg-logo-preview" src="'+esc(curLogo)+'" style="margin-top:6px;max-height:40px;max-width:120px;border-radius:4px;border:1px solid var(--main-border)" onerror="this.style.display=\'none\'">':'')
+    +'</div>'
     +'</div>'
     +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Book your appointment online" value="'+esc(w&&w.tagline||'')+'"></div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+'>Active</label></div>'
@@ -8854,6 +8881,77 @@ function openServiceWidgetModal(id){
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="saveServiceWidget('+(w?'\''+w.id+'\'':'null')+')">Save</button>';
   openModal(w?'Edit Widget':'New Service Widget',body,footer,'modal-lg');
+}
+function swgMsOpen(e){
+  e.stopPropagation();
+  var dd=document.getElementById('swg-ms-dd');if(!dd)return;
+  var isOpen=!dd.classList.contains('hidden');
+  dd.classList.toggle('hidden',isOpen);
+  if(!isOpen){
+    var sr=dd.querySelector('.svc-ms-search');if(sr)sr.focus();
+    var _cls=function(ev){var wrap=document.getElementById('swg-svc-ms');if(!wrap||!wrap.contains(ev.target)){dd.classList.add('hidden');document.removeEventListener('click',_cls);}};
+    setTimeout(function(){document.addEventListener('click',_cls);},10);
+  }
+}
+function swgMsToggle(sid){
+  var chk=document.getElementById('swg-svc-'+sid);if(!chk)return;
+  chk.checked=!chk.checked;
+  var tick=document.getElementById('swg-ms-ck-'+sid);
+  if(tick)tick.style.display=chk.checked?'':'none';
+  swgMsRefresh();
+}
+function swgMsRemove(sid){
+  var chk=document.getElementById('swg-svc-'+sid);if(chk)chk.checked=false;
+  var tick=document.getElementById('swg-ms-ck-'+sid);if(tick)tick.style.display='none';
+  swgMsRefresh();
+}
+function swgMsRefresh(){
+  var area=document.getElementById('swg-ms-chips');if(!area)return;
+  var checked=Array.from(document.querySelectorAll('.swg-svc-chk:checked'));
+  if(!checked.length){area.innerHTML='<span style="color:var(--text-muted);font-size:12px">All services (none selected)</span>';return;}
+  area.innerHTML=checked.map(function(c){
+    var s=(db.services||[]).find(function(x){return x.id===c.value;});
+    var col=s?s.color||'#6b21ea':'#6b21ea';
+    var nm=s?esc(s.name):c.value;
+    return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();swgMsRemove(\''+c.value+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';
+  }).join('');
+}
+function swgMsFilter(inp){
+  var q=inp.value.toLowerCase();
+  Array.from(inp.closest('.svc-ms-dd').querySelectorAll('.svc-ms-opt')).forEach(function(o){
+    o.style.display=o.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
+async function openMediaPicker(targetId){
+  if(!state.media||!state.media.loaded){
+    toast('Loading media library...','info');
+    await loadMediaFiles();
+  }
+  var imgs=(state.media&&state.media.files||[]).filter(function(f){
+    return f.url&&(f.type||'').startsWith('image/');
+  });
+  if(!imgs.length){
+    toast('No images in your media library yet. Upload images in the Media section first.','error');
+    return;
+  }
+  var grid=imgs.map(function(f){
+    return'<div onclick="mediaPick(\''+targetId+'\',\''+esc(f.url)+'\')" style="cursor:pointer;border:2px solid transparent;border-radius:6px;overflow:hidden;aspect-ratio:1;background:var(--main-bg)" class="media-pick-item">'
+      +'<img src="'+esc(f.url)+'" style="width:100%;height:100%;object-fit:cover" title="'+esc(f.name)+'" onerror="this.closest(\'.media-pick-item\').style.display=\'none\'">'
+      +'</div>';
+  }).join('');
+  var body='<div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Click an image to select it as your logo.</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;max-height:380px;overflow-y:auto">'+grid+'</div>'
+    +'</div>';
+  openModal('Choose from Media Library',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>');
+}
+function mediaPick(targetId,url){
+  var inp=document.getElementById(targetId);
+  if(inp)inp.value=url;
+  var prev=document.getElementById('swg-logo-preview');
+  if(prev){prev.src=url;prev.style.display='';}
+  closeModal();
+  toast('Logo selected.','success');
 }
 
 function saveServiceWidget(id){
