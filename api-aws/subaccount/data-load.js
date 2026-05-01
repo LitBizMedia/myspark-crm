@@ -1,6 +1,6 @@
 // api/subaccount/data-load.js (Lambda version)
 // GET /api/subaccount/data-load
-// Loads the bulk subaccount_data JSONB blob for the authenticated subaccount.
+// Loads the bulk subaccount_data JSONB blob plus services, variations, and class sessions.
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
@@ -15,16 +15,34 @@ async function handler(req, res) {
   const subaccountId = auth.subaccount_id;
 
   try {
-    const r = await db.query(
-      'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
-      [subaccountId]
-    );
+    const [blobResult, servicesResult, variationsResult, classesResult] = await Promise.all([
+      db.query(
+        'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
+        [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM services WHERE subaccount_id = $1 ORDER BY created_at ASC',
+        [subaccountId]
+      ),
+      db.query(
+        `SELECT sv.* FROM service_variations sv
+         JOIN services s ON sv.service_id = s.id
+         WHERE s.subaccount_id = $1
+         ORDER BY sv.created_at ASC`,
+        [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM class_sessions WHERE subaccount_id = $1 ORDER BY date ASC, time ASC',
+        [subaccountId]
+      )
+    ]);
 
-    if (r.rows.length === 0) {
-      return res.status(200).json({ data: null });
-    }
-
-    return res.status(200).json({ data: r.rows[0].data });
+    return res.status(200).json({
+      data: blobResult.rows[0]?.data || null,
+      services: servicesResult.rows,
+      serviceVariations: variationsResult.rows,
+      classSessions: classesResult.rows
+    });
   } catch (e) {
     console.error('data-load error:', e.message);
     return res.status(500).json({ error: 'Failed to load data' });
