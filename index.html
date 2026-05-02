@@ -1641,20 +1641,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-size:11px;color:var(--text-muted);margin-top:8px">You will be redirected to Square to authorize access.</div>
             </div>
           </div>
-          <div class="s-card full" id="supabase-card" style="display:none">
-            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Supabase Sync</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Agency-level database connection. All subaccounts sync through this connection automatically.</div>
-            <div class="form-row" style="max-width:580px">
-              <div class="form-group"><label>Project URL</label><input id="sb-url" type="text" placeholder="https://xxxx.supabase.co"></div>
-              <div class="form-group"><label>Anon Key</label><input id="sb-key" type="password" placeholder="eyJhbGci..."></div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:2px">
-              <button class="btn btn-purple btn-sm" onclick="saveSupabase()">Save &amp; Sync</button>
-              <button class="btn btn-ghost btn-sm" onclick="pullFromSupabase()">Pull Latest Data</button>
-              <div class="sync-status"><div class="sync-dot" id="sync-dot2"></div><span id="sync-lbl2" style="font-size:12px;color:var(--text-muted)">&#8211;</span></div>
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">Managed at agency level. Subaccounts connect automatically.</div>
-          </div>
           <div class="s-card full">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Custom Fields</div>
             <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Create reusable custom fields. They appear in form builders and in expandable sections on contact records. Organize them by category.</div>
@@ -1709,10 +1695,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 // CONSTANTS
 // =====================================================
 let SK='myspark_crm_v2';let SSK='myspark_session_v1';
-// Fallback Supabase credentials - always available even if localStorage is wiped
-const SB_FALLBACK_URL='https://jytnzqaatkdtcflysadw.supabase.co';
-const SB_FALLBACK_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dG56cWFhdGtkdGNmbHlzYWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDE5NDUsImV4cCI6MjA5MjM3Nzk0NX0.znP5Tx2qU89BCuRBJZJlbmR-abde5J0NEzL0BXVi80g';
-// Square credentials now live in Supabase only. No hardcoded token in source.
+// Server endpoint defaults are baked into apiUrl(); no client config needed.
+// Square credentials live in subaccount_data on the server. No hardcoded token in source.
 // =====================================================
 // AWS API CONFIG (Phase 8 migration - Path B)
 // =====================================================
@@ -1799,7 +1783,6 @@ let db={
   settings:{
     businessHours:JSON.parse(JSON.stringify(DEF_BH)),
     square:{appId:'',accessToken:'',locationId:'',sandbox:true},
-    supabaseUrl:'',supabaseKey:'',
     adminProfile:{},
     notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24},
     timezone:'America/Chicago',
@@ -1916,7 +1899,7 @@ function layoutOverlap(events){
 // =====================================================
 // DATA
 // =====================================================
-// loadData defined below (Supabase-aware version at line ~3100)
+// loadData defined below (server-aware version at line ~3100)
 
 function sqStorageKey(){return 'myspark_sq_v1_'+(state.subaccountSlug||DEFAULT_SLUG);}
 // Returns true if Square is connected for the current workspace.
@@ -1931,10 +1914,7 @@ function sqIsConnected(){
 }
 
 function applyFallbackCredentials(){
-  if(!db.settings.supabaseUrl||!db.settings.supabaseKey){
-    db.settings.supabaseUrl=SB_FALLBACK_URL;
-    db.settings.supabaseKey=SB_FALLBACK_KEY;  }
-  // Square credentials come from Supabase (subaccount_data.settings.square) after fetchFromSupabase.
+  // Square credentials come from subaccount_data.settings.square after server data load.
   // Before the fetch completes, try the browser cache as a fast-path.
   var sqStored=localStorage.getItem(sqStorageKey());
   if(!sqIsConnected()&&sqStored){
@@ -1954,7 +1934,7 @@ function applyFallbackCredentials(){
 function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
 // schedSync defined below (line ~3130)
 
-// Legacy sync code removed - using Supabase subaccount_data
+// Legacy sync code removed - using server-side subaccount_data
 
 function setSyncSt(s){
   ['','2'].forEach(x=>{
@@ -2240,7 +2220,7 @@ async function submitResetPassword(token){
     if(!r.ok){toast(data.error||'Reset failed.','error');return;}
     closeModal();
     toast('Password updated. Reloading...','success');
-    // Force full reload so fetchFromSupabase picks up the new password hash
+    // Force full reload so the data fetch picks up the new password hash
     setTimeout(function(){window.location.href=window.location.pathname;},1200);
   }catch(e){
     toast('Reset failed: '+e.message,'error');
@@ -2295,7 +2275,7 @@ function handleLogout(){
 // =====================================================
 // INIT
 // =====================================================
-// initApp defined below (Supabase-aware version at line ~3180)
+// initApp defined below (server-aware version at line ~3180)
 
 const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',media:'Media Library',staff:'Staff',settings:'Settings'};
 function renderPanel(){
@@ -3625,7 +3605,7 @@ function sendApptConfirmation(data){
   fetch(apiUrl('/api/email/send'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Confirmed: '+data.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-confirmation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:data.title,staff_name:staffName,business_name:bizName}})}).catch(function(){});
 }
 
-function syncApptToSupabase(appt,deleted){
+function syncAppointment(appt,deleted){
   if(deleted){
     fetch(apiUrl('/api/subaccount/appointments-delete'),{
       method:'POST',
@@ -3656,6 +3636,9 @@ function syncApptToSupabase(appt,deleted){
     body:JSON.stringify(payload)
   }).catch(function(){});
 }
+
+// Backward-compat alias for renamed function. Drop in future cleanup.
+var syncApptToSupabase = syncAppointment;
 
 function saveAppt(){
   const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
@@ -3926,15 +3909,8 @@ async function saveUserSched(){
   // Look up the target user
   const target=(db.users||[]).find(x=>x.id===uid);
 
-  if(isPrimaryAdmin(uid)||!target){
-    // Primary admin: also persist to subaccount_users (admin is in that table now)
-    // and to adminProfile blob for backwards compat.
-    if(!db.settings.adminProfile)db.settings.adminProfile={};
-    db.settings.adminProfile.schedule=sched;
-    db.settings.adminProfile.dateOverrides=overrides;
-    saveData();
-  }
-
+  // Local mutation removed. Schedule and dateOverrides persist via the
+  // API call below to subaccount_users; fetchFromServer refreshes db.users.
   if(target){
     try{
       var res=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
@@ -4186,8 +4162,6 @@ function loadData(){
         settings:{...db.settings,...p.settings,
           businessHours:p.settings&&p.settings.businessHours||JSON.parse(JSON.stringify(DEF_BH)),
           square:p.settings&&p.settings.square||{appId:'',accessToken:'',locationId:'',sandbox:true},
-          supabaseUrl:p.settings&&p.settings.supabaseUrl||'',
-          supabaseKey:p.settings&&p.settings.supabaseKey||'',
           adminProfile:p.settings&&p.settings.adminProfile||{},
           notifSettings:p.settings&&p.settings.notifSettings||{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
         },
@@ -4198,7 +4172,7 @@ function loadData(){
 }
 
 // =====================================================
-// SUPABASE SYNC
+// SERVER DATA SYNC
 // =====================================================
 function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(doSync,2200)}
 
@@ -4218,7 +4192,7 @@ async function doSync(){
   }catch(e){setSyncSt('error')}
 }
 
-async function fetchFromSupabase(){
+async function fetchFromServer(){
   setSyncSt('syncing');
   try{
     const r=await fetch(apiUrl('/api/subaccount/data-load'),{credentials:'include'});
@@ -4259,17 +4233,10 @@ async function fetchFromSupabase(){
   return false;
 }
 
-function saveSupabase(){
-  db.settings.supabaseUrl=(document.getElementById('sb-url')&&document.getElementById('sb-url').value)||'';
-  db.settings.supabaseKey=(document.getElementById('sb-key')&&document.getElementById('sb-key').value)||'';
-  saveData();toast('Supabase settings saved. Syncing...','success');
-}
-
-async function pullFromSupabase(){
-  const ok=await fetchFromSupabase();
-  if(ok){renderPanel();toast('Data pulled from Supabase.','success')}
-  else toast('Could not pull data. Check your credentials.','error');
-}
+// saveSupabase and pullFromSupabase removed (UI no longer present, server config is implicit)
+// Backward-compat alias: many call sites still use fetchFromSupabase. Drop this in a future cleanup
+// once all callers are renamed.
+const fetchFromSupabase = fetchFromServer;
 
 // =====================================================
 // initApp - Supabase-aware
@@ -4368,13 +4335,10 @@ function initApp(){
   const av=document.getElementById('sb-avatar');
   av.textContent=initials(u.name||u.username);av.style.background=u.color||'#6b21ea';
   renderWorkspacePill();
-  if(db.settings.supabaseUrl&&db.settings.supabaseKey)setSyncSt('synced');
   applyRolePermissions();
   updateNotifBadge();initBrowserNotifs();renderPanel();
-  fetchFromSupabase().then(ok=>{if(ok){renderPanel();renderWorkspacePill();}});
+  fetchFromServer().then(function(ok){if(ok){renderPanel();renderWorkspacePill();}});
   handleSquareHash();
-  var sbCard=document.getElementById('supabase-card');
-  if(sbCard)sbCard.style.display='none';
   var sqLbl=document.getElementById('sq-status-label');
   if(sqLbl)sqLbl.textContent=sqIsConnected()?'Square connected. Ready to process payments.':'Connect Square in Settings to process card payments.';
   // Dashboard auto-refresh every 30 seconds. Guard prevents double-binding if initApp runs twice.
@@ -4449,8 +4413,7 @@ function openProfileModal(){
   state.selUserColor=curColor;
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+(curColor===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   state.modal={type:'profile',id:u.id};
-  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="pf-name" type="text" value="'+esc(eff&&eff.name||'')+'"></div><div class="form-group"><label>Username</label><input id="pf-user" type="text" value="'+esc(eff&&eff.username||'')+'" '+(isAdmin?'disabled':'')+'></div></div>'
-    +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
+  const b='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
     +'<div class="form-group"><label>Current Password <span style=\"font-weight:400;color:var(--text-muted)\">(required to change password)</span></label><input id="pf-old-pass" type="password" placeholder="Enter current password"></div>'
     +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="Leave blank to keep current"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div>';
@@ -4458,9 +4421,9 @@ function openProfileModal(){
 }
 
 async function saveProfile(){
-  const name=document.getElementById('pf-name').value.trim();
   const pass=document.getElementById('pf-pass').value;
   const pass2=document.getElementById('pf-pass2').value;
+  if(!pass){toast('No changes to save.','warning');return;}
   if(pass&&pass!==pass2){toast('Passwords do not match.','error');return}
   const u=state.user;
 
@@ -4488,55 +4451,8 @@ async function saveProfile(){
     }
   }
 
-  // Update locally first for immediate visual feedback
-  const updates={name:name};
-  // Match openProfileModal's logic - identify primary admin via username
-  // since state.user.id is a uuid post-auth-rebuild and won't match
-  // isPrimaryAdmin's legacy 'admin-<slug>' format
-  var primaryAdminUsername = (state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug)
-    ? 'patrick'
-    : (db._subaccountAdmin&&db._subaccountAdmin.username);
-  const isAdmin=isPrimaryAdmin(u.id) ||
-    (u.role==='admin' && u.username===primaryAdminUsername);
-  if(isAdmin){
-    db.settings.adminProfile={...db.settings.adminProfile,...updates};
-  }else{
-    const userRec=db.users.find(x=>x.id===u.id);
-    if(userRec)Object.assign(userRec,updates);
-  }
-  state.user={...state.user,...updates};
-  document.getElementById('sb-name').textContent=name||u.username;
-  document.getElementById('sb-avatar').textContent=initials(name||u.username);
-  saveData();
-
-  // Sync display_name and color to subaccount_users so refresh picks them up.
-  // Without this, refreshing pulls old values from the auth table and
-  // overwrites the local change.
-  try{
-    var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
-      method:'POST',
-      credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username:u.username,displayName:name})
-    });
-    var syncData=await syncRes.json().catch(function(){return {};});
-    if(!syncRes.ok){
-      var errMsg=syncData.error||('Status '+syncRes.status);
-      toast('Profile saved locally, but auth sync failed: '+errMsg,'warning');
-      closeModal();
-      return;
-    }
-  }catch(syncErr){
-    toast('Profile saved locally, but auth sync failed: '+syncErr.message,'warning');
-    closeModal();
-    return;
-  }
-
-  // Refresh from server so db.users matches the database
-  try{await fetchFromSupabase();}catch(e){}
-
   closeModal();
-  toast(pass?'Password changed and profile updated.':'Profile updated.','success');
+  toast('Password changed.','success');
 }
 
 // =====================================================
@@ -4595,15 +4511,13 @@ async function saveEditUser(){
     }
     updates.passwordHash=await sha256(pass);
   }
-  if(isAdmin){
-    db.settings.adminProfile={...db.settings.adminProfile,...updates};
-    if(db._subaccountAdmin&&euEmail)db._subaccountAdmin.email=euEmail;
-  }else{const u=db.users.find(x=>x.id===userId);if(u)Object.assign(u,updates);}
+  // DOM-only optimistic update if editing self. Server is the single
+  // source of truth; fetchFromServer + refreshStateUser run after the
+  // API call and sync everything from subaccount_users.
   if(state.user&&state.user.id===userId){
-    state.user={...state.user,...updates};
     document.getElementById('sb-name').textContent=updates.name||state.user.username;
     document.getElementById('sb-avatar').textContent=initials(updates.name||state.user.username);
-    document.getElementById('sb-avatar').style.background=updates.color||'#6b21ea';
+    if(updates.color)document.getElementById('sb-avatar').style.background=updates.color;
   }
   // Sync to subaccount_users for both admin and non-admin paths.
   // The Lambda looks up by username scoped to this subaccount, so admin
@@ -4678,8 +4592,6 @@ function renderSettings(){
     else{actBtn.classList.add('hidden');}
   }
   const s=db.settings;
-  const su=document.getElementById('sb-url');if(su&&s.supabaseUrl)su.value=s.supabaseUrl;
-  const sk=document.getElementById('sb-key');if(sk&&s.supabaseKey)sk.value=s.supabaseKey;
   if(s.square){
     const ai=document.getElementById('sq-app-id');if(ai&&s.square.appId)ai.value=s.square.appId;
     const at=document.getElementById('sq-token');if(at&&s.square.accessToken)at.value=s.square.accessToken;
