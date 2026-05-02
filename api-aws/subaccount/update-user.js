@@ -41,7 +41,7 @@ async function handler(req, res) {
   }
 
   const subaccountId = session.subaccount_id;
-  const { username, role, email, displayName, active, newPassword } = req.body || {};
+  const { username, role, email, displayName, active, newPassword, color, schedule, dateOverrides } = req.body || {};
 
   if (!username || typeof username !== 'string') {
     return res.status(400).json({ error: 'username required' });
@@ -97,6 +97,9 @@ async function handler(req, res) {
       must_change_password: false
     };
     if (email) createBody.email = String(email).toLowerCase();
+    if (color) createBody.color = color;
+    if (schedule) createBody.schedule = JSON.stringify(schedule);
+    if (dateOverrides) createBody.date_overrides = JSON.stringify(dateOverrides);
     
     try {
       await db.insertOne('subaccount_users', createBody);
@@ -145,6 +148,18 @@ async function handler(req, res) {
     patch.legacy_password_hash = null;
     patch.password_changed_at = new Date().toISOString();
     changedFields.push('password');
+  }
+  if (color !== undefined && color !== targetUser.color) {
+    patch.color = color;
+    changedFields.push('color');
+  }
+  if (schedule !== undefined) {
+    patch.schedule = schedule ? JSON.stringify(schedule) : null;
+    changedFields.push('schedule');
+  }
+  if (dateOverrides !== undefined) {
+    patch.date_overrides = dateOverrides ? JSON.stringify(dateOverrides) : null;
+    changedFields.push('date_overrides');
   }
 
   if (!changedFields.length) {

@@ -3866,43 +3866,108 @@ async function saveUser(){
   const role=document.getElementById('uf-role').value;
   if(!username||!password){toast('Username and password required.','error');return}
   if(allUsers().find(u=>u.username===username)){toast('Username taken.','error');return}
-  const hash=await sha256(password);
   const sched=JSON.parse(JSON.stringify(editSched));
   DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
   var userEmail=(document.getElementById('uf-email')&&document.getElementById('uf-email').value||'').trim().toLowerCase();
-  var newUserId=uid();
-  db.users.push({id:newUserId,username,name:name||username,email:userEmail||null,passwordHash:hash,role,active:true,color:state.selUserColor,schedule:sched,dateOverrides:[...userOvs],createdAt:now_()});
-  saveData();closeModal();renderUserList();
-  // Audit: user creation (admin action)
+
+  // Call update-user. With newPassword and a username that doesn't exist,
+  // the Lambda creates a row in subaccount_users with a real UUID.
+  try{
+    var res=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        username:username,
+        displayName:name||username,
+        email:userEmail||null,
+        role:role,
+        active:true,
+        newPassword:password,
+        color:state.selUserColor,
+        schedule:sched,
+        dateOverrides:[...userOvs]
+      })
+    });
+    var data=await res.json().catch(function(){return {};});
+    if(!res.ok){
+      toast('Could not add user: '+(data.error||('Status '+res.status)),'error');
+      return;
+    }
+  }catch(e){
+    toast('Network error adding user.','error');
+    return;
+  }
+
+  // Refresh from server. db.users now reflects the real UUID, color,
+  // schedule, and date_overrides as persisted by the Lambda.
+  await fetchFromSupabase();
+
+  var newUser=(db.users||[]).find(function(u){return u.username===username;});
+
+  closeModal();
+  renderUserList();
+  typeof renderStaffUserList==='function'&&renderStaffUserList();
+
   logSubaccountAudit('subaccount.user.create', {
-    targetId: newUserId,
+    targetId: newUser?newUser.id:null,
     targetType: 'user',
     metadata: { username: username, name: name||username, role: role }
   });
   toast('User added.','success');
 }
 
-function saveUserSched(){
+async function saveUserSched(){
   const uid=state.modal.id;
-  // Audit: schedule update (user.update)
+  const sched=JSON.parse(JSON.stringify(editSched));
+  DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
+  const overrides=[...userOvs];
+
+  // Look up the target user
+  const target=(db.users||[]).find(x=>x.id===uid);
+
+  if(isPrimaryAdmin(uid)||!target){
+    // Primary admin: also persist to subaccount_users (admin is in that table now)
+    // and to adminProfile blob for backwards compat.
+    if(!db.settings.adminProfile)db.settings.adminProfile={};
+    db.settings.adminProfile.schedule=sched;
+    db.settings.adminProfile.dateOverrides=overrides;
+    saveData();
+  }
+
+  if(target){
+    try{
+      var res=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
+        method:'POST',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          username:target.username,
+          schedule:sched,
+          dateOverrides:overrides
+        })
+      });
+      var data=await res.json().catch(function(){return {};});
+      if(!res.ok){
+        toast('Could not save schedule: '+(data.error||('Status '+res.status)),'error');
+        return;
+      }
+    }catch(e){
+      toast('Network error saving schedule.','error');
+      return;
+    }
+    await fetchFromSupabase();
+  }
+
   logSubaccountAudit('subaccount.user.update', {
     targetId: uid,
     targetType: 'user',
     metadata: { fields_changed: ['schedule', 'dateOverrides'] }
   });
-  const sched=JSON.parse(JSON.stringify(editSched));
-  DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
-  if(isPrimaryAdmin(uid)){
-    // Admin stored in db.settings.adminProfile
-    if(!db.settings.adminProfile)db.settings.adminProfile={};
-    db.settings.adminProfile.schedule=sched;
-    db.settings.adminProfile.dateOverrides=[...userOvs];
-  }else{
-    const u=db.users.find(x=>x.id===uid);
-    if(!u){toast('User not found.','error');return;}
-    u.schedule=sched;u.dateOverrides=[...userOvs];
-  }
-  saveData();closeModal();renderCal&&renderCal();toast('Schedule saved.','success');
+  closeModal();
+  if(typeof renderCal==='function')renderCal();
+  if(typeof renderUserList==='function')renderUserList();
+  toast('Schedule saved.','success');
 }
 
 function delUser(id){
@@ -3915,14 +3980,35 @@ function delUser(id){
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelUser()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelUser(){
+async function confirmDelUser(){
   const id=state.modal&&state.modal.id;if(!id)return;
   if(isPrimaryAdmin(id)){toast('The primary workspace admin cannot be removed.','error');closeModal();return;}
   var _u=db.users.find(function(u){return u.id===id;});
-  db.users=db.users.filter(u=>u.id!==id);
-  saveData();closeModal();renderUserList();
+
+  try{
+    var res=await fetch(apiUrl('/api/subaccount/delete-user'),{credentials:'include',
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:id})
+    });
+    var data=await res.json().catch(function(){return {};});
+    if(!res.ok){
+      toast('Could not remove user: '+(data.error||('Status '+res.status)),'error');
+      return;
+    }
+  }catch(e){
+    toast('Network error removing user.','error');
+    return;
+  }
+
+  // Refresh so db.users matches the database (the user is now gone)
+  await fetchFromSupabase();
+
+  closeModal();
+  renderUserList();
   typeof renderStaffUserList==='function'&&renderStaffUserList();
-  // Audit: user deletion (admin action)
+
   logSubaccountAudit('subaccount.user.delete', {
     targetId: id,
     targetType: 'user',
@@ -3994,6 +4080,35 @@ function withBtnLock(btn, asyncFn) {
 // =====================================================
 // EFFECTIVE ADMIN (supports profile overrides)
 // =====================================================
+// =====================================================
+// refreshStateUser - keep state.user in sync with db.users
+// =====================================================
+// state.user is set at session-restore from /session response which
+// only includes basic fields (id, username, role, name). Calls to
+// db.users hold the full record (color, schedule, dateOverrides, etc).
+// This helper pulls the full record into state.user by username match.
+// Call after fetchFromSupabase and after any user save.
+function refreshStateUser(){
+  if(!state||!state.user||!state.user.username)return;
+  var rec=(db.users||[]).find(function(u){return u.username===state.user.username;});
+  if(!rec)return;
+  state.user={
+    ...state.user,
+    id:rec.id,
+    name:rec.name||state.user.name,
+    email:rec.email||state.user.email,
+    role:rec.role||state.user.role,
+    color:rec.color,
+    schedule:rec.schedule,
+    dateOverrides:rec.dateOverrides
+  };
+  // Repaint sidebar avatar with the fresh color
+  var av=document.getElementById('sb-avatar');
+  if(av&&rec.color){av.style.background=rec.color;}
+  var nm=document.getElementById('sb-name');
+  if(nm){nm.textContent=state.user.name||state.user.username;}
+}
+
 function getEffectiveAdmin(){
   // Look up the primary admin from db.users (subaccount_users data).
   // Identified by username: 'patrick' for litbiz, sa.username for others.
@@ -4007,10 +4122,14 @@ function getEffectiveAdmin(){
   });
 
   if(realAdmin){
+    // db.users is the canonical source from subaccount_users. adminProfile
+    // is a legacy blob copy that may be stale after API saves. Prefer
+    // realAdmin (db.users) for color/name/schedule, fall back to ov only
+    // when the canonical record is missing the field.
     return{
       ...realAdmin,
-      name:ov.name||realAdmin.name||realAdmin.username,
-      color:ov.color||realAdmin.color||'#6b21ea',
+      name:realAdmin.name||realAdmin.username||ov.name,
+      color:realAdmin.color||ov.color||'#6b21ea',
       schedule:realAdmin.schedule||ov.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
       dateOverrides:realAdmin.dateOverrides||ov.dateOverrides||[]
     };
@@ -4131,6 +4250,8 @@ async function fetchFromSupabase(){
         });
       }
       localStorage.setItem(SK,JSON.stringify(db));
+      // Sync state.user from db.users so all UI reads see consistent data
+      try{refreshStateUser();}catch(e){}
       setSyncSt('synced');return true;
     }
     setSyncSt('synced');
@@ -4329,7 +4450,6 @@ function openProfileModal(){
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+(curColor===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   state.modal={type:'profile',id:u.id};
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="pf-name" type="text" value="'+esc(eff&&eff.name||'')+'"></div><div class="form-group"><label>Username</label><input id="pf-user" type="text" value="'+esc(eff&&eff.username||'')+'" '+(isAdmin?'disabled':'')+'></div></div>'
-    +(isAdminOrManager()?'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>':'')
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
     +'<div class="form-group"><label>Current Password <span style=\"font-weight:400;color:var(--text-muted)\">(required to change password)</span></label><input id="pf-old-pass" type="password" placeholder="Enter current password"></div>'
     +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="Leave blank to keep current"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>'
@@ -4369,7 +4489,7 @@ async function saveProfile(){
   }
 
   // Update locally first for immediate visual feedback
-  const updates={name:name,color:state.selUserColor};
+  const updates={name:name};
   // Match openProfileModal's logic - identify primary admin via username
   // since state.user.id is a uuid post-auth-rebuild and won't match
   // isPrimaryAdmin's legacy 'admin-<slug>' format
@@ -4387,13 +4507,11 @@ async function saveProfile(){
   state.user={...state.user,...updates};
   document.getElementById('sb-name').textContent=name||u.username;
   document.getElementById('sb-avatar').textContent=initials(name||u.username);
-  document.getElementById('sb-avatar').style.background=state.selUserColor;
   saveData();
 
-  // Sync display_name to subaccount_users so refresh picks it up.
-  // Without this, refreshing pulls the old name from the auth table and
+  // Sync display_name and color to subaccount_users so refresh picks them up.
+  // Without this, refreshing pulls old values from the auth table and
   // overwrites the local change.
-  // Color is local-only (not in subaccount_users schema), so we only sync name.
   try{
     var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
       method:'POST',
@@ -4413,6 +4531,9 @@ async function saveProfile(){
     closeModal();
     return;
   }
+
+  // Refresh from server so db.users matches the database
+  try{await fetchFromSupabase();}catch(e){}
 
   closeModal();
   toast(pass?'Password changed and profile updated.':'Profile updated.','success');
@@ -4484,13 +4605,19 @@ async function saveEditUser(){
     document.getElementById('sb-avatar').textContent=initials(updates.name||state.user.username);
     document.getElementById('sb-avatar').style.background=updates.color||'#6b21ea';
   }
-  // Sync to subaccount_users table so login picks up the changes.
-  // Without this, the JSON blob has the new role but the auth table doesn't,
-  // and the user keeps logging in with their old role.
-  // We skip this for the primary admin (handled separately via different flow).
-  if(!isAdmin){
-    var targetUser=db.users.find(x=>x.id===userId);
-    var targetUsername=targetUser&&targetUser.username;
+  // Sync to subaccount_users for both admin and non-admin paths.
+  // The Lambda looks up by username scoped to this subaccount, so admin
+  // updating themselves correctly hits their own subaccount_users row.
+  {
+    var targetUsername;
+    if(isAdmin){
+      var primaryAdminUsername=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug)?'patrick':((db._subaccountAdmin&&db._subaccountAdmin.username)||'admin');
+      var adminRow=(db.users||[]).find(function(x){return x.username===primaryAdminUsername;});
+      targetUsername=adminRow?adminRow.username:primaryAdminUsername;
+    }else{
+      var targetUser=db.users.find(x=>x.id===userId);
+      targetUsername=targetUser&&targetUser.username;
+    }
     if(targetUsername){
       try{
         var syncBody={username:targetUsername};
@@ -4498,6 +4625,9 @@ async function saveEditUser(){
         if(name)syncBody.displayName=name;
         if(euEmail)syncBody.email=euEmail;
         if(updates.passwordHash&&pass)syncBody.newPassword=pass;
+        if(updates.color)syncBody.color=updates.color;
+        if(updates.schedule)syncBody.schedule=updates.schedule;
+        if(updates.dateOverrides)syncBody.dateOverrides=updates.dateOverrides;
         var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
           method:'POST',
           credentials:'include',
@@ -4506,7 +4636,6 @@ async function saveEditUser(){
         });
         var syncData=await syncRes.json().catch(function(){return {};});
         if(!syncRes.ok){
-          // Surface the issue but don't roll back the local change
           var errMsg=syncData.error||('Status '+syncRes.status);
           if(syncData.code==='USER_NEEDS_MIGRATION'){
             toast('User updated locally, but they need to set a password before changes apply at login.','warning');
@@ -4518,14 +4647,13 @@ async function saveEditUser(){
         }else{
           toast('User updated.','success');
         }
+        await fetchFromSupabase();
       }catch(syncErr){
         toast('User updated locally, but auth sync failed: '+syncErr.message,'warning');
       }
     }else{
       toast('User updated.','success');
     }
-  }else{
-    toast('User updated.','success');
   }
   saveData();closeModal();renderUserList();
 }
