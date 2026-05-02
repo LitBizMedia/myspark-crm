@@ -15,7 +15,7 @@ async function handler(req, res) {
   const subaccountId = auth.subaccount_id;
 
   try {
-    const [blobResult, servicesResult, variationsResult, classesResult] = await Promise.all([
+    const [blobResult, servicesResult, variationsResult, classesResult, usersResult] = await Promise.all([
       db.query(
         'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
         [subaccountId]
@@ -34,6 +34,15 @@ async function handler(req, res) {
       db.query(
         'SELECT * FROM class_sessions WHERE subaccount_id = $1 ORDER BY date ASC, time ASC',
         [subaccountId]
+      ),
+      db.query(
+        `SELECT id, username, display_name, email, role, color, active,
+                schedule, date_overrides, must_change_password,
+                created_at, updated_at
+         FROM subaccount_users
+         WHERE subaccount_id = $1
+         ORDER BY created_at ASC`,
+        [subaccountId]
       )
     ]);
 
@@ -41,7 +50,8 @@ async function handler(req, res) {
       data: blobResult.rows[0]?.data || null,
       services: servicesResult.rows,
       serviceVariations: variationsResult.rows,
-      classSessions: classesResult.rows
+      classSessions: classesResult.rows,
+      users: usersResult.rows
     });
   } catch (e) {
     console.error('data-load error:', e.message);

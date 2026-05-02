@@ -49,22 +49,21 @@ async function handler(req, res) {
     const widgets = blob.serviceWidgets || [];
     let widget = widget_id ? widgets.find(w => w.id === widget_id) : widgets[0];
 
-    // 5. Staff: IDs/names from agency_users, schedule/color from blob
+    // 5. Staff: everything from subaccount_users (single source of truth)
     const staffDbResult = await db.query(
-      'SELECT id, username, name FROM agency_users WHERE subaccount_id = $1 AND active = true ORDER BY created_at ASC',
+      `SELECT id, username, display_name, color, schedule, date_overrides
+       FROM subaccount_users 
+       WHERE subaccount_id = $1 AND active = true 
+       ORDER BY created_at ASC`,
       [subaccountId]
     );
-    const blobUsers = blob.users || [];
-    const publicStaff = staffDbResult.rows.map(u => {
-      const blobUser = blobUsers.find(b => b.id === u.id) || {};
-      return {
-        id: u.id,
-        name: u.name || u.username,
-        color: blobUser.color || '#6b21ea',
-        schedule: blobUser.schedule || {},
-        dateOverrides: blobUser.dateOverrides || []
-      };
-    });
+    const publicStaff = staffDbResult.rows.map(u => ({
+      id: u.id,
+      name: u.display_name || u.username,
+      color: u.color || '#6b21ea',
+      schedule: u.schedule || {},
+      dateOverrides: u.date_overrides || []
+    }));
 
     // 6. Filter services by widget
     let services = svcResult.rows;

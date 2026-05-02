@@ -1842,7 +1842,11 @@ const getContact=id=>{const c=db.contacts.find(c=>c.id===id);if(!c)return null;i
 const getAppt=id=>db.appointments.find(a=>a.id===id);
 const getTask=id=>db.tasks.find(t=>t.id===id);
 const getTag=id=>db.tags.find(t=>t.id===id);
-const allUsers=()=>[getEffectiveAdmin(),...db.users];
+const allUsers=()=>{
+  if(db.users&&db.users.length)return db.users;
+  const fallback=getEffectiveAdmin();
+  return fallback&&fallback.id?[fallback]:[];
+};
 const getUserById=id=>allUsers().find(u=>u.id===id);
 const getUserColor=id=>{const u=getUserById(id);return u?u.color||'#6b21ea':'#6b21ea'};
 const fmt$=n=>'$'+(+n||0).toFixed(2);
@@ -3991,22 +3995,35 @@ function withBtnLock(btn, asyncFn) {
 // EFFECTIVE ADMIN (supports profile overrides)
 // =====================================================
 function getEffectiveAdmin(){
-  const ov=db.settings.adminProfile||{};
-  // LitBiz (default slug): Patrick is the agency owner and workspace admin
-  if(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug){
-    return{...DEFAULT_ADMIN,...ov,id:'admin-patrick',role:'admin',active:true};
-  }
-  // Other workspaces: use the subaccount's own admin from _subaccountAdmin
+  // Look up the primary admin from db.users (subaccount_users data).
+  // Identified by username: 'patrick' for litbiz, sa.username for others.
   const sa=db._subaccountAdmin||{};
-  const adminId='admin-'+state.subaccountSlug;
-  const name=ov.name||sa.name||(sa.username?sa.username.charAt(0).toUpperCase()+sa.username.slice(1):'Admin');
+  const ov=db.settings.adminProfile||{};
+  const isDefault=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug);
+  const primaryUsername=isDefault?'patrick':(sa.username||'admin');
+
+  const realAdmin=(db.users||[]).find(function(u){
+    return u.username===primaryUsername&&u.role==='admin';
+  });
+
+  if(realAdmin){
+    return{
+      ...realAdmin,
+      name:ov.name||realAdmin.name||realAdmin.username,
+      color:ov.color||realAdmin.color||'#6b21ea',
+      schedule:realAdmin.schedule||ov.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
+      dateOverrides:realAdmin.dateOverrides||ov.dateOverrides||[]
+    };
+  }
+
+  // Fallback: data-load not yet completed. Placeholder with no id so
+  // downstream code can detect the unloaded state.
   return{
-    id:adminId,
-    username:sa.username||'admin',
-    passwordHash:sa.passwordHash||'',
+    id:null,
+    username:primaryUsername,
     role:'admin',
     active:true,
-    name:name,
+    name:ov.name||sa.name||(isDefault?'Patrick':'Admin'),
     color:ov.color||sa.color||'#6b21ea',
     schedule:ov.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
     dateOverrides:ov.dateOverrides||[],
@@ -4018,9 +4035,16 @@ function getEffectiveAdmin(){
 // The primary admin cannot be removed, demoted, or have their schedule deleted.
 function isPrimaryAdmin(id){
   if(!id)return false;
+  // Legacy ID formats kept for backwards compat
   if(id==='admin-patrick')return true;
   if(state.subaccountSlug&&id==='admin-'+state.subaccountSlug)return true;
-  return false;
+  // UUID lookup: match if user is admin AND is the primary username
+  const u=(db.users||[]).find(function(x){return x.id===id;});
+  if(!u||u.role!=='admin')return false;
+  const sa=db._subaccountAdmin||{};
+  const isDefault=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug);
+  const primaryUsername=isDefault?'patrick':(sa.username||'admin');
+  return u.username===primaryUsername;
 }
 
 // =====================================================
@@ -4087,6 +4111,25 @@ async function fetchFromSupabase(){
       if(result.services)db.services=result.services;
       if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
       if(result.classSessions)db.classSessions=result.classSessions;
+      // Users from subaccount_users table (UUIDs), not from blob.
+      if(result.users){
+        db.users=result.users.map(function(u){
+          return {
+            id:u.id,
+            username:u.username,
+            name:u.display_name||u.username,
+            email:u.email,
+            role:u.role,
+            color:u.color||'#6b21ea',
+            active:u.active,
+            schedule:u.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
+            dateOverrides:u.date_overrides||[],
+            mustChangePassword:u.must_change_password,
+            createdAt:u.created_at,
+            updatedAt:u.updated_at
+          };
+        });
+      }
       localStorage.setItem(SK,JSON.stringify(db));
       setSyncSt('synced');return true;
     }

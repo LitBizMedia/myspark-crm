@@ -125,22 +125,20 @@ async function handler(req, res) {
     const bs       = settings.bookingSettings || {};
     const leadTimeHours = service.booking_lead_time_hours || 0;
 
-    // 5. Staff pool: IDs from agency_users, schedule from blob
+    // 5. Staff pool: from subaccount_users (single source of truth)
     const assignedStaff = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
     const staffDbResult = await db.query(
-      'SELECT id, username, name FROM agency_users WHERE subaccount_id = $1 AND active = true',
+      `SELECT id, username, display_name, schedule, date_overrides 
+       FROM subaccount_users 
+       WHERE subaccount_id = $1 AND active = true`,
       [subaccountId]
     );
-    const blobUsers2 = blob.users || [];
-    let staffPool = staffDbResult.rows.map(u => {
-      const blobUser = blobUsers2.find(b => b.id === u.id) || {};
-      return {
-        id: u.id,
-        name: u.name || u.username,
-        schedule: blobUser.schedule || {},
-        dateOverrides: blobUser.dateOverrides || []
-      };
-    });
+    let staffPool = staffDbResult.rows.map(u => ({
+      id: u.id,
+      name: u.display_name || u.username,
+      schedule: u.schedule || {},
+      dateOverrides: u.date_overrides || []
+    }));
     if (staff_id && staff_id !== 'any') {
       staffPool = staffPool.filter(u => u.id === staff_id);
     } else if (assignedStaff.length) {
