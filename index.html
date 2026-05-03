@@ -6274,7 +6274,7 @@ function _sessionRow(s){
     +'<div style="font-size:11px;color:var(--text-muted)">'+s.date+(s.time?' at '+s.time:'')+(instructor?' &middot; '+esc(instructor.name||instructor.username):'')+'</div>'
     +'</div>'
     +'<div style="text-align:right;flex-shrink:0">'
-    +'<div style="font-size:12px;font-weight:600;color:'+(enrolled>=cap?'#f97316':enrolled>=cap*.8?'#fbbf24':'#4ade80')+'">'+enrolled+'/'+cap+'</div>'
+    +'<div style="font-size:12px;font-weight:600;color:'+(enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80')+'">'+enrolled+'/'+cap+'</div>'
     +'<div style="width:60px;height:4px;background:var(--main-border);border-radius:2px;margin-top:3px"><div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:2px"></div></div>'
     +'</div>'
     +'<div style="display:flex;gap:6px;flex-shrink:0">'
@@ -6288,7 +6288,6 @@ function openServiceModal(id){
   var s=id?(db.services||[]).find(function(x){return x.id===id;}):null;
   var users=allUsers();
   var daysOfWeek=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  var avail=s&&s.availability||{};
   var _selStaff=(s&&s.assigned_staff)||[];
   var staffMsOpts=users.map(function(u){
     var col=u.color||'#6b21ea';
@@ -6573,7 +6572,7 @@ function openRosterModal(sessionId){
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
     +'<div style="font-size:13px;font-weight:700">'+esc(s.title)+'</div>'
     +'<div style="font-size:12px;color:var(--text-muted)">'+s.date+(s.time?' at '+s.time:'')+'</div>'
-    +'<div style="margin-left:auto;font-size:12px;font-weight:700;color:'+(enrolled>=cap?'#f97316':'#4ade80')+'">'+enrolled+'/'+cap+' enrolled</div>'
+    +'<div style="margin-left:auto;font-size:12px;font-weight:700;color:'+(enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80')+'">'+enrolled+'/'+cap+' enrolled</div>'
     +'</div>'
     +(contactOpts&&enrolled<cap?'<div style="display:flex;gap:8px;margin-bottom:14px">'
       +'<select id="roster-add-contact" style="flex:1"><option value="">Add participant...</option>'+contactOpts+'</select>'
@@ -8556,7 +8555,7 @@ function _renderBookingSettingsTab(){
   // Payment defaults
   h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;margin-bottom:12px">Payment Defaults</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Global default for all services. Can be overridden per service.</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Global default applied to all services.</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Payment Mode</label>'
     +'<select id="bs-pay-mode" onchange="bsToggleDeposit()">'
