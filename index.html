@@ -53,6 +53,13 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-dim)}
 .form-group textarea{resize:vertical;min-height:80px}
 .form-group select option{background:var(--bg-card)}
+/* Date/time pickers: invert the native calendar icon so it's visible on dark input backgrounds */
+.form-group input[type="date"]::-webkit-calendar-picker-indicator,
+.form-group input[type="time"]::-webkit-calendar-picker-indicator,
+.form-group input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.form-group input[type="month"]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.7;cursor:pointer}
+.form-group input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.form-group input[type="time"]::-webkit-calendar-picker-indicator:hover{opacity:1}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 
@@ -3463,6 +3470,63 @@ function getServiceColor(serviceId){
   return svc ? (svc.color || null) : null;
 }
 
+// Searchable service picker for the appointment modal. Mirrors the ssHTML/ssFilter/ssSelect
+// pattern used for contacts. Renders a search input with a hidden value field.
+// On select, calls apptOnServiceChange to drive prefill behavior.
+function svcSsHTML(wrapId, inputId, hiddenId, ddId, placeholder, val){
+  var s = val ? (db.services||[]).find(function(x){ return x.id === val; }) : null;
+  var iv = s ? s.name : '';
+  var sf = "svcSsFilter('"+inputId+"','"+hiddenId+"','"+ddId+"',this.value)";
+  return '<div class="ss-wrap" id="'+wrapId+'">'
+    + '<input class="ss-inp" id="'+inputId+'" type="text" placeholder="'+esc(placeholder)+'" value="'+esc(iv)+'" oninput="'+sf+'" onclick="'+sf+'" autocomplete="off">'
+    + '<input type="hidden" id="'+hiddenId+'" value="'+esc(val||'')+'">'
+    + '<div class="ss-drop hidden" id="'+ddId+'"></div>'
+    + '</div>';
+}
+
+function svcSsFilter(inputId, hiddenId, ddId, v){
+  var dd = document.getElementById(ddId);
+  if (!dd) return;
+  var lowerV = (v||'').toLowerCase();
+  var matches = (db.services||[]).filter(function(s){
+    if (s.active === false) return false;
+    if (s.type === 'class') return false; // classes use Add to Class flow
+    if (!lowerV) return true;
+    return (s.name||'').toLowerCase().indexOf(lowerV) >= 0
+      || (s.category||'').toLowerCase().indexOf(lowerV) >= 0;
+  }).slice(0, 12);
+  if (!matches.length) {
+    dd.innerHTML = '<div class="ss-empty">No services found</div>';
+  } else {
+    dd.innerHTML = matches.map(function(s){
+      var nameEsc = esc(s.name).replace(/'/g, '&#39;');
+      var meta = [];
+      if (s.category) meta.push(esc(s.category));
+      if (s.duration_default) meta.push(s.duration_default + ' min');
+      if (s.price != null) meta.push('$' + parseFloat(s.price).toFixed(2));
+      return '<div class="ss-opt" onclick="svcSsSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\''+s.id+'\',\''+nameEsc+'\')">'
+        + '<div style="font-weight:600">' + esc(s.name) + '</div>'
+        + (meta.length ? '<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">' + meta.join(' \u00b7 ') + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+  dd.classList.remove('hidden');
+  setTimeout(function(){
+    document.addEventListener('click', function f(){
+      dd.classList.add('hidden');
+      document.removeEventListener('click', f);
+    }, {capture: true});
+  }, 10);
+}
+
+function svcSsSelect(inputId, hiddenId, ddId, id, name){
+  document.getElementById(inputId).value = name;
+  document.getElementById(hiddenId).value = id;
+  document.getElementById(ddId).classList.add('hidden');
+  // Trigger the prefill logic (title, duration, buffers, staff filter, variations).
+  apptOnServiceChange();
+}
+
 // Builds <option> HTML for the appointment modal staff dropdown. If allowedIds
 // is provided, only those staff appear (used in Service mode).
 function _apptStaffOptions(allowedIds, currentId){
@@ -3496,13 +3560,16 @@ function _apptVariationOptionsHTML(serviceId, currentId){
 
 // Inline pill button styling for the Custom/Service mode toggle.
 // Generic dropdown menu attached to a trigger button. Items: [{label, onClick}].
-// Menu auto-closes on outside click. Used by +Schedule and catalog +Add buttons.
+// Menu auto-closes on outside click. Right-aligned to button so it never overflows
+// off the right edge of the screen (most +Add buttons sit on the right of headers).
 function openDropdownMenu(buttonEl, items){
   closeDropdownMenu();
   var rect = buttonEl.getBoundingClientRect();
   var menu = document.createElement('div');
   menu.id = 'global-dropdown-menu';
-  menu.style.cssText = 'position:fixed;top:' + (rect.bottom + 4) + 'px;left:' + rect.left + 'px;'
+  // Anchor right edge of menu to right edge of button. Menu grows leftward.
+  var rightOffset = window.innerWidth - rect.right;
+  menu.style.cssText = 'position:fixed;top:' + (rect.bottom + 4) + 'px;right:' + rightOffset + 'px;'
     + 'background:var(--main-card);border:1px solid var(--main-border);border-radius:6px;'
     + 'box-shadow:0 6px 20px rgba(0,0,0,.25);padding:4px;z-index:10000;min-width:' + Math.max(rect.width, 180) + 'px;';
   items.forEach(function(item){
@@ -3515,8 +3582,8 @@ function openDropdownMenu(buttonEl, items){
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.style.cssText = 'display:block;width:100%;padding:8px 12px;text-align:left;'
-      + 'background:transparent;border:none;cursor:pointer;color:var(--text);'
-      + 'font-size:13px;border-radius:4px;font-family:inherit;';
+      + 'background:transparent;border:none;cursor:pointer;color:var(--main-text);'
+      + 'font-size:13px;font-weight:500;border-radius:4px;font-family:inherit;';
     btn.textContent = item.label;
     btn.onmouseover = function(){ btn.style.background = 'var(--main-bg)'; };
     btn.onmouseout = function(){ btn.style.background = 'transparent'; };
@@ -3755,12 +3822,9 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
 
   const defUid=a&&a.assignedTo||(prefUserId||null)||(state.user&&state.user.id)||'';
 
-  // Service options (active services only). Used in Service mode.
+  // Active non-class services available for picking. Used by the search picker
+  // helper svcSsHTML at render time and by initial staff filter logic below.
   var activeServices = (db.services || []).filter(function(s){ return s.active !== false && s.type !== 'class'; });
-  var svcOpts = '<option value="">Pick a service...</option>'
-    + activeServices.map(function(s){
-      return '<option value="' + s.id + '"' + (s.id === initialServiceId ? ' selected' : '') + '>' + esc(s.name) + '</option>';
-    }).join('');
 
   // Variation options if a service is preselected.
   var initialVarHTML = initialServiceId ? _apptVariationOptionsHTML(initialServiceId, initialVariationId) : '';
@@ -3778,14 +3842,20 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     // by the +Schedule menu choice, no in-modal switching.
     (initialMode === 'service'
       ? '<div id="apt-svc-section">'
-        + '<div class="form-group"><label>Service *</label><select id="af-service" onchange="apptOnServiceChange()">' + svcOpts + '</select></div>'
+        + '<div class="form-group"><label>Service *</label>' + svcSsHTML('af-svc-wrap','af-svc-inp','af-service','af-svc-drop','Search services...', initialServiceId || '') + '</div>'
         + '<div class="form-group" id="apt-var-wrap" style="display:' + (initialVarHTML ? 'block' : 'none') + '"><label>Variation</label><select id="af-variation" onchange="apptOnVariationChange()">' + initialVarHTML + '</select></div>'
         + '</div>'
       : '')
 
+    // Title field: visible in Custom mode only. In Service mode it is set
+    // programmatically when the service is picked, but kept as a hidden input
+    // so saveAppt can read it the same way.
+    + (initialMode === 'service'
+      ? '<input type="hidden" id="af-title" value="'+esc(a&&a.title||'')+'">'
+      : '<div class="form-group"><label>Title *</label><input id="af-title" type="text" value="'+esc(a&&a.title||'')+'" placeholder="Discovery call, follow-up..."></div>')
+
     // Existing fields (unchanged)
     + '<div id="appt-warn" class="warn-box hidden"></div>'
-    + '<div class="form-group"><label>Title *</label><input id="af-title" type="text" value="'+esc(a&&a.title||'')+'" placeholder="Discovery call, follow-up..."></div>'
     + '<div class="form-group"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
     + '<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label><input id="af-time" type="time" value="'+esc(a&&a.time||prefTime||'09:00')+'" onchange="checkApptConflict()"></div></div>'
     + '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
