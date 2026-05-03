@@ -4655,6 +4655,10 @@ async function fetchFromServer(){
       if(result.services)db.services=result.services;
       if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
       if(result.classSessions)db.classSessions=result.classSessions;
+      // Migrated out of blob into dedicated column/table. Override anything
+      // the blob might still have during the transition.
+      if(Array.isArray(result.serviceCategories))db.serviceCategories=result.serviceCategories;
+      if(Array.isArray(result.serviceWidgets))db.serviceWidgets=result.serviceWidgets;
       // Users from subaccount_users table (UUIDs), not from blob.
       if(result.users){
         db.users=result.users.map(function(u){
@@ -6701,10 +6705,11 @@ function svcCatAdd(){
   var name=inp?inp.value.trim():'';
   if(!name){toast('Enter a category name.','error');return;}
   if(!db.serviceCategories)db.serviceCategories=[];
-  if(db.serviceCategories.includes(name)){toast('Category already exists.','error');return;}
-  db.serviceCategories.push(name);
-  schedSync();
-  renderServiceCal();
+  if(db.serviceCategories.some(function(c){return c.toLowerCase()===name.toLowerCase();})){
+    toast('Category already exists.','error');return;
+  }
+  var next=db.serviceCategories.concat([name]);
+  _saveServiceCategories(next);
 }
 
 function svcCatEdit(idx){
@@ -6716,11 +6721,16 @@ function svcCatEdit(idx){
     var newName=inp.value.trim();
     if(!newName){toast('Category name cannot be empty.','error');return;}
     var old=db.serviceCategories[idx];
-    db.serviceCategories[idx]=newName;
-    // Update any services using the old name
-    (db.services||[]).forEach(function(s){if(s.category===old)s.category=newName;});
-    schedSync();
-    renderServiceCal();
+    if(old===newName){
+      // No change; just exit edit mode
+      disp.style.display='';
+      inp.style.display='none';
+      return;
+    }
+    var next=db.serviceCategories.slice();
+    next[idx]=newName;
+    // Cascade rename to services server-side via rename_from/rename_to
+    _saveServiceCategories(next, old, newName);
   } else {
     disp.style.display='none';
     inp.style.display='';
@@ -6733,9 +6743,32 @@ function svcCatDelete(idx){
   if(!name)return;
   var inUse=(db.services||[]).some(function(s){return s.category===name;});
   if(inUse&&!confirm('This category is used by one or more services. Remove it anyway?'))return;
-  db.serviceCategories.splice(idx,1);
-  schedSync();
-  renderServiceCal();
+  var next=db.serviceCategories.slice();
+  next.splice(idx,1);
+  _saveServiceCategories(next);
+}
+
+// Saves service categories to the dedicated column. If renameFrom/renameTo
+// are provided, server also cascades the rename across services.
+function _saveServiceCategories(nextCategories, renameFrom, renameTo){
+  var payload={categories:nextCategories};
+  if(renameFrom&&renameTo)payload.rename_from=renameFrom,payload.rename_to=renameTo;
+  fetch(apiUrl('/api/subaccount/service-categories-set'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(function(r){
+    if(!r.ok){toast('Failed to save categories.','error');return;}
+    return r.json().then(function(data){
+      db.serviceCategories=Array.isArray(data.categories)?data.categories:nextCategories;
+      // If the server cascaded a rename, refresh services to pick up the change
+      if(renameFrom&&renameTo&&typeof fetchFromServer==='function'){
+        fetchFromServer();
+      } else {
+        renderServiceCal();
+      }
+    });
+  }).catch(function(){toast('Network error saving categories.','error');});
 }
 
 
@@ -9855,20 +9888,36 @@ function saveServiceWidget(id){
     tagline:((document.getElementById('swg-tag')||{}).value||'').trim(),
     active:(document.getElementById('swg-active')||{}).checked!==false
   };
-  if(!db.serviceWidgets)db.serviceWidgets=[];
-  var ex=id?db.serviceWidgets.find(function(x){return x.id===id;}):null;
-  if(ex){Object.assign(ex,w);}else{db.serviceWidgets.push(w);}
-  schedSync();
-  closeModal();
-  renderBookingWidgets();
+  fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(w)
+  }).then(function(r){
+    if(!r.ok){toast('Failed to save widget.','error');return;}
+    return r.json().then(function(data){
+      // Update local state from authoritative server response
+      if(!db.serviceWidgets)db.serviceWidgets=[];
+      var serverWidget=data.widget||w;
+      var ex=db.serviceWidgets.find(function(x){return x.id===serverWidget.id;});
+      if(ex){Object.assign(ex,serverWidget);}else{db.serviceWidgets.push(serverWidget);}
+      closeModal();
+      renderBookingWidgets();
+    });
+  }).catch(function(){toast('Network error saving widget.','error');});
 }
 
 function deleteServiceWidget(id){
   if(!confirm('Delete this widget?'))return;
-  db.serviceWidgets=(db.serviceWidgets||[]).filter(function(w){return w.id!==id;});
-  schedSync();
-  closeModal();
-  renderBookingWidgets();
+  fetch(apiUrl('/api/subaccount/service-widgets-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id})
+  }).then(function(r){
+    if(!r.ok){toast('Failed to delete widget.','error');return;}
+    db.serviceWidgets=(db.serviceWidgets||[]).filter(function(w){return w.id!==id;});
+    closeModal();
+    renderBookingWidgets();
+  }).catch(function(){toast('Network error deleting widget.','error');});
 }
 
 function copyWidgetCode(id){

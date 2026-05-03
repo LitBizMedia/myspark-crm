@@ -2,8 +2,11 @@
 // POST /api/subaccount/data-save
 // Saves the bulk subaccount_data JSONB blob for the authenticated subaccount.
 //
-// User-related fields are stripped before save. The canonical sources are:
+// User-related fields and migrated fields are stripped before save.
+// The canonical sources are:
 //   - subaccount_users table (users, admin)
+//   - subaccount_data.service_categories column (service categories)
+//   - service_widgets table (widgets)
 //   - server-side config (Supabase fields are dead, no longer used)
 // Anything still being sent in the blob is treated as legacy noise and dropped.
 
@@ -12,7 +15,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 // Top-level fields that must NOT live in the blob anymore.
-const STRIPPED_TOP_LEVEL = ['users', '_subaccountAdmin'];
+const STRIPPED_TOP_LEVEL = ['users', '_subaccountAdmin', 'serviceCategories', 'serviceWidgets'];
 // Fields under data.settings that must NOT live in the blob anymore.
 const STRIPPED_SETTINGS = ['adminProfile', 'supabaseUrl', 'supabaseKey'];
 
@@ -56,7 +59,7 @@ async function handler(req, res) {
   const slug = subaccountId.replace(/^sub-/, '');
   const dataId = 'data-' + slug;
 
-  // Strip dead user-related fields before persisting.
+  // Strip dead fields before persisting.
   const { data: clean, stripped } = sanitize(data);
   if (stripped.length > 0) {
     console.log(`data-save[${subaccountId}]: stripped legacy fields: ${stripped.join(', ')}`);

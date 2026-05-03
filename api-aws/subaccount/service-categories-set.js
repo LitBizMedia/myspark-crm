@@ -18,6 +18,12 @@ async function handler(req, res) {
     return res.status(400).json({ error: 'categories must be an array' });
   }
 
+  // Optional rename cascade: when renaming a category, also update services
+  // that reference the old name.
+  const renameFrom = (body.rename_from || '').trim();
+  const renameTo = (body.rename_to || '').trim();
+  const doCascade = renameFrom && renameTo && renameFrom !== renameTo;
+
   // Coerce to strings, trim, drop empties, enforce 100 char cap, dedupe.
   const seen = new Set();
   const clean = [];
@@ -48,16 +54,31 @@ async function handler(req, res) {
       return res.status(404).json({ error: 'subaccount_data row not found' });
     }
 
+    // Cascade rename: update any services with the old category name.
+    // Note: not in a transaction with the categories update. If this fails
+    // after the categories save, services will be left referencing the old
+    // name. Rare and self-healing on next services save.
+    let cascaded = 0;
+    if (doCascade) {
+      const cascadeResult = await db.query(
+        `UPDATE services
+           SET category = $1, updated_at = NOW()
+         WHERE subaccount_id = $2 AND category = $3`,
+        [renameTo, subaccountId, renameFrom]
+      );
+      cascaded = cascadeResult.rowCount || 0;
+    }
+
     await logAudit({
       req, actorType: 'subaccount', actorId: auth.user_id,
       actorUsername: auth.username, actorRole: auth.role,
-      action: 'subaccount.service_categories.set',
+      action: doCascade ? 'subaccount.service_categories.rename' : 'subaccount.service_categories.set',
       targetType: 'subaccount_data', targetId: subaccountId,
       targetSubaccountId: subaccountId,
-      metadata: { count: clean.length }
+      metadata: { count: clean.length, rename_from: renameFrom || null, rename_to: renameTo || null, services_updated: cascaded }
     });
 
-    return res.status(200).json({ success: true, categories: clean });
+    return res.status(200).json({ success: true, categories: clean, services_updated: cascaded });
   } catch (e) {
     console.error('service-categories-set error:', e.message, e.stack);
     return res.status(500).json({ error: 'Failed to save categories' });
