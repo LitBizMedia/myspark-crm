@@ -56,7 +56,7 @@ exports.handler = async (event) => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS service_widgets (
         id              TEXT PRIMARY KEY,
-        subaccount_id   UUID NOT NULL,
+        subaccount_id   TEXT NOT NULL,
         name            TEXT NOT NULL,
         service_ids     JSONB NOT NULL DEFAULT '[]'::jsonb,
         primary_color   TEXT,
