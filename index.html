@@ -7225,7 +7225,6 @@ function _saveServiceWithForce(svc, type, force){
         } else {
           // User cancelled. Reload to discard the optimistic local edit.
           if(typeof fetchFromServer==='function')fetchFromServer();
-          else if(typeof fetchFromSupabase==='function')fetchFromSupabase();
           toast('Edit cancelled. Sessions and roster preserved.','info');
         }
       });
@@ -7237,7 +7236,6 @@ function _saveServiceWithForce(svc, type, force){
     return r.json().then(function(data){
       // Refresh data so generated/regenerated/updated sessions appear immediately
       if(type==='class'&&typeof fetchFromServer==='function')fetchFromServer();
-      else if(type==='class'&&typeof fetchFromSupabase==='function')fetchFromSupabase();
       // Status toast based on what happened server-side
       if(type==='class'&&data){
         if(data.sessions_generated){

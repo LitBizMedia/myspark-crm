@@ -69,13 +69,13 @@ async function handler(req, res) {
       INSERT INTO services (
         id, subaccount_id, name, description, category, type, color, price,
         buffer_before, buffer_after, assigned_staff, allow_client_choose_staff,
-        availability, booking_lead_time_hours, booking_advance_days, active,
+        booking_lead_time_hours, booking_advance_days, active,
         instructor_id, capacity, location, drop_in_allowed,
         recurrence_rule, last_generated_through,
         created_at, updated_at
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-        $17,$18,$19,$20,$21,$22,
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+        $16,$17,$18,$19,$20,$21,
         NOW(),NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -85,7 +85,6 @@ async function handler(req, res) {
         buffer_before=EXCLUDED.buffer_before, buffer_after=EXCLUDED.buffer_after,
         assigned_staff=EXCLUDED.assigned_staff,
         allow_client_choose_staff=EXCLUDED.allow_client_choose_staff,
-        availability=EXCLUDED.availability,
         booking_lead_time_hours=EXCLUDED.booking_lead_time_hours,
         booking_advance_days=EXCLUDED.booking_advance_days,
         active=EXCLUDED.active,
@@ -104,7 +103,6 @@ async function handler(req, res) {
       parseInt(s.buffer_before)||0, parseInt(s.buffer_after)||0,
       JSON.stringify(s.assigned_staff||[]),
       s.allow_client_choose_staff !== false,
-      JSON.stringify(s.availability||{}),
       parseInt(s.booking_lead_time_hours)||0,
       parseInt(s.booking_advance_days)||60,
       s.active !== false,
