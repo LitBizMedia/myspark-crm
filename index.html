@@ -3916,6 +3916,46 @@ function checkApptConflict(){
       }
     }
   }
+  // Service mode: lead time and advance booking soft warnings.
+  // Both rely on optional service fields. If unset, checks are skipped.
+  // Soft warnings only - user can override and schedule anyway.
+  if(state.apptMode==='service'&&!apptOverride){
+    const svcInpC=document.getElementById('af-service');
+    const serviceIdC=svcInpC?svcInpC.value:'';
+    if(serviceIdC&&date&&time){
+      const svcC=(db.services||[]).find(function(s){return s.id===serviceIdC;});
+      if(svcC){
+        const apptDt=new Date(date+'T'+time);
+        const nowDt=new Date();
+        const wbC=document.getElementById('appt-warn');
+        const btnC=document.getElementById('appt-save-btn');
+
+        // Lead time: appointment must be at least N hours from now.
+        const leadHours=parseInt(svcC.booking_lead_time_hours,10)||0;
+        if(leadHours>0){
+          const minDt=new Date(nowDt.getTime()+leadHours*3600000);
+          if(apptDt<minDt){
+            if(wbC){wbC.classList.remove('hidden');wbC.innerHTML='<strong>Lead time required:</strong> '+esc(svcC.name)+' requires '+leadHours+' hour'+(leadHours!==1?'s':'')+' notice. Booking earlier skips that requirement.<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
+            if(btnC){btnC.disabled=true;btnC.style.opacity='.4';}
+            return;
+          }
+        }
+
+        // Advance booking: appointment must be no more than N days from today.
+        const advDays=parseInt(svcC.booking_advance_days,10)||0;
+        if(advDays>0){
+          const maxDt=new Date(nowDt);
+          maxDt.setDate(maxDt.getDate()+advDays);
+          if(apptDt>maxDt){
+            if(wbC){wbC.classList.remove('hidden');wbC.innerHTML='<strong>Booking too far out:</strong> '+esc(svcC.name)+' is normally bookable up to '+advDays+' day'+(advDays!==1?'s':'')+' in advance.<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
+            if(btnC){btnC.disabled=true;btnC.style.opacity='.4';}
+            return;
+          }
+        }
+      }
+    }
+  }
+
   const conflict=checkDoubleBook(state.modal.id,date,time,dur,userId);
   const wb=document.getElementById('appt-warn'),btn=document.getElementById('appt-save-btn');
   if(!wb||!btn)return;
