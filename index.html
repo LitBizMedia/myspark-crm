@@ -7200,14 +7200,58 @@ function saveService(id){
   else{if(!db.services)db.services=[];db.services.push(svc);}
   closeModal();
   renderServiceCal();
+  _saveServiceWithForce(svc, type, false);
+}
+
+// Posts service save. On 409 roster_block, prompts user to confirm regeneration
+// and reposts with force_regenerate=true. On success, refreshes data so new
+// sessions appear on the calendar.
+function _saveServiceWithForce(svc, type, force){
+  var payload = force ? Object.assign({}, svc, { force_regenerate: true }) : svc;
   fetch(apiUrl('/api/subaccount/services-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(svc)
+    body:JSON.stringify(payload)
   }).then(function(r){
-    if(!r.ok)toast('Sync error saving '+(type==='class'?'class':'service')+'.','error');
-    else if(type==='class')toast('Class saved. Sessions will generate when the recurrence engine ships in C.4.','info');
-  }).catch(function(){});
+    if(r.status===409){
+      return r.json().then(function(data){
+        // Roster block: confirm with user, repost with force flag
+        var msg = (data && data.message) || 'Future sessions have enrolled participants. Regenerate anyway?';
+        if(data && data.enrolled_total){
+          msg += ' (' + data.enrolled_total + ' participant' + (data.enrolled_total!==1?'s':'') + ' total)';
+        }
+        if(confirm(msg + '\n\nClick OK to delete those sessions and regenerate. Cancel to keep them and revert your edits.')){
+          _saveServiceWithForce(svc, type, true);
+        } else {
+          // User cancelled. Reload to discard the optimistic local edit.
+          if(typeof fetchFromServer==='function')fetchFromServer();
+          else if(typeof fetchFromSupabase==='function')fetchFromSupabase();
+          toast('Edit cancelled. Sessions and roster preserved.','info');
+        }
+      });
+    }
+    if(!r.ok){
+      toast('Sync error saving '+(type==='class'?'class':'service')+'.','error');
+      return;
+    }
+    return r.json().then(function(data){
+      // Refresh data so generated/regenerated/updated sessions appear immediately
+      if(type==='class'&&typeof fetchFromServer==='function')fetchFromServer();
+      else if(type==='class'&&typeof fetchFromSupabase==='function')fetchFromSupabase();
+      // Status toast based on what happened server-side
+      if(type==='class'&&data){
+        if(data.sessions_generated){
+          toast('Class saved. '+data.sessions_generated+' session'+(data.sessions_generated!==1?'s':'')+' generated.','success');
+        } else if(data.sessions_deleted){
+          toast('Class saved. '+data.sessions_deleted+' session'+(data.sessions_deleted!==1?'s':'')+' regenerated.','success');
+        } else if(data.sessions_updated){
+          toast('Class saved. '+data.sessions_updated+' future session'+(data.sessions_updated!==1?'s':'')+' updated.','success');
+        }
+      }
+    });
+  }).catch(function(){
+    toast('Sync error saving '+(type==='class'?'class':'service')+'.','error');
+  });
 }
 
 function deleteService(id){

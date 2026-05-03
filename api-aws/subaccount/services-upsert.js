@@ -1,11 +1,11 @@
 // POST /api/subaccount/services-upsert
-// Phase A: accepts class definition fields (instructor_id, capacity, location,
-//   drop_in_allowed, recurrence_rule, last_generated_through).
-// Phase C.4: when a class type service is saved with a recurrence_rule and has
-//   no existing future sessions, generates child class_sessions rows and
-//   updates last_generated_through to today + 90 days.
-//   Edit propagation (rule changes that delete/regenerate sessions) is C.5;
-//   this Lambda does NOT regenerate when sessions already exist.
+// Phase A: accepts class definition fields.
+// Phase C.4: generates child class_sessions on first save when none exist.
+// Phase C.5: detects rule changes vs existing recurrence_rule and propagates:
+//   - Rule unchanged + non-rule fields changed: UPDATE future non-override sessions
+//   - Rule changed, no rosters affected: DELETE future non-override sessions, regenerate
+//   - Rule changed, rosters present, no force_regenerate flag: return 409 (block save)
+//   - Rule changed, rosters present, force_regenerate=true: regenerate anyway
 
 const crypto = require('crypto');
 const db = require('./lib/db');
@@ -27,21 +27,44 @@ async function handler(req, res) {
   if (!s.name) return res.status(400).json({ error: 'name is required' });
 
   const subaccountId = auth.subaccount_id;
+  const forceRegenerate = !!s.force_regenerate;
 
   try {
-    const existing = await db.query(
-      'SELECT id FROM services WHERE id=$1 AND subaccount_id=$2',
+    // Load existing service row (if any) so we can compare rules.
+    const existingResult = await db.query(
+      'SELECT id, recurrence_rule FROM services WHERE id=$1 AND subaccount_id=$2',
       [s.id, subaccountId]
     );
-    const isNew = existing.rows.length === 0;
+    const oldService = existingResult.rows[0] || null;
+    const isNew = !oldService;
 
-    // Compute last_generated_through up front. For class with recurrence,
-    // set to horizon. Otherwise pass through whatever client provided (null).
+    // Pre-check: if class with rule change and existing sessions have rosters,
+    // block the save unless user confirmed force_regenerate.
+    let ruleDidChange = false;
+    if (s.type === 'class' && s.recurrence_rule && oldService) {
+      const oldRule = parseRule(oldService.recurrence_rule);
+      ruleDidChange = ruleChanged(oldRule, s.recurrence_rule);
+
+      if (ruleDidChange && !forceRegenerate) {
+        const rosterCheck = await countAffectedRosters(s.id, subaccountId);
+        if (rosterCheck.affected > 0) {
+          return res.status(409).json({
+            error: 'roster_block',
+            message: rosterCheck.affected + ' future session' + (rosterCheck.affected !== 1 ? 's have' : ' has') + ' enrolled participants. Confirm to delete and regenerate.',
+            affected_sessions: rosterCheck.affected,
+            enrolled_total: rosterCheck.enrolled
+          });
+        }
+      }
+    }
+
+    // Compute last_generated_through. Set to horizon for class+recurrence saves.
     let lastGeneratedThrough = s.last_generated_through || null;
     if (s.type === 'class' && s.recurrence_rule) {
       lastGeneratedThrough = horizonDateStr();
     }
 
+    // UPSERT service row. Past this point we are committed to the save.
     await db.query(`
       INSERT INTO services (
         id, subaccount_id, name, description, category, type, color, price,
@@ -93,10 +116,10 @@ async function handler(req, res) {
       lastGeneratedThrough
     ]);
 
-    // Generate sessions if class type with recurrence and no existing sessions.
-    let generationResult = null;
+    // Class session handling: generate, regenerate, or propagate.
+    let sessionResult = { generated: 0, deleted: 0, updated: 0, skipped: false };
     if (s.type === 'class' && s.recurrence_rule) {
-      generationResult = await maybeGenerateSessions(s, subaccountId);
+      sessionResult = await handleClassSessions(s, subaccountId, ruleDidChange, !!oldService);
     }
 
     await logAudit({
@@ -109,16 +132,21 @@ async function handler(req, res) {
         name: s.name,
         type: s.type,
         has_recurrence: !!s.recurrence_rule,
-        sessions_generated: generationResult ? generationResult.generated : 0,
-        sessions_skipped_existing: generationResult ? generationResult.skipped : false
+        rule_changed: ruleDidChange,
+        force_regenerate: forceRegenerate,
+        sessions_generated: sessionResult.generated,
+        sessions_deleted: sessionResult.deleted,
+        sessions_updated: sessionResult.updated
       }
     });
 
     return res.status(200).json({
       success: true,
       id: s.id,
-      sessions_generated: generationResult ? generationResult.generated : 0,
-      sessions_skipped_existing: generationResult ? generationResult.skipped : false
+      sessions_generated: sessionResult.generated,
+      sessions_deleted: sessionResult.deleted,
+      sessions_updated: sessionResult.updated,
+      rule_changed: ruleDidChange
     });
   } catch(e) {
     console.error('services-upsert error:', e.message, e.stack);
@@ -126,29 +154,120 @@ async function handler(req, res) {
   }
 }
 
-// ===== Recurrence engine =====
+// ===== Class session handling =====
 
-// Returns { generated: N, skipped: bool }. Skipped=true means existing sessions were found.
-async function maybeGenerateSessions(s, subaccountId) {
-  // Skip if any future sessions already exist for this service. Edit propagation
-  // is C.5 territory; this Lambda only auto-generates on first save.
+async function handleClassSessions(s, subaccountId, ruleDidChange, isExistingService) {
   const today = todayStr();
-  const existingSessions = await db.query(
-    `SELECT id FROM class_sessions
-     WHERE service_id=$1 AND subaccount_id=$2 AND date >= $3
-     LIMIT 1`,
+
+  // Find future sessions for this service (any status except already cancelled).
+  const futureResult = await db.query(
+    `SELECT id, is_override FROM class_sessions
+     WHERE service_id=$1 AND subaccount_id=$2 AND date >= $3 AND status != 'cancelled'`,
     [s.id, subaccountId, today]
   );
-  if (existingSessions.rows.length > 0) {
-    return { generated: 0, skipped: true };
+  const futureSessions = futureResult.rows;
+
+  // Case 1: New class or no existing future sessions. Generate fresh.
+  if (!isExistingService || futureSessions.length === 0) {
+    const sessions = generateSessionsFromRule(s, s.recurrence_rule);
+    if (sessions.length) await bulkInsertSessions(sessions, subaccountId);
+    return { generated: sessions.length, deleted: 0, updated: 0, skipped: false };
   }
 
-  const sessions = generateSessionsFromRule(s, s.recurrence_rule);
-  if (!sessions.length) {
-    return { generated: 0, skipped: false };
+  // Case 2: Rule changed. Pre-check already passed (rosters cleared or forced).
+  // Delete future non-override sessions and regenerate.
+  if (ruleDidChange) {
+    const deleteResult = await db.query(
+      `DELETE FROM class_sessions
+       WHERE service_id=$1 AND subaccount_id=$2 AND date >= $3 AND is_override = false`,
+      [s.id, subaccountId, today]
+    );
+    const sessions = generateSessionsFromRule(s, s.recurrence_rule);
+    if (sessions.length) await bulkInsertSessions(sessions, subaccountId);
+    return {
+      generated: sessions.length,
+      deleted: deleteResult.rowCount || 0,
+      updated: 0,
+      skipped: false
+    };
   }
 
-  // Bulk INSERT. 14 parameters per row, plus participants literal and NOW().
+  // Case 3: Rule unchanged. Propagate non-rule field changes to future
+  // non-override sessions.
+  const updateResult = await db.query(
+    `UPDATE class_sessions
+     SET instructor_id=$1, capacity=$2, location=$3, duration=$4, price=$5,
+         title=$6, updated_at=NOW()
+     WHERE service_id=$7 AND subaccount_id=$8 AND date >= $9
+       AND is_override = false AND status != 'cancelled'`,
+    [
+      s.instructor_id || null,
+      parseInt(s.capacity) || 10,
+      s.location || null,
+      parseInt(s.duration_default) || 60,
+      s.price != null ? parseFloat(s.price) : null,
+      s.name,
+      s.id, subaccountId, today
+    ]
+  );
+  return { generated: 0, deleted: 0, updated: updateResult.rowCount || 0, skipped: false };
+}
+
+// Counts future non-override sessions with at least one enrolled participant.
+async function countAffectedRosters(serviceId, subaccountId) {
+  const today = todayStr();
+  const result = await db.query(
+    `SELECT
+       COUNT(*)::int AS affected,
+       COALESCE(SUM((
+         SELECT COUNT(*) FROM jsonb_array_elements(participants) p
+         WHERE p->>'status' = 'enrolled'
+       )), 0)::int AS enrolled
+     FROM class_sessions
+     WHERE service_id=$1 AND subaccount_id=$2 AND date >= $3
+       AND is_override = false AND status != 'cancelled'
+       AND participants IS NOT NULL
+       AND jsonb_typeof(participants) = 'array'
+       AND EXISTS (
+         SELECT 1 FROM jsonb_array_elements(participants) p
+         WHERE p->>'status' = 'enrolled'
+       )`,
+    [serviceId, subaccountId, today]
+  );
+  return {
+    affected: result.rows[0].affected || 0,
+    enrolled: result.rows[0].enrolled || 0
+  };
+}
+
+// ===== Rule comparison =====
+
+function parseRule(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+  return raw;
+}
+
+function ruleChanged(oldRule, newRule) {
+  if (!oldRule && !newRule) return false;
+  if (!oldRule || !newRule) return true;
+  if (oldRule.repeats !== newRule.repeats) return true;
+  if (oldRule.start_date !== newRule.start_date) return true;
+  if (oldRule.start_time !== newRule.start_time) return true;
+  if (JSON.stringify(oldRule.days_of_week || []) !== JSON.stringify(newRule.days_of_week || [])) return true;
+  if ((oldRule.day_of_month || null) !== (newRule.day_of_month || null)) return true;
+  if ((oldRule.end_type || 'never') !== (newRule.end_type || 'never')) return true;
+  if ((oldRule.occurrences || null) !== (newRule.occurrences || null)) return true;
+  if ((oldRule.end_date || null) !== (newRule.end_date || null)) return true;
+  return false;
+}
+
+// ===== Bulk insert =====
+
+async function bulkInsertSessions(sessions, subaccountId) {
+  if (!sessions.length) return;
   const colsPerRow = 14;
   const placeholders = [];
   const params = [];
@@ -160,7 +279,6 @@ async function maybeGenerateSessions(s, subaccountId) {
       ',$' + (base+9) + ',$' + (base+10) + ',$' + (base+11) + ',$' + (base+12) +
       ',$' + (base+13) + ',$' + (base+14) + ",'[]'::jsonb,NOW(),NOW())"
     );
-    // subaccount_id pulled from outer auth context, not from session object
     params.push(
       sess.id, subaccountId, sess.service_id, sess.series_id,
       sess.instructor_id, sess.title, sess.date, sess.time,
@@ -168,31 +286,26 @@ async function maybeGenerateSessions(s, subaccountId) {
       sess.is_override, sess.price
     );
   });
-
   const sql =
     `INSERT INTO class_sessions (
       id, subaccount_id, service_id, series_id, instructor_id, title,
       date, time, duration, capacity, location, status,
       is_override, price, participants, created_at, updated_at
     ) VALUES ` + placeholders.join(',');
-
   await db.query(sql, params);
-
-  return { generated: sessions.length, skipped: false };
 }
 
-// Generates session metadata objects from a recurrence rule. No DB writes.
+// ===== Recurrence engine =====
+
 function generateSessionsFromRule(service, rule) {
   if (!rule || !rule.start_date || !rule.start_time) return [];
 
   const sessions = [];
   const horizonStr = horizonDateStr();
 
-  // Build session helper, captures common fields from service + rule.
   function buildSession(dateStr) {
     return {
       id: crypto.randomUUID(),
-      subaccount_id: service.subaccount_id || null, // filled from caller context if missing
       service_id: service.id,
       series_id: service.id,
       instructor_id: service.instructor_id || null,
@@ -208,33 +321,22 @@ function generateSessionsFromRule(service, rule) {
     };
   }
 
-  // ONCE: single session, no end logic.
   if (rule.repeats === 'once') {
     sessions.push(buildSession(rule.start_date));
     return sessions;
   }
 
-  // Determine occurrences cap and end-date cutoff.
   const endType = rule.end_type || 'never';
   let occurrencesCap = HARD_CAP_SESSIONS;
   if (endType === 'after') {
     occurrencesCap = Math.min(parseInt(rule.occurrences) || DEFAULT_OCCURRENCES, HARD_CAP_SESSIONS);
   }
   const endDateCutoff = (endType === 'on_date' && rule.end_date) ? rule.end_date : null;
-
-  // Walk day-by-day from start_date emitting matching dates.
-  // Stop conditions:
-  //   - hard cap (HARD_CAP_SESSIONS) always applies, set via occurrencesCap
-  //   - end_type='after': occurrencesCap honors user request up to hard cap
-  //   - end_type='on_date': stop when cursor passes endDateCutoff
-  //   - end_type='never': stop at horizon (so we don't generate sessions
-  //     forever; cron extends later)
-  // Horizon only applies when there's no explicit user-specified end.
   const useHorizon = (endType === 'never');
+
   const cursor = parseDateLocal(rule.start_date);
   if (!cursor) return [];
 
-  // Safety: cap iterations to prevent infinite loops on bad input.
   const MAX_ITERATIONS = 365 * 5;
   let iterations = 0;
 
@@ -267,21 +369,17 @@ function generateSessionsFromRule(service, rule) {
 
 // ===== Date helpers =====
 
-// Today in YYYY-MM-DD (UTC, server time. Acceptable for scheduling at day granularity).
 function todayStr() {
   const d = new Date();
   return formatDateLocal(d);
 }
 
-// Horizon date (today + HORIZON_DAYS) in YYYY-MM-DD.
 function horizonDateStr() {
   const d = new Date();
   d.setDate(d.getDate() + HORIZON_DAYS);
   return formatDateLocal(d);
 }
 
-// Parse YYYY-MM-DD into a local-time Date at midnight. Avoids the TZ shift that
-// `new Date('2026-05-04')` introduces (which interprets as UTC and can shift the day).
 function parseDateLocal(str) {
   if (!str || typeof str !== 'string') return null;
   const parts = str.split('-');
@@ -293,7 +391,6 @@ function parseDateLocal(str) {
   return new Date(y, m - 1, d, 0, 0, 0, 0);
 }
 
-// Format a local-time Date as YYYY-MM-DD.
 function formatDateLocal(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
