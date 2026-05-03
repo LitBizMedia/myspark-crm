@@ -4065,28 +4065,30 @@ function refreshStateUser(){
 }
 
 function getEffectiveAdmin(){
-  // Look up the primary admin from db.users (subaccount_users data).
-  // Identified by username: 'patrick' for litbiz, sa.username for others.
-  const sa=db._subaccountAdmin||{};
-  const ov=db.settings.adminProfile||{};
+  // Look up the primary admin from db.users (canonical, populated from
+  // subaccount_users). For litbiz, the primary admin's username is 'patrick'.
+  // For other workspaces, the primary admin is whichever user has role='admin'
+  // and has the lowest created_at (the original admin from subaccount-create).
   const isDefault=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug);
-  const primaryUsername=isDefault?'patrick':(sa.username||'admin');
-
-  const realAdmin=(db.users||[]).find(function(u){
-    return u.username===primaryUsername&&u.role==='admin';
-  });
+  var realAdmin;
+  if(isDefault){
+    realAdmin=(db.users||[]).find(function(u){
+      return u.username==='patrick'&&u.role==='admin';
+    });
+  }else{
+    // Find the original admin: oldest createdAt with role=admin
+    var admins=(db.users||[]).filter(function(u){return u.role==='admin';});
+    admins.sort(function(a,b){return(a.createdAt||'').localeCompare(b.createdAt||'');});
+    realAdmin=admins[0];
+  }
 
   if(realAdmin){
-    // db.users is the canonical source from subaccount_users. adminProfile
-    // is a legacy blob copy that may be stale after API saves. Prefer
-    // realAdmin (db.users) for color/name/schedule, fall back to ov only
-    // when the canonical record is missing the field.
     return{
       ...realAdmin,
-      name:realAdmin.name||realAdmin.username||ov.name,
-      color:realAdmin.color||ov.color||'#6b21ea',
-      schedule:realAdmin.schedule||ov.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
-      dateOverrides:realAdmin.dateOverrides||ov.dateOverrides||[]
+      name:realAdmin.name||realAdmin.username,
+      color:realAdmin.color||'#6b21ea',
+      schedule:realAdmin.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
+      dateOverrides:realAdmin.dateOverrides||[]
     };
   }
 
@@ -4094,14 +4096,14 @@ function getEffectiveAdmin(){
   // downstream code can detect the unloaded state.
   return{
     id:null,
-    username:primaryUsername,
+    username:isDefault?'patrick':'admin',
     role:'admin',
     active:true,
-    name:ov.name||sa.name||(isDefault?'Patrick':'Admin'),
-    color:ov.color||sa.color||'#6b21ea',
-    schedule:ov.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
-    dateOverrides:ov.dateOverrides||[],
-    createdAt:sa.createdAt||DEFAULT_ADMIN.createdAt
+    name:isDefault?'Patrick':'Admin',
+    color:'#6b21ea',
+    schedule:JSON.parse(JSON.stringify(DEF_SCHED)),
+    dateOverrides:[],
+    createdAt:null
   };
 }
 
@@ -4109,16 +4111,14 @@ function getEffectiveAdmin(){
 // The primary admin cannot be removed, demoted, or have their schedule deleted.
 function isPrimaryAdmin(id){
   if(!id)return false;
-  // Legacy ID formats kept for backwards compat
+  // Legacy ID formats kept for backwards compat with agency login-as flow
   if(id==='admin-patrick')return true;
   if(state.subaccountSlug&&id==='admin-'+state.subaccountSlug)return true;
-  // UUID lookup: match if user is admin AND is the primary username
-  const u=(db.users||[]).find(function(x){return x.id===id;});
-  if(!u||u.role!=='admin')return false;
-  const sa=db._subaccountAdmin||{};
-  const isDefault=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug);
-  const primaryUsername=isDefault?'patrick':(sa.username||'admin');
-  return u.username===primaryUsername;
+  // UUID lookup: match against the canonical primary admin from db.users.
+  // Use getEffectiveAdmin so the rule for identifying the primary lives
+  // in one place.
+  var primary=getEffectiveAdmin();
+  return !!(primary&&primary.id===id);
 }
 
 // =====================================================
@@ -4379,16 +4379,10 @@ function openProfileModal(forced){
   const u=state.user;
   // Forced mode: triggered by must_change_password. Cannot be dismissed.
   forced=forced||(u&&u.mustChangePassword);
-  // Determine if this is the primary admin. The auth-rebuilt session stores
-  // state.user.id as a uuid from subaccount_users, but isPrimaryAdmin only
-  // recognizes the legacy 'admin-<slug>' format. When the logged-in user
-  // has admin role and matches the workspace's primary admin username, we
-  // route to getEffectiveAdmin() so the modal pulls from db.settings.adminProfile.
-  var primaryAdminUsername = (state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug)
-    ? 'patrick'
-    : (db._subaccountAdmin&&db._subaccountAdmin.username);
-  const isAdmin=isPrimaryAdmin(u.id) ||
-    (u.role==='admin' && u.username===primaryAdminUsername);
+  // Identify whether the logged-in user is the primary admin. After
+  // the user identity unification, isPrimaryAdmin handles all cases
+  // (UUID and legacy 'admin-<slug>' synthetic ids).
+  const isAdmin=isPrimaryAdmin(u.id);
   const eff=isAdmin?getEffectiveAdmin():getUserById(u.id);
   const curColor=(eff&&eff.color)||USER_COLORS[0];
   state.selUserColor=curColor;
@@ -4509,7 +4503,7 @@ async function saveEditUser(){
       if(!oldPass){toast('Enter your current password to set a new one.','error');return;}
       const oldHash=await sha256(oldPass);
       const selfUser=allUsers().find(function(u){return u.id===userId;});
-      const expectedHash=selfUser?selfUser.passwordHash:(db._subaccountAdmin&&db._subaccountAdmin.passwordHash);
+      const expectedHash=selfUser?selfUser.passwordHash:null;
       if(oldHash!==expectedHash){toast('Current password is incorrect.','error');return;}
     }
     updates.passwordHash=await sha256(pass);
@@ -4528,7 +4522,8 @@ async function saveEditUser(){
   {
     var targetUsername;
     if(isAdmin){
-      var primaryAdminUsername=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug)?'patrick':((db._subaccountAdmin&&db._subaccountAdmin.username)||'admin');
+      var primaryAdmin=getEffectiveAdmin();
+      var primaryAdminUsername=(primaryAdmin&&primaryAdmin.username)||'admin';
       var adminRow=(db.users||[]).find(function(x){return x.username===primaryAdminUsername;});
       targetUsername=adminRow?adminRow.username:primaryAdminUsername;
     }else{
@@ -8301,8 +8296,9 @@ document.addEventListener('DOMContentLoaded',async function(){
     }
     return;
   }
-  // Pre-fetch Supabase data before showing login so _subaccountAdmin is available
-  fetchFromSupabase().then(function(){});
+  // Pre-fetch server data in the background so db.users is populated
+  // by the time the user submits the login form.
+  fetchFromServer().then(function(){});
   // Check for agency login-as token in URL
   var urlParams=new URLSearchParams(window.location.search);
   var agencyToken=urlParams.get('at');
@@ -8316,16 +8312,23 @@ document.addEventListener('DOMContentLoaded',async function(){
           hideAuthLoading();
           document.getElementById('auth-screen').classList.add('hidden');
           document.getElementById('app').classList.remove('hidden');
-          // Fetch data first so _subaccountAdmin is available, then log in as that actual admin
-          fetchFromSupabase().then(function(){
-            var sa=db&&db._subaccountAdmin;
-            if(sa&&sa.username){
-              state.user={id:'admin-'+pathSlug,username:sa.username,role:'admin',name:sa.name||sa.username,color:sa.color||'#6b21ea',agencyView:true};
-            }else if(pathSlug===DEFAULT_SLUG){
-              // LitBiz case - Patrick is the admin
-              state.user={id:'admin-patrick',username:'patrick',role:'admin',name:'Patrick',color:'#ff4000',agencyView:true};
+          // Fetch data so db.users is populated from subaccount_users, then
+          // log in as the real primary admin (using their canonical UUID).
+          fetchFromServer().then(function(){
+            var primary=getEffectiveAdmin();
+            if(primary&&primary.id){
+              // Real admin found in subaccount_users
+              state.user={
+                id:primary.id,
+                username:primary.username,
+                role:'admin',
+                name:primary.name||primary.username,
+                color:primary.color||'#6b21ea',
+                agencyView:true
+              };
             }else{
-              // Subaccount has no admin defined - fall back to read-only display
+              // Subaccount has no admin in subaccount_users yet (rare,
+              // pre-Priority-0 leftover). Fall back to read-only display.
               state.user={id:'agency-viewer',username:'agency',role:'admin',name:'Agency Viewer',color:'#ff4000',agencyView:true};
             }
             localStorage.setItem(SSK,JSON.stringify({...state.user,ts:Date.now()}));
@@ -14498,16 +14501,17 @@ async function initSubaccountCardForm(){
 
 // ── Edit Subaccount Modal ──
 async function openEditSubaccountModal(id,name,slug,plan){
-  // Fetch the subaccount's data blob to read current admin info
-  var adminName='',adminUser='';
+  // Pull the primary admin's current info from subaccount_users via the
+  // agency-side admin lookup endpoint. No more reading from the blob.
+  var adminName='',adminUser='',adminEmail='';
   try{
-    var r=await fetch(apiUrl('/api/agency/subaccount-data-get?id=')+encodeURIComponent(id),{credentials:'include'});
+    var r=await fetch(apiUrl('/api/agency/subaccount-admin-get?subaccountId=')+encodeURIComponent(id),{credentials:'include'});
     if(r.ok){
       var resData=await r.json();
-      var rows=resData.data?[{data:resData.data}]:[];
-      if(rows&&rows.length&&rows[0].data&&rows[0].data._subaccountAdmin){
-        adminName=rows[0].data._subaccountAdmin.name||'';
-        adminUser=rows[0].data._subaccountAdmin.username||'';
+      if(resData&&resData.admin){
+        adminName=resData.admin.display_name||'';
+        adminUser=resData.admin.username||'';
+        adminEmail=resData.admin.email||'';
       }
     }
   }catch(e){console.warn('Could not load admin info:',e);}
@@ -14555,27 +14559,26 @@ async function saveEditSubaccount(id){
       body:JSON.stringify({id:id,name:name})
     });
     if(!r1.ok){var e1=await r1.text();toast('Could not update subaccount: '+e1,'error');return;}
-    // Patch the _subaccountAdmin inside subaccount_data (non-LitBiz only)
-    if(!isLitBiz){
-      var rGet=await fetch(apiUrl('/api/agency/subaccount-data-get?id=')+encodeURIComponent(id),{credentials:'include'});
-      if(rGet.ok){
-        var rgData=await rGet.json();
-        var rows=rgData.data?[{data:rgData.data}]:[];
-        if(rows&&rows.length&&rows[0].data){
-          var data=rows[0].data;
-          data._subaccountAdmin=data._subaccountAdmin||{};
-          data._subaccountAdmin.name=newAdminName;
-          data._subaccountAdmin.username=newAdminUser;
-          // Also update business name in settings so it matches
-          if(data.settings)data.settings.businessName=name;
-          var r2=await fetch(apiUrl('/api/agency/subaccount-update'),{
-            method:'POST',
-            credentials:'include',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({id:id,data:data})
-          });
-          if(!r2.ok){var e2=await r2.text();toast('Subaccount name updated, but admin update failed: '+e2,'warn');}
+    // Update the primary admin's username + display_name in subaccount_users
+    // via the agency admin-update endpoint. LitBiz workspace's primary admin
+    // (Patrick) is managed separately so skip there.
+    if(!isLitBiz&&(newAdminName||newAdminUser)){
+      var adminPatch={subaccountId:id};
+      if(newAdminName)adminPatch.newDisplayName=newAdminName;
+      if(newAdminUser)adminPatch.newUsername=newAdminUser;
+      try{
+        var r2=await fetch(apiUrl('/api/agency/subaccount-admin-update'),{
+          method:'POST',
+          credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(adminPatch)
+        });
+        if(!r2.ok){
+          var e2=await r2.json().catch(function(){return {error:'Server error'};});
+          toast('Subaccount name updated, but admin update failed: '+(e2.error||'unknown'),'warning');
         }
+      }catch(e2){
+        toast('Subaccount name updated, but admin update failed: '+e2.message,'warning');
       }
     }
     closeModal();
