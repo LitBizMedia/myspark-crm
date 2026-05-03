@@ -1698,17 +1698,12 @@ let SK='myspark_crm_v2';let SSK='myspark_session_v1';
 // Server endpoint defaults are baked into apiUrl(); no client config needed.
 // Square credentials live in subaccount_data on the server. No hardcoded token in source.
 // =====================================================
-// AWS API CONFIG (Phase 8 migration - Path B)
+// API CONFIG
 // =====================================================
-// Toggle to route /api/* calls to AWS instead of Vercel.
-// Override at runtime in DevTools console for testing:
-//   USE_AWS_API = true; location.reload()  ← turn on
-//   USE_AWS_API = false; location.reload() ← turn off
-// Setting on window so DevTools can flip it without rebuild.
-window.USE_AWS_API = true;
+// Routes /api/* calls to the AWS API Gateway custom domain.
 const AWS_API_BASE = 'https://api.mysparkplus.app';
 function apiUrl(path) {
-  return window.USE_AWS_API ? AWS_API_BASE + path : path;
+  return AWS_API_BASE + path;
 }
 const PER_PAGE=20;
 const ADMIN_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
@@ -2569,7 +2564,6 @@ function positionNowLine(){
     el.style.top=Math.round((nowM-minH*60)/60*68)+'px';
   });
 }
-function onCalUserFilter(){var s=document.getElementById('cal-user-sel');if(s)state.calUser=s.value;renderCal()}
 function calNav(d){
   const dt=state.calDate;
   if(state.calView==='month')state.calDate=new Date(dt.getFullYear(),dt.getMonth()+d,1);
@@ -3328,14 +3322,6 @@ function saveBH(){const bh=db.settings.businessHours;DKEYS.forEach(dk=>{const s=
 
 
 function renderTagMgr(){const el=document.getElementById('tag-mgr');if(!el)return;el.innerHTML=db.tags.map(t=>'<div class="tag-manage-item" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'<button class="tag-rm" onclick="delTag(\''+t.id+'\')">×</button></div>').join('')}
-function saveSquare(){
-  db.settings.square={appId:document.getElementById('sq-app-id').value.trim(),accessToken:document.getElementById('sq-token').value.trim(),locationId:document.getElementById('sq-loc').value.trim(),sandbox:document.getElementById('sq-env').value==='true'};
-  saveData();
-  logSubaccountAudit('subaccount.settings.update', {
-    metadata: { settings_section: 'square_payments', fields_changed: ['appId','accessToken','locationId','sandbox'] }
-  });
-  toast('Square settings saved.','success');
-}
 
 // =====================================================
 // DOUBLE BOOKING
@@ -3462,18 +3448,6 @@ function confirmDelContact(id){
   openModal('Archive Contact',
     '<p style="color:var(--text-muted)">Archive <strong style="color:var(--text)">'+ esc(ct.name)+'</strong>? They can be restored from the archive later.</p>',
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="archiveContact(\''+ct.id+'\');closeModal()">Archive</button>');
-}
-function delContact(id){
-  var _ct=db.contacts.find(function(x){return x.id===id;});
-  db.contacts=db.contacts.filter(c=>c.id!==id);db.appointments=db.appointments.filter(a=>a.contactId!==id);db.tasks=db.tasks.filter(t=>t.contactId!==id);
-  saveData();closeModal();closeDrawer();renderContacts();
-  // Audit: hard delete (admin only)
-  logSubaccountAudit('subaccount.contact.delete', {
-    targetId: id,
-    targetType: 'contact',
-    metadata: { contact_name: _ct ? _ct.name : null, action_subtype: 'permanent' }
-  });
-  toast('Contact deleted.','success');
 }
 
 // APPOINTMENT MODAL
@@ -3617,8 +3591,6 @@ function syncAppointment(appt,deleted){
 }
 
 // Backward-compat alias for renamed function. Drop in future cleanup.
-var syncApptToSupabase = syncAppointment;
-
 function saveAppt(){
   const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
   if(!title||!date){toast('Title and date required.','error');return}
@@ -3626,8 +3598,8 @@ function saveAppt(){
   var isNewAppt=!state.modal.id;
   var apptIdForAudit=state.modal.id||null;
   if(state.modal.id){const a=getAppt(state.modal.id);if(a)Object.assign(a,data)}
-  else{var newAppt={id:uid(),...data,createdAt:now_()};db.appointments.push(newAppt);apptIdForAudit=newAppt.id;sendApptConfirmation(data);syncApptToSupabase(newAppt,false);}
-  if(state.modal.id){const updated=getAppt(state.modal.id);if(updated)syncApptToSupabase(updated,false);}
+  else{var newAppt={id:uid(),...data,createdAt:now_()};db.appointments.push(newAppt);apptIdForAudit=newAppt.id;sendApptConfirmation(data);syncAppointment(newAppt,false);}
+  if(state.modal.id){const updated=getAppt(state.modal.id);if(updated)syncAppointment(updated,false);}
   saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();updateNotifBadge();
   // Audit
   logSubaccountAudit(isNewAppt ? 'subaccount.appointment.create' : 'subaccount.appointment.update', {
@@ -3671,7 +3643,7 @@ function confirmDelAppt(){
   const id=state.modal&&state.modal.id;if(!id)return;
   const appt=db.appointments.find(a=>a.id===id);
   db.appointments=db.appointments.filter(a=>a.id!==id);
-  sendApptCancellation(appt);if(appt)syncApptToSupabase(appt,true);
+  sendApptCancellation(appt);if(appt)syncAppointment(appt,true);
   saveData();closeModal();
   if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();
   typeof renderApptList==='function'&&renderApptList();
@@ -3863,7 +3835,7 @@ async function saveUser(){
 
   // Refresh from server. db.users now reflects the real UUID, color,
   // schedule, and date_overrides as persisted by the Lambda.
-  await fetchFromSupabase();
+  await fetchFromServer();
 
   var newUser=(db.users||[]).find(function(u){return u.username===username;});
 
@@ -3911,7 +3883,7 @@ async function saveUserSched(){
       toast('Network error saving schedule.','error');
       return;
     }
-    await fetchFromSupabase();
+    await fetchFromServer();
   }
 
   logSubaccountAudit('subaccount.user.update', {
@@ -3958,7 +3930,7 @@ async function confirmDelUser(){
   }
 
   // Refresh so db.users matches the database (the user is now gone)
-  await fetchFromSupabase();
+  await fetchFromServer();
 
   closeModal();
   renderUserList();
@@ -4042,7 +4014,7 @@ function withBtnLock(btn, asyncFn) {
 // only includes basic fields (id, username, role, name). Calls to
 // db.users hold the full record (color, schedule, dateOverrides, etc).
 // This helper pulls the full record into state.user by username match.
-// Call after fetchFromSupabase and after any user save.
+// Call after fetchFromServer and after any user save.
 function refreshStateUser(){
   if(!state||!state.user||!state.user.username)return;
   var rec=(db.users||[]).find(function(u){return u.username===state.user.username;});
@@ -4211,14 +4183,9 @@ async function fetchFromServer(){
   }catch(e){setSyncSt('error')}
   return false;
 }
-
-// saveSupabase and pullFromSupabase removed (UI no longer present, server config is implicit)
-// Backward-compat alias: many call sites still use fetchFromSupabase. Drop this in a future cleanup
 // once all callers are renamed.
-const fetchFromSupabase = fetchFromServer;
-
 // =====================================================
-// initApp - Supabase-aware
+// initApp - server-aware
 // =====================================================
 // =====================================================
 // IDLE TIMEOUT (HIPAA: automatic logoff)
@@ -4559,7 +4526,7 @@ async function saveEditUser(){
         }else{
           toast('User updated.','success');
         }
-        await fetchFromSupabase();
+        await fetchFromServer();
       }catch(syncErr){
         toast('User updated locally, but auth sync failed: '+syncErr.message,'warning');
       }
@@ -4579,7 +4546,7 @@ function renderUserList(){
 }
 
 // =====================================================
-// OVERRIDE: renderSettings — include Supabase + notif
+// OVERRIDE: renderSettings — include notification settings
 // =====================================================
 function renderSettings(){
   renderUserList();renderTagMgr();renderBH();renderNotifSettings();cfRenderSettings();renderSquareCard();renderTimezoneSelect();
@@ -8356,7 +8323,7 @@ document.addEventListener('DOMContentLoaded',async function(){
         hideAuthLoading();
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
-        fetchFromSupabase().then(function(ok){initApp();});
+        fetchFromServer().then(function(ok){initApp();});
         return;
       }
     }
@@ -9246,10 +9213,6 @@ function posApplyCredit(){
   toast('$'+apply.toFixed(2)+' in credits will be applied.','success');
 }
 
-function posGetCreditApplied(){
-  const inp=document.getElementById('pos-credit-inp');
-  return inp?parseFloat(inp.value)||0:0;
-}
 
 
 // =====================================================
@@ -9351,11 +9314,11 @@ function handleSquareHash(){
   if(!hash)return;
   const p=new URLSearchParams(hash);
   // New callback flow: callback.js wrote creds to square_credentials and a marker to subaccount_data.
-  // Client just needs to refresh from Supabase to see the updated connection state.
+  // Client just needs to refresh from the server to see the updated connection state.
   if(p.get('sq_connected')==='1'){
     history.replaceState(null,'',window.location.pathname);
     toast('Square connected successfully.','success');
-    fetchFromSupabase().then(function(){
+    fetchFromServer().then(function(){
       if(state.panel==='settings')renderSquareCard();
     });
     return;
@@ -9438,9 +9401,9 @@ async function importFromSquare(){
         updated++;
       }
     });
-    // Save directly to localStorage first, then sync to Supabase
+    // Save directly to localStorage first, then sync to server
     localStorage.setItem(SK, JSON.stringify(db));
-    // Push to Supabase immediately with correct data
+    // Push to server immediately with correct data
     await doSync();
     toast('Cards synced for '+updated+' contact'+(updated===1?'':'s')+'.','success');
     if(state.panel==='contacts')renderContacts();
@@ -10001,8 +9964,6 @@ function confirmSave(saveFn,label){
     }
   },3000);
 }
-function cancelSaveConfirm(){state._saveConfirmPending=false;}
-function executePendingSave(){if(state._pendingSave){state._pendingSave();state._pendingSave=null;}}
 
 
 // =====================================================
@@ -11079,7 +11040,6 @@ function gcFind(code){
   return(db.giftCards||[]).find(function(g){return gcCodeStrip(g.code)===stripped;});
 }
 
-function gcFmtBalance(g){ return fmt$(g.balance||0); }
 
 // ── Main render ──
 function renderGiftCards(){
@@ -11284,25 +11244,6 @@ function saveGcProduct(){
   toast(state.modal.id?'Gift card updated.':'Gift card created.','success');
 }
 
-function gcShowSellEmbed(prodId){
-  var prod=(db.giftCardProducts||[]).find(function(x){return x.id===prodId;});
-  if(!prod)return;
-  var rawBase=window.location.href.split('?')[0];
-  var liveBase=(db.settings&&db.settings.appLiveUrl||'').replace(/\/+$/,'');
-  var base=liveBase||rawBase;
-  var embedUrl=base+'?gcembed='+prodId;
-  var iframeCode='<iframe src="'+embedUrl+'" style="width:100%;border:none;min-height:480px" frameborder="0"></iframe>';
-  var body='<div style="margin-bottom:14px">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Direct Link</div>'
-    +'<div style="display:flex;gap:7px"><input type="text" value="'+esc(embedUrl)+'" readonly style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:12px;outline:none;font-family:monospace;min-width:0">'
-    +'<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText(\''+esc(embedUrl)+'\').then(function(){toast(\'Copied!\',\'success\')})">Copy</button></div></div>'
-    +'<div style="margin-bottom:14px">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">iFrame Embed</div>'
-    +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-family:monospace;font-size:11px;color:#a5f3a5;word-break:break-all;margin-bottom:7px">'+esc(iframeCode)+'</div>'
-    +'<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(iframeCode)+').then(function(){toast(\'Copied!\',\'success\')})">Copy Embed</button></div>'
-    +'<div class="warn-box" style="margin-bottom:0">Square payment collection on the embed is a placeholder. Connect Square and wire the charge endpoint when ready.</div>';
-  openModal('Sell: '+prod.name, body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
-}
 
 // ── Orders Tab ──
 
@@ -12658,24 +12599,6 @@ function renderContactSessionPacks(contactId){
   return h;
 }
 
-function spAddPackFromDrawer(contactId){
-  var tmpls=(db.sessionPackTemplates||[]).filter(function(t){return t.status!=='inactive';});
-  if(!tmpls.length){toast('No active pack templates. Create one in Session Packs first.','error');return;}
-  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
-  var body='<div class="form-group"><label>Pack Template</label>'
-    +'<select id="sp-drawer-tmpl" class="filter-sel" style="width:100%;height:38px" onchange="spDrawerUpdateSummary()">'
-    +tmpls.map(function(t){return'<option value="'+t.id+'">'+esc(t.name)+' - '+fmt$(t.price)+'</option>';}).join('')
-    +'</select></div>'
-    +'<div id="sp-drawer-summary" style="font-size:12px;color:var(--main-text-muted);margin:-6px 0 10px"></div>'
-    +'<div class="form-group"><label>Payment Method</label>'
-    +'<select id="sp-drawer-pm" class="filter-sel" style="width:100%;height:38px"><option value="card">Card</option><option value="cash">Cash</option><option value="other">Other</option></select></div>'
-    +'<div class="form-group"><label>Notes <span style="font-weight:400;color:var(--main-text-muted)">(optional)</span></label>'
-    +'<input id="sp-drawer-notes" type="text" style="'+inpS+'" placeholder="Internal note..."></div>';
-  openModal('Add Session Pack',body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="spDrawerIssuePack(\''+contactId+'\')">Issue Pack</button>');
-  setTimeout(spDrawerUpdateSummary,50);
-}
 
 function spDrawerUpdateSummary(){
   var tmplId=document.getElementById('sp-drawer-tmpl')&&document.getElementById('sp-drawer-tmpl').value;
@@ -14283,7 +14206,7 @@ async function createSubaccount(){
   if(passErr){toast(passErr,'error');return;}
   var subId='sub-'+slug;
   // Initial data blob. Excludes user-related fields (users, _subaccountAdmin,
-  // settings.adminProfile, settings.supabase*) since those live in
+  // settings.adminProfile) since those live in
   // subaccount_users and the data-save Lambda strips them anyway.
   var initData={
     contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],
@@ -15037,7 +14960,7 @@ async function agencyLoadUsers(){
   try{
     var r=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
     if(!r.ok){
-      listEl.innerHTML='<div style="color:#f87171;font-size:13px;padding:12px 0">Could not load users. Make sure the agency_users table exists in Supabase.</div>';
+      listEl.innerHTML='<div style="color:#f87171;font-size:13px;padding:12px 0">Could not load users from the server.</div>';
       return;
     }
     var users=await r.json();
@@ -15314,12 +15237,6 @@ async function agencySaveOwnPassword(){
 }
 
 // ── Update auth subtitle based on subaccount ──
-function updateAuthSubtitle(){
-  var el=document.querySelector('.auth-subtitle');
-  if(el&&state.subaccountSlug&&state.subaccountSlug!==DEFAULT_SLUG){
-    el.textContent=state.subaccountSlug.charAt(0).toUpperCase()+state.subaccountSlug.slice(1).replace(/-/g,' ')+' CRM';
-  }
-}
 
 
 // =====================================================
@@ -15327,7 +15244,7 @@ function updateAuthSubtitle(){
 // =====================================================
 //
 // Backed by AWS S3. The browser uploads directly to S3 via presigned PUT URLs
-// and reads via presigned GET URLs. Metadata lives in Supabase media_files.
+// and reads via presigned GET URLs. Metadata lives in the media_files table.
 // All reads/writes go through /api/media/* which enforces auth + slug isolation.
 //
 // State on `state.media`:
@@ -15713,11 +15630,10 @@ function savePaySettings(){
   saveData();
   if(state.paymentsTab==='pos')calcTotals();
 }
-function canDeleteContact(){ return hasRole('admin'); } // only admin permanently deletes
+ // only admin permanently deletes
 function canManageGiftCards(){ return hasRole('admin','manager'); }
 function canManageCoupons(){ return hasRole('admin','manager'); }
 function canRefundVoid(){ return hasRole('admin','manager'); }
-function txnCanSeeAll(){ return hasRole('admin','manager'); }
 
 function applyRolePermissions(){
   var r=userRole();
