@@ -1,6 +1,10 @@
 // POST /api/subaccount/class-sessions-enroll
 // Enrolls or cancels a contact from a class session.
 // Body: { session_id, contact_id, action: 'enroll' | 'cancel' }
+//
+// Idempotent enroll: if the contact is already enrolled, returns 200 with
+// { already_enrolled: true } and makes no DB change. The frontend uses this
+// to show an "already on the roster" message instead of a generic success.
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
@@ -32,12 +36,37 @@ async function handler(req, res) {
     let participants = Array.isArray(session.participants) ? session.participants : [];
 
     if (action === 'enroll') {
+      // Idempotent guard: already enrolled means no-op success.
+      const existing = participants.find(p => p.contact_id === contact_id);
+      const wasAlreadyEnrolled = existing && existing.status === 'enrolled';
+
+      if (wasAlreadyEnrolled) {
+        const enrolled_count = participants.filter(p => p.status === 'enrolled').length;
+        // Audit the no-op for traceability.
+        await logAudit({
+          req, actorType:'subaccount', actorId:auth.user_id,
+          actorUsername:auth.username, actorRole:auth.role,
+          action: 'subaccount.class_session.enroll',
+          targetType:'class_session', targetId:session_id,
+          targetSubaccountId:subaccountId,
+          metadata:{ contact_id, action, no_op: true, reason: 'already_enrolled' }
+        });
+        return res.status(200).json({
+          success: true,
+          already_enrolled: true,
+          participants,
+          enrolled_count
+        });
+      }
+
+      // Capacity check only applies when we actually intend to add.
       const enrolled = participants.filter(p => p.status === 'enrolled').length;
       if (enrolled >= session.capacity) {
         return res.status(409).json({ error: 'Class is full' });
       }
-      const existing = participants.find(p => p.contact_id === contact_id);
+
       if (existing) {
+        // Was previously cancelled, re-enrolling.
         existing.status = 'enrolled';
         existing.enrolled_at = new Date().toISOString();
       } else {
