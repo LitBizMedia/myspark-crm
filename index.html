@@ -1167,8 +1167,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div id="cal-calendar-view">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Calendar</div>
-          <button class="btn btn-primary" onclick="openApptModal(null,null)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Appointment
+          <button class="btn btn-primary" onclick="openScheduleMenu(this)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Schedule
           </button>
         </div>
         <div class="cal-toolbar">
@@ -1197,8 +1197,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Appointments</div>
               <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="appt-list-sub">All upcoming appointments</div>
             </div>
-            <button class="btn btn-primary" onclick="openApptModal(null,null)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Appointment
+            <button class="btn btn-primary" onclick="openScheduleMenu(this)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Schedule
             </button>
           </div>
           <div class="toolbar" style="margin-bottom:14px">
@@ -2618,7 +2618,7 @@ function renderMonthCal(){
     const isToday=str===td;
     const appts=str?getCalAppts(state.calUser,str):[];
     const tasks_=str?db.tasks.filter(t=>t.dueDate===str&&t.status!=='done'):[];
-    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;display:flex;align-items:center;gap:3px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span><button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button></div>'}),
+    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span><button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button></div>'}),
       ...tasks_.slice(0,Math.max(0,2-appts.length)).map(t=>'<div class="cal-ev cal-ev-task" onclick="event.stopPropagation();openTaskModal(null,\''+t.id+'\')">'+esc(t.title)+'</div>')];
     const more=appts.length+tasks_.length-shown.length;
     // Per-user appointment count summary
@@ -2707,6 +2707,8 @@ function buildTimedCol(dateStr,appts,allHours){
     var topPx=(s-minH*60)/60*68,heightPx=Math.max((a.duration||60)/60*68,18);
     if(s/60<allHours[0]||s/60>=(allHours[allHours.length-1]||24)+1)return'';
     var col=getUserColor(a.assignedTo);
+    var sCol=getServiceColor(a.service_id);
+    var sStripe=sCol?'border-left:4px solid '+sCol+';':'';
     var wStyle=a._tc>1?'width:calc('+Math.floor(100/a._tc)+'% - 3px);left:calc('+a._col*(100/a._tc)+'% + 1px);right:auto;':'';
     var isCancelled=a.status==='cancelled';
     var cA=a.contactId?getContact(a.contactId):null;
@@ -2714,7 +2716,7 @@ function buildTimedCol(dateStr,appts,allHours){
     var bufApx=Math.round((parseInt(a.buffer_after)||0)/60*68);
     var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
-    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+wStyle+'" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
+    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+  '</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
@@ -2746,13 +2748,15 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var topPx=(s-minH*60)/60*68,heightPx=Math.max((a.duration||60)/60*68,18);
     if(s/60<allHours[0]||s/60>=(allHours[allHours.length-1]||24)+1)return'';
     var evCol=getUserColor(a.assignedTo);
+    var sColU=getServiceColor(a.service_id);
+    var sStripeU=sColU?'border-left:4px solid '+sColU+';':'';
     var c=a.contactId?getContact(a.contactId):null;
     var isCancelledU=a.status==='cancelled';
     var bufBpxU=Math.round((parseInt(a.buffer_before)||0)/60*68);
     var bufApxU=Math.round((parseInt(a.buffer_after)||0)/60*68);
     var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
-    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';left:3px;right:3px;width:auto" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
+    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+  '</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
@@ -3452,7 +3456,278 @@ function confirmDelContact(id){
 
 // APPOINTMENT MODAL
 let apptOverride=false;
-function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId){
+// Helper for calendar to look up service color from a service_id.
+function getServiceColor(serviceId){
+  if (!serviceId) return null;
+  var svc = (db.services || []).find(function(s){ return s.id === serviceId; });
+  return svc ? (svc.color || null) : null;
+}
+
+// Builds <option> HTML for the appointment modal staff dropdown. If allowedIds
+// is provided, only those staff appear (used in Service mode).
+function _apptStaffOptions(allowedIds, currentId){
+  var users = allUsers();
+  if (allowedIds && allowedIds.length) {
+    users = users.filter(function(u){ return allowedIds.indexOf(u.id) >= 0; });
+  }
+  var opts = '<option value="">Pick staff...</option>';
+  opts += users.map(function(u){
+    return '<option value="' + u.id + '"' + (u.id === currentId ? ' selected' : '') + '>' + esc(u.name || u.username) + '</option>';
+  }).join('');
+  return opts;
+}
+
+// Builds <option> HTML for the variation dropdown. Returns empty string if
+// the service has no active variations (caller hides the wrapper).
+function _apptVariationOptionsHTML(serviceId, currentId){
+  var vars = (db.serviceVariations || []).filter(function(v){
+    return v.service_id === serviceId && v.active !== false;
+  });
+  if (!vars.length) return '';
+  var opts = '<option value="">Default (no variation)</option>';
+  opts += vars.map(function(v){
+    return '<option value="' + v.id + '"' + (v.id === currentId ? ' selected' : '') + '>'
+      + esc(v.name) + ' (' + (v.duration || 60) + ' min'
+      + (v.price != null ? ' - $' + parseFloat(v.price).toFixed(2) : '')
+      + ')</option>';
+  }).join('');
+  return opts;
+}
+
+// Inline pill button styling for the Custom/Service mode toggle.
+// Generic dropdown menu attached to a trigger button. Items: [{label, onClick}].
+// Menu auto-closes on outside click. Used by +Schedule and catalog +Add buttons.
+function openDropdownMenu(buttonEl, items){
+  closeDropdownMenu();
+  var rect = buttonEl.getBoundingClientRect();
+  var menu = document.createElement('div');
+  menu.id = 'global-dropdown-menu';
+  menu.style.cssText = 'position:fixed;top:' + (rect.bottom + 4) + 'px;left:' + rect.left + 'px;'
+    + 'background:var(--main-card);border:1px solid var(--main-border);border-radius:6px;'
+    + 'box-shadow:0 6px 20px rgba(0,0,0,.25);padding:4px;z-index:10000;min-width:' + Math.max(rect.width, 180) + 'px;';
+  items.forEach(function(item){
+    if (item.divider) {
+      var d = document.createElement('div');
+      d.style.cssText = 'height:1px;background:var(--main-border);margin:4px 0;';
+      menu.appendChild(d);
+      return;
+    }
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText = 'display:block;width:100%;padding:8px 12px;text-align:left;'
+      + 'background:transparent;border:none;cursor:pointer;color:var(--text);'
+      + 'font-size:13px;border-radius:4px;font-family:inherit;';
+    btn.textContent = item.label;
+    btn.onmouseover = function(){ btn.style.background = 'var(--main-bg)'; };
+    btn.onmouseout = function(){ btn.style.background = 'transparent'; };
+    btn.onclick = function(e){
+      e.stopPropagation();
+      closeDropdownMenu();
+      item.onClick();
+    };
+    menu.appendChild(btn);
+  });
+  document.body.appendChild(menu);
+  setTimeout(function(){
+    document.addEventListener('click', _dropdownOutsideHandler);
+  }, 10);
+}
+function _dropdownOutsideHandler(e){
+  var menu = document.getElementById('global-dropdown-menu');
+  if (!menu || !menu.contains(e.target)) closeDropdownMenu();
+}
+function closeDropdownMenu(){
+  var menu = document.getElementById('global-dropdown-menu');
+  if (menu) menu.remove();
+  document.removeEventListener('click', _dropdownOutsideHandler);
+}
+
+// +Schedule dropdown on calendar and appointments list views.
+function openScheduleMenu(btnEl){
+  openDropdownMenu(btnEl, [
+    { label: 'Appointment', onClick: function(){ openApptModal(null, null, null, null, null, null, 'custom'); } },
+    { label: 'Service',     onClick: function(){ openApptModal(null, null, null, null, null, null, 'service'); } },
+    { label: 'Add to Class', onClick: function(){ openEnrollInClassModal(); } }
+  ]);
+}
+
+// +Add dropdown on the catalog (Service Calendars tab).
+function openCatalogAddMenu(btnEl){
+  openDropdownMenu(btnEl, [
+    { label: 'Individual Service', onClick: function(){ openServiceModal(null, 'individual'); } },
+    { label: 'Class',              onClick: function(){ openServiceModal(null, 'class'); } }
+  ]);
+}
+
+// Add to Class flow: pick class, pick session, pick contact, enroll.
+// Reuses svcEnroll which handles capacity, already-enrolled, and roster display.
+function openEnrollInClassModal(){
+  var today = todayStr();
+  var classesWithSessions = (db.services || []).filter(function(svc){
+    if (svc.type !== 'class' || svc.active === false) return false;
+    return (db.classSessions || []).some(function(cs){
+      return cs.service_id === svc.id && cs.date >= today && cs.status !== 'cancelled';
+    });
+  });
+
+  if (!classesWithSessions.length) {
+    toast('No upcoming class sessions. Schedule one in Service Calendars first.', 'warn');
+    return;
+  }
+
+  var classOpts = '<option value="">Pick a class...</option>'
+    + classesWithSessions.map(function(c){
+      return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+    }).join('');
+
+  var body = '<div style="display:flex;flex-direction:column;gap:14px">'
+    + '<div class="form-group"><label>Class *</label><select id="enroll-class" onchange="enrollOnClassChange()">' + classOpts + '</select></div>'
+    + '<div class="form-group" id="enroll-session-wrap" style="display:none"><label>Session *</label><select id="enroll-session" onchange="enrollOnSessionChange()"></select></div>'
+    + '<div class="form-group" id="enroll-contact-wrap" style="display:none"><label>Contact *</label>' + ssHTML('enroll-cw','enroll-ci','enroll-cv','enroll-cd','Search contact...','') + '</div>'
+    + '</div>';
+
+  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="enrollSubmit()">Enroll</button>';
+
+  openModal('Add to Class', body, footer);
+}
+
+function enrollOnClassChange(){
+  var classSel = document.getElementById('enroll-class');
+  var classId = classSel ? classSel.value : '';
+  var sessionWrap = document.getElementById('enroll-session-wrap');
+  var contactWrap = document.getElementById('enroll-contact-wrap');
+
+  if (!classId) {
+    if (sessionWrap) sessionWrap.style.display = 'none';
+    if (contactWrap) contactWrap.style.display = 'none';
+    return;
+  }
+
+  var today = todayStr();
+  var sessions = (db.classSessions || []).filter(function(cs){
+    return cs.service_id === classId && cs.date >= today && cs.status !== 'cancelled';
+  }).sort(function(a, b){
+    return a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '');
+  });
+
+  var sessOpts = '<option value="">Pick a session...</option>'
+    + sessions.map(function(s){
+      var enrolled = (s.participants || []).filter(function(p){ return p.status === 'enrolled'; }).length;
+      var cap = s.capacity || 10;
+      var full = enrolled >= cap;
+      return '<option value="' + s.id + '"' + (full ? ' disabled' : '') + '>'
+        + fmtDate(s.date) + (s.time ? ' at ' + fmtTime(s.time) : '')
+        + ' (' + enrolled + '/' + cap + (full ? ' - FULL' : '') + ')</option>';
+    }).join('');
+
+  var sessSel = document.getElementById('enroll-session');
+  if (sessSel) sessSel.innerHTML = sessOpts;
+  if (sessionWrap) sessionWrap.style.display = 'block';
+  if (contactWrap) contactWrap.style.display = 'none';
+}
+
+function enrollOnSessionChange(){
+  var sessSel = document.getElementById('enroll-session');
+  var sessionId = sessSel ? sessSel.value : '';
+  var contactWrap = document.getElementById('enroll-contact-wrap');
+  if (contactWrap) contactWrap.style.display = sessionId ? 'block' : 'none';
+}
+
+function enrollSubmit(){
+  var sessSel = document.getElementById('enroll-session');
+  var contactInp = document.getElementById('enroll-cv');
+  var sessionId = sessSel ? sessSel.value : '';
+  var contactId = contactInp ? contactInp.value : '';
+  if (!sessionId) { toast('Pick a session.', 'error'); return; }
+  if (!contactId) { toast('Pick a contact.', 'error'); return; }
+  closeModal();
+  // svcEnroll handles capacity, already-enrolled, and opens the roster modal as confirmation.
+  svcEnroll(sessionId, contactId);
+}
+
+// Called when service dropdown changes. Prefills title, duration, buffers,
+// refreshes variation dropdown, and filters staff to assigned_staff.
+function apptOnServiceChange(){
+  var svcSel = document.getElementById('af-service');
+  var serviceId = svcSel ? svcSel.value : '';
+  var varWrap = document.getElementById('apt-var-wrap');
+  if (!serviceId) {
+    if (varWrap) varWrap.style.display = 'none';
+    var userSelClear = document.getElementById('af-user');
+    var currentClear = userSelClear ? userSelClear.value : '';
+    if (userSelClear) userSelClear.innerHTML = _apptStaffOptions(null, currentClear);
+    return;
+  }
+  var svc = (db.services || []).find(function(s){ return s.id === serviceId; });
+  if (!svc) return;
+
+  // Prefill title, duration, buffers (overwrite at pick time per spec).
+  var titleInp = document.getElementById('af-title');
+  if (titleInp) titleInp.value = svc.name || '';
+  var durInp = document.getElementById('af-dur');
+  if (durInp) durInp.value = svc.duration_default || 60;
+  var bufBefore = document.getElementById('af-buf-before');
+  if (bufBefore) bufBefore.value = parseInt(svc.buffer_before) || 0;
+  var bufAfter = document.getElementById('af-buf-after');
+  if (bufAfter) bufAfter.value = parseInt(svc.buffer_after) || 0;
+
+  // Filter staff dropdown to assigned_staff.
+  var userSel = document.getElementById('af-user');
+  if (userSel) {
+    var currentStaff = userSel.value;
+    var allowed = (svc.assigned_staff && svc.assigned_staff.length) ? svc.assigned_staff : null;
+    // If current pick is not in allowed list, clear so user must repick.
+    var newCurrent = (allowed && currentStaff && allowed.indexOf(currentStaff) < 0) ? '' : currentStaff;
+    userSel.innerHTML = _apptStaffOptions(allowed, newCurrent);
+  }
+
+  // Refresh variation dropdown.
+  var varHTML = _apptVariationOptionsHTML(serviceId, '');
+  var varSel = document.getElementById('af-variation');
+  if (varHTML && varSel && varWrap) {
+    varSel.innerHTML = varHTML;
+    varWrap.style.display = 'block';
+  } else if (varWrap) {
+    varWrap.style.display = 'none';
+  }
+
+  checkApptConflict();
+}
+
+// Called when variation dropdown changes. Overrides title, duration, buffers
+// from the variation if one is picked. Empty selection resets to service defaults.
+function apptOnVariationChange(){
+  var varSel = document.getElementById('af-variation');
+  var svcSel = document.getElementById('af-service');
+  if (!varSel || !svcSel) return;
+  var serviceId = svcSel.value;
+  var variationId = varSel.value;
+  var svc = (db.services || []).find(function(s){ return s.id === serviceId; });
+  if (!svc) return;
+  if (!variationId) {
+    // Reset to service defaults.
+    var titleInp = document.getElementById('af-title');
+    if (titleInp) titleInp.value = svc.name || '';
+    var durInp = document.getElementById('af-dur');
+    if (durInp) durInp.value = svc.duration_default || 60;
+    checkApptConflict();
+    return;
+  }
+  var variation = (db.serviceVariations || []).find(function(v){ return v.id === variationId; });
+  if (!variation) return;
+  var titleInp2 = document.getElementById('af-title');
+  if (titleInp2) titleInp2.value = svc.name + ' - ' + variation.name;
+  var durInp2 = document.getElementById('af-dur');
+  if (durInp2) durInp2.value = variation.duration || svc.duration_default || 60;
+  var bufBefore2 = document.getElementById('af-buf-before');
+  if (bufBefore2 && variation.buffer_before != null) bufBefore2.value = parseInt(variation.buffer_before) || 0;
+  var bufAfter2 = document.getElementById('af-buf-after');
+  if (bufAfter2 && variation.buffer_after != null) bufAfter2.value = parseInt(variation.buffer_after) || 0;
+  checkApptConflict();
+}
+
+function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefServiceId,prefMode){
   // Audit: viewing existing appointment (PHI)
   if (apptId) {
     var _a = getAppt(apptId);
@@ -3465,17 +3740,66 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId){
 
   const a=apptId?getAppt(apptId):null,cid=a&&a.contactId||contactId;
   apptOverride=false;state.modal={type:'appt',id:apptId||null,extra:cid};
+
+  // Determine initial mode and service link.
+  // Priority: explicit prefMode > existing service_id implies service > default custom.
+  const initialServiceId = (a && a.service_id) || prefServiceId || null;
+  const initialVariationId = (a && a.service_variation_id) || null;
+  var initialMode;
+  if (prefMode === 'service' || prefMode === 'custom') {
+    initialMode = prefMode;
+  } else {
+    initialMode = initialServiceId ? 'service' : 'custom';
+  }
+  state.apptMode = initialMode;
+
   const defUid=a&&a.assignedTo||(prefUserId||null)||(state.user&&state.user.id)||'';
-  const uOpts=allUsers().map(u=>'<option value="'+u.id+'"'+(u.id===defUid?' selected':'')+'>'+esc(u.name||u.username)+'</option>').join('');
-  const b='<div id="appt-warn" class="warn-box hidden"></div>'
-    +'<div class="form-group"><label>Title *</label><input id="af-title" type="text" value="'+esc(a&&a.title||'')+'" placeholder="Discovery call, follow-up..."></div>'
-    +'<div class="form-group"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
-    +'<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label><input id="af-time" type="time" value="'+esc(a&&a.time||prefTime||'09:00')+'" onchange="checkApptConflict()"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','rescheduled','no-show','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
-    +'<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
-  openModal(a?'Edit Appointment':'Book Appointment',b,(a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>','modal-lg');
+
+  // Service options (active services only). Used in Service mode.
+  var activeServices = (db.services || []).filter(function(s){ return s.active !== false && s.type !== 'class'; });
+  var svcOpts = '<option value="">Pick a service...</option>'
+    + activeServices.map(function(s){
+      return '<option value="' + s.id + '"' + (s.id === initialServiceId ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+    }).join('');
+
+  // Variation options if a service is preselected.
+  var initialVarHTML = initialServiceId ? _apptVariationOptionsHTML(initialServiceId, initialVariationId) : '';
+
+  // Staff options: filtered if in service mode with a service selected, else all.
+  var initialAllowedStaff = null;
+  if (initialMode === 'service' && initialServiceId) {
+    var preSvc = activeServices.find(function(s){ return s.id === initialServiceId; });
+    initialAllowedStaff = (preSvc && preSvc.assigned_staff && preSvc.assigned_staff.length) ? preSvc.assigned_staff : null;
+  }
+  const uOpts = _apptStaffOptions(initialAllowedStaff, defUid);
+
+  const b =
+    // Service section: visible only in Service mode. Mode is set at open time
+    // by the +Schedule menu choice, no in-modal switching.
+    (initialMode === 'service'
+      ? '<div id="apt-svc-section">'
+        + '<div class="form-group"><label>Service *</label><select id="af-service" onchange="apptOnServiceChange()">' + svcOpts + '</select></div>'
+        + '<div class="form-group" id="apt-var-wrap" style="display:' + (initialVarHTML ? 'block' : 'none') + '"><label>Variation</label><select id="af-variation" onchange="apptOnVariationChange()">' + initialVarHTML + '</select></div>'
+        + '</div>'
+      : '')
+
+    // Existing fields (unchanged)
+    + '<div id="appt-warn" class="warn-box hidden"></div>'
+    + '<div class="form-group"><label>Title *</label><input id="af-title" type="text" value="'+esc(a&&a.title||'')+'" placeholder="Discovery call, follow-up..."></div>'
+    + '<div class="form-group"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
+    + '<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label><input id="af-time" type="time" value="'+esc(a&&a.time||prefTime||'09:00')+'" onchange="checkApptConflict()"></div></div>'
+    + '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
+    + '<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
+    + '<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','rescheduled','no-show','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
+    + '<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
+
+  // Title reflects mode for clarity. Edit always says "Edit Appointment".
+  var modalTitle;
+  if (a) modalTitle = 'Edit Appointment';
+  else if (initialMode === 'service') modalTitle = 'Book Service';
+  else modalTitle = 'Book Appointment';
+
+  openModal(modalTitle,b,(a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>','modal-lg');
   setTimeout(checkApptConflict,80);
 }
 
@@ -3580,7 +3904,9 @@ function syncAppointment(appt,deleted){
     location:appt.location||null,
     notes:appt.notes||null,
     buffer_before:parseInt(appt.buffer_before)||0,
-    buffer_after:parseInt(appt.buffer_after)||0
+    buffer_after:parseInt(appt.buffer_after)||0,
+    service_id:appt.service_id||null,
+    service_variation_id:appt.service_variation_id||null
   };
   fetch(apiUrl('/api/subaccount/appointments-upsert'),{
     method:'POST',
@@ -3594,7 +3920,16 @@ function syncAppointment(appt,deleted){
 function saveAppt(){
   const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
   if(!title||!date){toast('Title and date required.','error');return}
-  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:document.getElementById('af-time').value,duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0};
+  // Capture service link based on current mode.
+  var serviceId=null, variationId=null;
+  if(state.apptMode==='service'){
+    var svcSel=document.getElementById('af-service');
+    serviceId=(svcSel&&svcSel.value)||null;
+    var varSel=document.getElementById('af-variation');
+    variationId=(varSel&&varSel.value)||null;
+    if(!serviceId){toast('Pick a service or switch to Custom mode.','error');return;}
+  }
+  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:document.getElementById('af-time').value,duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0,service_id:serviceId,service_variation_id:variationId};
   var isNewAppt=!state.modal.id;
   var apptIdForAudit=state.modal.id||null;
   if(state.modal.id){const a=getAppt(state.modal.id);if(a)Object.assign(a,data)}
@@ -3605,7 +3940,7 @@ function saveAppt(){
   logSubaccountAudit(isNewAppt ? 'subaccount.appointment.create' : 'subaccount.appointment.update', {
     targetId: apptIdForAudit,
     targetType: 'appointment',
-    metadata: { title: data.title, date: data.date, time: data.time, contact_id: data.contactId, assigned_to: data.assignedTo, status: data.status }
+    metadata: { title: data.title, date: data.date, time: data.time, contact_id: data.contactId, assigned_to: data.assignedTo, status: data.status, service_id: serviceId, service_variation_id: variationId }
   });
   toast(isNewAppt?'Appointment saved.':'Appointment updated.','success');
 }
@@ -6101,8 +6436,7 @@ function renderServiceCal(){
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Service Calendars</div>'
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+total+' service'+(total!==1?'s':'')+(state.svcCatF||state.svcTypeF||state.svcStatF?' (filtered)':'')+'</div></div>'
     +'<div style="display:flex;gap:8px">'
-    +'<button class="btn btn-ghost btn-sm" onclick="openClassSessionModal(null,null)">+ Class Session</button>'
-    +'<button class="btn btn-primary" onclick="openServiceModal(null)">+ Add Service</button>'
+    +'<button class="btn btn-primary" onclick="openCatalogAddMenu(this)">+ Add</button>'
     +'</div></div>';
 
   // Filter bar
@@ -6284,8 +6618,10 @@ function _sessionRow(s){
     +'</div>';
 }
 
-function openServiceModal(id){
+function openServiceModal(id, prefType){
   var s=id?(db.services||[]).find(function(x){return x.id===id;}):null;
+  // Type defaults: editing uses existing, new uses prefType from catalog dropdown, fallback individual.
+  var defaultType = s ? s.type : (prefType === 'class' ? 'class' : 'individual');
   var users=allUsers();
   var daysOfWeek=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var _selStaff=(s&&s.assigned_staff)||[];
@@ -6309,7 +6645,7 @@ function openServiceModal(id){
     +'</select></div>'
     +'</div>'
     +'<div class="form-row">'
-    +'<div class="form-group"><label>Type</label><select id="svc-type"><option value="individual"'+((!s||s.type!=='class')?' selected':'')+'>Individual</option><option value="class"'+((s&&s.type==='class')?' selected':'')+'>Class</option></select></div>'
+    +'<div class="form-group"><label>Type</label><select id="svc-type"><option value="individual"'+(defaultType==='individual'?' selected':'')+'>Individual</option><option value="class"'+(defaultType==='class'?' selected':'')+'>Class</option></select></div>'
     +'<div class="form-group"><label>Color</label><input id="svc-color" type="color" value="'+(s&&s.color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
     +'</div>'
     +'<div class="form-row">'
