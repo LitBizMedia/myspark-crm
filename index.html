@@ -2147,7 +2147,8 @@ document.getElementById('login-form').addEventListener('submit',async function(e
       name:data.user.name||data.user.username,
       color:data.user.color,
       email:data.user.email,
-      breakglass:!!data.user.breakglass
+      breakglass:!!data.user.breakglass,
+      mustChangePassword:!!data.user.must_change_password
     };
     // Audit successful login (server already logs this server-side, this adds
     // a redundant client-side entry for symmetry with other PHI actions)
@@ -2161,6 +2162,11 @@ document.getElementById('login-form').addEventListener('submit',async function(e
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     initApp();
+    // Force password change for new admins or admin-reset accounts.
+    // Modal cannot be dismissed until they complete the change.
+    if(state.user.mustChangePassword){
+      setTimeout(function(){openProfileModal(true);},150);
+    }
   }catch(networkErr){
     err.textContent='Cannot reach login server. Check your connection and try again.';
     err.classList.remove('hidden');
@@ -4395,9 +4401,11 @@ function toggleUserMenu(e){
   }
 }
 
-function openProfileModal(){
+function openProfileModal(forced){
   const m=document.getElementById('user-menu');if(m)m.classList.add('hidden');
   const u=state.user;
+  // Forced mode: triggered by must_change_password. Cannot be dismissed.
+  forced=forced||(u&&u.mustChangePassword);
   // Determine if this is the primary admin. The auth-rebuilt session stores
   // state.user.id as a uuid from subaccount_users, but isPrimaryAdmin only
   // recognizes the legacy 'admin-<slug>' format. When the logged-in user
@@ -4412,12 +4420,31 @@ function openProfileModal(){
   const curColor=(eff&&eff.color)||USER_COLORS[0];
   state.selUserColor=curColor;
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+(curColor===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
-  state.modal={type:'profile',id:u.id};
-  const b='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
+  state.modal={type:'profile',id:u.id,forced:!!forced};
+  var banner=forced
+    ? '<div style="background:#7a4eff20;border:1px solid #7a4eff60;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--text)"><strong>Set your password to continue.</strong> Your account was created by an administrator. Please choose a new password to secure your access.</div>'
+    : '';
+  var newPwPlaceholder=forced?'New password':'Leave blank to keep current';
+  var title=forced?'Set Your Password':'My Profile';
+  var footer=forced
+    ? '<button class="btn btn-primary" onclick="saveProfile()">Save Password</button>'
+    : '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>';
+  const b=banner
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
     +'<div class="form-group"><label>Current Password <span style=\"font-weight:400;color:var(--text-muted)\">(required to change password)</span></label><input id="pf-old-pass" type="password" placeholder="Enter current password"></div>'
-    +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="Leave blank to keep current"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="'+newPwPlaceholder+'"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div>';
-  openModal('My Profile',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>','modal-lg');
+  openModal(title,b,footer,'modal-lg');
+  // In forced mode, also disable the modal backdrop click and ESC dismissal
+  // by removing the close X. The css class hides it via .modal-no-close.
+  if(forced){
+    setTimeout(function(){
+      var modalEl=document.querySelector('.modal');
+      if(modalEl)modalEl.classList.add('modal-no-close');
+      var closeX=document.querySelector('.modal-close, .modal .close');
+      if(closeX)closeX.style.display='none';
+    },50);
+  }
 }
 
 async function saveProfile(){
@@ -4426,6 +4453,7 @@ async function saveProfile(){
   if(!pass){toast('No changes to save.','warning');return;}
   if(pass&&pass!==pass2){toast('Passwords do not match.','error');return}
   const u=state.user;
+  const wasForced=!!(state.modal&&state.modal.forced);
 
   // If password change requested, hit the server-side endpoint.
   if(pass){
@@ -4445,6 +4473,8 @@ async function saveProfile(){
         toast(data.error||'Password change failed.','error');
         return;
       }
+      // Server already cleared must_change_password in the DB. Clear locally too.
+      if(state.user)state.user.mustChangePassword=false;
     }catch(e){
       toast('Cannot reach server. Check your connection.','error');
       return;
@@ -5063,8 +5093,6 @@ async function confirmResetTpl(){
 async function loadSmsSettings(){
   var slug=state.subaccountSlug||'litbiz';
   var subId='sub-'+slug;
-  var key=db.settings.supabaseKey||SB_FALLBACK_KEY;
-  var baseUrl=db.settings.supabaseUrl||SB_FALLBACK_URL;
   try{
     var res=await fetch(apiUrl('/api/subaccount/sms-status'),{credentials:'include'});
     if(!res.ok)return null;
@@ -13152,7 +13180,6 @@ const PLAN_STATUS_COLORS = {
 
 async function loadAllPlans(){
   // Returns {subaccountId: planRecord}
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
     var r=await fetch(apiUrl('/api/agency/plans-list'),{credentials:'include'});
     if(!r.ok)return{};
@@ -13418,7 +13445,6 @@ async function loadBillingSummary(){
   if(!el)return;
   // Pull all plans (we already have similar data via agencyLoadSubaccounts but fetch fresh here)
   try{
-    var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
     var r=await fetch(apiUrl('/api/agency/plans-list'),{credentials:'include'});
     if(!r.ok){el.innerHTML='<div style="color:#f87171;font-size:13px">Failed to load summary.</div>';return;}
     var data=await r.json();
@@ -13674,7 +13700,6 @@ async function confirmRefund(invoiceId){
 // =====================================================
 async function openManagePlanModal(subId,subName){
   if(!agencyCanManageSubaccounts()){toast('You do not have permission to manage plans.','error');return;}
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   var plan=null;
   try{
     var r=await fetch(apiUrl('/api/agency/plans-list?subaccount_id=')+encodeURIComponent(subId),{credentials:'include'});
@@ -14111,7 +14136,6 @@ async function agencyConfirmResetPassword(subId,slug){
 async function agencyLoadSmsRequests(){
   var el=document.getElementById('agency-sms-requests-section');
   if(!el)return;
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
     var res=await fetch(apiUrl('/api/agency/sms-requests'),{credentials:'include'});
     var data=res.ok?await res.json():{pending:[],provisioned:[]};
@@ -14247,7 +14271,6 @@ async function confirmAgencySmsProvision(){
 
 async function agencyLoadSubaccounts(){
   var el=document.getElementById('agency-subs-grid');if(!el)return;
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
     var r=await fetch(apiUrl('/api/agency/subaccounts-list?include_data=true'),{credentials:'include'});
     var data=r.ok?await r.json():{subaccounts:[],data_map:{}};
@@ -14507,55 +14530,56 @@ async function createSubaccount(){
   if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
   var passErr=checkPasswordStrength(adminPass);
   if(passErr){toast(passErr,'error');return;}
-  var passHash=await sha256(adminPass);
   var subId='sub-'+slug;
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
+  // Initial data blob. Excludes user-related fields (users, _subaccountAdmin,
+  // settings.adminProfile, settings.supabase*) since those live in
+  // subaccount_users and the data-save Lambda strips them anyway.
+  var initData={
+    contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],
+    tags:[],subscriptions:[],forms:[],formSubmissions:[],
+    customFieldCategories:[],customFields:[],
+    productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services'],
+    products:[],
+    settings:{
+      businessName:name,
+      businessHours:{
+        mon:{open:true,start:'08:00',end:'18:00'},tue:{open:true,start:'08:00',end:'18:00'},
+        wed:{open:true,start:'08:00',end:'18:00'},thu:{open:true,start:'08:00',end:'18:00'},
+        fri:{open:true,start:'08:00',end:'18:00'},sat:{open:false,start:'09:00',end:'14:00'},
+        sun:{open:false,start:'09:00',end:'14:00'}
+      },
+      square:{appId:'',accessToken:'',locationId:'',sandbox:true},
+      notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
+    }
+  };
   try{
-    // Create subaccount + data + plan in one server call
+    // Single server call: creates subaccount + data blob + plan record +
+    // subaccount_users row for the admin (bcrypted server-side), all in
+    // one transaction. If anything fails, all roll back cleanly.
     var r1=await fetch(apiUrl('/api/agency/subaccount-create'),{
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:subId,name:name,slug:slug,tier:tier,adminEmail:adminEmail,adminUsername:adminUser,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote||null,exemptFromBilling:isExempt!==false,status:isExempt?'exempt':'trialing'})
+      body:JSON.stringify({
+        id:subId,
+        name:name,
+        slug:slug,
+        tier:tier,
+        adminEmail:adminEmail,
+        adminUsername:adminUser,
+        adminName:adminName,
+        adminPassword:adminPass,
+        adminColor:'#6b21ea',
+        billingPeriod:billingPeriod,
+        hipaaAddon:hipaaAddon,
+        discountPercent:discountPct,
+        discountNote:discountNote||null,
+        exemptFromBilling:isExempt!==false,
+        status:isExempt?'exempt':'trialing',
+        initData:initData
+      })
     });
     if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
-    // Create initial data record with admin user
-    var initData={
-      contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],
-      tags:[],users:[],subscriptions:[],forms:[],formSubmissions:[],
-      customFieldCategories:[],customFields:[],
-      productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services'],
-      products:[],
-      settings:{
-        businessName:name,
-        supabaseUrl:SB_FALLBACK_URL,
-        supabaseKey:SB_FALLBACK_KEY,
-        businessHours:{
-          mon:{open:true,start:'08:00',end:'18:00'},tue:{open:true,start:'08:00',end:'18:00'},
-          wed:{open:true,start:'08:00',end:'18:00'},thu:{open:true,start:'08:00',end:'18:00'},
-          fri:{open:true,start:'08:00',end:'18:00'},sat:{open:false,start:'09:00',end:'14:00'},
-          sun:{open:false,start:'09:00',end:'14:00'}
-        },
-        square:{appId:'',accessToken:'',locationId:'',sandbox:true},
-        adminProfile:{},
-        notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
-      },
-      _subaccountAdmin:{
-        username:adminUser,
-        passwordHash:passHash,
-        name:adminName,
-        email:adminEmail,
-        color:'#6b21ea',
-        createdAt:new Date().toISOString()
-      }
-    };
-    var r2=await fetch(apiUrl('/api/agency/subaccount-update'),{
-      method:'POST',
-      credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:subId,data:initData})
-    });
-    if(!r2.ok){var e2=await r2.text();toast('Subaccount created but data init failed: '+e2,'warn');}
     // Handle billing setup
     if(!isExempt){
       var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote,actor:loadAgencySession()};
@@ -14727,7 +14751,6 @@ async function initSubaccountCardForm(){
 // ── Edit Subaccount Modal ──
 async function openEditSubaccountModal(id,name,slug,plan){
   // Fetch the subaccount's data blob to read current admin info
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   var adminName='',adminUser='';
   try{
     var r=await fetch(apiUrl('/api/agency/subaccount-data-get?id=')+encodeURIComponent(id),{credentials:'include'});
@@ -14764,7 +14787,6 @@ async function openEditSubaccountModal(id,name,slug,plan){
 async function saveEditSubaccount(id){
   var name=(document.getElementById('edit-sub-name')&&document.getElementById('edit-sub-name').value||'').trim();
   if(!name){toast('Name required.','error');return;}
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   var slug=state.modal&&state.modal.extra&&state.modal.extra.slug||'';
   var origAdminUser=state.modal&&state.modal.extra&&state.modal.extra.origAdminUser||'';
   var isLitBiz=slug===DEFAULT_SLUG;
@@ -14832,7 +14854,6 @@ async function agencyToggleSub(id,active,name){
 }
 
 async function agencyConfirmToggleSub(id,active){
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
     await fetch(apiUrl('/api/agency/subaccount-update'),{
       method:'POST',
@@ -15262,7 +15283,6 @@ function renderAgencySettings(){
 async function agencyLoadUsers(){
   var listEl=document.getElementById('agency-users-list');
   if(!listEl)return;
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   try{
     var r=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
     if(!r.ok){
@@ -15418,7 +15438,6 @@ async function agencySaveEditUser(userId){
   var roleEl=document.getElementById('ag-edit-role');
   var activeEl=document.getElementById('ag-edit-active');
   var pass=document.getElementById('ag-edit-pass')&&document.getElementById('ag-edit-pass').value||'';
-  var url=SB_FALLBACK_URL,key=SB_FALLBACK_KEY;
   var editEmail=(document.getElementById('ag-edit-email')&&document.getElementById('ag-edit-email').value||'').trim().toLowerCase();
   var updates={name:name,updated_at:new Date().toISOString()};
   if(editEmail)updates.email=editEmail;
