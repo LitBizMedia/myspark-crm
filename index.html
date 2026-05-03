@@ -7585,9 +7585,13 @@ function openRosterModal(sessionId){
       +'</div>';
   }).join('');
 
-  var contactOpts=(db.contacts||[]).filter(function(c){
-    return!(s.participants||[]).find(function(p){return p.contact_id===c.id&&p.status==='enrolled';});
-  }).map(function(c){return'<option value="'+c.id+'">'+esc(c.name)+'</option>';}).join('');
+  // Decide whether to show the Add Participant picker. Skip when at capacity
+  // or when there are no eligible (non-archived) contacts to add.
+  var hasAddable = (db.contacts||[]).some(function(c){
+    if(c.archived)return false;
+    var p=(s.participants||[]).find(function(x){return x.contact_id===c.id;});
+    return !p || p.status !== 'enrolled';
+  });
 
   var body='<div>'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
@@ -7595,9 +7599,9 @@ function openRosterModal(sessionId){
     +'<div style="font-size:12px;color:var(--text-muted)">'+s.date+(s.time?' at '+s.time:'')+'</div>'
     +'<div style="margin-left:auto;font-size:12px;font-weight:700;color:'+(enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80')+'">'+enrolled+'/'+cap+' enrolled</div>'
     +'</div>'
-    +(contactOpts&&enrolled<cap?'<div style="display:flex;gap:8px;margin-bottom:14px">'
-      +'<select id="roster-add-contact" style="flex:1"><option value="">Add participant...</option>'+contactOpts+'</select>'
-      +'<button class="btn btn-primary btn-sm" onclick="svcEnroll(\''+sessionId+'\',document.getElementById(\'roster-add-contact\').value)">Enroll</button>'
+    +(hasAddable&&enrolled<cap?'<div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-start">'
+      +'<div style="flex:1">'+ssHTML('roster-add-cw','roster-add-ci','roster-add-cv','roster-add-dd','Search contact...','')+'</div>'
+      +'<button class="btn btn-primary btn-sm" onclick="svcEnroll(\''+sessionId+'\',document.getElementById(\'roster-add-cv\').value)">Enroll</button>'
       +'</div>':'')
     +(rows?'<div>'+rows+'</div>':'<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">No participants yet.</div>')
     +'</div>';
