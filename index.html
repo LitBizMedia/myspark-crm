@@ -231,6 +231,9 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 
 /* CALENDAR */
 .cal-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px}
+.cal-toolbar-left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cal-big-month{font-family:'Exo 2',sans-serif;font-size:38px;font-weight:800;color:var(--main-text);line-height:1;letter-spacing:-0.5px;text-transform:capitalize}
+@media (max-width:600px){.cal-big-month{font-size:26px}}
 .cal-nav{display:flex;align-items:center;gap:6px}
 .cal-period{font-family:'Exo 2',sans-serif;font-size:17px;font-weight:700;min-width:180px;text-align:center;color:var(--main-text)}
 .view-toggle{display:flex;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden}
@@ -1179,11 +1182,14 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           </button>
         </div>
         <div class="cal-toolbar">
-          <div class="cal-nav">
-            <button class="btn btn-ghost btn-sm" onclick="calNav(-1)">&#8249;</button>
-            <div class="cal-period" id="cal-period"></div>
-            <button class="btn btn-ghost btn-sm" onclick="calNav(1)">&#8250;</button>
-            <button class="btn btn-ghost btn-sm" onclick="calToday()">Today</button>
+          <div class="cal-toolbar-left">
+            <div class="cal-big-month" id="cal-big-month"></div>
+            <div class="cal-nav">
+              <button class="btn btn-ghost btn-sm" onclick="calNav(-1)">&#8249;</button>
+              <div class="cal-period" id="cal-period"></div>
+              <button class="btn btn-ghost btn-sm" onclick="calNav(1)">&#8250;</button>
+              <button class="btn btn-ghost btn-sm" onclick="calToday()">Today</button>
+            </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <div class="view-toggle">
@@ -2663,6 +2669,7 @@ function _calEventClick(id){
 function renderMonthCal(){
   const d=state.calDate,y=d.getFullYear(),m=d.getMonth(),td=todayStr();
   document.getElementById('cal-period').textContent=MONTHS[m]+' '+y;
+  document.getElementById('cal-big-month').textContent=MONTHS[m].slice(0,3);
   const first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
   let cells=[];
   for(let i=0;i<first;i++){const dd=new Date(y,m,-(first-1-i));cells.push({day:dd.getDate(),cur:false,str:''})}
@@ -2828,6 +2835,7 @@ function renderWeekCal(){
   const ws=new Date(d.getTime()-dow*86400000);
   const we=new Date(ws.getTime()+6*86400000);
   document.getElementById('cal-period').textContent=MONTHS[ws.getMonth()]+' '+ws.getDate()+' - '+we.getDate()+', '+we.getFullYear();
+  document.getElementById('cal-big-month').textContent=MONTHS[ws.getMonth()].slice(0,3);
   const cols=Array.from({length:7},(_,i)=>{const dd=new Date(ws.getTime()+i*86400000);const s=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');return{day:dd,str:s}});
   const td=todayStr(),allH=globalCalHours();
   let html='<div class="cal-timed"><div class="time-col"><div class="time-col-head"></div><div class="time-col-allday">All-day</div>'+allH.map(h=>'<div class="time-slot">'+(h===12?'12 PM':h<12?h+' AM':(h-12)+' PM')+'</div>').join('')+'</div>';
@@ -2870,6 +2878,7 @@ function renderDayCal(){
   var d=state.calDate;
   var str=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   document.getElementById('cal-period').textContent=DFULL[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+  document.getElementById('cal-big-month').textContent=MONTHS[d.getMonth()].slice(0,3);
   var allH=globalCalHours();
   var staffCols=getSelectedDayStaff();
   var html='<div class="cal-timed" style="min-width:'+((staffCols.length*190)+80)+'px">';
