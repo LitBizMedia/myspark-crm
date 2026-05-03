@@ -2601,7 +2601,7 @@ function renderCalLegend(){
 }
 
 function getCalAppts(uid,dateStr){
-  return db.appointments.filter(function(a){
+  var appts=db.appointments.filter(function(a){
     if(dateStr&&a.date!==dateStr)return false;
     if(uid&&uid!=='all'&&a.assignedTo!==uid)return false;
     // When viewing all staff, respect the calDayStaff visibility filter
@@ -2610,6 +2610,54 @@ function getCalAppts(uid,dateStr){
     }
     return true;
   });
+
+  // Merge in class sessions, normalized to appointment shape so the existing
+  // calendar render code treats them uniformly. Marker _isClassSession lets
+  // click handlers dispatch to the roster modal instead of the appt modal.
+  var sessions=(db.classSessions||[]).filter(function(s){
+    if(s.status==='cancelled')return false;
+    if(dateStr&&s.date!==dateStr)return false;
+    if(uid&&uid!=='all'&&s.instructor_id!==uid)return false;
+    if((!uid||uid==='all')&&state.calDayStaff&&state.calDayStaff.length>0){
+      if(!state.calDayStaff.includes(s.instructor_id))return false;
+    }
+    return true;
+  }).map(_classSessionAsAppt);
+
+  return appts.concat(sessions);
+}
+
+// Normalizes a class_sessions row to look like an appointment so the calendar
+// render code can iterate them together. Marker _isClassSession is used by
+// click handlers and any code that needs to differentiate.
+function _classSessionAsAppt(s){
+  var enrolled=(s.participants||[]).filter(function(p){return p.status==='enrolled';}).length;
+  var cap=s.capacity||10;
+  return {
+    id:s.id,
+    title:s.title+' ('+enrolled+'/'+cap+')',
+    date:s.date,
+    time:s.time,
+    duration:s.duration||60,
+    assignedTo:s.instructor_id||null,
+    service_id:s.service_id,
+    status:s.status||'scheduled',
+    contactId:null,
+    buffer_before:0,
+    buffer_after:0,
+    _isClassSession:true,
+    _sessionRaw:s
+  };
+}
+
+// Dispatches a calendar event click to the right modal based on whether the id
+// matches a class session or an appointment.
+function _calEventClick(id){
+  if((db.classSessions||[]).find(function(s){return s.id===id;})){
+    openRosterModal(id);
+  } else {
+    openApptModal(null,id);
+  }
 }
 
 function renderMonthCal(){
@@ -2625,7 +2673,7 @@ function renderMonthCal(){
     const isToday=str===td;
     const appts=str?getCalAppts(state.calUser,str):[];
     const tasks_=str?db.tasks.filter(t=>t.dueDate===str&&t.status!=='done'):[];
-    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span><button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button></div>'}),
+    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'}),
       ...tasks_.slice(0,Math.max(0,2-appts.length)).map(t=>'<div class="cal-ev cal-ev-task" onclick="event.stopPropagation();openTaskModal(null,\''+t.id+'\')">'+esc(t.title)+'</div>')];
     const more=appts.length+tasks_.length-shown.length;
     // Per-user appointment count summary
@@ -2723,7 +2771,7 @@ function buildTimedCol(dateStr,appts,allHours){
     var bufApx=Math.round((parseInt(a.buffer_after)||0)/60*68);
     var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
-    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
+    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+  '</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
@@ -2763,7 +2811,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var bufApxU=Math.round((parseInt(a.buffer_after)||0)/60*68);
     var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
-    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();openApptModal(null,\''+a.id+'\')" title="'+esc(a.title)+'">'
+    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+  '</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
@@ -2833,6 +2881,11 @@ function renderDayCal(){
   staffCols.forEach(function(u){
     var col=u.color||'#6b21ea';
     var uAppts=db.appointments.filter(function(a){return a.date===str&&a.assignedTo===u.id&&a.status!=='cancelled';});
+    // Merge in class sessions where this user is the instructor.
+    var uSessions=(db.classSessions||[]).filter(function(s){
+      return s.date===str&&s.instructor_id===u.id&&s.status!=='cancelled';
+    }).map(_classSessionAsAppt);
+    uAppts=uAppts.concat(uSessions);
     var apptCount=uAppts.length;
     html+='<div class="cal-mc-col">';
     // Header
