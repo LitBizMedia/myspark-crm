@@ -3503,7 +3503,9 @@ function svcSsFilter(inputId, hiddenId, ddId, v){
       var meta = [];
       if (s.category) meta.push(esc(s.category));
       if (s.duration_default) meta.push(s.duration_default + ' min');
-      if (s.price != null) meta.push('$' + parseFloat(s.price).toFixed(2));
+      // Use price range from variations when available, else service price.
+      var priceDisplay = _svcPriceDisplay(s);
+      if (priceDisplay) meta.push(priceDisplay);
       return '<div class="ss-opt" onclick="svcSsSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\''+s.id+'\',\''+nameEsc+'\')">'
         + '<div style="font-weight:600">' + esc(s.name) + '</div>'
         + (meta.length ? '<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">' + meta.join(' \u00b7 ') + '</div>' : '')
@@ -6645,9 +6647,11 @@ function svcCatDelete(idx){
 
 
 function _svcCard(s){
-  var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===s.id;});
+  var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===s.id&&v.active!==false;});
   var staffNames=(s.assigned_staff||[]).map(function(uid){var u=allUsers().find(function(x){return x.id===uid;});return u?esc(u.name||u.username):'';}).filter(Boolean);
   var col=s.color||'#6b21ea';
+  // Compute price display: range from active variations if available, else service price.
+  var priceDisplay=_svcPriceDisplay(s, vars);
   return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;overflow:hidden;border-left:4px solid '+col+'">'
     +'<div style="padding:12px 14px">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
@@ -6660,9 +6664,32 @@ function _svcCard(s){
     +'<div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted);flex-wrap:wrap;margin-top:6px">'
     +(vars.length?'<span>'+vars.length+' variation'+(vars.length!==1?'s':'')+'</span>':'<span>No variations</span>')
     +(staffNames.length?'<span>'+staffNames.slice(0,3).join(', ')+(staffNames.length>3?' +more':'')+'</span>':'<span>All staff</span>')
-    +(s.price!=null?'<span>$'+parseFloat(s.price).toFixed(2)+'</span>':'')
+    +(priceDisplay?'<span>'+priceDisplay+'</span>':'')
     +'</div>'
     +'</div></div>';
+}
+
+// Derives a price display string for a service, accounting for active variations.
+// Returns null when there's nothing to show (no service price and no priced variations).
+// Examples:
+//   - Service price $50, no variations           -> "$50.00"
+//   - Service has variations $40, $60, $80       -> "$40.00 - $80.00"
+//   - All variations same price $50              -> "$50.00"
+//   - Variations exist but none priced, svc $50  -> "$50.00"
+//   - Nothing priced                             -> null
+function _svcPriceDisplay(s, vars){
+  // vars param is optional; recompute if not passed.
+  var v = vars || (db.serviceVariations||[]).filter(function(x){return x.service_id===s.id&&x.active!==false;});
+  var pricedVars = v.filter(function(x){ return x.price != null; });
+  if (pricedVars.length) {
+    var prices = pricedVars.map(function(x){ return parseFloat(x.price); });
+    var min = Math.min.apply(null, prices);
+    var max = Math.max.apply(null, prices);
+    if (min === max) return '$' + min.toFixed(2);
+    return '$' + min.toFixed(2) + ' - $' + max.toFixed(2);
+  }
+  if (s.price != null) return '$' + parseFloat(s.price).toFixed(2);
+  return null;
 }
 
 function _sessionRow(s){
@@ -6771,9 +6798,9 @@ function renderVariationsSection(serviceId){
     h+='<div style="display:flex;flex-direction:column;gap:6px">';
     vars.forEach(function(v){
       h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px">'
-        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600">'+esc(v.name)+'</div>'
-        +'<div style="font-size:11px;color:var(--text-muted)">'+(v.duration||60)+' min'+(v.price!=null?' &middot; $'+parseFloat(v.price).toFixed(2):'')+'</div></div>'
-        +(v.active===false?'<span style="font-size:9px;color:#9ca3af">Inactive</span>':'')
+        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--main-text)">'+esc(v.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--main-text-muted)">'+(v.duration||60)+' min'+(v.price!=null?' &middot; $'+parseFloat(v.price).toFixed(2):'')+'</div></div>'
+        +(v.active===false?'<span style="font-size:9px;color:var(--main-text-muted)">Inactive</span>':'')
         +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openVariationModal(\''+serviceId+'\',\''+v.id+'\')">Edit</button>'
         +'</div>';
     });
