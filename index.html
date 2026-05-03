@@ -2318,25 +2318,7 @@ function switchPanel(name){
 // =====================================================
 // NOTIFICATIONS
 // =====================================================
-function getNotifs(){
-  const td=todayStr(),uid=state.user&&state.user.id;
-  const tom=new Date();tom.setDate(tom.getDate()+1);const ts=tom.toISOString().split('T')[0];
-  const out=[];
-  db.tasks.filter(t=>t.status!=='done'&&isOverdue(t.dueDate)&&(!t.assignedTo||t.assignedTo===uid||state.user&&state.user.role==='admin'))
-    .forEach(t=>out.push({cls:'ni-overdue',icon:'!',text:'"'+t.title+'" is overdue',sub:'Task overdue',kind:'task',id:t.id}));
-  db.tasks.filter(t=>t.status!=='done'&&t.dueDate===td&&(!t.assignedTo||t.assignedTo===uid||state.user&&state.user.role==='admin'))
-    .forEach(t=>out.push({cls:'ni-due',icon:'T',text:'"'+t.title+'" due today',sub:'Task due today',kind:'task',id:t.id}));
-  db.appointments.filter(a=>a.date===td&&a.status==='scheduled'&&(!a.assignedTo||a.assignedTo===uid||state.user&&state.user.role==='admin'))
-    .forEach(a=>out.push({cls:'ni-appt',icon:'C',text:'"'+a.title+'"'+(a.time?' at '+fmtTime(a.time):''),sub:'Appointment today',kind:'appt',id:a.id}));
-  db.appointments.filter(a=>a.date===ts&&a.status==='scheduled'&&(!a.assignedTo||a.assignedTo===uid))
-    .forEach(a=>out.push({cls:'ni-appt',icon:'C',text:'"'+a.title+'" tomorrow'+(a.time?' at '+fmtTime(a.time):''),sub:'Appointment tomorrow',kind:'appt',id:a.id}));
-  return out;
-}
 
-function updateNotifBadge(){
-  const n=getNotifs(),badge=document.getElementById('notif-badge');
-  if(badge){badge.textContent=n.length;badge.classList.toggle('hidden',n.length===0)}
-}
 
 function toggleNotif(e){
   e.stopPropagation();
@@ -2346,11 +2328,6 @@ function toggleNotif(e){
 }
 function closeNotif(){document.getElementById('notif-drop').classList.add('hidden');state.notifOpen=false}
 
-function renderNotifs(){
-  const notifs=getNotifs(),el=document.getElementById('notif-list');
-  if(!notifs.length){el.innerHTML='<div class="notif-empty">You\'re all caught up.</div>';return}
-  el.innerHTML=notifs.map(n=>`<div class="notif-item" onclick="handleNotifClick('${n.kind}','${n.id}')"><div class="notif-icon ${n.cls}">${n.icon}</div><div><div class="notif-text">${esc(n.text)}</div><div class="notif-sub">${n.sub}</div></div></div>`).join('');
-}
 
 function handleNotifClick(kind,id){
   closeNotif();
@@ -3349,10 +3326,6 @@ function renderBH(){
 function toggleBH(dk){const bh=db.settings.businessHours;bh[dk].open=!bh[dk].open;const t=document.getElementById('bht-'+dk);if(t)t.classList.toggle('on',bh[dk].open);const s=document.getElementById('bhs-'+dk),e=document.getElementById('bhe-'+dk);if(s)s.disabled=!bh[dk].open;if(e)e.disabled=!bh[dk].open}
 function saveBH(){const bh=db.settings.businessHours;DKEYS.forEach(dk=>{const s=document.getElementById('bhs-'+dk)&&document.getElementById('bhs-'+dk).value,e=document.getElementById('bhe-'+dk)&&document.getElementById('bhe-'+dk).value;if(s)bh[dk].start=s;if(e)bh[dk].end=e});saveData();toast('Business hours saved.','success')}
 
-function renderUserList(){
-  const el=document.getElementById('user-list');if(!el)return;
-  el.innerHTML=allUsers().map(u=>'<div class="user-row"><div class="user-color-dot" style="background:'+(u.color||'#6b21ea')+'"></div><div style="width:28px;height:28px;border-radius:50%;background:'+(u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-family:\'Syne\',sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">'+initials(u.name||u.username)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div><span class="role-badge role-'+u.role+'">'+u.role+'</span>'+(!isPrimaryAdmin(u.id)?'<button class="icon-btn-xs" onclick="openUserSchedModal(\''+u.id+'\')" title="Edit Schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button><button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')+'</div>').join('');
-}
 
 function renderTagMgr(){const el=document.getElementById('tag-mgr');if(!el)return;el.innerHTML=db.tags.map(t=>'<div class="tag-manage-item" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'<button class="tag-rm" onclick="delTag(\''+t.id+'\')">×</button></div>').join('')}
 function saveSquare(){
@@ -7029,20 +7002,6 @@ function fbRenderPalette(){
 
 function fbGetSt(key,def){const f=fbState.editingForm;return(f&&f.settings&&f.settings.style&&f.settings.style[key])||def;}
 
-function fbApplyLiveStyles(){
-  const f=fbState.editingForm;if(!f)return;
-  const st=f.settings.style||{};
-  const bg=st.bgColor||'#ffffff';
-  const fb=st.fieldBg||'#f8f8f8';
-  const bc=st.borderColor||'#d0d0d8';
-  const lc=st.labelColor||'#222222';
-  const ac=st.primaryColor||'#6b21ea';
-  const pc=document.getElementById('fb-pcanvas');if(pc)pc.style.background=bg;
-  document.querySelectorAll('.fb-fc').forEach(el=>{el.style.background=fb;el.style.borderColor=bc;});
-  document.querySelectorAll('.fb-lbl').forEach(el=>{el.style.color=lc;});
-  document.querySelectorAll('.fb-mi,.fb-mita,.fb-msel').forEach(el=>{el.style.background=fb;el.style.borderColor=bc;});
-  document.querySelectorAll('.fb-mopt-dot,.fb-mopt-box').forEach(el=>{el.style.borderColor=ac;});
-}
 
 function fbRenderCanvas(){
   const f=fbState.editingForm;if(!f)return'';
@@ -7519,81 +7478,7 @@ function fbSetSpTab(tab){
 // =====================================================
 // FORM BUILDER - Preview
 // =====================================================
-function fbPreview(){
-  const f=fbState.editingForm;if(!f)return;
-  const st=f.settings.style||{};
-  const btnBg=st.buttonBg||'#ff4000',btnTxt=st.buttonTextColor||'#fff';
-  const radius=st.borderRadius||'8';
-  const font=st.fontFamily||'DM Sans';
-  let overlay=document.getElementById('fb-prev-overlay');
-  if(overlay)overlay.remove();
-  const div=document.createElement('div');
-  div.id='fb-prev-overlay';
-  div.className='fb-prev-overlay';
-  div.onclick=function(e){if(e.target===div)div.remove();};
-  div.innerHTML='<div class="fb-prev-card" style="background:'+esc(st.bgColor||'#f4f4f8')+';font-family:'+esc(font)+',sans-serif"><div class="fb-prev-head"><h2 style="color:'+esc(st.labelColor||'#111')+'">'+esc(f.name)+'</h2><button class="icon-btn-xs" onclick="document.getElementById(\'fb-prev-overlay\').remove()" style="color:#666"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="fb-prev-body">'+fbRenderFormHTML(f,st,radius)+'<div style="margin-top:18px"><button class="fb-prev-submit" style="background:'+btnBg+';color:'+btnTxt+';border-radius:'+radius+'px">'+esc(st.buttonText||'Submit')+'</button></div></div></div>';
-  document.body.appendChild(div);
-}
 
-function fbRenderFormHTML(f,st,radius){
-  const r=radius||'8';
-  const fieldBg=st&&st.fieldBg||'#f8f8f8';
-  const border=st&&st.borderColor||'#d0d0d8';
-  const txt=st&&st.textColor||'#111';
-  const lbl=st&&st.labelColor||'#222';
-  const accent=st&&st.primaryColor||'#6b21ea';
-  const iStyle='width:100%;border:1px solid '+border+';border-radius:'+r+'px;padding:9px 12px;font-size:14px;color:'+txt+';background:'+fieldBg+';outline:none;box-sizing:border-box;font-family:inherit';
-  const taStyle='width:100%;border:1px solid '+border+';border-radius:'+r+'px;padding:9px 12px;font-size:14px;color:'+txt+';background:'+fieldBg+';outline:none;box-sizing:border-box;font-family:inherit;min-height:80px;resize:vertical';
-  let h='';
-  const allFields=f.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]);
-  allFields.forEach(fd=>{
-    if(fd.type==='captcha')return;
-    if(fd.type==='hidden')return;
-    const reqStar=fd.required?'<span style="color:#ff4000;margin-left:2px">*</span>':'';
-    h+='<div class="fb-prev-field">';
-    if(fd.type==='name'){
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      h+='<div style="display:flex;gap:8px"><input class="fb-prev-input" style="'+iStyle+'" placeholder="First name"><input class="fb-prev-input" style="'+iStyle+'" placeholder="Last name"></div>';
-    }else if(fd.type==='address'){
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      h+='<input class="fb-prev-input" style="'+iStyle+';margin-bottom:6px" placeholder="Street address">';
-      h+='<div style="display:flex;gap:6px"><input class="fb-prev-input" style="'+iStyle+';flex:2" placeholder="City"><input class="fb-prev-input" style="'+iStyle+';flex:1" placeholder="State"><input class="fb-prev-input" style="'+iStyle+';width:80px" placeholder="ZIP"></div>';
-    }else if(fd.type==='textarea'){
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      h+='<textarea class="fb-prev-input" style="'+taStyle+'" placeholder="'+esc(fd.placeholder||'')+'"></textarea>';
-    }else if(fd.type==='dropdown'){
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      h+='<select class="fb-prev-select" style="'+iStyle+';height:42px"'+(fd.multiSelect?' multiple size="3"':'')+'><option value="">Select...</option>'+(fd.options||[]).map(o=>'<option>'+esc(o.label)+'</option>').join('')+'</select>';
-    }else if(fd.type==='radio'){
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      (fd.options||[]).forEach(o=>{h+='<label class="fb-prev-opt-row"><input type="radio" name="'+fd.id+'" style="accent-color:'+accent+'">'+esc(o.label)+'</label>';});
-    }else if(fd.type==='checkbox'){
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      (fd.options||[]).forEach(o=>{h+='<label class="fb-prev-opt-row"><input type="checkbox" style="accent-color:'+accent+'">'+esc(o.label)+'</label>';});
-    }else if(fd.type==='tnc'){
-      const link=(fd.settings&&fd.settings.link)?'<a href="'+esc(fd.settings.link)+'" target="_blank" style="color:'+accent+';text-decoration:underline">'+esc((fd.settings&&fd.settings.linkLabel)||'Terms and Conditions')+'</a>':'<span style="color:'+accent+'">Terms and Conditions</span>';
-      h+='<label class="fb-prev-tnc"><input type="checkbox" style="accent-color:'+accent+'">I agree to the '+link+'</label>';
-    }else if(fd.type==='signature'){
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      h+='<canvas class="fb-prev-sig" style="border:1px solid '+border+';border-radius:'+r+'px" width="500" height="100"></canvas>';
-    }else if(fd.type==='file'){
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      h+='<input type="file" style="'+iStyle+'"'+(fd.settings&&fd.settings.accept?' accept="'+esc(fd.settings.accept)+'"':'')+' '+(fd.settings&&fd.settings.multiple?'multiple':'')+' >';
-    }else if(fd.type==='source'){
-      if(fd.settings&&fd.settings.visible){
-        h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+'</label>';
-        h+='<select class="fb-prev-select" style="'+iStyle+';height:42px"><option value="">Select...</option>'+(fd.settings.sources||[]).map(s=>'<option>'+esc(s)+'</option>').join('')+'</select>';
-      }
-    }else{
-      // text, email, phone, number, url, date, dob, company
-      const t={email:'email',phone:'tel',number:'number',url:'url',date:'date',dob:'date'}[fd.type]||'text';
-      h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';
-      h+='<input class="fb-prev-input" style="'+iStyle+'" type="'+t+'" placeholder="'+esc(fd.placeholder||'')+'" value="'+esc(fd.defaultValue||'')+'">';
-    }
-    h+='</div>';
-  });
-  return h;
-}
 
 // =====================================================
 // FORM BUILDER - Submissions
@@ -7679,76 +7564,11 @@ function fbCreateContactFromSub(sub,form){
 // =====================================================
 // FORM BUILDER - Embed
 // =====================================================
-function fbOpenEmbed(id){
-  fbState.embedFormId=id;fbState.view='embed';
-  fbHideOverlay();
-  const el=document.getElementById('forms-forms-view');if(!el)return;
-  const f=(db.forms||[]).find(x=>x.id===id);if(!f)return;
-  const pageUrl=window.location.href.split('?')[0];
-  const iframeSrc=pageUrl+'?fbembed='+id;
-  const scriptCode='<script>\n(function(){\n  var f=document.createElement("iframe");\n  f.src="'+iframeSrc+'";\n  f.style.cssText="width:100%;border:none;min-height:400px";\n  f.onload=function(){window.addEventListener("message",function(e){if(e.data&&e.data.fbResize)f.style.height=e.data.fbResize+"px";});};\n  document.currentScript.parentNode.insertBefore(f,document.currentScript);\n})();\n<\/script>';
-  const iframeCode='<iframe src="'+iframeSrc+'" style="width:100%;border:none;min-height:400px" frameborder="0"></iframe>';
-  let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Embed: '+esc(f.name)+'</div></div>';
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
-  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">';
-  h+='<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:6px">Script Embed</div>';
-  h+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Paste before your page closing body tag. Auto-resizes to fit the form.</div>';
-  h+='<div class="fb-code-block">'+esc(scriptCode)+'</div>';
-  h+='<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(scriptCode)+').then(()=>toast(\'Copied!\',\'success\'))">Copy Script</button></div>';
-  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">';
-  h+='<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:6px">iFrame Embed</div>';
-  h+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Simple iframe for any website builder. Works with Wordpress, Squarespace, and Webflow.</div>';
-  h+='<div class="fb-code-block">'+esc(iframeCode)+'</div>';
-  h+='<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(iframeCode)+').then(()=>toast(\'Copied!\',\'success\'))">Copy iFrame</button></div>';
-  h+='</div>';
-  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-top:14px">';
-  h+='<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">Form URL</div>';
-  h+='<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Direct link to share the form. Works as a standalone page.</div>';
-  h+='<div style="display:flex;gap:8px;align-items:center"><input type="text" value="'+esc(iframeSrc)+'" readonly style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:13px;outline:none;font-family:monospace"><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(\''+esc(iframeSrc)+'\').then(()=>toast(\'URL copied!\',\'success\'))">Copy URL</button></div>';
-  h+='</div>';
-  el.innerHTML=h;
-}
 
 // =====================================================
 // FORM BUILDER - Embed renderer (standalone page)
 // =====================================================
-function fbCheckEmbedMode(){
-  const params=new URLSearchParams(window.location.search);
-  const fid=params.get('fbembed');
-  if(!fid)return false;
-  const f=(db.forms||[]).find(x=>x.id===fid);
-  if(!f){document.body.innerHTML='<p style="padding:20px;font-family:sans-serif;color:#666">Form not found.</p>';return true;}
-  const st=f.settings.style||{};
-  document.body.style.cssText='margin:0;padding:20px;background:'+( st.bgColor||'#ffffff')+';font-family:'+(st.fontFamily||'DM Sans')+',sans-serif';
-  document.body.innerHTML='<div id="fb-embed-form"><h2 style="margin:0 0 16px;color:'+(st.labelColor||'#111')+'">'+esc(f.name)+'</h2><div id="fb-embed-fields">'+fbRenderFormHTML(f,st,st.borderRadius||'8')+'</div><div style="margin-top:16px"><button onclick="fbHandleEmbedSubmit()" style="background:'+(st.buttonBg||'#ff4000')+';color:'+(st.buttonTextColor||'#fff')+';border:none;border-radius:'+(st.borderRadius||'8')+'px;padding:11px 28px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">'+esc(st.buttonText||'Submit')+'</button></div></div>';
-  return true;
-}
 
-function fbHandleEmbedSubmit(){
-  const params=new URLSearchParams(window.location.search);
-  const fid=params.get('fbembed');
-  const f=(db.forms||[]).find(x=>x.id===fid);if(!f)return;
-  // Collect form data
-  const data={};
-  f.pages.forEach(pg=>{pg.fields.forEach(fd=>{
-    if(fd.type==='captcha'||fd.type==='hidden'){if(fd.type==='hidden')data[fd.id]=fd.settings&&fd.settings.value||'';return;}
-    const el=document.querySelector('[name="'+fd.id+'"]')||document.querySelector('#ef-'+fd.id);
-    if(el)data[fd.id]=el.type==='checkbox'?el.checked:el.value;
-  });});
-  // Save submission
-  if(!db.formSubmissions)db.formSubmissions=[];
-  const sub={id:'fsub-'+uid(),formId:fid,data,contactId:null,createdAt:now_(),pageUrl:window.location.href};
-  db.formSubmissions.push(sub);
-  if(f.settings.createContact||f.settings.updateContact)fbCreateContactFromSub(sub,f);
-  saveData();
-  // Action
-  if(f.settings.submitAction==='redirect'&&f.settings.redirectUrl){
-    window.location.href=f.settings.redirectUrl;
-  }else{
-    document.getElementById('fb-embed-form').innerHTML='<div style="text-align:center;padding:40px 20px"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;color:#34d399" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p style="font-size:16px;font-weight:600;margin:0">'+esc(f.settings.successMessage||'Thank you for your submission!')+'</p></div>';
-    window.parent.postMessage({fbResize:240},'*');
-  }
-}
 
 
 // =====================================================
@@ -8566,33 +8386,9 @@ function renderStaff(){
   switchStaffTab(tab);
 }
 
-function switchStaffTab(tab){
-  state.staffTab=tab;
-  ['team','resources','settings','reporting'].forEach(function(t){
-    const btn=document.getElementById('stt-'+t);
-    const view=document.getElementById('staff-'+t+'-view');
-    if(btn)btn.classList.toggle('active',t===tab);
-    if(view)view.classList.toggle('hidden',t!==tab);
-  });
-  if(tab==='team')renderStaffTeam();
-  if(tab==='settings')renderStaffUserList();
-  if(tab==='reporting')renderStaffReporting();
-}
 
 
 
-function renderStaffUserList(){
-  const el=document.getElementById('staff-user-list');if(!el)return;
-  el.innerHTML=allUsers().map(function(u){
-    return'<div class="user-row">'
-      +'<div style="width:32px;height:32px;border-radius:50%;background:'+(u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">'+initials(u.name||u.username)+'</div>'
-      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div>'
-      +'<span class="role-badge role-'+u.role+'">'+u.role+'</span>'
-      +'<button class="icon-btn-xs" onclick="openEditUserModal(\''+u.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="12" height="12"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
-      +(!isPrimaryAdmin(u.id)?'<button class="icon-btn-xs" onclick="delUser(\''+u.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>':'')
-      +'</div>';
-  }).join('');
-}
 
 function getRptDateRange(){
   const sel=document.getElementById('rpt-range');
@@ -8666,43 +8462,6 @@ function renderStaffReporting(){
 // =====================================================
 // DASHBOARD — Week Schedule
 // =====================================================
-function renderDashWeek(){
-  const el=document.getElementById('dash-week');if(!el)return;
-  const uid=state.user&&state.user.id;
-  const now=new Date();
-  const dow=now.getDay();
-  const weekDays=[];
-  for(let i=0;i<7;i++){const d=new Date(now);d.setDate(now.getDate()-dow+i);weekDays.push(d);}
-  const appts=(db.appointments||[]).filter(function(a){
-    return(!uid||a.assignedTo===uid||!a.assignedTo)&&a.status!=='cancelled';
-  });
-  let hasAny=false;
-  let h='<div class="dash-week-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>My Week</div>'
-    +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:10px">';
-  weekDays.forEach(function(d){
-    const ds=d.toISOString().split('T')[0];
-    const isToday=ds===todayStr();
-    const dayAppts=appts.filter(function(a){return a.date===ds;}).sort(function(a,b){return(a.time||'').localeCompare(b.time||'');});
-    if(dayAppts.length)hasAny=true;
-    h+='<div class="week-day-col"><div class="week-day-label'+(isToday?' is-today':'')+'">'
-      +DSHORT[d.getDay()]+' '+d.getDate()+'</div>';
-    if(dayAppts.length){
-      dayAppts.forEach(function(a){
-        const col=getUserColor(a.assignedTo)||'var(--purple)';
-        h+='<div class="week-appt-item" style="border-left-color:'+col+'">'
-          +'<span class="week-appt-time">'+(a.time?fmtTime(a.time):'All day')+'</span>'
-          +'<span class="week-appt-title" title="'+esc(a.title)+'">'+esc(a.title)+'</span>'
-          +'</div>';
-      });
-    }else{
-      h+='<div class="week-no-appts">&mdash;</div>';
-    }
-    h+='</div>';
-  });
-  h+='</div>';
-  el.innerHTML=h;
-  el.style.display=hasAny?'':'block'; // always show
-}
 
 // =====================================================
 // CALENDAR — Booking Widgets tab
@@ -10048,17 +9807,6 @@ function updateBulkBar(){
   }
 }
 
-function toggleArchiveView(){
-  state.cShowArchived=!state.cShowArchived;
-  state.cSelected.clear();
-  state.cPage=1;
-  const btn=document.getElementById('archive-toggle-btn');
-  const addBtn=document.getElementById('add-contact-btn');
-  if(btn)btn.textContent=state.cShowArchived?'Back to Contacts':'View Archive';
-  if(btn)btn.style.color=state.cShowArchived?'var(--orange)':'';
-  if(addBtn)addBtn.classList.toggle('hidden',state.cShowArchived);
-  renderContacts();
-}
 
 // =====================================================
 // BULK ACTIONS
