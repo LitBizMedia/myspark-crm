@@ -6758,13 +6758,66 @@ function _sessionRow(s){
 function openServiceModal(id, prefType){
   var s=id?(db.services||[]).find(function(x){return x.id===id;}):null;
   // Type defaults: editing uses existing, new uses prefType from catalog dropdown, fallback individual.
-  var defaultType = s ? s.type : (prefType === 'class' ? 'class' : 'individual');
+  var defaultType=s?s.type:(prefType==='class'?'class':'individual');
+
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    +renderServiceCommonFields(s,defaultType)
+    +'<div id="svc-type-section">'+renderServiceTypeFields(s,defaultType)+'</div>'
+    +'<div id="svc-var-wrap">'+(defaultType==='individual'&&s?'<div id="svc-var-section"></div>':'')+'</div>'
+    +'</div>';
+
+  var footer=(s?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteService(\''+s.id+'\')">Delete</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveService('+(s?'\''+s.id+'\'':'null')+')">Save</button>';
+
+  // Title reflects type for clarity.
+  var modalTitle;
+  if(s)modalTitle=s.type==='class'?'Edit Class':'Edit Service';
+  else modalTitle=defaultType==='class'?'New Class':'New Service';
+
+  openModal(modalTitle,body,footer,'modal-lg');
+
+  // Post-render init: variations section for individual edits, recurrence handlers for class.
+  setTimeout(function(){
+    if(defaultType==='individual'&&s)renderVariationsSection(s.id);
+    initServiceModalAfterRender(defaultType);
+  },50);
+}
+
+// Common fields visible in both Individual and Class modes. Type select drives the swap.
+function renderServiceCommonFields(s,type){
+  return '<div class="form-row">'
+    +'<div class="form-group"><label>'+(type==='class'?'Class Name *':'Service Name *')+'</label><input id="svc-name" type="text" value="'+esc(s?s.name:'')+'"></div>'
+    +'<div class="form-group"><label>Category</label>'
+    +'<select id="svc-cat">'
+    +'<option value="">No Category</option>'
+    +(db.serviceCategories||[]).map(function(c){return'<option value="'+esc(c)+'"'+((s&&s.category===c)?' selected':'')+'>'+esc(c)+'</option>';}).join('')
+    +'</select></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Type</label><select id="svc-type" onchange="onServiceTypeChange()"><option value="individual"'+(type==='individual'?' selected':'')+'>Individual</option><option value="class"'+(type==='class'?' selected':'')+'>Class</option></select></div>'
+    +'<div class="form-group"><label>Color</label><input id="svc-color" type="color" value="'+(s&&s.color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Description</label><textarea id="svc-desc" rows="2" style="resize:vertical">'+esc(s&&s.description||'')+'</textarea></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Booking Lead Time (hours)</label><input id="svc-lead" type="number" min="0" value="'+(s&&s.booking_lead_time_hours||0)+'"></div>'
+    +'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label></div>';
+}
+
+// Dispatcher: renders Individual or Class field set based on type.
+function renderServiceTypeFields(s,type){
+  return type==='class'?renderServiceClassFields(s):renderServiceIndividualFields(s);
+}
+
+// Individual service fields: price, duration, buffers, staff multi-select, client-choose toggle.
+function renderServiceIndividualFields(s){
   var users=allUsers();
-  var daysOfWeek=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var _selStaff=(s&&s.assigned_staff)||[];
   var staffMsOpts=users.map(function(u){
     var col=u.color||'#6b21ea';
-    return'<div class="svc-ms-opt" onclick="svcMsToggle2(\''+u.id+'\')">'   
+    return'<div class="svc-ms-opt" onclick="svcMsToggle2(\''+u.id+'\')">'
       +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
       +esc(u.name||u.username)
       +'<span id="svc-ms-ck-'+u.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selStaff.includes(u.id)?'':'display:none')+'">&#10003;</span>'
@@ -6772,20 +6825,7 @@ function openServiceModal(id, prefType){
       +'</div>';
   }).join('');
 
-  var body='<div style="display:flex;flex-direction:column;gap:14px">'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Service Name *</label><input id="svc-name" type="text" value="'+esc(s?s.name:'')+'"></div>'
-    +'<div class="form-group"><label>Category</label>'
-    +'<select id="svc-cat">'
-    +'<option value="">No Category</option>'
-    +(db.serviceCategories||[]).map(function(c){return'<option value="'+esc(c)+'"'+(( s&&s.category===c)?' selected':'')+'>'+esc(c)+'</option>';}).join('')
-    +'</select></div>'
-    +'</div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Type</label><select id="svc-type"><option value="individual"'+(defaultType==='individual'?' selected':'')+'>Individual</option><option value="class"'+(defaultType==='class'?' selected':'')+'>Class</option></select></div>'
-    +'<div class="form-group"><label>Color</label><input id="svc-color" type="color" value="'+(s&&s.color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
-    +'</div>'
-    +'<div class="form-row">'
+  return '<div class="form-row">'
     +'<div class="form-group"><label>Display Price ($)</label><input id="svc-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+(s&&s.price!=null?s.price:'')+'"></div>'
     +'<div class="form-group"><label>Default Duration (min)</label><input id="svc-dur" type="number" min="5" step="5" value="'+(s&&s.duration_default||60)+'"></div>'
     +'</div>'
@@ -6793,35 +6833,185 @@ function openServiceModal(id, prefType){
     +'<div class="form-group"><label>Buffer Before</label>'+_svcBufSel('svc-buf-before',s&&s.buffer_before||0)+'</div>'
     +'<div class="form-group"><label>Buffer After</label>'+_svcBufSel('svc-buf-after',s&&s.buffer_after||0)+'</div>'
     +'</div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Booking Lead Time (hours)</label><input id="svc-lead" type="number" min="0" value="'+(s&&s.booking_lead_time_hours||0)+'"></div>'
-    +'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>'
-    +'</div>'
-    +'<div class="form-group"><label>Description</label><textarea id="svc-desc" rows="2" style="resize:vertical">'+esc(s&&s.description||'')+'</textarea></div>'
     +'<div class="form-group"><label>Assigned Staff</label>'
     +'<div class="svc-ms-wrap" id="svc-staff-ms">'
     +'<div class="svc-ms-display" onclick="svcMsOpen(event)">'
     +'<div class="svc-ms-chips" id="svc-ms-chips-area">'
-+(_selStaff.length?_selStaff.map(function(uid){var u=users.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username):'?';return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();svcMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join(''):'<span style="color:var(--text-muted);font-size:12px">Select staff...</span>')
+    +(_selStaff.length?_selStaff.map(function(uid){var u=users.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username):'?';return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();svcMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join(''):'<span style="color:var(--text-muted);font-size:12px">Select staff...</span>')
     +'</div><span class="svc-ms-arrow">&#9660;</span></div>'
     +'<div class="svc-ms-dd hidden" id="svc-ms-dd">'
     +'<input type="text" class="svc-ms-search" placeholder="Search staff..." oninput="svcMsFilter(this)">'
     +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
     +'</div></div></div>'
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-choose-staff" type="checkbox"'+((s&&s.allow_client_choose_staff!==false)||!s?' checked':'')+'>Allow client to choose staff member</label></div>'
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label></div>'
-    +(s?'<div id="svc-var-section"></div>':'')
-    +'</div>';
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-choose-staff" type="checkbox"'+((s&&s.allow_client_choose_staff!==false)||!s?' checked':'')+'>Allow client to choose staff member</label></div>';
+}
 
-  var footer=(s?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteService(\''+s.id+'\')">Delete</button>':'')
-    +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveService('+(s?'\''+s.id+'\'':'null')+')">Save</button>';
+// Class fields: instructor, capacity, location, price-per-session, drop-in toggle, recurrence schedule.
+function renderServiceClassFields(s){
+  var users=allUsers().filter(function(u){return u.active!==false;});
+  var instructorId=s&&s.instructor_id||'';
+  var instructorOpts='<option value="">Pick an instructor...</option>'
+    +users.map(function(u){
+      return '<option value="'+u.id+'"'+(u.id===instructorId?' selected':'')+'>'+esc(u.name||u.username)+'</option>';
+    }).join('');
 
-  openModal(s?'Edit Service':'New Service', body, footer, 'modal-lg');
+  return '<div class="form-row">'
+    +'<div class="form-group"><label>Instructor *</label><select id="svc-instructor">'+instructorOpts+'</select></div>'
+    +'<div class="form-group"><label>Capacity *</label><input id="svc-capacity" type="number" min="1" value="'+(s&&s.capacity||10)+'"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Default Session Duration (min)</label><input id="svc-dur" type="number" min="5" step="5" value="'+(s&&s.duration_default||60)+'"></div>'
+    +'<div class="form-group"><label>Price per Session ($)</label><input id="svc-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+(s&&s.price!=null?s.price:'')+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Location</label><input id="svc-location" type="text" value="'+esc(s&&s.location||'')+'" placeholder="Studio A, Zoom link, address..."></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-dropin" type="checkbox"'+((s&&s.drop_in_allowed!==false)||!s?' checked':'')+'>Drop-in allowed (single-session bookings)</label></div>'
+    +renderRecurrenceFields(s);
+}
 
-  if(s){
-    setTimeout(function(){renderVariationsSection(s.id);},50);
+// Recurrence/schedule sub-section. Conditional fields swap on Repeats and End Type changes.
+function renderRecurrenceFields(s){
+  var rule=(s&&s.recurrence_rule)||{};
+  var startDate=rule.start_date||todayStr();
+  var startTime=rule.start_time||'09:00';
+  var repeats=rule.repeats||'weekly';
+  var dow=rule.days_of_week||[];
+  // If new and weekly with no days picked, default to start_date's day-of-week.
+  if(!dow.length&&repeats==='weekly'){
+    var d=new Date(startDate+'T00:00:00');
+    dow=[d.getDay()];
   }
+  var endType=rule.end_type||'never';
+  var occurrences=rule.occurrences||12;
+  var endDate=rule.end_date||'';
+
+  var dowLabels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var dowChecks=dowLabels.map(function(lbl,i){
+    var checked=dow.indexOf(i)>=0;
+    return '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:4px 8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;font-size:12px"><input type="checkbox" id="svc-rec-dow-'+i+'"'+(checked?' checked':'')+' style="width:14px;height:14px"> '+lbl+'</label>';
+  }).join('');
+
+  return '<div style="border-top:1px solid var(--main-border);padding-top:14px;margin-top:4px">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Schedule</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Start Date *</label><input id="svc-rec-start" type="date" value="'+esc(startDate)+'"></div>'
+    +'<div class="form-group"><label>Start Time *</label><input id="svc-rec-time" type="time" value="'+esc(startTime)+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Repeats</label><select id="svc-rec-repeats" onchange="onRecurrenceRepeatsChange()">'
+    +'<option value="once"'+(repeats==='once'?' selected':'')+'>One time</option>'
+    +'<option value="daily"'+(repeats==='daily'?' selected':'')+'>Daily</option>'
+    +'<option value="weekly"'+(repeats==='weekly'?' selected':'')+'>Weekly</option>'
+    +'</select></div>'
+    +'<div class="form-group" id="svc-rec-dow-wrap" style="display:'+(repeats==='weekly'?'block':'none')+'"><label>Days of Week *</label><div style="display:flex;gap:6px;flex-wrap:wrap">'+dowChecks+'</div></div>'
+    +'<div id="svc-rec-end-section" style="display:'+(repeats==='once'?'none':'block')+'">'
+    +'<div class="form-group"><label>End</label><select id="svc-rec-endtype" onchange="onRecurrenceEndTypeChange()">'
+    +'<option value="never"'+(endType==='never'?' selected':'')+'>Never</option>'
+    +'<option value="after"'+(endType==='after'?' selected':'')+'>After N occurrences</option>'
+    +'<option value="on_date"'+(endType==='on_date'?' selected':'')+'>On a specific date</option>'
+    +'</select></div>'
+    +'<div class="form-group" id="svc-rec-occ-wrap" style="display:'+(endType==='after'?'block':'none')+'"><label>Occurrences</label><input id="svc-rec-occ" type="number" min="1" max="52" value="'+occurrences+'"><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Capped at 52 per series.</div></div>'
+    +'<div class="form-group" id="svc-rec-end-wrap" style="display:'+(endType==='on_date'?'block':'none')+'"><label>End Date</label><input id="svc-rec-end" type="date" value="'+esc(endDate)+'"></div>'
+    +'</div>'
+    +'</div>';
+}
+
+// Type switcher: re-renders the type-specific section in place. Common fields preserved.
+function onServiceTypeChange(){
+  var typeSel=document.getElementById('svc-type');
+  if(!typeSel)return;
+  var newType=typeSel.value;
+  var s=state.modal.id?(db.services||[]).find(function(x){return x.id===state.modal.id;}):null;
+
+  var typeSection=document.getElementById('svc-type-section');
+  if(typeSection)typeSection.innerHTML=renderServiceTypeFields(s,newType);
+
+  // Variations section visibility: only individual + editing existing.
+  var varWrap=document.getElementById('svc-var-wrap');
+  if(varWrap){
+    if(newType==='individual'&&s){
+      varWrap.innerHTML='<div id="svc-var-section"></div>';
+      setTimeout(function(){renderVariationsSection(s.id);},30);
+    } else {
+      varWrap.innerHTML='';
+    }
+  }
+
+  // Re-init type-specific UI (no-op for individual; recurrence handlers self-init via onchange).
+  initServiceModalAfterRender(newType);
+
+  // Update modal title to match new type.
+  var titleEl=document.querySelector('.modal-title');
+  if(titleEl){
+    if(s)titleEl.textContent=newType==='class'?'Edit Class':'Edit Service';
+    else titleEl.textContent=newType==='class'?'New Class':'New Service';
+  }
+}
+
+// Conditional field swap when Repeats changes. One time hides days and end. Weekly shows days. Daily shows end only.
+function onRecurrenceRepeatsChange(){
+  var repeatsSel=document.getElementById('svc-rec-repeats');
+  if(!repeatsSel)return;
+  var repeats=repeatsSel.value;
+  var dowWrap=document.getElementById('svc-rec-dow-wrap');
+  var endSection=document.getElementById('svc-rec-end-section');
+  if(dowWrap)dowWrap.style.display=repeats==='weekly'?'block':'none';
+  if(endSection)endSection.style.display=repeats==='once'?'none':'block';
+}
+
+// Conditional field swap when End Type changes. After shows occurrences. On Date shows end_date.
+function onRecurrenceEndTypeChange(){
+  var endSel=document.getElementById('svc-rec-endtype');
+  if(!endSel)return;
+  var endType=endSel.value;
+  var occWrap=document.getElementById('svc-rec-occ-wrap');
+  var endWrap=document.getElementById('svc-rec-end-wrap');
+  if(occWrap)occWrap.style.display=endType==='after'?'block':'none';
+  if(endWrap)endWrap.style.display=endType==='on_date'?'block':'none';
+}
+
+// Reads form fields and constructs the recurrence_rule JSONB object. Returns null on validation failure.
+function buildRecurrenceRuleFromForm(){
+  var startDate=(document.getElementById('svc-rec-start')||{}).value;
+  var startTime=(document.getElementById('svc-rec-time')||{}).value;
+  var repeats=(document.getElementById('svc-rec-repeats')||{}).value;
+
+  if(!startDate){toast('Start date is required.','error');return null;}
+  if(!startTime){toast('Start time is required.','error');return null;}
+
+  var rule={v:1,repeats:repeats,start_date:startDate,start_time:startTime};
+
+  if(repeats==='once')return rule;
+
+  if(repeats==='weekly'){
+    var dow=[];
+    for(var i=0;i<7;i++){
+      var cb=document.getElementById('svc-rec-dow-'+i);
+      if(cb&&cb.checked)dow.push(i);
+    }
+    if(!dow.length){toast('Pick at least one day of week.','error');return null;}
+    rule.days_of_week=dow;
+  }
+
+  var endType=(document.getElementById('svc-rec-endtype')||{}).value||'never';
+  rule.end_type=endType;
+
+  if(endType==='after'){
+    var occ=parseInt((document.getElementById('svc-rec-occ')||{}).value,10);
+    if(!occ||occ<1){toast('Occurrences must be at least 1.','error');return null;}
+    rule.occurrences=Math.min(occ,52);
+  } else if(endType==='on_date'){
+    var endDate=(document.getElementById('svc-rec-end')||{}).value;
+    if(!endDate){toast('End date is required.','error');return null;}
+    if(endDate<startDate){toast('End date must be after start date.','error');return null;}
+    rule.end_date=endDate;
+  }
+
+  return rule;
+}
+
+// Post-render hook: currently a no-op stub. Recurrence handlers self-register via onchange in HTML.
+// Reserved for future per-type init logic.
+function initServiceModalAfterRender(type){
+  // Future: per-type init (focus, tooltips, etc.)
 }
 
 function renderVariationsSection(serviceId){
@@ -6852,26 +7042,57 @@ function renderVariationsSection(serviceId){
 
 function saveService(id){
   var name=document.getElementById('svc-name').value.trim();
-  if(!name){toast('Service name is required.','error');return;}
-  var staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
-  if(!staffChks.length){toast('Assign at least one staff member.','error');return;}
+  if(!name){toast(document.getElementById('svc-type').value==='class'?'Class name is required.':'Service name is required.','error');return;}
+
+  var type=document.getElementById('svc-type').value;
+
+  // Common fields built first; type-specific fields layered in below.
   var svc={
     id:id||uid(),
     name:name,
     category:document.getElementById('svc-cat').value.trim(),
-    type:document.getElementById('svc-type').value,
+    type:type,
     color:document.getElementById('svc-color').value,
-    price:document.getElementById('svc-price').value!==''?parseFloat(document.getElementById('svc-price').value):null,
-    duration_default:parseInt(document.getElementById('svc-dur').value)||60,
-    buffer_before:parseInt(document.getElementById('svc-buf-before').value)||0,
-    buffer_after:parseInt(document.getElementById('svc-buf-after').value)||0,
+    description:document.getElementById('svc-desc').value.trim(),
     booking_lead_time_hours:parseInt(document.getElementById('svc-lead').value)||0,
     booking_advance_days:parseInt(document.getElementById('svc-adv').value)||60,
-    description:document.getElementById('svc-desc').value.trim(),
-    assigned_staff:staffChks,
-    allow_client_choose_staff:document.getElementById('svc-choose-staff').checked,
     active:document.getElementById('svc-active').checked
   };
+
+  if(type==='individual'){
+    var staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
+    if(!staffChks.length){toast('Assign at least one staff member.','error');return;}
+
+    Object.assign(svc,{
+      price:document.getElementById('svc-price').value!==''?parseFloat(document.getElementById('svc-price').value):null,
+      duration_default:parseInt(document.getElementById('svc-dur').value)||60,
+      buffer_before:parseInt(document.getElementById('svc-buf-before').value)||0,
+      buffer_after:parseInt(document.getElementById('svc-buf-after').value)||0,
+      assigned_staff:staffChks,
+      allow_client_choose_staff:document.getElementById('svc-choose-staff').checked
+    });
+  } else {
+    // Class type: validate instructor, capacity, and recurrence rule.
+    var instructorId=(document.getElementById('svc-instructor')||{}).value;
+    if(!instructorId){toast('Pick an instructor.','error');return;}
+
+    var capacity=parseInt((document.getElementById('svc-capacity')||{}).value,10);
+    if(!capacity||capacity<1){toast('Capacity must be at least 1.','error');return;}
+
+    var rule=buildRecurrenceRuleFromForm();
+    if(!rule)return; // builder shows its own toast
+
+    Object.assign(svc,{
+      instructor_id:instructorId,
+      capacity:capacity,
+      duration_default:parseInt((document.getElementById('svc-dur')||{}).value)||60,
+      location:(document.getElementById('svc-location')||{}).value.trim()||null,
+      price:(document.getElementById('svc-price')||{}).value!==''?parseFloat(document.getElementById('svc-price').value):null,
+      drop_in_allowed:(document.getElementById('svc-dropin')||{}).checked,
+      recurrence_rule:rule
+    });
+  }
+
   var existing=id?(db.services||[]).find(function(x){return x.id===id;}):null;
   if(existing){Object.assign(existing,svc);}
   else{if(!db.services)db.services=[];db.services.push(svc);}
@@ -6881,7 +7102,10 @@ function saveService(id){
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(svc)
-  }).then(function(r){if(!r.ok)toast('Sync error saving service.','error');}).catch(function(){});
+  }).then(function(r){
+    if(!r.ok)toast('Sync error saving '+(type==='class'?'class':'service')+'.','error');
+    else if(type==='class')toast('Class saved. Sessions will generate when the recurrence engine ships in C.4.','info');
+  }).catch(function(){});
 }
 
 function deleteService(id){
