@@ -3489,6 +3489,8 @@ function openModal(title,bodyHTML,footHTML,size){
 function closeModal(){
   document.getElementById('modal-overlay').classList.remove('open');
   state.modal={type:null,id:null,extra:null};
+  // Tear down appointment payment Square card form if it was attached.
+  if(typeof _destroyApptSquareCardForm==='function')_destroyApptSquareCardForm();
   // After-close hook: any pending callback fires once, then clears.
   // Used by flows that need to navigate from one modal to another (e.g. roster -> back to service detail).
   var cb=state.modalAfterClose;
@@ -4031,6 +4033,9 @@ function switchApptTab(tab){
   if(!state.apptDetail)return;
   var a=getAppt(state.apptDetail.id);
   if(!a)return;
+  // Destroy any active Square card form before switching tabs.
+  // Re-init happens lazily when user clicks Card chip on the new render.
+  _destroyApptSquareCardForm();
   state.apptDetail.tab=tab;
 
   document.querySelectorAll('#appt-detail-tabs .svc-detail-tab').forEach(function(t){
@@ -4131,17 +4136,28 @@ function _renderApptPaymentTab(appt){
   // Payment form (only shown when there's a balance)
   var form='';
   if(status!=='paid'){
+    // Available card-on-file cards for this appointment's contact (if any)
+    var contact=appt.contactId?(db.contacts||[]).find(function(x){return x.id===appt.contactId;}):null;
+    var cofCards=(contact&&contact.squareCards)||[];
+    var hasContact=!!contact;
+    var hasCofCards=cofCards.length>0;
+    var sqConnected=(typeof sqIsConnected==='function')?sqIsConnected():false;
+
     form='<div style="background:var(--bg-card);border-radius:8px;padding:16px;margin-bottom:18px">'
       +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:12px">Record Payment</div>'
 
-      // Method chips: Cash and Other for Phase 1A. Card and Card-on-File added in 1B.
+      // Method chips
       +'<div style="margin-bottom:14px">'
       +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">METHOD</label>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
       +'<button type="button" id="apt-pm-cash" class="chip active" onclick="apptSetPM(\'cash\')">Cash</button>'
       +'<button type="button" id="apt-pm-other" class="chip" onclick="apptSetPM(\'other\')">Other</button>'
-      +'<button type="button" class="chip" disabled title="Coming in Phase 1B" style="opacity:.4;cursor:not-allowed">Card</button>'
-      +'<button type="button" class="chip" disabled title="Coming in Phase 1B" style="opacity:.4;cursor:not-allowed">Card on File</button>'
+      +(sqConnected
+        ?'<button type="button" id="apt-pm-card" class="chip" onclick="apptSetPM(\'card\')">Card</button>'
+        :'<button type="button" class="chip" disabled title="Square not connected" style="opacity:.4;cursor:not-allowed">Card</button>')
+      +(sqConnected&&hasCofCards
+        ?'<button type="button" id="apt-pm-cof" class="chip" onclick="apptSetPM(\'cof\')">Card on File</button>'
+        :'<button type="button" class="chip" disabled title="'+(!sqConnected?'Square not connected':!hasContact?'No contact on appointment':'No card on file')+'" style="opacity:.4;cursor:not-allowed">Card on File</button>')
       +'</div>'
       +'</div>'
 
@@ -4150,10 +4166,25 @@ function _renderApptPaymentTab(appt){
       +'<div class="form-group" id="apt-pay-ref-wrap" style="display:none"><label>Reference</label><input id="apt-pay-ref" type="text" placeholder="Check #, Venmo, etc."></div>'
       +'</div>'
 
+      // Card form container - hidden by default, populated when Card chip clicked
+      +'<div id="apt-pay-card-fields" style="display:none;margin-bottom:12px">'
+      +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">CARD DETAILS</label>'
+      +'<div id="apt-sq-card-container" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:60px"></div>'
+      +'<div id="apt-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:6px"></div>'
+      +'</div>'
+
+      // Card-on-file picker - hidden by default
+      +'<div id="apt-pay-cof-fields" style="display:none;margin-bottom:12px">'
+      +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">SAVED CARD</label>'
+      +'<select id="apt-pay-cof-select" style="width:100%">'
+      +cofCards.map(function(c,i){return'<option value="'+i+'">'+esc(c.brand||'Card')+' ending in '+esc(c.last4||'****')+'</option>';}).join('')
+      +'</select>'
+      +'</div>'
+
       +'<div class="form-group"><label>Notes</label><textarea id="apt-pay-notes" rows="2" placeholder="Optional"></textarea></div>'
 
       +'<div style="display:flex;justify-content:flex-end;margin-top:12px">'
-      +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>takeApptPayment())">Record Payment</button>'
+      +'<button class="btn btn-primary" id="apt-pay-submit" onclick="withBtnLock(this,()=>takeApptPayment())">Record Payment</button>'
       +'</div>'
       +'</div>';
   }
@@ -4182,19 +4213,71 @@ function _renderApptPaymentTab(appt){
   return header+form+history;
 }
 
-// Sets the payment method on the Take Payment form.
+// Square card form instance for the appointment payment tab. Separate from
+// posSqCard so the two tabs don't fight over a shared card form. Created on
+// first 'card' chip click, destroyed on tab switch / modal close.
+let apptSqCard = null;
+
+// Sets the payment method on the Take Payment form. Toggles visible field
+// groups (cash has none, other shows ref, card shows Square form, cof shows picker).
 function apptSetPM(method){
   state.apptPM=method;
-  ['cash','other'].forEach(function(m){
+  ['cash','other','card','cof'].forEach(function(m){
     var el=document.getElementById('apt-pm-'+m);
     if(el)el.classList.toggle('active', m===method);
   });
   var refWrap=document.getElementById('apt-pay-ref-wrap');
   if(refWrap)refWrap.style.display=(method==='other'?'block':'none');
+  var cardWrap=document.getElementById('apt-pay-card-fields');
+  if(cardWrap)cardWrap.style.display=(method==='card'?'block':'none');
+  var cofWrap=document.getElementById('apt-pay-cof-fields');
+  if(cofWrap)cofWrap.style.display=(method==='cof'?'block':'none');
+
+  // Update submit button label
+  var btn=document.getElementById('apt-pay-submit');
+  if(btn){
+    if(method==='card')btn.textContent='Charge Card';
+    else if(method==='cof')btn.textContent='Charge Saved Card';
+    else btn.textContent='Record Payment';
+  }
+
+  // Lazy init Square card form on first card chip click
+  if(method==='card'&&!apptSqCard){
+    _initApptSquareCardForm();
+  }
 }
 
-// Records a payment toward the current appointment. Phase 1A handles cash/other only.
-function takeApptPayment(){
+// Mounts a fresh Square card form into the appointment payment tab container.
+// Each modal open gets a fresh instance; we destroy on switch/close.
+async function _initApptSquareCardForm(){
+  var errEl=document.getElementById('apt-sq-card-errors');
+  var container=document.getElementById('apt-sq-card-container');
+  if(!container)return;
+  container.innerHTML='';
+  try{
+    var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
+    var cfg=await cfgRes.json();
+    if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
+    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
+    var payments=window.Square.payments(cfg.appId,'production');
+    apptSqCard=await payments.card();
+    await apptSqCard.attach('#apt-sq-card-container');
+  }catch(e){
+    console.error('Square init error (appt):',e);
+    if(errEl)errEl.textContent='Could not load card form: '+e.message;
+  }
+}
+
+// Cleanup on modal close or tab switch away from payment.
+function _destroyApptSquareCardForm(){
+  if(apptSqCard){
+    try{apptSqCard.destroy();}catch(e){}
+    apptSqCard=null;
+  }
+}
+
+// Records a payment toward the current appointment. Routes by method.
+async function takeApptPayment(){
   if(!state.apptDetail)return;
   var apptId=state.apptDetail.id;
   var appt=getAppt(apptId);
@@ -4204,11 +4287,19 @@ function takeApptPayment(){
   var amount=parseFloat((document.getElementById('apt-pay-amount')||{}).value);
   if(!amount||amount<=0||isNaN(amount)){toast('Enter a valid amount.','error');return;}
 
-  var ref=(document.getElementById('apt-pay-ref')||{}).value||'';
   var notes=(document.getElementById('apt-pay-notes')||{}).value||'';
   var staffId=state.user&&state.user.id||null;
   var staffName=state.user&&(state.user.name||state.user.username)||null;
 
+  if(method==='card'){
+    return _takeApptPaymentCard(appt, amount, notes, staffId, staffName);
+  }
+  if(method==='cof'){
+    return _takeApptPaymentCOF(appt, amount, notes, staffId, staffName);
+  }
+
+  // Cash or Other: simple record
+  var ref=(document.getElementById('apt-pay-ref')||{}).value||'';
   var payId=uid();
   var pmt={
     id:payId,
@@ -4229,16 +4320,164 @@ function takeApptPayment(){
     notes:notes||'',
     createdAt:now_()
   };
-
-  // Local push for immediate UI feedback
   if(!db.payments)db.payments=[];
   db.payments.push(pmt);
   _createPaymentRemote(pmt);
-
   toast('Payment of '+fmt$(amount)+' recorded.','success');
-
-  // Re-render the payment tab to show new history and updated balance
   switchApptTab('payment');
+}
+
+// Card payment: tokenize via Square SDK, charge via /api/square/charge.
+async function _takeApptPaymentCard(appt, amount, notes, staffId, staffName){
+  var errEl=document.getElementById('apt-sq-card-errors');
+  if(errEl)errEl.textContent='';
+  if(!apptSqCard){
+    if(errEl)errEl.textContent='Card form not ready. Click Card and wait for the form to load.';
+    return;
+  }
+  try{
+    var result=await apptSqCard.tokenize();
+    if(result.status!=='OK'){
+      var msgs=(result.errors||[]).map(function(e){return e.message;}).join(', ');
+      if(errEl)errEl.textContent=msgs||'Card validation failed.';
+      return;
+    }
+    var r=await fetch(apiUrl('/api/square/charge'),{
+      credentials:'include',
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        slug:state.subaccountSlug,
+        sourceId:result.token,
+        amountCents:Math.round(amount*100),
+        note:'Appointment payment - '+(appt.title||appt.id)
+      })
+    });
+    var data=await r.json();
+    var payId=uid();
+    if(data.error){
+      var failPmt={
+        id:payId,
+        contactId:appt.contactId||null,
+        staffId:staffId,
+        staffName:staffName,
+        appointmentId:appt.id,
+        items:[{desc:appt.title||'Appointment payment',price:amount}],
+        subtotal:amount,afterDiscount:amount,tipAmount:0,creditApplied:0,total:amount,
+        paymentMethod:'card',
+        status:'failed',
+        failReason:data.error,
+        notes:notes,
+        createdAt:now_()
+      };
+      if(!db.payments)db.payments=[];
+      db.payments.push(failPmt);
+      _createPaymentRemote(failPmt);
+      toast('Charge failed: '+data.error,'error');
+      switchApptTab('payment');
+      return;
+    }
+    var last4=data.payment&&data.payment.cardDetails&&data.payment.cardDetails.card&&data.payment.cardDetails.card.last4||'';
+    var brand=data.payment&&data.payment.cardDetails&&data.payment.cardDetails.card&&data.payment.cardDetails.card.cardBrand||'';
+    var pmt={
+      id:payId,
+      contactId:appt.contactId||null,
+      staffId:staffId,
+      staffName:staffName,
+      appointmentId:appt.id,
+      squarePaymentId:data.payment&&data.payment.id||'',
+      items:[{desc:appt.title||'Appointment payment',price:amount}],
+      subtotal:amount,afterDiscount:amount,tipAmount:0,creditApplied:0,total:amount,
+      paymentMethod:'card',
+      cardLast4:last4,
+      cardBrand:brand,
+      status:'completed',
+      notes:notes,
+      createdAt:now_()
+    };
+    if(!db.payments)db.payments=[];
+    db.payments.push(pmt);
+    _createPaymentRemote(pmt);
+    toast('Charged '+fmt$(amount)+' to card.','success');
+    _destroyApptSquareCardForm();
+    switchApptTab('payment');
+  }catch(e){
+    console.error('Card charge error:',e);
+    if(errEl)errEl.textContent='Charge failed: '+e.message;
+  }
+}
+
+// Card on File: charge a saved card via /api/square/charge with cardId.
+async function _takeApptPaymentCOF(appt, amount, notes, staffId, staffName){
+  var contact=appt.contactId?(db.contacts||[]).find(function(x){return x.id===appt.contactId;}):null;
+  var cards=(contact&&contact.squareCards)||[];
+  if(!cards.length){toast('No card on file for this contact.','error');return;}
+  var idx=parseInt((document.getElementById('apt-pay-cof-select')||{}).value)||0;
+  var card=cards[idx]||cards[0];
+  try{
+    var r=await fetch(apiUrl('/api/square/charge'),{
+      credentials:'include',
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        slug:state.subaccountSlug,
+        cardId:card.id,
+        customerId:contact.squareCustomerId||'',
+        amountCents:Math.round(amount*100),
+        note:'Appointment payment - '+(appt.title||appt.id)
+      })
+    });
+    var data=await r.json();
+    var payId=uid();
+    if(data.error){
+      var failPmt={
+        id:payId,
+        contactId:contact.id,
+        contactName:contact.name,
+        staffId:staffId,
+        staffName:staffName,
+        appointmentId:appt.id,
+        items:[{desc:appt.title||'Appointment payment',price:amount}],
+        subtotal:amount,afterDiscount:amount,tipAmount:0,creditApplied:0,total:amount,
+        paymentMethod:'card_on_file',
+        status:'failed',
+        failReason:data.error,
+        notes:notes,
+        createdAt:now_()
+      };
+      if(!db.payments)db.payments=[];
+      db.payments.push(failPmt);
+      _createPaymentRemote(failPmt);
+      toast('Charge failed: '+data.error,'error');
+      switchApptTab('payment');
+      return;
+    }
+    var pmt={
+      id:payId,
+      contactId:contact.id,
+      contactName:contact.name,
+      staffId:staffId,
+      staffName:staffName,
+      appointmentId:appt.id,
+      squarePaymentId:data.payment&&data.payment.id||'',
+      items:[{desc:appt.title||'Appointment payment',price:amount}],
+      subtotal:amount,afterDiscount:amount,tipAmount:0,creditApplied:0,total:amount,
+      paymentMethod:'card_on_file',
+      cardLast4:card.last4,
+      cardBrand:card.brand,
+      status:'completed',
+      notes:notes,
+      createdAt:now_()
+    };
+    if(!db.payments)db.payments=[];
+    db.payments.push(pmt);
+    _createPaymentRemote(pmt);
+    toast('Charged '+fmt$(amount)+' to '+(card.brand||'card')+' '+(card.last4||''),'success');
+    switchApptTab('payment');
+  }catch(e){
+    console.error('COF charge error:',e);
+    toast('Card on file charge failed: '+e.message,'error');
+  }
 }
 
 function checkApptConflict(){
