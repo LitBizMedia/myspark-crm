@@ -2428,7 +2428,8 @@ function renderDash(){
   else ae.innerHTML=todayAppts.map(a=>{
     const c=a.contactId?getContact(a.contactId):null;
     const col=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
-    return'<div class="dash-appt-row"><div class="dash-appt-time" style="color:'+col+'">'+(fmtTime(a.time)||'TBD')+'</div><div><div class="dash-appt-title">'+esc(a.title)+'</div><div class="dash-appt-sub">'+(c?esc(c.name)+' \u00b7 ':'')+( a.duration||60)+' min'+(a.location?' \u00b7 '+esc(a.location):'')+'</div></div></div>';
+    const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
+    return'<div class="dash-appt-row"><div class="dash-appt-time" style="color:'+col+'">'+(fmtTime(a.time)||'TBD')+'</div><div style="flex:1"><div class="dash-appt-title">'+esc(a.title)+'</div><div class="dash-appt-sub">'+(c?esc(c.name)+' \u00b7 ':'')+( a.duration||60)+' min'+(a.location?' \u00b7 '+esc(a.location):'')+'</div></div>'+(payPill?'<div style="flex-shrink:0">'+payPill+'</div>':'')+'</div>';
   }).join('');
   const nd=new Date();nd.setDate(nd.getDate()+7);const ns=nd.toISOString().split('T')[0];
   const dueTasks=db.tasks.filter(t=>t.status!=='done'&&(t.dueDate<=ns||isOverdue(t.dueDate))&&(!t.assignedTo||t.assignedTo===uid||state.user&&state.user.role==='admin'))
@@ -2565,7 +2566,8 @@ function renderDrawer(){
     const up=sorted.filter(a=>a.date>=todayStr()&&a.status!=='cancelled'),past=sorted.filter(a=>a.date<todayStr()||a.status==='cancelled');
     const aHTML=arr=>arr.map(a=>{
       const u=a.assignedTo?getUserById(a.assignedTo):null,uc=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
-      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
+      const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
+      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span>'+payPill+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
     }).join('');
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Upcoming ('+up.length+')</div><button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">+ Book</button></div>'
       +'<div style="margin-top:8px">'+(up.length?aHTML(up):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No upcoming appointments.</div>')+'</div>'
@@ -2740,7 +2742,7 @@ function renderMonthCal(){
     const isToday=str===td;
     const appts=str?getCalAppts(state.calUser,str):[];
     const tasks_=str?db.tasks.filter(t=>t.dueDate===str&&t.status!=='done'):[];
-    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'}),
+    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'}),
       ...tasks_.slice(0,Math.max(0,2-appts.length)).map(t=>'<div class="cal-ev cal-ev-task" onclick="event.stopPropagation();openTaskModal(null,\''+t.id+'\')">'+esc(t.title)+'</div>')];
     const more=appts.length+tasks_.length-shown.length;
     // Per-user appointment count summary
@@ -2839,7 +2841,7 @@ function buildTimedCol(dateStr,appts,allHours){
     var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
-      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+  '</div>'
+      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
       +'</div>';
@@ -2879,7 +2881,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
-      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+  '</div>'
+      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
       +'</div>';
@@ -4164,6 +4166,53 @@ function _getClassParticipantStatus(session, contactId){
   if(paid<=0)return 'unpaid';
   if(paid>=price-0.01)return 'paid';
   return 'partial';
+}
+
+// Aggregate payment status for a class session.
+// 'paid' = every enrolled participant paid in full
+// 'partial' = some participants paid (in full or partially)
+// 'unpaid' = no participants have paid anything
+// 'no_price' = no price set
+// 'no_participants' = no enrolled participants
+function _getClassSessionPaymentStatus(session){
+  var price=_getClassPrice(session);
+  if(price==null||price===0)return 'no_price';
+  var enrolled=(session.participants||[]).filter(function(p){return p.status==='enrolled';});
+  if(!enrolled.length)return 'no_participants';
+  var paidCount=0, partialCount=0;
+  enrolled.forEach(function(p){
+    var s=_getClassParticipantStatus(session, p.contact_id);
+    if(s==='paid')paidCount++;
+    else if(s==='partial')partialCount++;
+  });
+  if(paidCount===enrolled.length)return 'paid';
+  if(paidCount>0||partialCount>0)return 'partial';
+  return 'unpaid';
+}
+
+// Returns a payment status pill as HTML. Pass compact:true for calendar
+// (only paid/partial render, no_price and unpaid render empty). Pass
+// compact:false for list views (all three statuses render).
+function _paymentPillHTML(status, compact){
+  if(status==='no_price'||status==='no_participants')return '';
+  if(compact){
+    if(status==='paid')return '<span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:6px;background:#4ade80;color:#0a1c0e;line-height:1.2;flex-shrink:0;margin-right:4px">PAID</span>';
+    if(status==='partial')return '<span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:6px;background:#fbbf24;color:#3a2a00;line-height:1.2;flex-shrink:0;margin-right:4px">PRT</span>';
+    return '';
+  }
+  if(status==='paid')return '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.15);color:#4ade80;letter-spacing:.04em">PAID IN FULL</span>';
+  if(status==='partial')return '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(251,191,36,.15);color:#fbbf24;letter-spacing:.04em">PARTIAL</span>';
+  if(status==='unpaid')return '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(248,113,113,.15);color:#f87171;letter-spacing:.04em">UNPAID</span>';
+  return '';
+}
+
+// Returns the right payment status for any calendar event (appt or class session).
+function _eventPaymentStatus(a){
+  if(a&&a._isClassSession){
+    var session=(db.classSessions||[]).find(function(s){return s.id===a.id;});
+    return session?_getClassSessionPaymentStatus(session):'no_price';
+  }
+  return _getApptPaymentStatus(a);
 }
 
 // Builds a unified payment context for either an appointment payment or a
@@ -9128,6 +9177,7 @@ function renderApptList(){
       const c=a.contactId?getContact(a.contactId):null;
       const uc=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
       const u=a.assignedTo?getUserById(a.assignedTo):null;
+      const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
       html+='<div class="appt-list-row" style="border-left-color:'+uc+'" onclick="openApptModal(null,\''+a.id+'\')">'
         +'<div class="appt-list-date"><span style="font-size:11px;font-weight:700;color:var(--text-muted)">'+DSHORT[d.getDay()]+'</span></div>'
         +'<div class="appt-list-body">'
@@ -9135,7 +9185,7 @@ function renderApptList(){
         +'<div class="appt-list-meta">'+(a.time?fmtTime(a.time)+' \u00b7 ':'')+( a.duration||60)+' min'+(c?' \u00b7 '+esc(c.name):'')+(a.location?' \u00b7 '+esc(a.location):'')+'</div>'
         +'</div>'
         +(u?'<div style="font-size:11px;font-weight:600;color:'+uc+';flex-shrink:0;padding-top:2px">'+esc(u.name||u.username)+'</div>':'')
-        +'<div style="flex-shrink:0;display:flex;align-items:center;gap:6px"><span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span>'
+        +'<div style="flex-shrink:0;display:flex;align-items:center;gap:6px">'+payPill+'<span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span>'
         +'<button class="icon-btn-xs" title="Delete" onclick="event.stopPropagation();delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div>'
         +'</div>';
     });
