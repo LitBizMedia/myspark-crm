@@ -240,6 +240,12 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .view-btn{padding:6px 14px;font-size:12px;font-weight:600;color:var(--main-text-muted);
   cursor:pointer;background:transparent;border:none;font-family:Lato,sans-serif;transition:all .18s}
 .view-btn:hover{color:var(--text)}.view-btn.active{background:var(--purple);color:#fff}
+.svc-list-row:hover{background:var(--main-bg)}
+.svc-list-row:last-child{border-bottom:none !important}
+.svc-detail-tab{padding:10px 18px;font-size:13px;font-weight:600;color:var(--main-text-muted);
+  background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .15s;margin-bottom:-1px;font-family:Lato,sans-serif}
+.svc-detail-tab:hover{color:var(--main-text)}
+.svc-detail-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
 .cal-legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--main-text-muted)}
 .legend-dot{width:10px;height:10px;border-radius:50%}
@@ -6583,237 +6589,136 @@ function svcMsFilter(inp){
 }
 function renderServiceCal(){
   var el=document.getElementById('svc-cal-body');if(!el)return;
-  if(!state.svcPage)state.svcPage=0;
-  if(!state.svcCatF)state.svcCatF='';
-  if(!state.svcTypeF)state.svcTypeF='';
-  if(!state.svcStatF)state.svcStatF='';
+  if(state.svcCatF==null)state.svcCatF='';
+  if(state.svcTypeF==null)state.svcTypeF='';
+  if(state.svcStatF==null)state.svcStatF='';
+  if(state.svcStaffF==null)state.svcStaffF='';
 
   var cats=(db.serviceCategories||[]);
   var allSvcs=(db.services||[]);
-  var sessions=(db.classSessions||[]);
-  var PAGE=9;
+  var users=allUsers();
 
   // Apply filters
   var filtered=allSvcs.filter(function(s){
     if(state.svcCatF&&s.category!==state.svcCatF)return false;
-    if(state.svcTypeF&&s.type!==state.svcTypeF)return false;
+    if(state.svcTypeF==='individual'&&s.type==='class')return false;
+    if(state.svcTypeF==='class'&&s.type!=='class')return false;
     if(state.svcStatF==='active'&&s.active===false)return false;
     if(state.svcStatF==='inactive'&&s.active!==false)return false;
+    if(state.svcStaffF){
+      if(s.type==='class'){
+        if(s.instructor_id!==state.svcStaffF)return false;
+      } else {
+        if(!(s.assigned_staff||[]).includes(state.svcStaffF))return false;
+      }
+    }
     return true;
   });
 
+  // Default sort by name ascending
+  filtered.sort(function(a,b){
+    var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();
+    if(an<bn)return-1;if(an>bn)return 1;return 0;
+  });
+
   var total=filtered.length;
-  var totalPages=Math.max(1,Math.ceil(total/PAGE));
-  if(state.svcPage>=totalPages)state.svcPage=totalPages-1;
-  var paged=filtered.slice(state.svcPage*PAGE,(state.svcPage+1)*PAGE);
-  var individuals=paged.filter(function(s){return s.type!=='class';});
-  var classes=paged.filter(function(s){return s.type==='class';});
+  var totalAll=allSvcs.length;
+  var hasActiveFilter=!!(state.svcCatF||state.svcTypeF||state.svcStatF||state.svcStaffF);
 
   // Header
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Service Calendars</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+total+' service'+(total!==1?'s':'')+(state.svcCatF||state.svcTypeF||state.svcStatF?' (filtered)':'')+'</div></div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+total+' of '+totalAll+' service'+(totalAll!==1?'s':'')+(hasActiveFilter?' (filtered)':'')+'</div></div>'
     +'<div style="display:flex;gap:8px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="openCategoriesModal()">Manage Categories</button>'
     +'<button class="btn btn-primary" onclick="openCatalogAddMenu(this)">+ Add</button>'
     +'</div></div>';
 
-  // Filter bar
+  // Filter bar: type pill toggle + category dropdown + staff dropdown + status dropdown + clear
+  var staffOpts='<option value="">All Staff</option>'
+    +users.map(function(u){return'<option value="'+u.id+'"'+(state.svcStaffF===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>';}).join('');
   var catOpts='<option value="">All Categories</option>'
     +cats.map(function(c){return'<option value="'+esc(c)+'"'+(state.svcCatF===c?' selected':'')+'>'+esc(c)+'</option>';}).join('');
-  h+='<div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center">'
-    +'<select class="filter-sel" onchange="state.svcCatF=this.value;state.svcPage=0;renderServiceCal()">'+catOpts+'</select>'
-    +'<select class="filter-sel" onchange="state.svcTypeF=this.value;state.svcPage=0;renderServiceCal()">'
-    +'<option value=""'+(state.svcTypeF===''?' selected':'')+'>All Types</option>'
-    +'<option value="individual"'+(state.svcTypeF==='individual'?' selected':'')+'>Individual</option>'
-    +'<option value="class"'+(state.svcTypeF==='class'?' selected':'')+'>Class</option>'
-    +'</select>'
-    +'<select class="filter-sel" onchange="state.svcStatF=this.value;state.svcPage=0;renderServiceCal()">'
+
+  h+='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">'
+    +'<div class="view-toggle" style="flex-shrink:0">'
+    +'<button class="view-btn'+(state.svcTypeF===''?' active':'')+'" onclick="state.svcTypeF=\'\';renderServiceCal()">All</button>'
+    +'<button class="view-btn'+(state.svcTypeF==='individual'?' active':'')+'" onclick="state.svcTypeF=\'individual\';renderServiceCal()">Services</button>'
+    +'<button class="view-btn'+(state.svcTypeF==='class'?' active':'')+'" onclick="state.svcTypeF=\'class\';renderServiceCal()">Classes</button>'
+    +'</div>'
+    +'<select class="filter-sel" onchange="state.svcCatF=this.value;renderServiceCal()">'+catOpts+'</select>'
+    +'<select class="filter-sel" onchange="state.svcStaffF=this.value;renderServiceCal()">'+staffOpts+'</select>'
+    +'<select class="filter-sel" onchange="state.svcStatF=this.value;renderServiceCal()">'
     +'<option value=""'+(state.svcStatF===''?' selected':'')+'>All Status</option>'
     +'<option value="active"'+(state.svcStatF==='active'?' selected':'')+'>Active</option>'
     +'<option value="inactive"'+(state.svcStatF==='inactive'?' selected':'')+'>Inactive</option>'
     +'</select>'
-    +(state.svcCatF||state.svcTypeF||state.svcStatF
-      ?'<button class="btn btn-ghost btn-sm" onclick="state.svcCatF=\'\';state.svcTypeF=\'\';state.svcStatF=\'\';state.svcPage=0;renderServiceCal()">Clear filters</button>'
+    +(hasActiveFilter
+      ?'<button class="btn btn-ghost btn-sm" onclick="state.svcCatF=\'\';state.svcTypeF=\'\';state.svcStatF=\'\';state.svcStaffF=\'\';renderServiceCal()">Clear filters</button>'
       :'')
     +'</div>';
 
-  // Services grid
-  if(!paged.length){
-    h+='<div style="color:var(--text-muted);font-size:13px;padding:32px;text-align:center;border:1px dashed var(--main-border);border-radius:8px;margin-bottom:24px">'
+  // List
+  if(!filtered.length){
+    h+='<div style="color:var(--text-muted);font-size:13px;padding:32px;text-align:center;border:1px dashed var(--main-border);border-radius:8px">'
       +(allSvcs.length?'No services match the current filters.':'No services yet. Add your first service to get started.')
       +'</div>';
   } else {
-    if(individuals.length){
-      h+='<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Individual Services</div>';
-      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px">';
-      individuals.forEach(function(s){h+=_svcCard(s);});
-      h+='</div>';
-    }
-    if(classes.length){
-      h+='<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Class Services</div>';
-      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px">';
-      classes.forEach(function(s){h+=_svcCard(s);});
-      h+='</div>';
-    }
-  }
-
-  // Pagination
-  if(totalPages>1){
-    var pages='';
-    for(var p=0;p<totalPages;p++){
-      pages+='<button class="btn btn-'+(p===state.svcPage?'primary':'ghost')+' btn-sm" style="min-width:32px" onclick="state.svcPage='+p+';renderServiceCal()">'+( p+1)+'</button>';
-    }
-    h+='<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:24px">'
-      +'<button class="btn btn-ghost btn-sm" '+(state.svcPage===0?'disabled':'')+' onclick="state.svcPage=Math.max(0,state.svcPage-1);renderServiceCal()">&#8249;</button>'
-      +pages
-      +'<button class="btn btn-ghost btn-sm" '+(state.svcPage>=totalPages-1?'disabled':'')+' onclick="state.svcPage=Math.min('+(totalPages-1)+',state.svcPage+1);renderServiceCal()">&#8250;</button>'
-      +'<span style="font-size:11px;color:var(--text-muted);margin-left:8px">Showing '+(state.svcPage*PAGE+1)+'\u2013'+Math.min((state.svcPage+1)*PAGE,total)+' of '+total+'</span>'
+    // Header row
+    h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;overflow:hidden">'
+      +'<div style="display:grid;grid-template-columns:3fr 90px 1.5fr 1.5fr 1fr 90px;gap:14px;padding:10px 16px;background:var(--main-bg);border-bottom:1px solid var(--main-border);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">'
+      +'<div>Name</div><div>Type</div><div>Category</div><div>Staff</div><div>Price</div><div></div>'
       +'</div>';
-  }
-
-  // Class sessions
-  if(sessions.length){
-    h+='<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Upcoming Sessions</div>';
-    h+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px">';
-    sessions.filter(function(s){return s.status!=='cancelled';}).sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(s){h+=_sessionRow(s);});
+    filtered.forEach(function(s){h+=_svcRow(s);});
     h+='</div>';
   }
-
-  // Categories section
-  h+=_renderCategoriesSection(cats);
 
   el.innerHTML=h;
 }
 
-function _renderCategoriesSection(cats){
-  var rows=cats.length
-    ?cats.map(function(c,idx){
-      return'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--main-border)">'
-        +'<div id="svc-cat-disp-'+idx+'" style="flex:1;font-size:13px">'+esc(c)+'</div>'
-        +'<input id="svc-cat-inp-'+idx+'" type="text" value="'+esc(c)+'" style="display:none;flex:1;height:30px;font-size:12px">'
-        +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="svcCatEdit('+idx+')">Edit</button>'
-        +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;color:#f87171" onclick="svcCatDelete('+idx+')">Remove</button>'
-        +'</div>';
-    }).join('')
-    :'<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No categories yet. Add one below.</div>';
-
-  return'<div style="border:1px solid var(--main-border);border-radius:8px;overflow:hidden">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--main-bg);border-bottom:1px solid var(--main-border)">'
-    +'<div style="font-size:13px;font-weight:700">Service Categories</div>'
-    +'</div>'
-    +'<div style="padding:12px 16px">'
-    +rows
-    +'<div style="display:flex;gap:8px;margin-top:12px">'
-    +'<input id="svc-new-cat" type="text" placeholder="New category name..." style="flex:1;height:34px;font-size:12px">'
-    +'<button class="btn btn-primary btn-sm" onclick="svcCatAdd()">Add</button>'
-    +'</div></div></div>';
-}
-
-function svcCatAdd(){
-  var inp=document.getElementById('svc-new-cat');
-  var name=inp?inp.value.trim():'';
-  if(!name){toast('Enter a category name.','error');return;}
-  if(!db.serviceCategories)db.serviceCategories=[];
-  if(db.serviceCategories.some(function(c){return c.toLowerCase()===name.toLowerCase();})){
-    toast('Category already exists.','error');return;
-  }
-  var next=db.serviceCategories.concat([name]);
-  _saveServiceCategories(next);
-}
-
-function svcCatEdit(idx){
-  var disp=document.getElementById('svc-cat-disp-'+idx);
-  var inp=document.getElementById('svc-cat-inp-'+idx);
-  if(!disp||!inp)return;
-  var editing=inp.style.display!=='none';
-  if(editing){
-    var newName=inp.value.trim();
-    if(!newName){toast('Category name cannot be empty.','error');return;}
-    var old=db.serviceCategories[idx];
-    if(old===newName){
-      // No change; just exit edit mode
-      disp.style.display='';
-      inp.style.display='none';
-      return;
-    }
-    var next=db.serviceCategories.slice();
-    next[idx]=newName;
-    // Cascade rename to services server-side via rename_from/rename_to
-    _saveServiceCategories(next, old, newName);
-  } else {
-    disp.style.display='none';
-    inp.style.display='';
-    inp.focus();inp.select();
-  }
-}
-
-function svcCatDelete(idx){
-  var name=db.serviceCategories&&db.serviceCategories[idx];
-  if(!name)return;
-  var inUse=(db.services||[]).some(function(s){return s.category===name;});
-  if(inUse&&!confirm('This category is used by one or more services. Remove it anyway?'))return;
-  var next=db.serviceCategories.slice();
-  next.splice(idx,1);
-  _saveServiceCategories(next);
-}
-
-// Saves service categories to the dedicated column. If renameFrom/renameTo
-// are provided, server also cascades the rename across services.
-function _saveServiceCategories(nextCategories, renameFrom, renameTo){
-  var payload={categories:nextCategories};
-  if(renameFrom&&renameTo)payload.rename_from=renameFrom,payload.rename_to=renameTo;
-  fetch(apiUrl('/api/subaccount/service-categories-set'),{
-    method:'POST',credentials:'include',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(payload)
-  }).then(function(r){
-    if(!r.ok){toast('Failed to save categories.','error');return;}
-    return r.json().then(function(data){
-      db.serviceCategories=Array.isArray(data.categories)?data.categories:nextCategories;
-      // If the server cascaded a rename, refresh services to pick up the change
-      if(renameFrom&&renameTo&&typeof fetchFromServer==='function'){
-        fetchFromServer();
-      } else {
-        renderServiceCal();
-      }
-    });
-  }).catch(function(){toast('Network error saving categories.','error');});
-}
-
-
-function _svcCard(s){
-  var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===s.id&&v.active!==false;});
-  var staffNames=(s.assigned_staff||[]).map(function(uid){var u=allUsers().find(function(x){return x.id===uid;});return u?esc(u.name||u.username):'';}).filter(Boolean);
+// Single row in the service catalog list view.
+function _svcRow(s){
   var col=s.color||'#6b21ea';
-  // Compute price display: range from active variations if available, else service price.
-  var priceDisplay=_svcPriceDisplay(s, vars);
-  return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;overflow:hidden;border-left:4px solid '+col+'">'
-    +'<div style="padding:12px 14px">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
-    +'<div style="font-weight:700;font-size:13px">'+esc(s.name)+'</div>'
-    +'<div style="display:flex;gap:6px;align-items:center">'
-    +(s.active!==false?'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.15);color:#4ade80;font-weight:600">Active</span>':'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(156,163,175,.15);color:#9ca3af;font-weight:600">Inactive</span>')
-    +'<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="openServiceModal(\''+s.id+'\')">Edit</button>'
-    +'</div></div>'
-    +(s.category?'<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">'+esc(s.category)+'</div>':'')
-    +'<div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted);flex-wrap:wrap;margin-top:6px">'
-    +(vars.length?'<span>'+vars.length+' variation'+(vars.length!==1?'s':'')+'</span>':'<span>No variations</span>')
-    +(staffNames.length?'<span>'+staffNames.slice(0,3).join(', ')+(staffNames.length>3?' +more':'')+'</span>':'<span>All staff</span>')
-    +(priceDisplay?'<span>'+priceDisplay+'</span>':'')
+  var isClass=s.type==='class';
+  var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===s.id&&v.active!==false;});
+  var users=allUsers();
+
+  // Staff display: classes show single instructor, services show first 2 of multi-staff
+  var staffStr;
+  if(isClass){
+    var instr=users.find(function(u){return u.id===s.instructor_id;});
+    staffStr=instr?esc(instr.name||instr.username):'<span style="color:var(--text-muted)">No instructor</span>';
+  } else {
+    var staffNames=(s.assigned_staff||[]).map(function(uid){var u=users.find(function(x){return x.id===uid;});return u?esc(u.name||u.username):'';}).filter(Boolean);
+    if(!staffNames.length)staffStr='<span style="color:var(--text-muted)">All staff</span>';
+    else if(staffNames.length<=2)staffStr=staffNames.join(', ');
+    else staffStr=staffNames.slice(0,2).join(', ')+' +'+(staffNames.length-2);
+  }
+
+  var price=_svcPriceDisplay(s, vars);
+  var typePill=isClass
+    ?'<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(107,33,234,.15);color:var(--purple-light);font-weight:600">Class</span>'
+    :'<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(34,197,94,.15);color:#22c55e;font-weight:600">Service</span>';
+  var statusDot=s.active!==false
+    ?'<span title="Active" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:8px;vertical-align:middle"></span>'
+    :'<span title="Inactive" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#9ca3af;margin-right:8px;vertical-align:middle"></span>';
+
+  return'<div class="svc-list-row" onclick="openServiceDetail(\''+s.id+'\')" '
+    +'style="display:grid;grid-template-columns:3fr 90px 1.5fr 1.5fr 1fr 90px;gap:14px;padding:12px 16px;border-bottom:1px solid var(--main-border);cursor:pointer;align-items:center;border-left:3px solid '+col+';transition:background .1s">'
+    +'<div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:13px">'+statusDot+esc(s.name)+'</div>'
+    +'<div>'+typePill+'</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(s.category?esc(s.category):'<span style="color:var(--text-muted)">\u2014</span>')+'</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+staffStr+'</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted)">'+(price||'<span style="color:var(--text-muted)">\u2014</span>')+'</div>'
+    +'<div style="text-align:right" onclick="event.stopPropagation()">'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px" onclick="openServiceDetail(\''+s.id+'\')">Open</button>'
     +'</div>'
-    +'</div></div>';
+    +'</div>';
 }
 
 // Derives a price display string for a service, accounting for active variations.
 // Returns null when there's nothing to show (no service price and no priced variations).
-// Examples:
-//   - Service price $50, no variations           -> "$50.00"
-//   - Service has variations $40, $60, $80       -> "$40.00 - $80.00"
-//   - All variations same price $50              -> "$50.00"
-//   - Variations exist but none priced, svc $50  -> "$50.00"
-//   - Nothing priced                             -> null
 function _svcPriceDisplay(s, vars){
-  // vars param is optional; recompute if not passed.
   var v = vars || (db.serviceVariations||[]).filter(function(x){return x.service_id===s.id&&x.active!==false;});
   var pricedVars = v.filter(function(x){ return x.price != null; });
   if (pricedVars.length) {
@@ -6827,27 +6732,254 @@ function _svcPriceDisplay(s, vars){
   return null;
 }
 
-function _sessionRow(s){
-  var svc=(db.services||[]).find(function(x){return x.id===s.service_id;});
-  var col=svc?svc.color||'#6b21ea':'#6b21ea';
-  var instructor=allUsers().find(function(u){return u.id===s.instructor_id;});
-  var enrolled=(s.participants||[]).filter(function(p){return p.status==='enrolled';}).length;
-  var cap=s.capacity||10;
-  var pct=Math.round(enrolled/cap*100);
-  return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:14px;border-left:4px solid '+col+'">'
-    +'<div style="flex:1;min-width:0">'
-    +'<div style="font-weight:600;font-size:13px;margin-bottom:2px">'+esc(s.title)+'</div>'
-    +'<div style="font-size:11px;color:var(--text-muted)">'+s.date+(s.time?' at '+s.time:'')+(instructor?' &middot; '+esc(instructor.name||instructor.username):'')+'</div>'
+// Detail modal: tab interface that wraps the existing edit form and an upcoming-sessions list.
+function openServiceDetail(id){
+  var s=(db.services||[]).find(function(x){return x.id===id;});
+  if(!s){toast('Service not found.','error');return;}
+  state.svcDetail={id:id,tab:'edit',sessionPage:0};
+
+  var body='<div id="svc-detail-tabs" style="display:flex;gap:0;border-bottom:1px solid var(--main-border);margin-bottom:18px">'
+    +'<button class="svc-detail-tab active" data-tab="edit" onclick="switchServiceDetailTab(\'edit\')">Edit</button>'
+    +(s.type==='class'?'<button class="svc-detail-tab" data-tab="sessions" onclick="switchServiceDetailTab(\'sessions\')">Upcoming Sessions</button>':'')
     +'</div>'
-    +'<div style="text-align:right;flex-shrink:0">'
-    +'<div style="font-size:12px;font-weight:600;color:'+(enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80')+'">'+enrolled+'/'+cap+'</div>'
-    +'<div style="width:60px;height:4px;background:var(--main-border);border-radius:2px;margin-top:3px"><div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:2px"></div></div>'
-    +'</div>'
-    +'<div style="display:flex;gap:6px;flex-shrink:0">'
-    +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openRosterModal(\''+s.id+'\')">Roster</button>'
-    +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openClassSessionModal(\''+s.id+'\',\''+( s.service_id||'')+'\')">Edit</button>'
-    +'</div>'
+    +'<div id="svc-detail-content"></div>';
+
+  // Footer is empty on init; switchServiceDetailTab fills it based on tab.
+  openModal((s.type==='class'?'Class: ':'Service: ')+s.name, body, '', 'modal-lg');
+  switchServiceDetailTab('edit');
+}
+
+function switchServiceDetailTab(tab){
+  if(!state.svcDetail)return;
+  var s=(db.services||[]).find(function(x){return x.id===state.svcDetail.id;});
+  if(!s)return;
+  state.svcDetail.tab=tab;
+
+  // Update active tab styling
+  document.querySelectorAll('.svc-detail-tab').forEach(function(t){
+    t.classList.toggle('active', t.getAttribute('data-tab')===tab);
+  });
+
+  var content=document.getElementById('svc-detail-content');
+  var foot=document.getElementById('modal-foot');
+
+  if(tab==='edit'){
+    content.innerHTML=_renderServiceEditForm(s);
+    foot.innerHTML='<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteService(\''+s.id+'\')">Delete</button>'
+      +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+      +'<button class="btn btn-primary" onclick="saveService(\''+s.id+'\')">Save</button>';
+    setTimeout(function(){
+      if(s.type==='individual')renderVariationsSection(s.id);
+      initServiceModalAfterRender(s.type||'individual');
+    },50);
+  } else if(tab==='sessions'){
+    content.innerHTML=_renderUpcomingSessionsTab(s);
+    foot.innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  }
+}
+
+// Reuses the existing edit form helpers so we don't fork the catalog form.
+function _renderServiceEditForm(s){
+  var defaultType=s.type||'individual';
+  return'<div style="display:flex;flex-direction:column;gap:14px">'
+    +renderServiceCommonFields(s,defaultType)
+    +'<div id="svc-type-section">'+renderServiceTypeFields(s,defaultType)+'</div>'
+    +'<div id="svc-var-wrap">'+(defaultType==='individual'?'<div id="svc-var-section"></div>':'')+'</div>'
     +'</div>';
+}
+
+// Upcoming sessions list within the service detail modal. Paginated 14 per page.
+function _renderUpcomingSessionsTab(s){
+  if(s.type!=='class'){
+    return'<div style="color:var(--text-muted);font-size:13px;padding:24px;text-align:center">Individual services don\'t have scheduled sessions.</div>';
+  }
+  var today=todayStr();
+  var sessions=(db.classSessions||[])
+    .filter(function(x){return x.service_id===s.id&&x.date>=today&&x.status!=='cancelled';})
+    .sort(function(a,b){
+      if(a.date<b.date)return-1;if(a.date>b.date)return 1;
+      return(a.time||'')<(b.time||'')?-1:1;
+    });
+
+  if(!sessions.length){
+    return'<div style="color:var(--text-muted);font-size:13px;padding:24px;text-align:center">No scheduled sessions.</div>';
+  }
+
+  var PAGE=14;
+  var page=(state.svcDetail&&state.svcDetail.sessionPage)||0;
+  var totalPages=Math.max(1,Math.ceil(sessions.length/PAGE));
+  if(page>=totalPages){page=totalPages-1;state.svcDetail.sessionPage=page;}
+  var paged=sessions.slice(page*PAGE,(page+1)*PAGE);
+
+  var rows=paged.map(function(sess){return _detailSessionRow(sess);}).join('');
+
+  var pager='';
+  if(totalPages>1){
+    pager='<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;font-size:12px">'
+      +'<button class="btn btn-ghost btn-sm" '+(page===0?'disabled':'')+' onclick="state.svcDetail.sessionPage='+(page-1)+';switchServiceDetailTab(\'sessions\')">&#8249; Previous</button>'
+      +'<span style="color:var(--text-muted)">Page '+(page+1)+' of '+totalPages+'</span>'
+      +'<button class="btn btn-ghost btn-sm" '+(page>=totalPages-1?'disabled':'')+' onclick="state.svcDetail.sessionPage='+(page+1)+';switchServiceDetailTab(\'sessions\')">Next &#8250;</button>'
+      +'</div>';
+  }
+
+  return'<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">'+sessions.length+' upcoming session'+(sessions.length!==1?'s':'')+'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:6px">'+rows+'</div>'
+    +pager;
+}
+
+// Compact session row for the detail modal sessions tab. Click opens roster.
+function _detailSessionRow(sess){
+  var enrolled=(sess.participants||[]).filter(function(p){return p.status==='enrolled';}).length;
+  var cap=sess.capacity||10;
+  var color=enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80';
+  return'<div onclick="closeModal();setTimeout(function(){openRosterModal(\''+sess.id+'\')},50)" '
+    +'style="display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid var(--main-border);border-radius:6px;cursor:pointer;background:var(--main-card);transition:background .1s" '
+    +'onmouseover="this.style.background=\'var(--main-bg)\'" onmouseout="this.style.background=\'var(--main-card)\'">'
+    +'<div style="flex:1;min-width:0">'
+    +'<div style="font-size:13px;font-weight:600">'+_fmtSessionDate(sess.date)+(sess.time?' &middot; '+sess.time:'')+'</div>'
+    +'</div>'
+    +'<div style="font-size:12px;font-weight:600;color:'+color+';flex-shrink:0">'+enrolled+' / '+cap+'</div>'
+    +'<div style="color:var(--text-muted);font-size:14px;flex-shrink:0">&rsaquo;</div>'
+    +'</div>';
+}
+
+// Friendly session date format: "Mon, May 4, 2026"
+function _fmtSessionDate(dateStr){
+  if(!dateStr)return'';
+  var parts=dateStr.split('-');
+  if(parts.length!==3)return dateStr;
+  var d=new Date(parseInt(parts[0],10),parseInt(parts[1],10)-1,parseInt(parts[2],10));
+  return DSHORT[d.getDay()]+', '+MONTHS[d.getMonth()].slice(0,3)+' '+d.getDate()+', '+d.getFullYear();
+}
+
+// Manage Categories modal: pill-style display with inline rename support.
+function openCategoriesModal(){
+  state.catModal={editingIdx:null};
+  _renderCategoriesModalContent();
+  openModal('Manage Categories', '<div id="cat-modal-content"></div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Done</button>');
+  _renderCategoriesModalContent();
+}
+
+function _renderCategoriesModalContent(){
+  var el=document.getElementById('cat-modal-content');
+  if(!el)return;
+  var cats=(db.serviceCategories||[]);
+  var editingIdx=(state.catModal&&state.catModal.editingIdx);
+
+  var rows;
+  if(!cats.length){
+    rows='<div style="color:var(--text-muted);font-size:13px;padding:16px 0;text-align:center">No categories yet. Add one below.</div>';
+  } else {
+    rows='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px">'
+      +cats.map(function(c,idx){
+        if(editingIdx===idx){
+          return'<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--main-bg);border:1px solid var(--purple-border);border-radius:6px">'
+            +'<input id="cat-edit-inp" type="text" value="'+esc(c)+'" style="flex:1;height:34px;font-size:13px" onkeydown="if(event.key===\'Enter\')svcCatSave('+idx+');if(event.key===\'Escape\')svcCatCancelEdit()">'
+            +'<button class="btn btn-primary btn-sm" onclick="svcCatSave('+idx+')">Save</button>'
+            +'<button class="btn btn-ghost btn-sm" onclick="svcCatCancelEdit()">Cancel</button>'
+            +'</div>';
+        }
+        return'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--main-card);border:1px solid var(--main-border);border-radius:6px">'
+          +'<div style="flex:1;font-size:13px;font-weight:500">'+esc(c)+'</div>'
+          +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px" onclick="svcCatStartEdit('+idx+')">Edit</button>'
+          +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px;color:#f87171" onclick="svcCatDelete('+idx+')">Remove</button>'
+          +'</div>';
+      }).join('')
+      +'</div>';
+  }
+
+  var addRow='<div style="display:flex;gap:8px;border-top:1px solid var(--main-border);padding-top:14px">'
+    +'<input id="svc-new-cat" type="text" placeholder="New category name..." style="flex:1;height:36px;font-size:13px" onkeydown="if(event.key===\'Enter\')svcCatAdd()">'
+    +'<button class="btn btn-primary btn-sm" onclick="svcCatAdd()">Add</button>'
+    +'</div>';
+
+  el.innerHTML=rows+addRow;
+  if(editingIdx!=null){
+    var inp=document.getElementById('cat-edit-inp');
+    if(inp){inp.focus();inp.select();}
+  }
+}
+
+function svcCatStartEdit(idx){
+  if(!state.catModal)state.catModal={};
+  state.catModal.editingIdx=idx;
+  _renderCategoriesModalContent();
+}
+
+function svcCatCancelEdit(){
+  if(!state.catModal)state.catModal={};
+  state.catModal.editingIdx=null;
+  _renderCategoriesModalContent();
+}
+
+function svcCatSave(idx){
+  var inp=document.getElementById('cat-edit-inp');
+  var newName=inp?inp.value.trim():'';
+  if(!newName){toast('Category name cannot be empty.','error');return;}
+  var old=db.serviceCategories[idx];
+  if(old===newName){
+    state.catModal.editingIdx=null;
+    _renderCategoriesModalContent();
+    return;
+  }
+  if((db.serviceCategories||[]).some(function(c,i){return i!==idx&&c.toLowerCase()===newName.toLowerCase();})){
+    toast('Category already exists.','error');return;
+  }
+  var next=db.serviceCategories.slice();
+  next[idx]=newName;
+  state.catModal.editingIdx=null;
+  _saveServiceCategories(next, old, newName, _renderCategoriesModalContent);
+}
+
+function svcCatAdd(){
+  var inp=document.getElementById('svc-new-cat');
+  var name=inp?inp.value.trim():'';
+  if(!name){toast('Enter a category name.','error');return;}
+  if(!db.serviceCategories)db.serviceCategories=[];
+  if(db.serviceCategories.some(function(c){return c.toLowerCase()===name.toLowerCase();})){
+    toast('Category already exists.','error');return;
+  }
+  var next=db.serviceCategories.concat([name]);
+  _saveServiceCategories(next, null, null, function(){
+    if(inp)inp.value='';
+    _renderCategoriesModalContent();
+  });
+}
+
+function svcCatDelete(idx){
+  var name=db.serviceCategories&&db.serviceCategories[idx];
+  if(!name)return;
+  var inUse=(db.services||[]).some(function(s){return s.category===name;});
+  if(inUse&&!confirm('This category is used by one or more services. Remove it anyway?'))return;
+  var next=db.serviceCategories.slice();
+  next.splice(idx,1);
+  _saveServiceCategories(next, null, null, _renderCategoriesModalContent);
+}
+
+// Saves service categories to the dedicated column. If renameFrom/renameTo
+// are provided, server also cascades the rename across services.
+// onComplete is an optional callback invoked after a successful save (used
+// by the categories modal to refresh its content without closing).
+function _saveServiceCategories(nextCategories, renameFrom, renameTo, onComplete){
+  var payload={categories:nextCategories};
+  if(renameFrom&&renameTo)payload.rename_from=renameFrom,payload.rename_to=renameTo;
+  fetch(apiUrl('/api/subaccount/service-categories-set'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(function(r){
+    if(!r.ok){toast('Failed to save categories.','error');return;}
+    return r.json().then(function(data){
+      db.serviceCategories=Array.isArray(data.categories)?data.categories:nextCategories;
+      // If the server cascaded a rename, refresh services to pick up the change
+      if(renameFrom&&renameTo&&typeof fetchFromServer==='function'){
+        fetchFromServer();
+      }
+      renderServiceCal();
+      if(typeof onComplete==='function')onComplete();
+    });
+  }).catch(function(){toast('Network error saving categories.','error');});
 }
 
 function openServiceModal(id, prefType){
