@@ -12114,6 +12114,9 @@ function txnNorm(p){
     contactName: p.contactName || null,
     items: p.items || [],
     subtotal: p.subtotal != null ? p.subtotal : (p.amount || 0),
+    couponDiscount: p.couponDiscount || 0,
+    couponCode: p.couponCode || '',
+    couponId: p.couponId || '',
     discountAmount: p.discountAmount || 0,
     discountNote: p.discountNote || '',
     afterDiscount: p.afterDiscount != null ? p.afterDiscount : (p.subtotal != null ? p.subtotal : (p.amount || 0)),
@@ -12449,8 +12452,9 @@ function txnOpenDetail(id){
     +itemsHTML+'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:12px">'
     +'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>Subtotal</span><span>'+fmt$(t.subtotal)+'</span></div>'
-    +(t.discountAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:4px 0"><span>Discount'+(t.discountNote?' ('+esc(t.discountNote)+')':'')+'</span><span>-'+fmt$(t.discountAmount)+'</span></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>After Discount</span><span>'+fmt$(t.afterDiscount)+'</span></div>':'')
+    +(t.couponDiscount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:4px 0"><span>Coupon'+(t.couponCode?' ('+esc(t.couponCode)+')':'')+'</span><span>-'+fmt$(t.couponDiscount)+'</span></div>':'')
+    +(t.discountAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:4px 0"><span>Discount'+(t.discountNote?' ('+esc(t.discountNote)+')':'')+'</span><span>-'+fmt$(t.discountAmount)+'</span></div>':'')
+    +((t.couponDiscount>0||t.discountAmount>0)?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>After Discount</span><span>'+fmt$(t.afterDiscount)+'</span></div>':'')
     +(t.tipAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>Tip</span><span>'+fmt$(t.tipAmount)+'</span></div>':'')
     +(t.creditApplied>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--purple-light);padding:4px 0"><span>Credits Applied</span><span>-'+fmt$(t.creditApplied)+'</span></div>':'')
     +'<div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:8px 0;border-top:1px solid var(--border);margin-top:5px"><span style="color:var(--text)">Total</span><span style="color:var(--orange)">'+fmt$(t.total)+'</span></div>'
