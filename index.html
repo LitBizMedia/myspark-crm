@@ -3262,7 +3262,6 @@ async function initPosSquareCardForm(){
     const payments=window.Square.payments(cfg.appId,'production');
     posSqCard=await payments.card();
     await posSqCard.attach('#pos-sq-card-container');
-    console.log('Square card form ready');
   }catch(e){
     console.error('Square init error:',e);
     if(errEl)errEl.textContent='Could not load card form: '+e.message;
@@ -4056,9 +4055,8 @@ function switchApptTab(tab){
     closeModal();
     setTimeout(function(){openApptModal(a.contactId, a.id);},50);
   } else if(tab==='payment'){
-    // Reset adjustment state for fresh payment, build the appointment ctx
-    state.apptDiscType='flat';
-    state.apptCoupon=null;
+    // Reset payment-form state so previous payments don't leak in
+    _resetPaymentFormState();
     state.payCtx=_buildApptPayCtx(a);
     content.innerHTML=_renderPaymentForm(state.payCtx);
     foot.innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
@@ -4075,9 +4073,8 @@ function openClassParticipantPayment(sessionId, contactId){
   var contact=(db.contacts||[]).find(function(c){return c.id===contactId;});
   if(!contact){toast('Contact not found.','error');return;}
 
-  // Reset adjustment state
-  state.apptDiscType='flat';
-  state.apptCoupon=null;
+  // Reset payment-form state so previous payments don't leak in
+  _resetPaymentFormState();
   state.payCtx=_buildClassPayCtx(session, contactId);
 
   var title=(session.title||'Class')+' - '+contact.name;
@@ -4268,6 +4265,10 @@ function _buildClassPayCtx(session, contactId, opts){
     sessionId:session.id,
     onSuccess:opts.onSuccess||function(){
       // Default: refresh the modal in place by re-rendering with fresh ctx.
+      // Destroy the Square card form first - innerHTML wipe would orphan it.
+      _destroyApptSquareCardForm();
+      // Reset payment-form state for the next payment in this modal session
+      _resetPaymentFormState();
       var freshSession=(db.classSessions||[]).find(function(x){return x.id===session.id;});
       if(!freshSession)return;
       state.payCtx=_buildClassPayCtx(freshSession, contactId, opts);
@@ -4476,10 +4477,18 @@ function _renderPaymentForm(ctx){
   return header+form+history;
 }
 
-// Backward-compat alias for the appointment tab. Builds ctx from appt and renders.
-function _renderApptPaymentTab(appt){
-  state.payCtx=_buildApptPayCtx(appt);
-  return _renderPaymentForm(state.payCtx);
+// Backward-compat alias removed: _renderApptPaymentTab was unused after the
+// payCtx refactor. Use _renderPaymentForm(ctx) directly.
+
+// Resets payment-form state to defaults. Called at every fresh entry into
+// the payment form so previous selections (gift card, coupon, method, etc)
+// don't leak between separate payment sessions.
+function _resetPaymentFormState(){
+  state.apptPM='cash';
+  state.apptDiscType='flat';
+  state.apptCoupon=null;
+  state.apptGC=null;
+  state.apptGCRemainder=null;
 }
 
 // Square card form instance for the appointment payment tab. Separate from
@@ -5099,27 +5108,32 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
     createdAt:now_()
   }, ctx.linkage||{});
 
-  // Helper to commit GC redemption + record + coupon usage
+  // Helper to commit GC redemption + record + coupon usage.
+  // GC is only redeemed when status is 'completed'. Failed payments do not
+  // consume the gift card balance - the customer can retry without losing GC.
   function commit(extras, success){
     var pmt=Object.assign({}, basePmt, extras||{});
+    var isCompleted=pmt.status==='completed';
     if(!db.payments)db.payments=[];
     db.payments.push(pmt);
     _createPaymentRemote(pmt);
 
-    // Reduce GC balance, log redemption
-    gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
-    if(gObj.balance<=0)gObj.status='redeemed';
-    else if(gcApplied>0)gObj.status='partial';
-    if(!gObj.log)gObj.log=[];
-    gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at payment'+(gcRemainder>0?' + '+fmt$(gcRemainder)+' '+(remMethod||''):''),date:now_(),contactId:ctx.contactId||null,paymentId:payId});
+    if(isCompleted){
+      // Reduce GC balance, log redemption
+      gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
+      if(gObj.balance<=0)gObj.status='redeemed';
+      else if(gcApplied>0)gObj.status='partial';
+      if(!gObj.log)gObj.log=[];
+      gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at payment'+(gcRemainder>0?' + '+fmt$(gcRemainder)+' '+(remMethod||''):''),date:now_(),contactId:ctx.contactId||null,paymentId:payId});
 
-    // Coupon usage logging
-    if(totals.couponId){
-      var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
-      if(cpn){
-        if(!cpn.usageLog)cpn.usageLog=[];
-        cpn.usageLog.push({id:uid(),contactId:ctx.contactId||null,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
-        cpn.usageCount=(cpn.usageCount||0)+1;
+      // Coupon usage logging only on completed payments
+      if(totals.couponId){
+        var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
+        if(cpn){
+          if(!cpn.usageLog)cpn.usageLog=[];
+          cpn.usageLog.push({id:uid(),contactId:ctx.contactId||null,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
+          cpn.usageCount=(cpn.usageCount||0)+1;
+        }
       }
     }
     saveData();
