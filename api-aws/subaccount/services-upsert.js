@@ -71,11 +71,11 @@ async function handler(req, res) {
         buffer_before, buffer_after, assigned_staff, allow_client_choose_staff,
         booking_lead_time_hours, booking_advance_days, active,
         instructor_id, capacity, location, drop_in_allowed,
-        recurrence_rule, last_generated_through,
+        recurrence_rule, last_generated_through, taxable,
         created_at, updated_at
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-        $16,$17,$18,$19,$20,$21,
+        $16,$17,$18,$19,$20,$21,$22,
         NOW(),NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -94,6 +94,7 @@ async function handler(req, res) {
         drop_in_allowed=EXCLUDED.drop_in_allowed,
         recurrence_rule=EXCLUDED.recurrence_rule,
         last_generated_through=EXCLUDED.last_generated_through,
+        taxable=EXCLUDED.taxable,
         updated_at=NOW()
       WHERE services.subaccount_id=$2
     `, [
@@ -111,7 +112,8 @@ async function handler(req, res) {
       s.location || null,
       s.drop_in_allowed !== false,
       s.recurrence_rule ? JSON.stringify(s.recurrence_rule) : null,
-      lastGeneratedThrough
+      lastGeneratedThrough,
+      s.taxable !== false
     ]);
 
     // Class session handling: generate, regenerate, or propagate.

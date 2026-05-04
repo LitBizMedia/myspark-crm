@@ -34,6 +34,8 @@ function paymentToFrontend(row) {
     discountNote: row.discount_note,
     afterDiscount: row.after_discount != null ? parseFloat(row.after_discount) : null,
     feeAmount: row.fee_amount != null ? parseFloat(row.fee_amount) : 0,
+    taxAmount: row.tax_amount != null ? parseFloat(row.tax_amount) : 0,
+    taxableAmount: row.taxable_amount != null ? parseFloat(row.taxable_amount) : 0,
     tipAmount: row.tip_amount != null ? parseFloat(row.tip_amount) : 0,
     creditApplied: row.credit_applied != null ? parseFloat(row.credit_applied) : 0,
     total: row.total != null ? parseFloat(row.total) : 0,

@@ -7460,6 +7460,7 @@ function openProductModal(id){
     +'<div class="form-group"><label>Product Name *</label><input id="prd-name" type="text" value="'+esc(p&&p.name||'')+'" placeholder="e.g. Website Design Package"></div>'
     +'<div class="form-group"><label>Status</label><select id="prd-active"><option value="true"'+(!p||p.active?' selected':'')+'>Active</option><option value="false"'+(p&&!p.active?' selected':'')+'>Inactive</option></select></div>'
     +'</div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="prd-taxable" type="checkbox"'+((p&&p.taxable!==false)||!p?' checked':'')+'>Charge tax on this product</label></div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Category</label><select id="prd-cat" class="filter-sel" style="width:100%;height:42px" onchange="if(this.value)document.getElementById(\'prd-cat-new\').value=\'\'"><option value="">Select or type below\u2026</option>'+catOpts+'</select></div>'
     +'<div class="form-group"><label>Or create new category</label><input id="prd-cat-new" type="text" placeholder="New category name\u2026" oninput="if(this.value)document.getElementById(\'prd-cat\').value=\'\'"></div>'
@@ -7545,6 +7546,7 @@ function saveProduct(){
     description:(document.getElementById('prd-desc')&&document.getElementById('prd-desc').value||'').trim(),
     category,
     active:document.getElementById('prd-active')&&document.getElementById('prd-active').value==='true',
+    taxable:!!(document.getElementById('prd-taxable')&&document.getElementById('prd-taxable').checked),
     squareCatalogId:(document.getElementById('prd-sq')&&document.getElementById('prd-sq').value||'').trim(),
     pricingOptions:[...editPricingOpts],
     trackInventory:invOn,
@@ -8345,7 +8347,7 @@ function renderServiceCommonFields(s,type){
     +'<div class="form-group"><label>Booking Lead Time (hours)</label><input id="svc-lead" type="number" min="0" value="'+(s&&s.booking_lead_time_hours||0)+'"></div>'
     +'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>'
     +'</div>'
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label></div>';
+    +'<div class="form-group" style="display:flex;gap:18px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-taxable" type="checkbox"'+((s&&s.taxable!==false)||!s?' checked':'')+'>Charge tax on this '+(type==='class'?'class':'service')+'</label></div>';
 }
 
 // Dispatcher: renders Individual or Class field set based on type.
@@ -8647,7 +8649,8 @@ function saveService(id){
     description:document.getElementById('svc-desc').value.trim(),
     booking_lead_time_hours:parseInt(document.getElementById('svc-lead').value)||0,
     booking_advance_days:parseInt(document.getElementById('svc-adv').value)||60,
-    active:document.getElementById('svc-active').checked
+    active:document.getElementById('svc-active').checked,
+    taxable:!!(document.getElementById('svc-taxable')&&document.getElementById('svc-taxable').checked)
   };
 
   if(type==='individual'){
@@ -14497,7 +14500,8 @@ function openPackTemplateModal(id){
     +'<label>Months from purchase</label>'
     +'<input id="spt-expmonths" type="number" min="1" step="1" style="'+inpS+'" value="'+(t&&t.expiresMonths?t.expiresMonths:'')+'" placeholder="12"></div>'
     +'</div>'
-    +(isNew?'':'<div class="form-group"><label>Status</label><select id="spt-status" class="filter-sel" style="width:100%;height:38px"><option value="active"'+(t&&t.status!=='inactive'?' selected':'')+'>Active</option><option value="inactive"'+(t&&t.status==='inactive'?' selected':'')+'>Inactive</option></select></div>');
+    +(isNew?'':'<div class="form-group"><label>Status</label><select id="spt-status" class="filter-sel" style="width:100%;height:38px"><option value="active"'+(t&&t.status!=='inactive'?' selected':'')+'>Active</option><option value="inactive"'+(t&&t.status==='inactive'?' selected':'')+'>Inactive</option></select></div>')
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="spt-taxable" type="checkbox"'+((t&&t.taxable!==false)||!t?' checked':'')+'>Charge tax on this pack</label></div>';
   openModal((isNew?'New Pack Template':'Edit Pack Template'),body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="savePackTemplate('+(isNew?'null':"'"+id+"'")+')">'+( isNew?'Create Template':'Save Changes')+'</button>',
@@ -14529,15 +14533,17 @@ function savePackTemplate(id){
   if(paid<1||total<1){toast('Enter valid session counts.','error');return;}
   if(total<paid){toast('Total sessions must be >= sessions paid.','error');return;}
   if(!db.sessionPackTemplates)db.sessionPackTemplates=[];
+  var taxable=!!(document.getElementById('spt-taxable')&&document.getElementById('spt-taxable').checked);
   if(id){
     var t=db.sessionPackTemplates.find(function(x){return x.id===id;});
     if(!t){toast('Template not found.','error');return;}
     t.name=name;t.price=price;t.sessionsPaid=paid;t.sessionsTotal=total;t.description=desc;
     t.serviceRestriction=restrict;t.services=services;t.expiresMonths=expMonths;
+    t.taxable=taxable;
     var statusEl=document.getElementById('spt-status');if(statusEl)t.status=statusEl.value;
     t.updatedAt=now_();
   }else{
-    db.sessionPackTemplates.push({id:uid(),name:name,price:price,sessionsPaid:paid,sessionsTotal:total,description:desc,serviceRestriction:restrict,services:services,expiresMonths:expMonths,status:'active',createdAt:now_()});
+    db.sessionPackTemplates.push({id:uid(),name:name,price:price,sessionsPaid:paid,sessionsTotal:total,description:desc,serviceRestriction:restrict,services:services,expiresMonths:expMonths,taxable:taxable,status:'active',createdAt:now_()});
   }
   saveData();closeModal();renderSessionPacks();toast(id?'Template updated.':'Template created.','success');
 }
@@ -18171,10 +18177,54 @@ function renderPaySettings(){
   if(!el)return;
   if(!db.paySettings)db.paySettings={};
   if(!db.paySettings.additionalFee)db.paySettings.additionalFee={enabled:false,label:'Additional Fee',type:'flat',amount:0};
+  if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
   var af=db.paySettings.additionalFee;
+  var tx=db.paySettings.tax;
   var inp='background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;width:100%;box-sizing:border-box';
   el.innerHTML=
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">'    +'<div style="display:flex;flex-direction:column;gap:18px">'    +'<div class="s-card">'    +'<div class="s-card-title">Additional Fee</div>'    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'    +'<div class="bh-toggle'+(af.enabled?' on':'')+'" id="fee-toggle" onclick="toggleAdditionalFee()" style="position:relative;flex-shrink:0"></div>'    +'<span style="font-size:13px;color:var(--main-text-muted)">'+(af.enabled?'Enabled':'Disabled')+'</span>'    +'</div>'    +'<div id="fee-fields" style="'+(af.enabled?'':'display:none;')+'display:flex;flex-direction:column;gap:12px">'    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'    +'<div class="form-group" style="flex:2;min-width:140px"><label>Fee Label</label><input id="fee-label" type="text" style="'+inp+'" value="'+esc(af.label||'Additional Fee')+'" placeholder="e.g. Processing Fee" oninput="savePaySettings()"></div>'    +'<div class="form-group" style="flex:1;min-width:110px"><label>Type</label><select id="fee-type" class="filter-sel" style="width:100%;height:42px" onchange="savePaySettings();renderPaySettings()">'    +'<option value="flat"'+(af.type==='flat'?' selected':'')+'>Flat ($)</option>'    +'<option value="pct"'+(af.type==='pct'?' selected':'')+'>Percent (%)</option>'    +'</select></div>'    +'<div class="form-group" style="flex:1;min-width:80px"><label>'+(af.type==='pct'?'Rate (%)':'Amount ($)')+'</label><input id="fee-amount" type="number" style="'+inp+'" min="0" step="0.01" value="'+(af.amount||'')+'" placeholder="0.00" oninput="savePaySettings()"></div>'    +'</div>'    +'<p style="font-size:12px;color:var(--main-text-muted);margin:4px 0 0">This fee is automatically added to every POS transaction when enabled.</p>'    +'</div>'    +'</div>'    +'<div class="s-card">'    +'<div class="s-card-title">Taxes</div>'    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Tax configuration coming in a future update.</p>'    +'</div>'    +'</div>'    +'<div style="display:flex;flex-direction:column;gap:18px">'    +'<div class="s-card">'    +'<div class="s-card-title">Receipts and Notifications</div>'    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Receipt and notification settings coming in a future update.</p>'    +'</div>'    +'</div>'    +'</div>';
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">'
+    +'<div style="display:flex;flex-direction:column;gap:18px">'
+    +'<div class="s-card">'
+    +'<div class="s-card-title">Additional Fee</div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+    +'<div class="bh-toggle'+(af.enabled?' on':'')+'" id="fee-toggle" onclick="toggleAdditionalFee()" style="position:relative;flex-shrink:0"></div>'
+    +'<span style="font-size:13px;color:var(--main-text-muted)">'+(af.enabled?'Enabled':'Disabled')+'</span>'
+    +'</div>'
+    +'<div id="fee-fields" style="'+(af.enabled?'':'display:none;')+'display:flex;flex-direction:column;gap:12px">'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +'<div class="form-group" style="flex:2;min-width:140px"><label>Fee Label</label><input id="fee-label" type="text" style="'+inp+'" value="'+esc(af.label||'Additional Fee')+'" placeholder="e.g. Processing Fee" oninput="savePaySettings()"></div>'
+    +'<div class="form-group" style="flex:1;min-width:110px"><label>Type</label><select id="fee-type" class="filter-sel" style="width:100%;height:42px" onchange="savePaySettings();renderPaySettings()">'
+    +'<option value="flat"'+(af.type==='flat'?' selected':'')+'>Flat ($)</option>'
+    +'<option value="pct"'+(af.type==='pct'?' selected':'')+'>Percent (%)</option>'
+    +'</select></div>'
+    +'<div class="form-group" style="flex:1;min-width:80px"><label>'+(af.type==='pct'?'Rate (%)':'Amount ($)')+'</label><input id="fee-amount" type="number" style="'+inp+'" min="0" step="0.01" value="'+(af.amount||'')+'" placeholder="0.00" oninput="savePaySettings()"></div>'
+    +'</div>'
+    +'<p style="font-size:12px;color:var(--main-text-muted);margin:4px 0 0">This fee is automatically added to every POS transaction when enabled.</p>'
+    +'</div>'
+    +'</div>'
+    +'<div class="s-card">'
+    +'<div class="s-card-title">Taxes</div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+    +'<div class="bh-toggle'+(tx.enabled?' on':'')+'" id="tax-toggle" onclick="toggleTaxCollection()" style="position:relative;flex-shrink:0"></div>'
+    +'<span style="font-size:13px;color:var(--main-text-muted)">'+(tx.enabled?'Collecting tax':'Disabled')+'</span>'
+    +'</div>'
+    +'<div id="tax-fields" style="'+(tx.enabled?'':'display:none;')+'display:flex;flex-direction:column;gap:12px">'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +'<div class="form-group" style="flex:2;min-width:140px"><label>Tax Label</label><input id="tax-label" type="text" style="'+inp+'" value="'+esc(tx.label||'Sales Tax')+'" placeholder="e.g. Sales Tax" oninput="savePaySettings()"></div>'
+    +'<div class="form-group" style="flex:1;min-width:90px"><label>Rate (%)</label><input id="tax-rate" type="number" style="'+inp+'" min="0" max="100" step="0.001" value="'+(tx.rate||'')+'" placeholder="7.000" oninput="savePaySettings()"></div>'
+    +'</div>'
+    +'<p style="font-size:12px;color:var(--main-text-muted);margin:4px 0 0">Tax applies to services, products, and packs marked taxable. Gift card sales are not taxed at purchase. Discounts and coupons reduce the taxable amount before tax is calculated.</p>'
+    +'<p style="font-size:11px;color:var(--main-text-muted);margin:0;font-style:italic">Tax law varies by state and item type. You are responsible for setting the correct rate and marking each item correctly.</p>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:18px">'
+    +'<div class="s-card">'
+    +'<div class="s-card-title">Receipts and Notifications</div>'
+    +'<p style="font-size:13px;color:var(--main-text-muted);margin:0">Receipt and notification settings coming in a future update.</p>'
+    +'</div>'
+    +'</div>'
+    +'</div>';
 }
 
 function toggleAdditionalFee(){
@@ -18187,16 +18237,81 @@ function toggleAdditionalFee(){
   toast('Additional fee '+(db.paySettings.additionalFee.enabled?'enabled':'disabled')+'.','success');
 }
 
+function toggleTaxCollection(){
+  if(!db.paySettings)db.paySettings={};
+  if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
+  db.paySettings.tax.enabled=!db.paySettings.tax.enabled;
+  saveData();
+  renderPaySettings();
+  if(state.paymentsTab==='pos'&&typeof calcTotals==='function')calcTotals();
+  toast('Tax collection '+(db.paySettings.tax.enabled?'enabled':'disabled')+'.','success');
+}
+
+// Returns tax config if tax is enabled and rate is positive, otherwise null.
+// Use this everywhere tax math runs to short-circuit when tax is off.
+function getTaxSettings(){
+  var t=db.paySettings&&db.paySettings.tax;
+  if(!t||!t.enabled)return null;
+  var rate=parseFloat(t.rate)||0;
+  if(rate<=0)return null;
+  return {enabled:true, rate:rate, label:t.label||'Sales Tax'};
+}
+
+// Computes tax on a list of items respecting per-item taxable flag and any
+// pre-tax discount allocation. Returns {tax, taxableAmount, label, rate, enabled}.
+//
+// items: [{price, taxable, qty}]  (qty defaults to 1)
+// preTaxDiscount: total discount applied before tax (coupon + manual discount)
+//                 allocated proportionally across all items based on share of subtotal
+//
+// Math:
+//   subtotal = sum(price*qty)
+//   For each item: alloc_disc = (item_total / subtotal) * preTaxDiscount
+//   For each TAXABLE item: taxable_share = max(0, item_total - alloc_disc)
+//   taxableAmount = sum of taxable_shares
+//   tax = round(taxableAmount * rate / 100, 2)
+function calcTax(items, preTaxDiscount){
+  var t=getTaxSettings();
+  if(!t)return {tax:0, taxableAmount:0, label:'Sales Tax', rate:0, enabled:false};
+  if(!items||!items.length)return {tax:0, taxableAmount:0, label:t.label, rate:t.rate, enabled:true};
+  var subtotal=items.reduce(function(s,i){return s+(parseFloat(i.price)||0)*(i.qty||1);},0);
+  if(subtotal<=0)return {tax:0, taxableAmount:0, label:t.label, rate:t.rate, enabled:true};
+  var disc=parseFloat(preTaxDiscount)||0;
+  if(disc>subtotal)disc=subtotal;
+  var taxableAmount=0;
+  items.forEach(function(i){
+    if(!i.taxable)return;
+    var line=(parseFloat(i.price)||0)*(i.qty||1);
+    var allocDisc=disc*(line/subtotal);
+    var taxableShare=Math.max(0, line-allocDisc);
+    taxableAmount+=taxableShare;
+  });
+  var tax=taxableAmount*t.rate/100;
+  return {
+    tax:Math.round(tax*100)/100,
+    taxableAmount:Math.round(taxableAmount*100)/100,
+    label:t.label,
+    rate:t.rate,
+    enabled:true
+  };
+}
+
 function savePaySettings(){
   if(!db.paySettings)db.paySettings={};
   if(!db.paySettings.additionalFee)db.paySettings.additionalFee={enabled:false,label:'Additional Fee',type:'flat',amount:0};
+  if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
   var af=db.paySettings.additionalFee;
+  var tx=db.paySettings.tax;
   var lbl=document.getElementById('fee-label');
   var typ=document.getElementById('fee-type');
   var amt=document.getElementById('fee-amount');
   if(lbl)af.label=lbl.value||'Additional Fee';
   if(typ)af.type=typ.value||'flat';
   if(amt)af.amount=parseFloat(amt.value)||0;
+  var tlbl=document.getElementById('tax-label');
+  var trate=document.getElementById('tax-rate');
+  if(tlbl)tx.label=tlbl.value||'Sales Tax';
+  if(trate)tx.rate=parseFloat(trate.value)||0;
   saveData();
   if(state.paymentsTab==='pos')calcTotals();
 }
