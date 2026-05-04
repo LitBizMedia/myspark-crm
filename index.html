@@ -11020,6 +11020,7 @@ function openStaffDrillDown(userId){
 
   var tBody='<table class="drill-table"><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Qty</th><th style="text-align:right">Sales</th><th style="text-align:right;color:#34d399">Tips</th></tr></thead><tbody>';
   rows.forEach(function(r){
+    var isTip=r.type==='Tip';
     tBody+='<tr>'
       +'<td>'+fmtDate(r.date)+'</td>'
       +'<td><span style="font-size:10px;font-weight:700;text-transform:uppercase;color:'+(r.type==='Tip'?'#34d399':r.type==='Appointment'?'var(--text-muted)':'var(--purple-light)')+'">'+r.type+'</span></td>'
