@@ -4006,8 +4006,239 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   else if (initialMode === 'service') modalTitle = 'Book Service';
   else modalTitle = 'Book Appointment';
 
-  openModal(modalTitle,b,(a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>','modal-lg');
+  // For existing appointments, wrap body with tab interface (Details + Take Payment).
+  // For new appointments, show details form only - payments require a saved appointment.
+  var bodyHTML;
+  if (a) {
+    state.apptDetail = { id: a.id, tab: 'details' };
+    bodyHTML = '<div id="appt-detail-tabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:18px">'
+      + '<button class="svc-detail-tab active" data-tab="details" onclick="switchApptTab(\'details\')">Details</button>'
+      + '<button class="svc-detail-tab" data-tab="payment" onclick="switchApptTab(\'payment\')">Take Payment</button>'
+      + '</div>'
+      + '<div id="appt-detail-content">' + b + '</div>';
+  } else {
+    bodyHTML = b;
+  }
+
+  var detailFooter = (a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
+
+  openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
   setTimeout(checkApptConflict,80);
+}
+
+// Switch between Details and Take Payment tabs in the appointment modal.
+function switchApptTab(tab){
+  if(!state.apptDetail)return;
+  var a=getAppt(state.apptDetail.id);
+  if(!a)return;
+  state.apptDetail.tab=tab;
+
+  document.querySelectorAll('#appt-detail-tabs .svc-detail-tab').forEach(function(t){
+    t.classList.toggle('active', t.getAttribute('data-tab')===tab);
+  });
+
+  var content=document.getElementById('appt-detail-content');
+  var foot=document.getElementById('modal-foot');
+
+  if(tab==='details'){
+    // Re-open the modal to rebuild the details form. Simpler than trying to
+    // preserve state; user is usually just toggling to check payment status.
+    closeModal();
+    setTimeout(function(){openApptModal(a.contactId, a.id);},50);
+  } else if(tab==='payment'){
+    content.innerHTML=_renderApptPaymentTab(a);
+    foot.innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  }
+}
+
+// Computes the source-of-truth price for an appointment.
+// Variation price wins when a variation is selected. Falls back to service
+// price. Returns null when no price is set anywhere.
+function _getApptPrice(appt){
+  if(!appt)return null;
+  if(appt.service_variation_id){
+    var v=(db.serviceVariations||[]).find(function(x){return x.id===appt.service_variation_id;});
+    if(v&&v.price!=null)return parseFloat(v.price);
+  }
+  if(appt.service_id){
+    var s=(db.services||[]).find(function(x){return x.id===appt.service_id;});
+    if(s&&s.price!=null)return parseFloat(s.price);
+  }
+  return null;
+}
+
+// Returns sum of completed payments toward this appointment.
+function _getApptPaidAmount(apptId){
+  var paid=0;
+  (db.payments||[]).forEach(function(p){
+    if(p.appointmentId===apptId && p.status==='completed'){
+      paid+=parseFloat(p.total||0);
+    }
+  });
+  return paid;
+}
+
+// Returns 'unpaid' | 'partial' | 'paid' | 'no_price'
+function _getApptPaymentStatus(appt){
+  var price=_getApptPrice(appt);
+  if(price==null||price===0)return 'no_price';
+  var paid=_getApptPaidAmount(appt.id);
+  if(paid<=0)return 'unpaid';
+  if(paid>=price-0.01)return 'paid';
+  return 'partial';
+}
+
+// Renders the Take Payment tab content. Three states:
+//   - no_price: message, no form
+//   - paid: status display + payment history, no form
+//   - unpaid/partial: balance display + payment form + payment history
+function _renderApptPaymentTab(appt){
+  var price=_getApptPrice(appt);
+  if(price==null){
+    return '<div style="color:var(--text-muted);font-size:13px;padding:32px;text-align:center;border:1px dashed var(--border);border-radius:8px">'
+      +'This appointment doesn\'t have a price. Set a service or variation with a price to enable payments.'
+      +'</div>';
+  }
+
+  var paid=_getApptPaidAmount(appt.id);
+  var balance=Math.max(0, price-paid);
+  var status=_getApptPaymentStatus(appt);
+
+  // Status header
+  var header;
+  if(status==='paid'){
+    header='<div style="background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);border-radius:8px;padding:16px;margin-bottom:18px">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+      +'<span style="font-size:11px;padding:3px 9px;border-radius:10px;background:#4ade80;color:#0a1c0e;font-weight:700">PAID IN FULL</span>'
+      +'<span style="font-size:14px;font-weight:700;color:#4ade80">'+fmt$(paid)+'</span>'
+      +'</div>'
+      +'<div style="font-size:12px;color:var(--text-muted)">Total received toward this appointment.</div>'
+      +'</div>';
+  } else {
+    var color=status==='partial'?'#fbbf24':'#f87171';
+    header='<div style="background:rgba(251,191,36,.08);border:1px solid '+color+';border-radius:8px;padding:16px;margin-bottom:18px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+      +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Balance Due</div>'
+      +'<div style="font-size:18px;font-weight:800;color:'+color+'">'+fmt$(balance)+'</div>'
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted)">'
+      +'<span>Total: '+fmt$(price)+'</span>'
+      +'<span>Paid: '+fmt$(paid)+'</span>'
+      +'</div>'
+      +'</div>';
+  }
+
+  // Payment form (only shown when there's a balance)
+  var form='';
+  if(status!=='paid'){
+    form='<div style="background:var(--bg-card);border-radius:8px;padding:16px;margin-bottom:18px">'
+      +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:12px">Record Payment</div>'
+
+      // Method chips: Cash and Other for Phase 1A. Card and Card-on-File added in 1B.
+      +'<div style="margin-bottom:14px">'
+      +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">METHOD</label>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      +'<button type="button" id="apt-pm-cash" class="chip active" onclick="apptSetPM(\'cash\')">Cash</button>'
+      +'<button type="button" id="apt-pm-other" class="chip" onclick="apptSetPM(\'other\')">Other</button>'
+      +'<button type="button" class="chip" disabled title="Coming in Phase 1B" style="opacity:.4;cursor:not-allowed">Card</button>'
+      +'<button type="button" class="chip" disabled title="Coming in Phase 1B" style="opacity:.4;cursor:not-allowed">Card on File</button>'
+      +'</div>'
+      +'</div>'
+
+      +'<div class="form-row">'
+      +'<div class="form-group"><label>Amount *</label><input id="apt-pay-amount" type="number" step="0.01" min="0.01" value="'+balance.toFixed(2)+'" placeholder="0.00"></div>'
+      +'<div class="form-group" id="apt-pay-ref-wrap" style="display:none"><label>Reference</label><input id="apt-pay-ref" type="text" placeholder="Check #, Venmo, etc."></div>'
+      +'</div>'
+
+      +'<div class="form-group"><label>Notes</label><textarea id="apt-pay-notes" rows="2" placeholder="Optional"></textarea></div>'
+
+      +'<div style="display:flex;justify-content:flex-end;margin-top:12px">'
+      +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>takeApptPayment())">Record Payment</button>'
+      +'</div>'
+      +'</div>';
+  }
+
+  // Payment history
+  var history='';
+  var apptPayments=(db.payments||[]).filter(function(p){return p.appointmentId===appt.id;});
+  if(apptPayments.length){
+    history='<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Payment History</div>'
+      +'<div style="display:flex;flex-direction:column;gap:6px">';
+    apptPayments.sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');}).forEach(function(p){
+      var dateStr=p.createdAt?new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+      var methodLbl=(p.paymentMethod||'').replace(/_/g,' ');
+      var statusLbl=p.status==='completed'?'':' · '+p.status;
+      history+='<div class="light-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px">'
+        +'<div>'
+        +'<div style="font-size:13px;font-weight:600">'+fmt$(parseFloat(p.total||0))+'</div>'
+        +'<div style="font-size:11px;color:var(--main-text-muted)">'+dateStr+' &middot; '+methodLbl+statusLbl+'</div>'
+        +'</div>'
+        +(p.tipAmount>0?'<div style="font-size:11px;color:var(--main-text-muted)">+'+fmt$(parseFloat(p.tipAmount))+' tip</div>':'')
+        +'</div>';
+    });
+    history+='</div>';
+  }
+
+  return header+form+history;
+}
+
+// Sets the payment method on the Take Payment form.
+function apptSetPM(method){
+  state.apptPM=method;
+  ['cash','other'].forEach(function(m){
+    var el=document.getElementById('apt-pm-'+m);
+    if(el)el.classList.toggle('active', m===method);
+  });
+  var refWrap=document.getElementById('apt-pay-ref-wrap');
+  if(refWrap)refWrap.style.display=(method==='other'?'block':'none');
+}
+
+// Records a payment toward the current appointment. Phase 1A handles cash/other only.
+function takeApptPayment(){
+  if(!state.apptDetail)return;
+  var apptId=state.apptDetail.id;
+  var appt=getAppt(apptId);
+  if(!appt){toast('Appointment not found.','error');return;}
+
+  var method=state.apptPM||'cash';
+  var amount=parseFloat((document.getElementById('apt-pay-amount')||{}).value);
+  if(!amount||amount<=0||isNaN(amount)){toast('Enter a valid amount.','error');return;}
+
+  var ref=(document.getElementById('apt-pay-ref')||{}).value||'';
+  var notes=(document.getElementById('apt-pay-notes')||{}).value||'';
+  var staffId=state.user&&state.user.id||null;
+  var staffName=state.user&&(state.user.name||state.user.username)||null;
+
+  var payId=uid();
+  var pmt={
+    id:payId,
+    contactId:appt.contactId||null,
+    contactName:null,
+    staffId:staffId,
+    staffName:staffName,
+    appointmentId:apptId,
+    items:[{desc:appt.title||'Appointment payment',price:amount}],
+    subtotal:amount,
+    afterDiscount:amount,
+    tipAmount:0,
+    creditApplied:0,
+    total:amount,
+    paymentMethod:method,
+    paymentRef:method==='other'?ref:'',
+    status:'completed',
+    notes:notes||'',
+    createdAt:now_()
+  };
+
+  // Local push for immediate UI feedback
+  if(!db.payments)db.payments=[];
+  db.payments.push(pmt);
+  _createPaymentRemote(pmt);
+
+  toast('Payment of '+fmt$(amount)+' recorded.','success');
+
+  // Re-render the payment tab to show new history and updated balance
+  switchApptTab('payment');
 }
 
 function checkApptConflict(){
