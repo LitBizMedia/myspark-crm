@@ -246,6 +246,12 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
   background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .15s;margin-bottom:-1px;font-family:Lato,sans-serif}
 .svc-detail-tab:hover{color:var(--main-text)}
 .svc-detail-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
+/* Reusable: white card content inside dark modal context. */
+/* Use on any element where bg=main-card so descendants get correct text color. */
+.light-card{background:var(--main-card);color:var(--main-text);border:1px solid var(--main-border);border-radius:6px}
+.light-card-muted{color:var(--main-text-muted)}
+.light-card.clickable{cursor:pointer;transition:background .1s}
+.light-card.clickable:hover{background:var(--main-bg)}
 .cal-legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--main-text-muted)}
 .legend-dot{width:10px;height:10px;border-radius:50%}
@@ -3427,7 +3433,15 @@ function openModal(title,bodyHTML,footHTML,size){
   document.getElementById('modal-box').className='modal'+(size?' '+size:'');
   document.getElementById('modal-overlay').classList.add('open');
 }
-function closeModal(){document.getElementById('modal-overlay').classList.remove('open');state.modal={type:null,id:null,extra:null}}
+function closeModal(){
+  document.getElementById('modal-overlay').classList.remove('open');
+  state.modal={type:null,id:null,extra:null};
+  // After-close hook: any pending callback fires once, then clears.
+  // Used by flows that need to navigate from one modal to another (e.g. roster -> back to service detail).
+  var cb=state.modalAfterClose;
+  state.modalAfterClose=null;
+  if(typeof cb==='function')setTimeout(cb,80);
+}
 function onModalBg(e){}
 
 function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,val){
@@ -6823,7 +6837,7 @@ function _renderUpcomingSessionsTab(s){
   }
 
   return'<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">'+sessions.length+' upcoming session'+(sessions.length!==1?'s':'')+'</div>'
-    +'<div style="display:flex;flex-direction:column;gap:6px">'+rows+'</div>'
+    +'<div style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:4px">'+rows+'</div>'
     +pager;
 }
 
@@ -6832,14 +6846,13 @@ function _detailSessionRow(sess){
   var enrolled=(sess.participants||[]).filter(function(p){return p.status==='enrolled';}).length;
   var cap=sess.capacity||10;
   var color=enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80';
-  return'<div onclick="closeModal();setTimeout(function(){openRosterModal(\''+sess.id+'\')},50)" '
-    +'style="display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid var(--main-border);border-radius:6px;cursor:pointer;background:var(--main-card);color:var(--main-text);transition:background .1s" '
-    +'onmouseover="this.style.background=\'var(--main-bg)\'" onmouseout="this.style.background=\'var(--main-card)\'">'
+  return'<div class="light-card clickable" onclick="_openRosterFromDetail(\''+sess.id+'\',\''+sess.service_id+'\')" '
+    +'style="display:flex;align-items:center;gap:14px;padding:10px 12px">'
     +'<div style="flex:1;min-width:0">'
-    +'<div style="font-size:13px;font-weight:600;color:var(--main-text)">'+_fmtSessionDate(sess.date)+(sess.time?' &middot; '+sess.time:'')+'</div>'
+    +'<div style="font-size:13px;font-weight:600">'+_fmtSessionDate(sess.date)+(sess.time?' &middot; '+sess.time:'')+'</div>'
     +'</div>'
     +'<div style="font-size:12px;font-weight:600;color:'+color+';flex-shrink:0">'+enrolled+' / '+cap+'</div>'
-    +'<div style="color:var(--main-text-muted);font-size:14px;flex-shrink:0">&rsaquo;</div>'
+    +'<div class="light-card-muted" style="font-size:14px;flex-shrink:0">&rsaquo;</div>'
     +'</div>';
 }
 
@@ -6850,6 +6863,20 @@ function _fmtSessionDate(dateStr){
   if(parts.length!==3)return dateStr;
   var d=new Date(parseInt(parts[0],10),parseInt(parts[1],10)-1,parseInt(parts[2],10));
   return DSHORT[d.getDay()]+', '+MONTHS[d.getMonth()].slice(0,3)+' '+d.getDate()+', '+d.getFullYear();
+}
+
+// Opens the roster modal from within the service detail modal, then re-opens
+// the detail modal (on its Sessions tab) when the roster modal closes. Uses
+// state.modalAfterClose which closeModal triggers.
+function _openRosterFromDetail(sessionId, serviceId){
+  closeModal();
+  setTimeout(function(){
+    state.modalAfterClose=function(){
+      openServiceDetail(serviceId);
+      setTimeout(function(){switchServiceDetailTab('sessions');},80);
+    };
+    openRosterModal(sessionId);
+  },80);
 }
 
 // Manage Categories modal: pill-style display with inline rename support.
@@ -6871,7 +6898,7 @@ function _renderCategoriesModalContent(){
   if(!cats.length){
     rows='<div style="color:var(--text-muted);font-size:13px;padding:16px 0;text-align:center">No categories yet. Add one below.</div>';
   } else {
-    rows='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px">'
+    rows='<div style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:18px;padding-right:4px">'
       +cats.map(function(c,idx){
         if(editingIdx===idx){
           return'<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--main-bg);border:1px solid var(--purple-border);border-radius:6px">'
@@ -6880,8 +6907,8 @@ function _renderCategoriesModalContent(){
             +'<button class="btn btn-ghost btn-sm" onclick="svcCatCancelEdit()">Cancel</button>'
             +'</div>';
         }
-        return'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--main-card);border:1px solid var(--main-border);border-radius:6px;color:var(--main-text)">'
-          +'<div style="flex:1;font-size:13px;font-weight:500;color:var(--main-text)">'+esc(c)+'</div>'
+        return'<div class="light-card" style="display:flex;align-items:center;gap:8px;padding:8px 12px">'
+          +'<div style="flex:1;font-size:13px;font-weight:500">'+esc(c)+'</div>'
           +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px" onclick="svcCatStartEdit('+idx+')">Edit</button>'
           +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px;color:#f87171" onclick="svcCatDelete('+idx+')">Remove</button>'
           +'</div>';
