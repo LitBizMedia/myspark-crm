@@ -3241,7 +3241,7 @@ async function reviewCharge(){
     +'</div>'
     +'<p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
+  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,additionalFee:additionalFee||0,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="withBtnLock(this,()=>processCharge())">Process Payment</button>');
 }
 
@@ -3362,7 +3362,7 @@ async function processCharge(){  // ── Gift Card payment path ──
     return;
   }
   // ── Normal payment path ──
-  const{cid,staffId,sub,couponDiscount,couponCode,couponId,discount,discountType,discountNote,afterDiscount,tip,total,pm,last4,items,useSquare,squareToken}=state.modal.extra;
+  const{cid,staffId,sub,couponDiscount,couponCode,couponId,discount,discountType,discountNote,afterDiscount,additionalFee,tip,total,pm,last4,items,useSquare,squareToken}=state.modal.extra;
   const tipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;const tipStaffId=tipStaffRaw||staffId||null;
   const creditApplied=state.modal.extra&&state.modal.extra.credit||0;
   const btn=document.getElementById('process-charge-btn');
