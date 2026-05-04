@@ -3689,14 +3689,17 @@ function _apptVariationOptionsHTML(serviceId, currentId){
     return v.service_id === serviceId && v.active !== false;
   });
   if (!vars.length) return '';
-  var opts = '<option value="">Default (no variation)</option>';
-  opts += vars.map(function(v){
-    return '<option value="' + v.id + '"' + (v.id === currentId ? ' selected' : '') + '>'
+  // Auto-select first variation when nothing is currently chosen, or when the
+  // currentId doesn't match any active variation. This avoids the dropdown
+  // landing on a "no variation" placeholder when variations exist.
+  var hasMatch = vars.some(function(v){return v.id === currentId;});
+  var defaultId = hasMatch ? currentId : vars[0].id;
+  return vars.map(function(v){
+    return '<option value="' + v.id + '"' + (v.id === defaultId ? ' selected' : '') + '>'
       + esc(v.name) + ' (' + (v.duration || 60) + ' min'
       + (v.price != null ? ' - $' + parseFloat(v.price).toFixed(2) : '')
       + ')</option>';
   }).join('');
-  return opts;
 }
 
 // Inline pill button styling for the Custom/Service mode toggle.
