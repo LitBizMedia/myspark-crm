@@ -4051,8 +4051,13 @@ function switchApptTab(tab){
     closeModal();
     setTimeout(function(){openApptModal(a.contactId, a.id);},50);
   } else if(tab==='payment'){
+    // Reset adjustment state for fresh payment
+    state.apptDiscType='flat';
+    state.apptCoupon=null;
     content.innerHTML=_renderApptPaymentTab(a);
     foot.innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+    // Seed totals breakdown so it's visible immediately
+    setTimeout(function(){if(typeof apptUpdateTotals==='function')apptUpdateTotals();},30);
   }
 }
 
@@ -4072,12 +4077,16 @@ function _getApptPrice(appt){
   return null;
 }
 
-// Returns sum of completed payments toward this appointment.
+// Returns sum of the "service portion" of completed payments toward this
+// appointment. Uses afterDiscount (subtotal minus coupon and manual discount)
+// so tips do NOT count toward the appointment balance.
+// Falls back to total when afterDiscount isn't set (legacy payments).
 function _getApptPaidAmount(apptId){
   var paid=0;
   (db.payments||[]).forEach(function(p){
     if(p.appointmentId===apptId && p.status==='completed'){
-      paid+=parseFloat(p.total||0);
+      var contribution=p.afterDiscount!=null?parseFloat(p.afterDiscount):parseFloat(p.total||0);
+      paid+=contribution;
     }
   });
   return paid;
@@ -4162,7 +4171,7 @@ function _renderApptPaymentTab(appt){
       +'</div>'
 
       +'<div class="form-row">'
-      +'<div class="form-group"><label>Amount *</label><input id="apt-pay-amount" type="number" step="0.01" min="0.01" value="'+balance.toFixed(2)+'" placeholder="0.00"></div>'
+      +'<div class="form-group"><label>Amount *</label><input id="apt-pay-amount" type="number" step="0.01" min="0.01" value="'+balance.toFixed(2)+'" placeholder="0.00" oninput="apptUpdateTotals()"></div>'
       +'<div class="form-group" id="apt-pay-ref-wrap" style="display:none"><label>Reference</label><input id="apt-pay-ref" type="text" placeholder="Check #, Venmo, etc."></div>'
       +'</div>'
 
@@ -4180,6 +4189,45 @@ function _renderApptPaymentTab(appt){
       +cofCards.map(function(c,i){return'<option value="'+i+'">'+esc(c.brand||'Card')+' ending in '+esc(c.last4||'****')+'</option>';}).join('')
       +'</select>'
       +'</div>'
+
+      // Collapsible Adjustments section: discount, coupon code, tip + tip staff
+      +'<div id="apt-pay-adj-toggle" onclick="apptToggleAdjustments()" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 0;font-size:12px;font-weight:600;color:var(--text-muted);user-select:none">'
+      +'<span id="apt-pay-adj-chevron">&#9656;</span><span>Adjustments (discount, coupon, tip)</span>'
+      +'</div>'
+      +'<div id="apt-pay-adj-section" style="display:none;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:12px">'
+
+      // Discount: amount + type toggle (flat or percent)
+      +'<div class="form-row" style="margin-bottom:8px">'
+      +'<div class="form-group" style="flex:2"><label>Discount</label><input id="apt-pay-disc-val" type="number" step="0.01" min="0" placeholder="0" oninput="apptUpdateTotals()"></div>'
+      +'<div class="form-group" style="flex:1"><label>&nbsp;</label>'
+      +'<div style="display:flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;height:38px">'
+      +'<button type="button" id="apt-disc-flat" class="view-btn active" style="flex:1" onclick="apptSetDiscType(\'flat\')">$</button>'
+      +'<button type="button" id="apt-disc-pct" class="view-btn" style="flex:1" onclick="apptSetDiscType(\'pct\')">%</button>'
+      +'</div></div>'
+      +'</div>'
+
+      // Coupon code
+      +'<div class="form-row" style="margin-bottom:8px">'
+      +'<div class="form-group" style="flex:2"><label>Coupon Code</label><input id="apt-pay-coupon-code" type="text" placeholder="Enter code"></div>'
+      +'<div class="form-group" style="flex:1"><label>&nbsp;</label><button type="button" class="btn btn-ghost btn-sm" id="apt-pay-coupon-apply" onclick="apptApplyCoupon()" style="width:100%;height:38px">Apply</button></div>'
+      +'</div>'
+      +'<div id="apt-pay-coupon-status" style="font-size:11px;color:var(--text-muted);margin-bottom:8px"></div>'
+
+      // Tip + tip staff
+      +'<div class="form-row">'
+      +'<div class="form-group"><label>Tip</label><input id="apt-pay-tip" type="number" step="0.01" min="0" placeholder="0.00" oninput="apptUpdateTotals()"></div>'
+      +'<div class="form-group"><label>Tip Staff</label><select id="apt-pay-tip-staff">'
+      +'<option value="">No tip</option>'
+      +(allUsers().map(function(u){
+          var sel=(u.id===(appt.assignedTo||'')?' selected':'');
+          return'<option value="'+u.id+'"'+sel+'>'+esc(u.name||u.username)+'</option>';
+        }).join(''))
+      +'</select></div>'
+      +'</div>'
+      +'</div>'
+
+      // Live totals breakdown
+      +'<div id="apt-pay-totals" style="background:var(--bg-input);border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px"></div>'
 
       +'<div class="form-group"><label>Notes</label><textarea id="apt-pay-notes" rows="2" placeholder="Optional"></textarea></div>'
 
@@ -4217,6 +4265,148 @@ function _renderApptPaymentTab(appt){
 // posSqCard so the two tabs don't fight over a shared card form. Created on
 // first 'card' chip click, destroyed on tab switch / modal close.
 let apptSqCard = null;
+
+// Toggles the Adjustments section visibility.
+function apptToggleAdjustments(){
+  var section=document.getElementById('apt-pay-adj-section');
+  var chevron=document.getElementById('apt-pay-adj-chevron');
+  if(!section)return;
+  var open=section.style.display==='block';
+  section.style.display=open?'none':'block';
+  if(chevron)chevron.innerHTML=open?'&#9656;':'&#9662;';
+}
+
+// Switches discount input between flat dollar amount and percent.
+function apptSetDiscType(type){
+  state.apptDiscType=type;
+  var f=document.getElementById('apt-disc-flat');
+  var p=document.getElementById('apt-disc-pct');
+  if(f)f.classList.toggle('active', type==='flat');
+  if(p)p.classList.toggle('active', type==='pct');
+  apptUpdateTotals();
+}
+
+// Validates and applies a coupon code from the input field. Looks up in
+// db.coupons by code (case-insensitive). Stores in state.apptCoupon.
+function apptApplyCoupon(){
+  var input=document.getElementById('apt-pay-coupon-code');
+  var status=document.getElementById('apt-pay-coupon-status');
+  if(!input||!status)return;
+  var code=(input.value||'').trim().toUpperCase();
+  if(!code){
+    state.apptCoupon=null;
+    status.textContent='';
+    status.style.color='var(--text-muted)';
+    apptUpdateTotals();
+    return;
+  }
+  var cpn=(db.coupons||[]).find(function(c){return(c.code||'').toUpperCase()===code;});
+  if(!cpn){
+    state.apptCoupon=null;
+    status.textContent='Coupon not found.';
+    status.style.color='#f87171';
+    apptUpdateTotals();
+    return;
+  }
+  if(cpn.active===false){
+    state.apptCoupon=null;
+    status.textContent='Coupon is inactive.';
+    status.style.color='#f87171';
+    apptUpdateTotals();
+    return;
+  }
+  // Date range check (if specified)
+  var today=todayStr();
+  if(cpn.startDate&&today<cpn.startDate){
+    state.apptCoupon=null;
+    status.textContent='Coupon not yet active.';
+    status.style.color='#f87171';
+    apptUpdateTotals();
+    return;
+  }
+  if(cpn.endDate&&today>cpn.endDate){
+    state.apptCoupon=null;
+    status.textContent='Coupon expired.';
+    status.style.color='#f87171';
+    apptUpdateTotals();
+    return;
+  }
+  // Usage limit check
+  if(cpn.usageLimit&&(cpn.usageCount||0)>=cpn.usageLimit){
+    state.apptCoupon=null;
+    status.textContent='Coupon usage limit reached.';
+    status.style.color='#f87171';
+    apptUpdateTotals();
+    return;
+  }
+  state.apptCoupon=cpn;
+  status.textContent='Coupon applied: '+esc(cpn.code)+(cpn.type==='pct'?' ('+cpn.value+'% off)':' ('+fmt$(cpn.value||0)+' off)');
+  status.style.color='#4ade80';
+  apptUpdateTotals();
+}
+
+// Computes and renders the live totals breakdown for the payment form.
+// Math order matches POS: subtotal -> coupon -> discount -> tip -> total.
+// Returns the computed values for use by takeApptPayment.
+function apptUpdateTotals(){
+  var totalsBox=document.getElementById('apt-pay-totals');
+  var amountInput=document.getElementById('apt-pay-amount');
+  var discInput=document.getElementById('apt-pay-disc-val');
+  var tipInput=document.getElementById('apt-pay-tip');
+  if(!totalsBox)return null;
+
+  var subtotal=parseFloat((amountInput||{}).value)||0;
+  var discType=state.apptDiscType||'flat';
+  var discVal=parseFloat((discInput||{}).value)||0;
+  var tipAmount=parseFloat((tipInput||{}).value)||0;
+
+  // Coupon discount
+  var couponDiscount=0;
+  var coupon=state.apptCoupon;
+  if(coupon){
+    if(coupon.type==='pct'){
+      couponDiscount=subtotal*(parseFloat(coupon.value||0)/100);
+    } else {
+      couponDiscount=parseFloat(coupon.value||0);
+    }
+    couponDiscount=Math.min(couponDiscount, subtotal);
+  }
+
+  // Manual discount (applied after coupon)
+  var afterCoupon=Math.max(0, subtotal-couponDiscount);
+  var discountAmount=0;
+  if(discType==='pct'){
+    discountAmount=afterCoupon*(discVal/100);
+  } else {
+    discountAmount=discVal;
+  }
+  discountAmount=Math.min(discountAmount, afterCoupon);
+
+  var afterDiscount=Math.max(0, afterCoupon-discountAmount);
+  var total=afterDiscount+tipAmount;
+
+  // Render breakdown
+  var rows='';
+  rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Subtotal</span><span>'+fmt$(subtotal)+'</span></div>';
+  if(couponDiscount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Coupon ('+esc(coupon.code)+')</span><span>-'+fmt$(couponDiscount)+'</span></div>';
+  if(discountAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Discount</span><span>-'+fmt$(discountAmount)+'</span></div>';
+  if(tipAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Tip</span><span>+'+fmt$(tipAmount)+'</span></div>';
+  rows+='<div style="display:flex;justify-content:space-between;padding:6px 0 2px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700;color:var(--text)"><span>Total Charged</span><span style="color:var(--orange);font-size:14px">'+fmt$(total)+'</span></div>';
+  totalsBox.innerHTML=rows;
+
+  return {
+    subtotal:subtotal,
+    couponDiscount:couponDiscount,
+    couponCode:coupon?coupon.code:'',
+    couponId:coupon?coupon.id:'',
+    discountAmount:discountAmount,
+    discountType:discType,
+    discountVal:discVal,
+    afterDiscount:afterDiscount,
+    tipAmount:tipAmount,
+    total:total
+  };
+}
 
 // Sets the payment method on the Take Payment form. Toggles visible field
 // groups (cash has none, other shows ref, card shows Square form, cof shows picker).
@@ -4284,18 +4474,21 @@ async function takeApptPayment(){
   if(!appt){toast('Appointment not found.','error');return;}
 
   var method=state.apptPM||'cash';
-  var amount=parseFloat((document.getElementById('apt-pay-amount')||{}).value);
-  if(!amount||amount<=0||isNaN(amount)){toast('Enter a valid amount.','error');return;}
+  var totals=apptUpdateTotals();
+  if(!totals)return;
+  if(!totals.subtotal||totals.subtotal<=0||isNaN(totals.subtotal)){toast('Enter a valid amount.','error');return;}
+  if(totals.total<=0){toast('Total must be greater than $0.','error');return;}
 
   var notes=(document.getElementById('apt-pay-notes')||{}).value||'';
   var staffId=state.user&&state.user.id||null;
   var staffName=state.user&&(state.user.name||state.user.username)||null;
+  var tipStaffId=(document.getElementById('apt-pay-tip-staff')||{}).value||null;
 
   if(method==='card'){
-    return _takeApptPaymentCard(appt, amount, notes, staffId, staffName);
+    return _takeApptPaymentCard(appt, totals, notes, staffId, staffName, tipStaffId);
   }
   if(method==='cof'){
-    return _takeApptPaymentCOF(appt, amount, notes, staffId, staffName);
+    return _takeApptPaymentCOF(appt, totals, notes, staffId, staffName, tipStaffId);
   }
 
   // Cash or Other: simple record
@@ -4307,13 +4500,20 @@ async function takeApptPayment(){
     contactName:null,
     staffId:staffId,
     staffName:staffName,
+    tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
     appointmentId:apptId,
-    items:[{desc:appt.title||'Appointment payment',price:amount}],
-    subtotal:amount,
-    afterDiscount:amount,
-    tipAmount:0,
+    items:[{desc:appt.title||'Appointment payment',price:totals.subtotal}],
+    subtotal:totals.subtotal,
+    couponDiscount:totals.couponDiscount,
+    couponCode:totals.couponCode,
+    couponId:totals.couponId,
+    discountAmount:totals.discountAmount,
+    discountType:totals.discountType,
+    discountVal:totals.discountVal,
+    afterDiscount:totals.afterDiscount,
+    tipAmount:totals.tipAmount,
     creditApplied:0,
-    total:amount,
+    total:totals.total,
     paymentMethod:method,
     paymentRef:method==='other'?ref:'',
     status:'completed',
@@ -4323,12 +4523,22 @@ async function takeApptPayment(){
   if(!db.payments)db.payments=[];
   db.payments.push(pmt);
   _createPaymentRemote(pmt);
-  toast('Payment of '+fmt$(amount)+' recorded.','success');
+  // Log coupon usage
+  if(totals.couponId){
+    var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
+    if(cpn){
+      if(!cpn.usageLog)cpn.usageLog=[];
+      cpn.usageLog.push({id:uid(),contactId:appt.contactId||null,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
+      cpn.usageCount=(cpn.usageCount||0)+1;
+      saveData();
+    }
+  }
+  toast('Recorded '+fmt$(totals.total)+'.','success');
   switchApptTab('payment');
 }
 
 // Card payment: tokenize via Square SDK, charge via /api/square/charge.
-async function _takeApptPaymentCard(appt, amount, notes, staffId, staffName){
+async function _takeApptPaymentCard(appt, totals, notes, staffId, staffName, tipStaffId){
   var errEl=document.getElementById('apt-sq-card-errors');
   if(errEl)errEl.textContent='';
   if(!apptSqCard){
@@ -4349,7 +4559,7 @@ async function _takeApptPaymentCard(appt, amount, notes, staffId, staffName){
       body:JSON.stringify({
         slug:state.subaccountSlug,
         sourceId:result.token,
-        amountCents:Math.round(amount*100),
+        amountCents:Math.round(totals.total*100),
         note:'Appointment payment - '+(appt.title||appt.id)
       })
     });
@@ -4361,9 +4571,14 @@ async function _takeApptPaymentCard(appt, amount, notes, staffId, staffName){
         contactId:appt.contactId||null,
         staffId:staffId,
         staffName:staffName,
+        tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
         appointmentId:appt.id,
-        items:[{desc:appt.title||'Appointment payment',price:amount}],
-        subtotal:amount,afterDiscount:amount,tipAmount:0,creditApplied:0,total:amount,
+        items:[{desc:appt.title||'Appointment payment',price:totals.subtotal}],
+        subtotal:totals.subtotal,
+        couponDiscount:totals.couponDiscount,couponCode:totals.couponCode,couponId:totals.couponId,
+        discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
+        afterDiscount:totals.afterDiscount,
+        tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
         paymentMethod:'card',
         status:'failed',
         failReason:data.error,
@@ -4384,10 +4599,15 @@ async function _takeApptPaymentCard(appt, amount, notes, staffId, staffName){
       contactId:appt.contactId||null,
       staffId:staffId,
       staffName:staffName,
+      tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
       appointmentId:appt.id,
       squarePaymentId:data.payment&&data.payment.id||'',
-      items:[{desc:appt.title||'Appointment payment',price:amount}],
-      subtotal:amount,afterDiscount:amount,tipAmount:0,creditApplied:0,total:amount,
+      items:[{desc:appt.title||'Appointment payment',price:totals.subtotal}],
+      subtotal:totals.subtotal,
+      couponDiscount:totals.couponDiscount,couponCode:totals.couponCode,couponId:totals.couponId,
+      discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
+      afterDiscount:totals.afterDiscount,
+      tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
       paymentMethod:'card',
       cardLast4:last4,
       cardBrand:brand,
@@ -4398,7 +4618,16 @@ async function _takeApptPaymentCard(appt, amount, notes, staffId, staffName){
     if(!db.payments)db.payments=[];
     db.payments.push(pmt);
     _createPaymentRemote(pmt);
-    toast('Charged '+fmt$(amount)+' to card.','success');
+    if(totals.couponId){
+      var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
+      if(cpn){
+        if(!cpn.usageLog)cpn.usageLog=[];
+        cpn.usageLog.push({id:uid(),contactId:appt.contactId||null,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
+        cpn.usageCount=(cpn.usageCount||0)+1;
+        saveData();
+      }
+    }
+    toast('Charged '+fmt$(totals.total)+' to card.','success');
     _destroyApptSquareCardForm();
     switchApptTab('payment');
   }catch(e){
@@ -4408,7 +4637,7 @@ async function _takeApptPaymentCard(appt, amount, notes, staffId, staffName){
 }
 
 // Card on File: charge a saved card via /api/square/charge with cardId.
-async function _takeApptPaymentCOF(appt, amount, notes, staffId, staffName){
+async function _takeApptPaymentCOF(appt, totals, notes, staffId, staffName, tipStaffId){
   var contact=appt.contactId?(db.contacts||[]).find(function(x){return x.id===appt.contactId;}):null;
   var cards=(contact&&contact.squareCards)||[];
   if(!cards.length){toast('No card on file for this contact.','error');return;}
@@ -4423,7 +4652,7 @@ async function _takeApptPaymentCOF(appt, amount, notes, staffId, staffName){
         slug:state.subaccountSlug,
         cardId:card.id,
         customerId:contact.squareCustomerId||'',
-        amountCents:Math.round(amount*100),
+        amountCents:Math.round(totals.total*100),
         note:'Appointment payment - '+(appt.title||appt.id)
       })
     });
@@ -4436,9 +4665,14 @@ async function _takeApptPaymentCOF(appt, amount, notes, staffId, staffName){
         contactName:contact.name,
         staffId:staffId,
         staffName:staffName,
+        tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
         appointmentId:appt.id,
-        items:[{desc:appt.title||'Appointment payment',price:amount}],
-        subtotal:amount,afterDiscount:amount,tipAmount:0,creditApplied:0,total:amount,
+        items:[{desc:appt.title||'Appointment payment',price:totals.subtotal}],
+        subtotal:totals.subtotal,
+        couponDiscount:totals.couponDiscount,couponCode:totals.couponCode,couponId:totals.couponId,
+        discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
+        afterDiscount:totals.afterDiscount,
+        tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
         paymentMethod:'card_on_file',
         status:'failed',
         failReason:data.error,
@@ -4458,10 +4692,15 @@ async function _takeApptPaymentCOF(appt, amount, notes, staffId, staffName){
       contactName:contact.name,
       staffId:staffId,
       staffName:staffName,
+      tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
       appointmentId:appt.id,
       squarePaymentId:data.payment&&data.payment.id||'',
-      items:[{desc:appt.title||'Appointment payment',price:amount}],
-      subtotal:amount,afterDiscount:amount,tipAmount:0,creditApplied:0,total:amount,
+      items:[{desc:appt.title||'Appointment payment',price:totals.subtotal}],
+      subtotal:totals.subtotal,
+      couponDiscount:totals.couponDiscount,couponCode:totals.couponCode,couponId:totals.couponId,
+      discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
+      afterDiscount:totals.afterDiscount,
+      tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
       paymentMethod:'card_on_file',
       cardLast4:card.last4,
       cardBrand:card.brand,
@@ -4472,7 +4711,16 @@ async function _takeApptPaymentCOF(appt, amount, notes, staffId, staffName){
     if(!db.payments)db.payments=[];
     db.payments.push(pmt);
     _createPaymentRemote(pmt);
-    toast('Charged '+fmt$(amount)+' to '+(card.brand||'card')+' '+(card.last4||''),'success');
+    if(totals.couponId){
+      var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
+      if(cpn){
+        if(!cpn.usageLog)cpn.usageLog=[];
+        cpn.usageLog.push({id:uid(),contactId:contact.id,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
+        cpn.usageCount=(cpn.usageCount||0)+1;
+        saveData();
+      }
+    }
+    toast('Charged '+fmt$(totals.total)+' to '+(card.brand||'card')+' '+(card.last4||''),'success');
     switchApptTab('payment');
   }catch(e){
     console.error('COF charge error:',e);
