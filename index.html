@@ -6833,13 +6833,13 @@ function _detailSessionRow(sess){
   var cap=sess.capacity||10;
   var color=enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80';
   return'<div onclick="closeModal();setTimeout(function(){openRosterModal(\''+sess.id+'\')},50)" '
-    +'style="display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid var(--main-border);border-radius:6px;cursor:pointer;background:var(--main-card);transition:background .1s" '
+    +'style="display:flex;align-items:center;gap:14px;padding:10px 12px;border:1px solid var(--main-border);border-radius:6px;cursor:pointer;background:var(--main-card);color:var(--main-text);transition:background .1s" '
     +'onmouseover="this.style.background=\'var(--main-bg)\'" onmouseout="this.style.background=\'var(--main-card)\'">'
     +'<div style="flex:1;min-width:0">'
-    +'<div style="font-size:13px;font-weight:600">'+_fmtSessionDate(sess.date)+(sess.time?' &middot; '+sess.time:'')+'</div>'
+    +'<div style="font-size:13px;font-weight:600;color:var(--main-text)">'+_fmtSessionDate(sess.date)+(sess.time?' &middot; '+sess.time:'')+'</div>'
     +'</div>'
     +'<div style="font-size:12px;font-weight:600;color:'+color+';flex-shrink:0">'+enrolled+' / '+cap+'</div>'
-    +'<div style="color:var(--text-muted);font-size:14px;flex-shrink:0">&rsaquo;</div>'
+    +'<div style="color:var(--main-text-muted);font-size:14px;flex-shrink:0">&rsaquo;</div>'
     +'</div>';
 }
 
@@ -6880,8 +6880,8 @@ function _renderCategoriesModalContent(){
             +'<button class="btn btn-ghost btn-sm" onclick="svcCatCancelEdit()">Cancel</button>'
             +'</div>';
         }
-        return'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--main-card);border:1px solid var(--main-border);border-radius:6px">'
-          +'<div style="flex:1;font-size:13px;font-weight:500">'+esc(c)+'</div>'
+        return'<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--main-card);border:1px solid var(--main-border);border-radius:6px;color:var(--main-text)">'
+          +'<div style="flex:1;font-size:13px;font-weight:500;color:var(--main-text)">'+esc(c)+'</div>'
           +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px" onclick="svcCatStartEdit('+idx+')">Edit</button>'
           +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px;color:#f87171" onclick="svcCatDelete('+idx+')">Remove</button>'
           +'</div>';
