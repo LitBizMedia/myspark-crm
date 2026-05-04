@@ -2,25 +2,22 @@
 // POST /api/subaccount/data-save
 // Saves the bulk subaccount_data JSONB blob for the authenticated subaccount.
 //
-// User-related fields and migrated fields are stripped before save.
-// The canonical sources are:
-//   - subaccount_users table (users, admin)
-//   - subaccount_data.service_categories column (service categories)
-//   - service_widgets table (widgets)
-//   - server-side config (Supabase fields are dead, no longer used)
+// Stripped fields go to dedicated tables/columns:
+//   - users, _subaccountAdmin -> subaccount_users table
+//   - serviceCategories -> subaccount_data.service_categories column
+//   - serviceWidgets -> service_widgets table
+//   - payments -> payments table (via /payments-create and /payments-update)
+//   - settings.adminProfile, settings.supabaseUrl, settings.supabaseKey -> dead, not used
 // Anything still being sent in the blob is treated as legacy noise and dropped.
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
-// Top-level fields that must NOT live in the blob anymore.
-const STRIPPED_TOP_LEVEL = ['users', '_subaccountAdmin', 'serviceCategories', 'serviceWidgets'];
-// Fields under data.settings that must NOT live in the blob anymore.
+const STRIPPED_TOP_LEVEL = ['users', '_subaccountAdmin', 'serviceCategories', 'serviceWidgets', 'payments'];
 const STRIPPED_SETTINGS = ['adminProfile', 'supabaseUrl', 'supabaseKey'];
 
 function sanitize(data) {
-  // Shallow copy so we don't mutate caller's object.
   const out = { ...data };
   const stripped = [];
 
@@ -59,7 +56,6 @@ async function handler(req, res) {
   const slug = subaccountId.replace(/^sub-/, '');
   const dataId = 'data-' + slug;
 
-  // Strip dead fields before persisting.
   const { data: clean, stripped } = sanitize(data);
   if (stripped.length > 0) {
     console.log(`data-save[${subaccountId}]: stripped legacy fields: ${stripped.join(', ')}`);

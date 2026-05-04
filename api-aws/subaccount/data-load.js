@@ -1,7 +1,7 @@
 // api/subaccount/data-load.js (Lambda version)
 // GET /api/subaccount/data-load
 // Loads the bulk subaccount_data JSONB blob plus services, variations, class
-// sessions, users, and (post-migration) service_categories and service_widgets.
+// sessions, users, service_categories, service_widgets, and payments.
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
@@ -16,9 +16,8 @@ async function handler(req, res) {
   const subaccountId = auth.subaccount_id;
 
   try {
-    const [blobResult, servicesResult, variationsResult, classesResult, usersResult, widgetsResult] = await Promise.all([
+    const [blobResult, servicesResult, variationsResult, classesResult, usersResult, widgetsResult, paymentsResult] = await Promise.all([
       db.query(
-        // Pull data blob and the new service_categories column in one query
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
         [subaccountId]
       ),
@@ -49,6 +48,10 @@ async function handler(req, res) {
       db.query(
         'SELECT * FROM service_widgets WHERE subaccount_id = $1 ORDER BY created_at ASC',
         [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM payments WHERE subaccount_id = $1 ORDER BY created_at DESC',
+        [subaccountId]
       )
     ]);
 
@@ -58,10 +61,9 @@ async function handler(req, res) {
       serviceVariations: variationsResult.rows,
       classSessions: classesResult.rows,
       users: usersResult.rows,
-      // New fields from migrated tables/columns. Frontend prefers these
-      // over anything that may still be in the blob during transition.
       serviceCategories: blobResult.rows[0]?.service_categories || [],
-      serviceWidgets: widgetsResult.rows
+      serviceWidgets: widgetsResult.rows,
+      payments: paymentsResult.rows
     });
   } catch (e) {
     console.error('data-load error:', e.message);

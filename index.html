@@ -1730,6 +1730,54 @@ const AWS_API_BASE = 'https://api.mysparkplus.app';
 function apiUrl(path) {
   return AWS_API_BASE + path;
 }
+
+// Persists a new payment to RDS via the payments-create endpoint.
+// Fire-and-forget: callers push the payment locally first for immediate UI,
+// this syncs to server asynchronously. On failure, surfaces a toast so the
+// user knows to refresh and re-verify.
+function _createPaymentRemote(pmt){
+  if(!pmt||!pmt.id)return;
+  fetch(apiUrl('/api/subaccount/payments-create'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(pmt)
+  }).then(function(r){
+    if(!r.ok){
+      console.error('payments-create returned',r.status);
+      toast('Payment recorded locally. Server sync failed, please refresh.','error');
+      return;
+    }
+    return r.json();
+  }).then(function(data){
+    if(data&&data.payment){
+      // Replace local copy with server's authoritative version (timestamps, defaults)
+      var idx=(db.payments||[]).findIndex(function(p){return p.id===pmt.id;});
+      if(idx>=0)db.payments[idx]=data.payment;
+    }
+  }).catch(function(e){
+    console.error('payments-create error:',e);
+    toast('Payment sync error. Refresh to verify.','error');
+  });
+}
+
+// Updates a whitelisted set of fields on an existing payment via payments-update.
+// Used for status flips (refund, void), Square ID backfill after tokenize,
+// gift card remainder status updates, etc.
+function _updatePaymentRemote(id,fields){
+  if(!id||!fields)return;
+  fetch(apiUrl('/api/subaccount/payments-update'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(Object.assign({id:id},fields))
+  }).then(function(r){
+    if(!r.ok){
+      console.error('payments-update returned',r.status);
+      toast('Payment update sync failed.','error');
+    }
+  }).catch(function(e){
+    console.error('payments-update error:',e);
+  });
+}
 const PER_PAGE=20;
 const ADMIN_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
 const AGENCY_SLUG='agency';
@@ -3241,7 +3289,9 @@ async function processCharge(){  // ── Gift Card payment path ──
     var gcRemRef=gcRemMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
     var gcNotes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
     var gcPayId=uid();
-    db.payments.push({id:gcPayId,contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:gcRemMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()});
+    var gcPmt={id:gcPayId,contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:gcRemMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()};
+    db.payments.push(gcPmt);
+    _createPaymentRemote(gcPmt);
     saveData();
     // Clear cart + coupon + contact. DO NOT yet call posClearGiftCard() — that nulls gcRemCard before we tokenize.
     state.posItems=[];state.posCoupon=null;
@@ -3259,14 +3309,14 @@ async function processCharge(){  // ── Gift Card payment path ──
       if(!gcSq.accessToken){
         toast('Square not connected. Card remainder not charged.','error');
         var prec=db.payments.find(function(x){return x.id===gcPayId;});
-        if(prec){prec.remainderStatus='failed';prec.remainderError='Square not connected';saveData();}
+        if(prec){prec.remainderStatus='failed';prec.remainderError='Square not connected';_updatePaymentRemote(gcPayId,{remainderStatus:'failed',remainderError:'Square not connected'});saveData();}
         finishGcFlow();
         return;
       }
       if(!gcRemCard){
         toast('Card form not ready. Remainder not charged. Click the Card button again and re-enter card info.','error');
         var prec2=db.payments.find(function(x){return x.id===gcPayId;});
-        if(prec2){prec2.remainderStatus='failed';prec2.remainderError='Card form not initialized';saveData();}
+        if(prec2){prec2.remainderStatus='failed';prec2.remainderError='Card form not initialized';_updatePaymentRemote(gcPayId,{remainderStatus:'failed',remainderError:'Card form not initialized'});saveData();}
         finishGcFlow();
         return;
       }
@@ -3275,7 +3325,7 @@ async function processCharge(){  // ── Gift Card payment path ──
           if(res.status!=='OK'){
             var prec=db.payments.find(function(x){return x.id===gcPayId;});
             var errDetails=res.errors?res.errors.map(function(e){return e.message||e.detail||e.code;}).join(', '):'Unknown tokenize error';
-            if(prec){prec.remainderStatus='failed';prec.remainderError='Tokenize: '+errDetails;saveData();}
+            if(prec){prec.remainderStatus='failed';prec.remainderError='Tokenize: '+errDetails;_updatePaymentRemote(gcPayId,{remainderStatus:'failed',remainderError:'Tokenize: '+errDetails});saveData();}
             toast('Remainder card error: '+errDetails+'. Transaction flagged.','error');
             finishGcFlow();
             return;
@@ -3285,12 +3335,13 @@ async function processCharge(){  // ── Gift Card payment path ──
           if(!d)return;
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
           if(d.error){
-            if(prec){prec.remainderStatus='failed';prec.remainderError=d.error;saveData();}
+            if(prec){prec.remainderStatus='failed';prec.remainderError=d.error;_updatePaymentRemote(gcPayId,{remainderStatus:'failed',remainderError:d.error});saveData();}
             toast('Remainder charge failed: '+d.error+'. Transaction flagged.','error');
           }else{
             if(prec&&d.payment&&d.payment.id){
               prec.squarePaymentId=d.payment.id;
               prec.remainderStatus='completed';
+              _updatePaymentRemote(gcPayId,{squarePaymentId:d.payment.id,remainderStatus:'completed'});
               saveData();
             }
             toast('Remainder of '+fmt$(remainder)+' charged.','success');
@@ -3299,7 +3350,7 @@ async function processCharge(){  // ── Gift Card payment path ──
         }).catch(function(e){
           console.error('Square remainder charge error:',e);
           var prec=db.payments.find(function(x){return x.id===gcPayId;});
-          if(prec){prec.remainderStatus='failed';prec.remainderError=e.message;saveData();}
+          if(prec){prec.remainderStatus='failed';prec.remainderError=e.message;_updatePaymentRemote(gcPayId,{remainderStatus:'failed',remainderError:e.message});saveData();}
           toast('Square error: '+e.message+'. Transaction flagged.','error');
           finishGcFlow();
         });
@@ -3355,7 +3406,9 @@ async function processCharge(){  // ── Gift Card payment path ──
     }
   }
   const payId=uid();
-  db.payments.push({id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,feeAmount:additionalFee||0,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()});
+  var posPmt={id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,feeAmount:additionalFee||0,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()};
+  db.payments.push(posPmt);
+  _createPaymentRemote(posPmt);
   // Log coupon usage
   if(couponId){
     const cpn=(db.coupons||[]).find(function(x){return x.id===couponId;});
@@ -4688,6 +4741,8 @@ async function fetchFromServer(){
       // the blob might still have during the transition.
       if(Array.isArray(result.serviceCategories))db.serviceCategories=result.serviceCategories;
       if(Array.isArray(result.serviceWidgets))db.serviceWidgets=result.serviceWidgets;
+      // Migrated to RDS payments table. Override blob payments during transition.
+      if(Array.isArray(result.payments))db.payments=result.payments;
       // Users from subaccount_users table (UUIDs), not from blob.
       if(result.users){
         db.users=result.users.map(function(u){
@@ -10914,7 +10969,7 @@ async function confirmChargeCoF(){
     const data=await r.json();
     if(data.error){
       const pmt={id:uid(),contactId:d.contact.id,contactName:d.contact.name,amount:d.total,tip:0,method:'card_on_file',status:'failed',failReason:data.error,staffId:d.staffId,staffName:d.staff&&d.staff.name||'',notes:d.notes,createdAt:now_()};
-      db.payments.push(pmt);saveData();
+      db.payments.push(pmt);_createPaymentRemote(pmt);saveData();
       closeModal();
       toast('Charge failed: '+data.error,'error');
       return;
@@ -10935,6 +10990,7 @@ async function confirmChargeCoF(){
       createdAt:now_()
     };
     db.payments.push(pmt);
+    _createPaymentRemote(pmt);
     saveData();
     closeModal();
     toast('Payment of $'+d.total.toFixed(2)+' processed successfully.','success');
@@ -12656,11 +12712,13 @@ async function gcProcessSale(){
 function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squarePaymentId){
   var payId=uid();
   var code=gcGenCode();
-  db.payments.push({id:payId,contactId:contactId||null,staffId:staffId||null,
+  var gcSalePmt={id:payId,contactId:contactId||null,staffId:staffId||null,
     items:[{desc:'Gift Card: '+prod.name+' ('+code+')',price:amt}],
     subtotal:amt,discountAmount:0,afterDiscount:amt,tipAmount:0,creditApplied:0,
     total:amt,paymentMethod:pm,paymentRef:ref,squarePaymentId:squarePaymentId,
-    status:'completed',notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,createdAt:now_()});
+    status:'completed',notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,createdAt:now_()};
+  db.payments.push(gcSalePmt);
+  _createPaymentRemote(gcSalePmt);
   if(!db.giftCards)db.giftCards=[];
   db.giftCards.push({id:'gc-'+uid(),code:code,productId:prodId,
     contactId:contactId||null,recipientName:recipName||null,
@@ -13726,7 +13784,7 @@ function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId){
     var d=new Date();d.setMonth(d.getMonth()+tmpl.expiresMonths);
     expiresDate=d.toISOString().split('T')[0];
   }
-  db.payments.push({
+  var spSalePmt={
     id:payId,contactId:contactId||null,staffId:staffId||null,
     items:[{desc:'Session Pack: '+tmpl.name,price:tmpl.price}],
     subtotal:tmpl.price,discountAmount:0,afterDiscount:tmpl.price,
@@ -13735,7 +13793,9 @@ function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId){
     status:'completed',notes:notes||'Session pack sale',
     isSessionPackSale:true,sessionPackId:packId,
     createdAt:now_()
-  });
+  };
+  db.payments.push(spSalePmt);
+  _createPaymentRemote(spSalePmt);
   if(!db.sessionPacks)db.sessionPacks=[];
   db.sessionPacks.push({
     id:packId,templateId:tmpl.id,
