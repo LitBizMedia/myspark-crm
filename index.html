@@ -4213,17 +4213,21 @@ function _renderApptPaymentTab(appt){
       +'</div>'
       +'<div id="apt-pay-coupon-status" style="font-size:11px;color:var(--text-muted);margin-bottom:8px"></div>'
 
-      // Tip + tip staff
-      +'<div class="form-row">'
-      +'<div class="form-group"><label>Tip</label><input id="apt-pay-tip" type="number" step="0.01" min="0" placeholder="0.00" oninput="apptUpdateTotals()"></div>'
-      +'<div class="form-group"><label>Tip Staff</label><select id="apt-pay-tip-staff">'
-      +'<option value="">No tip</option>'
-      +(allUsers().map(function(u){
-          var sel=(u.id===(appt.assignedTo||'')?' selected':'');
-          return'<option value="'+u.id+'"'+sel+'>'+esc(u.name||u.username)+'</option>';
-        }).join(''))
-      +'</select></div>'
-      +'</div>'
+      // Tip: amount only. Staff is automatic - whoever ran the appointment
+      // (appt.assignedTo). Shown as confirmation text so the user can see
+      // who the tip is going to without a dropdown to manage.
+      +(function(){
+        var staff=appt.assignedTo?(db.users||[]).find(function(u){return u.id===appt.assignedTo;}):null;
+        var staffName=staff?(staff.name||staff.username):null;
+        var staffNote=staffName
+          ?'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Tip recipient: '+esc(staffName)+'</div>'
+          :'<div style="font-size:11px;color:var(--orange);margin-top:4px">No staff assigned to this appointment</div>';
+        return '<div class="form-group">'
+          +'<label>Tip</label>'
+          +'<input id="apt-pay-tip" type="number" step="0.01" min="0" placeholder="0.00" oninput="apptUpdateTotals()">'
+          +staffNote
+          +'</div>';
+      })()
       +'</div>'
 
       // Live totals breakdown
@@ -4340,7 +4344,7 @@ function apptApplyCoupon(){
     return;
   }
   state.apptCoupon=cpn;
-  status.textContent='Coupon applied: '+esc(cpn.code)+(cpn.type==='pct'?' ('+cpn.value+'% off)':' ('+fmt$(cpn.value||0)+' off)');
+  status.textContent='Coupon applied: '+esc(cpn.code)+(cpn.discountType==='pct'?' ('+cpn.discountValue+'% off)':' ('+fmt$(cpn.discountValue||0)+' off)');
   status.style.color='#4ade80';
   apptUpdateTotals();
 }
@@ -4364,10 +4368,10 @@ function apptUpdateTotals(){
   var couponDiscount=0;
   var coupon=state.apptCoupon;
   if(coupon){
-    if(coupon.type==='pct'){
-      couponDiscount=subtotal*(parseFloat(coupon.value||0)/100);
+    if(coupon.discountType==='pct'){
+      couponDiscount=subtotal*(parseFloat(coupon.discountValue||0)/100);
     } else {
-      couponDiscount=parseFloat(coupon.value||0);
+      couponDiscount=parseFloat(coupon.discountValue||0);
     }
     couponDiscount=Math.min(couponDiscount, subtotal);
   }
@@ -4482,7 +4486,8 @@ async function takeApptPayment(){
   var notes=(document.getElementById('apt-pay-notes')||{}).value||'';
   var staffId=state.user&&state.user.id||null;
   var staffName=state.user&&(state.user.name||state.user.username)||null;
-  var tipStaffId=(document.getElementById('apt-pay-tip-staff')||{}).value||null;
+  // Tip auto-applies to whoever ran the appointment. Falls back to logged-in user when unassigned.
+  var tipStaffId=appt.assignedTo||staffId;
 
   if(method==='card'){
     return _takeApptPaymentCard(appt, totals, notes, staffId, staffName, tipStaffId);
