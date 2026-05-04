@@ -4293,6 +4293,7 @@ function _renderPaymentForm(ctx){
       +(sqConnected&&hasCofCards
         ?'<button type="button" id="apt-pm-cof" class="chip" onclick="apptSetPM(\'cof\')">Card on File</button>'
         :'<button type="button" class="chip" disabled title="'+(!sqConnected?'Square not connected':!hasContact?'No contact':'No card on file')+'" style="opacity:.4;cursor:not-allowed">Card on File</button>')
+      +'<button type="button" id="apt-pm-gc" class="chip" onclick="apptSetPM(\'gc\')">Gift Card</button>'
       +'</div>'
       +'</div>'
 
@@ -4302,18 +4303,52 @@ function _renderPaymentForm(ctx){
       +'</div>'
 
       // Card form container - hidden by default, populated when Card chip clicked
+      // Reused for both 'card' main method and 'gc' with 'card' remainder.
       +'<div id="apt-pay-card-fields" style="display:none;margin-bottom:12px">'
       +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">CARD DETAILS</label>'
       +'<div id="apt-sq-card-container" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:60px"></div>'
       +'<div id="apt-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:6px"></div>'
       +'</div>'
 
-      // Card-on-file picker - hidden by default
+      // Card-on-file picker - hidden by default, reused for both 'cof' and gc-remainder='cof'
       +'<div id="apt-pay-cof-fields" style="display:none;margin-bottom:12px">'
       +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">SAVED CARD</label>'
       +'<select id="apt-pay-cof-select" style="width:100%">'
       +cofCards.map(function(c,i){return'<option value="'+i+'">'+esc(c.brand||'Card')+' ending in '+esc(c.last4||'****')+'</option>';}).join('')
       +'</select>'
+      +'</div>'
+
+      // Gift Card section - hidden by default
+      +'<div id="apt-pay-gc-fields" style="display:none;margin-bottom:12px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:12px">'
+      +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">GIFT CARD CODE</label>'
+      +'<div id="apt-pay-gc-entry" style="display:flex;gap:6px">'
+      +'<input id="apt-pay-gc-code" type="text" placeholder="Enter code" style="flex:1">'
+      +'<button type="button" class="btn btn-ghost btn-sm" onclick="apptApplyGC()">Apply</button>'
+      +'</div>'
+      +'<div id="apt-pay-gc-error" style="color:#f87171;font-size:11px;margin-top:6px;display:none"></div>'
+
+      // Applied GC info + remainder picker (shown after lookup)
+      +'<div id="apt-pay-gc-info" style="display:none;margin-top:10px">'
+      +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0">'
+      +'<span style="color:var(--text-muted)">Applied: <span id="apt-pay-gc-code-label" style="color:var(--text);font-weight:600"></span></span>'
+      +'<button type="button" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px" onclick="apptClearGC()">Remove</button>'
+      +'</div>'
+      +'<div id="apt-pay-gc-balance-label" style="font-size:11px;color:var(--text-muted);margin-bottom:8px"></div>'
+
+      // Remainder method picker (shown when GC partial)
+      +'<div id="apt-pay-gc-remainder-wrap" style="display:none">'
+      +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">REMAINDER METHOD</label>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
+      +'<button type="button" id="apt-gcr-cash" class="chip" onclick="apptSetGCRemainder(\'cash\')">Cash</button>'
+      +'<button type="button" id="apt-gcr-other" class="chip" onclick="apptSetGCRemainder(\'other\')">Other</button>'
+      +(sqConnected?'<button type="button" id="apt-gcr-card" class="chip" onclick="apptSetGCRemainder(\'card\')">Card</button>':'')
+      +(sqConnected&&hasCofCards?'<button type="button" id="apt-gcr-cof" class="chip" onclick="apptSetGCRemainder(\'cof\')">Card on File</button>':'')
+      +'</div>'
+      +'<div id="apt-pay-gc-ref-wrap" style="display:none">'
+      +'<label>Reference</label><input id="apt-pay-gc-ref" type="text" placeholder="Check #, Venmo, etc.">'
+      +'</div>'
+      +'</div>'
+      +'</div>'
       +'</div>'
 
       // Collapsible Adjustments section
@@ -4519,13 +4554,39 @@ function apptUpdateTotals(){
   var afterDiscount=Math.max(0, afterCoupon-discountAmount);
   var total=afterDiscount+tipAmount;
 
+  // Gift card application: only when GC method is active AND a GC has been applied
+  var gcApplied=0;
+  var gcRemainder=0;
+  var inGC=state.apptPM==='gc'&&state.apptGC;
+  if(inGC){
+    gcApplied=Math.min(state.apptGC.balance||0, total);
+    gcRemainder=Math.max(0, total-gcApplied);
+    // Show/hide remainder picker
+    var remWrap=document.getElementById('apt-pay-gc-remainder-wrap');
+    if(remWrap)remWrap.style.display=(gcRemainder>0?'block':'none');
+    var balLbl=document.getElementById('apt-pay-gc-balance-label');
+    if(balLbl){
+      balLbl.textContent='GC balance: '+fmt$(state.apptGC.balance||0)+' · Will apply: '+fmt$(gcApplied)+(gcRemainder>0?(' · Remainder: '+fmt$(gcRemainder)):'');
+    }
+    _refreshPaymentFieldVisibility();
+  }
+
   // Render breakdown
   var rows='';
   rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Subtotal</span><span>'+fmt$(subtotal)+'</span></div>';
   if(couponDiscount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Coupon ('+esc(coupon.code)+')</span><span>-'+fmt$(couponDiscount)+'</span></div>';
   if(discountAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Discount</span><span>-'+fmt$(discountAmount)+'</span></div>';
   if(tipAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Tip</span><span>+'+fmt$(tipAmount)+'</span></div>';
-  rows+='<div style="display:flex;justify-content:space-between;padding:6px 0 2px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700;color:var(--text)"><span>Total Charged</span><span style="color:var(--orange);font-size:14px">'+fmt$(total)+'</span></div>';
+  rows+='<div style="display:flex;justify-content:space-between;padding:6px 0 2px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700;color:var(--text)"><span>Total</span><span style="color:var(--text);font-size:14px">'+fmt$(total)+'</span></div>';
+  if(inGC){
+    rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Gift Card ('+esc(state.apptGC.code)+')</span><span>-'+fmt$(gcApplied)+'</span></div>';
+    if(gcRemainder>0){
+      var remMethodLabel=state.apptGCRemainder?(state.apptGCRemainder==='cof'?'card on file':state.apptGCRemainder):'choose method';
+      rows+='<div style="display:flex;justify-content:space-between;padding:6px 0 2px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700"><span>Remainder ('+remMethodLabel+')</span><span style="color:var(--orange);font-size:14px">'+fmt$(gcRemainder)+'</span></div>';
+    } else {
+      rows+='<div style="display:flex;justify-content:space-between;padding:6px 0 2px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700;color:#4ade80"><span>Covered by Gift Card</span><span>'+fmt$(0)+'</span></div>';
+    }
+  }
   totalsBox.innerHTML=rows;
 
   return {
@@ -4538,37 +4599,148 @@ function apptUpdateTotals(){
     discountVal:discVal,
     afterDiscount:afterDiscount,
     tipAmount:tipAmount,
-    total:total
+    total:total,
+    giftCard:inGC?state.apptGC:null,
+    giftCardApplied:gcApplied,
+    gcRemainder:gcRemainder,
+    gcRemainderMethod:state.apptGCRemainder||null
   };
 }
 
 // Sets the payment method on the Take Payment form. Toggles visible field
-// groups (cash has none, other shows ref, card shows Square form, cof shows picker).
+// groups (cash has none, other shows ref, card shows Square form, cof shows
+// picker, gc shows GC entry).
 function apptSetPM(method){
   state.apptPM=method;
-  ['cash','other','card','cof'].forEach(function(m){
+  ['cash','other','card','cof','gc'].forEach(function(m){
     var el=document.getElementById('apt-pm-'+m);
     if(el)el.classList.toggle('active', m===method);
   });
-  var refWrap=document.getElementById('apt-pay-ref-wrap');
-  if(refWrap)refWrap.style.display=(method==='other'?'block':'none');
-  var cardWrap=document.getElementById('apt-pay-card-fields');
-  if(cardWrap)cardWrap.style.display=(method==='card'?'block':'none');
-  var cofWrap=document.getElementById('apt-pay-cof-fields');
-  if(cofWrap)cofWrap.style.display=(method==='cof'?'block':'none');
-
-  // Update submit button label
-  var btn=document.getElementById('apt-pay-submit');
-  if(btn){
-    if(method==='card')btn.textContent='Charge Card';
-    else if(method==='cof')btn.textContent='Charge Saved Card';
-    else btn.textContent='Record Payment';
+  // Clear GC selection when leaving gc method
+  if(method!=='gc'){
+    state.apptGC=null;
+    state.apptGCRemainder=null;
   }
+  _refreshPaymentFieldVisibility();
+  _refreshSubmitLabel();
 
-  // Lazy init Square card form on first card chip click
+  // Lazy init Square card form on first card chip click (regular card method)
   if(method==='card'&&!apptSqCard){
     _initApptSquareCardForm();
   }
+  apptUpdateTotals();
+}
+
+// Centralizes show/hide logic for method-specific field groups. Called after
+// any state change that affects which fields should be visible.
+function _refreshPaymentFieldVisibility(){
+  var method=state.apptPM||'cash';
+  var rem=state.apptGCRemainder||null;
+  var inGC=method==='gc';
+
+  // Reference field: shown for 'other' method OR when GC remainder is 'other'
+  // (GC has its own ref field within the GC section)
+  var refWrap=document.getElementById('apt-pay-ref-wrap');
+  if(refWrap)refWrap.style.display=(method==='other'?'block':'none');
+
+  // GC fields visible only in 'gc' method
+  var gcWrap=document.getElementById('apt-pay-gc-fields');
+  if(gcWrap)gcWrap.style.display=(inGC?'block':'none');
+
+  // GC remainder ref shown when GC active AND remainder='other'
+  var gcRefWrap=document.getElementById('apt-pay-gc-ref-wrap');
+  if(gcRefWrap)gcRefWrap.style.display=(inGC&&rem==='other'?'block':'none');
+
+  // Card form shown for 'card' method OR for GC remainder='card'
+  var cardWrap=document.getElementById('apt-pay-card-fields');
+  if(cardWrap)cardWrap.style.display=(method==='card'||(inGC&&rem==='card')?'block':'none');
+
+  // COF picker shown for 'cof' method OR for GC remainder='cof'
+  var cofWrap=document.getElementById('apt-pay-cof-fields');
+  if(cofWrap)cofWrap.style.display=(method==='cof'||(inGC&&rem==='cof')?'block':'none');
+
+  // Highlight the active GC remainder chip
+  ['cash','other','card','cof'].forEach(function(m){
+    var el=document.getElementById('apt-gcr-'+m);
+    if(el)el.classList.toggle('active', m===rem);
+  });
+}
+
+// Sets the submit button label based on method + state.
+function _refreshSubmitLabel(){
+  var btn=document.getElementById('apt-pay-submit');
+  if(!btn)return;
+  var method=state.apptPM||'cash';
+  if(method==='card')btn.textContent='Charge Card';
+  else if(method==='cof')btn.textContent='Charge Saved Card';
+  else if(method==='gc')btn.textContent='Apply Gift Card';
+  else btn.textContent='Record Payment';
+}
+
+// Looks up a gift card code, validates, and sets state.apptGC. Updates the UI
+// to show GC info + remainder picker if partial.
+function apptApplyGC(){
+  var codeInput=document.getElementById('apt-pay-gc-code');
+  var errEl=document.getElementById('apt-pay-gc-error');
+  var infoEl=document.getElementById('apt-pay-gc-info');
+  var entryEl=document.getElementById('apt-pay-gc-entry');
+  if(!codeInput)return;
+  var code=(codeInput.value||'').trim();
+  if(errEl){errEl.textContent='';errEl.style.display='none';}
+  if(!code){
+    if(errEl){errEl.textContent='Enter a gift card code.';errEl.style.display='block';}
+    return;
+  }
+  var g=(typeof gcFind==='function')?gcFind(code):(db.giftCards||[]).find(function(x){return(x.code||'').toUpperCase()===code.toUpperCase();});
+  if(!g){
+    if(errEl){errEl.textContent='Gift card not found.';errEl.style.display='block';}
+    return;
+  }
+  if(g.status==='redeemed'){
+    if(errEl){errEl.textContent='Gift card already fully redeemed.';errEl.style.display='block';}
+    return;
+  }
+  if(g.status==='refunded'){
+    if(errEl){errEl.textContent='Gift card has been refunded.';errEl.style.display='block';}
+    return;
+  }
+  if((g.balance||0)<=0){
+    if(errEl){errEl.textContent='Gift card has no remaining balance.';errEl.style.display='block';}
+    return;
+  }
+  // Apply
+  state.apptGC={id:g.id,code:g.code,balance:parseFloat(g.balance)};
+  if(entryEl)entryEl.style.display='none';
+  if(infoEl)infoEl.style.display='block';
+  var codeLbl=document.getElementById('apt-pay-gc-code-label');
+  if(codeLbl)codeLbl.textContent=g.code;
+  apptUpdateTotals();
+}
+
+// Clears the applied gift card and resets the GC section to entry state.
+function apptClearGC(){
+  state.apptGC=null;
+  state.apptGCRemainder=null;
+  var entryEl=document.getElementById('apt-pay-gc-entry');
+  var infoEl=document.getElementById('apt-pay-gc-info');
+  var errEl=document.getElementById('apt-pay-gc-error');
+  var codeInput=document.getElementById('apt-pay-gc-code');
+  if(entryEl)entryEl.style.display='flex';
+  if(infoEl)infoEl.style.display='none';
+  if(errEl){errEl.textContent='';errEl.style.display='none';}
+  if(codeInput)codeInput.value='';
+  _refreshPaymentFieldVisibility();
+  apptUpdateTotals();
+}
+
+// Sets the GC remainder method. Lazy-inits Square card form when 'card' chosen.
+function apptSetGCRemainder(method){
+  state.apptGCRemainder=method;
+  _refreshPaymentFieldVisibility();
+  if(method==='card'&&!apptSqCard){
+    _initApptSquareCardForm();
+  }
+  apptUpdateTotals();
 }
 
 // Mounts a fresh Square card form into the appointment payment tab container.
@@ -4623,6 +4795,9 @@ async function takeApptPayment(){
   }
   if(method==='cof'){
     return _takeApptPaymentCOF(ctx, totals, notes, staffId, staffName, tipStaffId);
+  }
+  if(method==='gc'){
+    return _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipStaffId);
   }
 
   // Cash or Other: simple record
@@ -4823,6 +4998,183 @@ async function _takeApptPaymentCOF(ctx, totals, notes, staffId, staffName, tipSt
     console.error('COF charge error:',e);
     toast('Card on file charge failed: '+e.message,'error');
   }
+}
+
+// Gift Card payment: applies the GC balance, then charges any remainder via
+// the chosen remainder method (cash/other/card/cof). Single payment record.
+async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipStaffId){
+  if(!totals.giftCard){toast('No gift card applied. Click Apply to lookup the code.','error');return;}
+  var gcId=totals.giftCard.id;
+  var gObj=(db.giftCards||[]).find(function(x){return x.id===gcId;});
+  if(!gObj){toast('Gift card not found.','error');return;}
+
+  var gcApplied=totals.giftCardApplied;
+  var gcRemainder=totals.gcRemainder;
+  var remMethod=totals.gcRemainderMethod;
+
+  if(gcRemainder>0&&!remMethod){
+    toast('Choose a payment method for the remaining '+fmt$(gcRemainder)+'.','error');
+    return;
+  }
+
+  var payId=uid();
+  var gcRef='';
+  if(remMethod==='other'){
+    gcRef=(document.getElementById('apt-pay-gc-ref')||{}).value||'';
+  }
+
+  // Build the base payment record. Method is 'gift_card' regardless of remainder.
+  // remainderMethod / remainderRef capture the secondary method.
+  var basePmt=Object.assign({
+    id:payId,
+    contactId:ctx.contactId||null,
+    staffId:staffId,
+    staffName:staffName,
+    tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
+    items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal}],
+    subtotal:totals.subtotal,
+    couponDiscount:totals.couponDiscount,couponCode:totals.couponCode,couponId:totals.couponId,
+    discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
+    afterDiscount:totals.afterDiscount,
+    tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
+    paymentMethod:'gift_card',
+    giftCardId:gObj.id,
+    giftCardCode:gObj.code,
+    giftCardApplied:gcApplied,
+    remainderMethod:remMethod||'',
+    remainderRef:gcRef,
+    notes:notes||'',
+    createdAt:now_()
+  }, ctx.linkage||{});
+
+  // Helper to commit GC redemption + record + coupon usage
+  function commit(extras, success){
+    var pmt=Object.assign({}, basePmt, extras||{});
+    if(!db.payments)db.payments=[];
+    db.payments.push(pmt);
+    _createPaymentRemote(pmt);
+
+    // Reduce GC balance, log redemption
+    gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
+    if(gObj.balance<=0)gObj.status='redeemed';
+    else if(gcApplied>0)gObj.status='partial';
+    if(!gObj.log)gObj.log=[];
+    gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at payment'+(gcRemainder>0?' + '+fmt$(gcRemainder)+' '+(remMethod||''):''),date:now_(),contactId:ctx.contactId||null,paymentId:payId});
+
+    // Coupon usage logging
+    if(totals.couponId){
+      var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
+      if(cpn){
+        if(!cpn.usageLog)cpn.usageLog=[];
+        cpn.usageLog.push({id:uid(),contactId:ctx.contactId||null,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
+        cpn.usageCount=(cpn.usageCount||0)+1;
+      }
+    }
+    saveData();
+    if(success)toast(success,'success');
+    if(typeof ctx.onSuccess==='function')ctx.onSuccess();
+  }
+
+  // No remainder needed: GC covers everything
+  if(gcRemainder<=0){
+    commit({status:'completed',remainderStatus:'completed'}, 'Recorded '+fmt$(gcApplied)+' from gift card.');
+    return;
+  }
+
+  // Cash or Other remainder: just record, no async charge needed
+  if(remMethod==='cash'||remMethod==='other'){
+    commit({status:'completed',remainderStatus:'completed'}, 'Applied '+fmt$(gcApplied)+' from gift card + '+fmt$(gcRemainder)+' '+remMethod+'.');
+    return;
+  }
+
+  // COF remainder: charge saved card for the remainder
+  if(remMethod==='cof'){
+    var contact=(db.contacts||[]).find(function(c){return c.id===ctx.contactId;});
+    var cards=(contact&&contact.squareCards)||[];
+    if(!cards.length){toast('No card on file for remainder.','error');return;}
+    var idx=parseInt((document.getElementById('apt-pay-cof-select')||{}).value)||0;
+    var card=cards[idx]||cards[0];
+    try{
+      var r=await fetch(apiUrl('/api/square/charge'),{
+        credentials:'include',method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          slug:state.subaccountSlug,
+          cardId:card.id,
+          customerId:contact.squareCustomerId||'',
+          amountCents:Math.round(gcRemainder*100),
+          note:'GC remainder - '+(ctx.itemDesc||'Payment')
+        })
+      });
+      var data=await r.json();
+      if(data.error){
+        commit({status:'failed',remainderStatus:'failed',remainderError:data.error,failReason:data.error},null);
+        toast('Remainder charge failed: '+data.error,'error');
+        return;
+      }
+      commit({
+        status:'completed',
+        remainderStatus:'completed',
+        squarePaymentId:data.payment&&data.payment.id||'',
+        cardLast4:card.last4,
+        cardBrand:card.brand
+      }, 'Applied '+fmt$(gcApplied)+' from gift card + '+fmt$(gcRemainder)+' to card on file.');
+    }catch(e){
+      commit({status:'failed',remainderStatus:'failed',remainderError:e.message,failReason:e.message},null);
+      toast('COF charge error: '+e.message,'error');
+    }
+    return;
+  }
+
+  // Card remainder: tokenize via Square and charge for the remainder amount
+  if(remMethod==='card'){
+    var errEl=document.getElementById('apt-sq-card-errors');
+    if(errEl)errEl.textContent='';
+    if(!apptSqCard){
+      if(errEl)errEl.textContent='Card form not ready. Wait for the form to load.';
+      return;
+    }
+    try{
+      var result=await apptSqCard.tokenize();
+      if(result.status!=='OK'){
+        var msgs=(result.errors||[]).map(function(e){return e.message;}).join(', ');
+        if(errEl)errEl.textContent=msgs||'Card validation failed.';
+        return;
+      }
+      var r2=await fetch(apiUrl('/api/square/charge'),{
+        credentials:'include',method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          slug:state.subaccountSlug,
+          sourceId:result.token,
+          amountCents:Math.round(gcRemainder*100),
+          note:'GC remainder - '+(ctx.itemDesc||'Payment')
+        })
+      });
+      var data2=await r2.json();
+      if(data2.error){
+        commit({status:'failed',remainderStatus:'failed',remainderError:data2.error,failReason:data2.error},null);
+        toast('Remainder charge failed: '+data2.error,'error');
+        return;
+      }
+      var last4=data2.payment&&data2.payment.cardDetails&&data2.payment.cardDetails.card&&data2.payment.cardDetails.card.last4||'';
+      var brand=data2.payment&&data2.payment.cardDetails&&data2.payment.cardDetails.card&&data2.payment.cardDetails.card.cardBrand||'';
+      commit({
+        status:'completed',
+        remainderStatus:'completed',
+        squarePaymentId:data2.payment&&data2.payment.id||'',
+        cardLast4:last4,
+        cardBrand:brand
+      }, 'Applied '+fmt$(gcApplied)+' from gift card + '+fmt$(gcRemainder)+' to card.');
+      _destroyApptSquareCardForm();
+    }catch(e){
+      console.error('GC card remainder error:',e);
+      if(errEl)errEl.textContent='Charge failed: '+e.message;
+    }
+    return;
+  }
+
+  toast('Unknown remainder method: '+remMethod,'error');
 }
 
 function checkApptConflict(){
