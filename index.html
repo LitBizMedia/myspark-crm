@@ -12928,6 +12928,23 @@ function txnRenderTable(){
   var pages = Math.ceil(filtered.length / TXN_PER_PAGE) || 1;
   if(state.txnPage > pages) state.txnPage = 1;
   var slice = filtered.slice((state.txnPage - 1) * TXN_PER_PAGE, state.txnPage * TXN_PER_PAGE);
+  // Column totals across the full filtered set (not just current page).
+  // Excludes voided. Refunded amount nets against the original.
+  var totals = filtered.reduce(function(s, p){
+    if(p.status === 'voided') return s;
+    var t = txnNorm(p);
+    var refunded = (p.refundLog || []).reduce(function(rs, r){ return rs + (r.total || 0); }, 0);
+    var net = (t.total || 0) - refunded;
+    s.subtotal += t.subtotal || 0;
+    s.afterDiscount += t.afterDiscount || 0;
+    s.tax += t.taxAmount || 0;
+    s.tip += t.tipAmount || 0;
+    s.total += net;
+    return s;
+  }, {subtotal:0, afterDiscount:0, tax:0, tip:0, total:0});
+  var totalsRowStyle = 'background:rgba(107,33,234,.06);font-weight:700;border-bottom:2px solid var(--purple-border);position:sticky;top:32px;z-index:1';
+  var totalsCellStyle = 'padding:8px 12px;font-size:12px;color:var(--main-text)';
+  var totalsNumStyle = 'padding:8px 12px;font-size:13px;text-align:right;color:var(--main-text);font-weight:700;font-family:Exo 2,sans-serif';
   if(thead) thead.innerHTML = '<tr>'
     +'<th style="min-width:110px">Date</th>'
     +'<th style="min-width:110px">Staff</th>'
@@ -12940,7 +12957,15 @@ function txnRenderTable(){
     +'<th style="min-width:120px">Method</th>'
     +'<th style="min-width:90px">Status</th>'
     +'<th style="width:40px"></th>'
-    +'</tr>';
+    +'</tr>'
+    +(filtered.length?'<tr style="'+totalsRowStyle+'">'
+      +'<td style="'+totalsCellStyle+';font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted)" colspan="4">Period Totals ('+filtered.length+' txn'+(filtered.length!==1?'s':'')+')</td>'
+      +'<td style="'+totalsNumStyle+'">'+fmt$(totals.subtotal)+'</td>'
+      +'<td style="'+totalsNumStyle+'">'+fmt$(totals.afterDiscount)+'</td>'
+      +'<td style="'+totalsNumStyle+'">'+fmt$(totals.tax)+'</td>'
+      +'<td style="'+totalsNumStyle+'">'+fmt$(totals.tip)+'</td>'
+      +'<td style="'+totalsCellStyle+';color:var(--main-text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em" colspan="3">Net Total: <span style="color:var(--orange);font-size:13px;font-weight:700;font-family:Exo 2,sans-serif;text-transform:none;letter-spacing:0">'+fmt$(totals.total)+'</span></td>'
+      +'</tr>':'');
   if(!slice.length){
     tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">'
       +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'
