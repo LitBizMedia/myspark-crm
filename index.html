@@ -11071,52 +11071,46 @@ function saveTimezone(){
 
 function renderBookingWidgets(){
   var el=document.getElementById('bw-cal-body');if(!el)return;
-  if(!state.bwTab)state.bwTab='service';
-  var tabs=[
-    {id:'service',label:'Service Widgets'},
-    {id:'appointment',label:'Appointment Widgets'},
-    {id:'settings',label:'Booking Settings'}
-  ];
-  var tabBar='<div class="cal-panel-tabs" style="margin-bottom:18px">'
-    +tabs.map(function(t){
-      return'<button class="cal-panel-tab'+(state.bwTab===t.id?' active':'')+'" onclick="state.bwTab=\''+t.id+'\';renderBookingWidgets()">'+t.label+'</button>';
-    }).join('')+'</div>';
-
-  var body='';
-  if(state.bwTab==='service') body=_renderSvcWidgetsTab();
-  else if(state.bwTab==='appointment') body=_renderApptWidgetsTab();
-  else body=_renderBookingSettingsTab();
-
-  el.innerHTML=tabBar+body;
+  el.innerHTML=_renderSvcWidgetsTab();
 }
 
 function _renderSvcWidgetsTab(){
   var widgets=(db.serviceWidgets||[]);
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
-    +'<div><div style="font-size:14px;font-weight:700">Service Booking Widgets</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Embeddable widgets for your service calendars</div></div>'
+    +'<div><div style="font-size:14px;font-weight:700">Booking Widgets</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Embeddable booking widgets for your website</div></div>'
     +'<button class="btn btn-primary" onclick="openServiceWidgetModal(null)">+ Create Widget</button>'
     +'</div>';
   if(!widgets.length){
     h+='<div style="text-align:center;padding:48px;border:1px dashed var(--main-border);border-radius:8px;color:var(--text-muted)">'
       +'<div style="font-size:13px;font-weight:600;margin-bottom:6px">No widgets yet</div>'
-      +'<div style="font-size:12px">Create your first service booking widget to generate an embed code for your website.</div>'
+      +'<div style="font-size:12px">Create your first booking widget to generate an embed code for your website.</div>'
       +'</div>';
     return h;
   }
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">';
   widgets.forEach(function(w){
-    var svcNames=(w.service_ids&&w.service_ids.length)
-      ?(db.services||[]).filter(function(s){return w.service_ids.includes(s.id);}).map(function(s){return esc(s.name);}).join(', ')||'No services found'
-      :'All services';
+    var svcCount=(w.service_ids||[]).length;
+    var svcLabel=svcCount?(svcCount+' service'+(svcCount!==1?'s':'')):'All services';
+    var staffMode=w.staff_mode||'any';
+    var staffCount=(w.staff_ids||[]).length;
+    var staffLabel='';
+    if(staffMode==='any')staffLabel='Any staff';
+    else if(staffMode==='specific')staffLabel='Specific staff ('+staffCount+')';
+    else if(staffMode==='round_robin')staffLabel='Round robin ('+staffCount+')';
     h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:14px;border-left:4px solid '+(w.primary_color||'#6b21ea')+'">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
       +'<div style="font-weight:700;font-size:13px">'+esc(w.name)+'</div>'
       +(w.active!==false?'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.15);color:#4ade80;font-weight:600">Active</span>':'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(156,163,175,.15);color:#9ca3af;font-weight:600">Inactive</span>')
       +'</div>'
-      +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Services: '+svcNames+'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">'
+      +'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-card);color:var(--text-muted);border:1px solid var(--main-border)">'+svcLabel+'</span>'
+      +'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-card);color:var(--text-muted);border:1px solid var(--main-border)">'+staffLabel+'</span>'
+      +(w.require_payment?'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(251,146,60,.15);color:var(--orange);border:1px solid rgba(251,146,60,.3)">Payment required</span>':'')
+      +'</div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
-      +'<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="copyWidgetCode(\''+w.id+'\')">Copy Embed Code</button>'
+      +'<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="copyWidgetCode(\''+w.id+'\')">Copy Embed</button>'
+      +'<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="copyWidgetLink(\''+w.id+'\')">Copy Link</button>'
       +'<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="openServiceWidgetModal(\''+w.id+'\')">Edit</button>'
       +'<button class="btn btn-ghost btn-sm" style="font-size:11px;color:#f87171" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>'
       +'</div></div>';
@@ -11125,6 +11119,8 @@ function _renderSvcWidgetsTab(){
   return h;
 }
 
+// DEPRECATED: appointment widgets concept retired in Stage 1 booking widget rebuild.
+// Function preserved temporarily in case any external caller existed, will be removed.
 function _renderApptWidgetsTab(){
   return'<div style="text-align:center;padding:48px;border:1px dashed var(--main-border);border-radius:8px;color:var(--text-muted)">'
     +'<div style="font-size:13px;font-weight:600;margin-bottom:6px">Appointment Widgets</div>'
@@ -11132,6 +11128,11 @@ function _renderApptWidgetsTab(){
     +'</div>';
 }
 
+// DEPRECATED: This rendering function is no longer wired to a UI tab as of the
+// Stage 1 booking widget rebuild. The settings it captures (cancellation, no-show,
+// tipping defaults, confirmation email defaults, widget branding defaults) are still
+// valuable but need a new home, planned for Stage 5 as a Workspace Settings panel.
+// Saved settings are still applied when present in db.settings.bookingSettings.
 function _renderBookingSettingsTab(){
   var bs=db.settings&&db.settings.bookingSettings||{};
   var pct=bs.tip_percentages||[10,15,20];
@@ -11309,7 +11310,28 @@ function openServiceWidgetModal(id){
     ?_selSvcs.map(function(sid){var s=(db.services||[]).find(function(x){return x.id===sid;});var col=s?s.color||'#6b21ea':'#6b21ea';var nm=s?esc(s.name):'?';return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();swgMsRemove(\''+sid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
     :'<span style="color:var(--text-muted);font-size:12px">All services (none selected)</span>';
 
+  // Staff selection setup
+  var _selStaff=(w&&w.staff_ids)||[];
+  var staffMode=(w&&w.staff_mode)||'any';
+  var allUsers=(db.users||[]).filter(function(u){return u.active!==false;});
+  var staffMsOpts=allUsers.map(function(u){
+    var col=u.color||'#6b21ea';
+    var nm=u.name||u.username||'Unnamed';
+    return'<div class="svc-ms-opt" onclick="swgStaffMsToggle(\''+u.id+'\')">'
+      +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
+      +esc(nm)
+      +'<span id="swg-staff-ck-'+u.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selStaff.includes(u.id)?'':'display:none')+'">&#10003;</span>'
+      +'<input type="checkbox" id="swg-staff-'+u.id+'" class="swg-staff-chk" value="'+u.id+'" style="display:none"'+(_selStaff.includes(u.id)?' checked':'')+'>'
+      +'</div>';
+  }).join('');
+  var initialStaffChips=_selStaff.length
+    ?_selStaff.map(function(uid){var u=allUsers.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username||'?'):'?';return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();swgStaffMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
+    :'<span style="color:var(--text-muted);font-size:12px">All staff (none selected)</span>';
+
   var curLogo=w&&w.logo_url||'';
+  var requirePayment=!!(w&&w.require_payment);
+  var confirmMsg=(w&&w.confirm_message)||'';
+
   var body='<div style="display:flex;flex-direction:column;gap:14px">'
     +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'"></div>'
     +'<div class="form-group"><label>Included Services <span style="color:var(--text-muted);font-weight:400">(none = show all)</span></label>'
@@ -11324,6 +11346,32 @@ function openServiceWidgetModal(id){
         +'</div></div>'
       :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No services yet. Add services in Service Calendars first.</div>')
     +'</div>'
+
+    // Staff mode + selection
+    +'<div class="form-group"><label>Staff Selection</label>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;background:var(--bg-card);border-radius:6px;padding:10px">'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="radio" name="swg-staff-mode" value="any"'+(staffMode==='any'?' checked':'')+' onchange="swgUpdateStaffMode()">'
+    +'<span><strong>Any staff</strong> <span style="color:var(--text-muted)">- patient picks from all available, simple alphabetical fallback</span></span></label>'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="radio" name="swg-staff-mode" value="specific"'+(staffMode==='specific'?' checked':'')+' onchange="swgUpdateStaffMode()">'
+    +'<span><strong>Specific staff only</strong> <span style="color:var(--text-muted)">- only chosen staff shown to patients</span></span></label>'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="radio" name="swg-staff-mode" value="round_robin"'+(staffMode==='round_robin'?' checked':'')+' onchange="swgUpdateStaffMode()">'
+    +'<span><strong>Round robin</strong> <span style="color:var(--text-muted)">- system auto-assigns from selected staff (rules configured later)</span></span></label>'
+    +'</div></div>'
+
+    +'<div class="form-group" id="swg-staff-pick-wrap" style="'+(staffMode==='any'?'display:none':'')+'">'
+    +'<label>Available Staff <span style="color:var(--text-muted);font-weight:400">(empty = all)</span></label>'
+    +(staffMsOpts
+      ?'<div class="svc-ms-wrap" id="swg-staff-ms">'
+        +'<div class="svc-ms-display" onclick="swgStaffMsOpen(event)">'
+        +'<div class="svc-ms-chips" id="swg-staff-chips">'+initialStaffChips+'</div>'
+        +'<span class="svc-ms-arrow">&#9660;</span></div>'
+        +'<div class="svc-ms-dd hidden" id="swg-staff-dd">'
+        +'<input type="text" class="svc-ms-search" placeholder="Search staff..." oninput="swgStaffMsFilter(this)">'
+        +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
+        +'</div></div>'
+      :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No active staff.</div>')
+    +'</div>'
+
     +'<div class="form-row">'
     +'<div class="form-group"><label>Primary Color</label><input id="swg-color" type="color" value="'+(w&&w.primary_color||db.settings&&db.settings.bookingSettings&&db.settings.bookingSettings.widget_primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
     +'<div class="form-group"><label>Logo</label>'
@@ -11338,6 +11386,19 @@ function openServiceWidgetModal(id){
     +'</div>'
     +'</div>'
     +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Book your appointment online" value="'+esc(w&&w.tagline||'')+'"></div>'
+
+    // Require payment toggle
+    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600">'
+    +'<input id="swg-req-pay" type="checkbox"'+(requirePayment?' checked':'')+'>'
+    +'Require payment to book online</label>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:24px">When enabled, patients must enter card info and pay before the booking is confirmed. Requires Square to be connected.</div>'
+    +'</div>'
+
+    // Custom confirmation message
+    +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after booking)</span></label>'
+    +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thank you! Your booking is confirmed. We will see you soon.">'+esc(confirmMsg)+'</textarea></div>'
+
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+'>Active</label></div>'
     +'</div>';
   var footer=(w?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
@@ -11384,6 +11445,60 @@ function swgMsFilter(inp){
   Array.from(inp.closest('.svc-ms-dd').querySelectorAll('.svc-ms-opt')).forEach(function(o){
     o.style.display=o.textContent.toLowerCase().includes(q)?'':'none';
   });
+}
+
+// Parallel set of helpers for the STAFF multi-select in the widget editor.
+// Same pattern as service multi-select but operates on swg-staff-* IDs.
+function swgStaffMsOpen(e){
+  e.stopPropagation();
+  var dd=document.getElementById('swg-staff-dd');if(!dd)return;
+  var isOpen=!dd.classList.contains('hidden');
+  dd.classList.toggle('hidden',isOpen);
+  if(!isOpen){
+    var sr=dd.querySelector('.svc-ms-search');if(sr)sr.focus();
+    var _cls=function(ev){var wrap=document.getElementById('swg-staff-ms');if(!wrap||!wrap.contains(ev.target)){dd.classList.add('hidden');document.removeEventListener('click',_cls);}};
+    setTimeout(function(){document.addEventListener('click',_cls);},10);
+  }
+}
+function swgStaffMsToggle(uid){
+  var chk=document.getElementById('swg-staff-'+uid);if(!chk)return;
+  chk.checked=!chk.checked;
+  var tick=document.getElementById('swg-staff-ck-'+uid);
+  if(tick)tick.style.display=chk.checked?'':'none';
+  swgStaffMsRefresh();
+}
+function swgStaffMsRemove(uid){
+  var chk=document.getElementById('swg-staff-'+uid);if(chk)chk.checked=false;
+  var tick=document.getElementById('swg-staff-ck-'+uid);if(tick)tick.style.display='none';
+  swgStaffMsRefresh();
+}
+function swgStaffMsRefresh(){
+  var area=document.getElementById('swg-staff-chips');if(!area)return;
+  var checked=Array.from(document.querySelectorAll('.swg-staff-chk:checked'));
+  if(!checked.length){area.innerHTML='<span style="color:var(--text-muted);font-size:12px">All staff (none selected)</span>';return;}
+  area.innerHTML=checked.map(function(c){
+    var u=(db.users||[]).find(function(x){return x.id===c.value;});
+    var col=u?u.color||'#6b21ea':'#6b21ea';
+    var nm=u?esc(u.name||u.username||'?'):c.value;
+    return'<span class="svc-ms-chip" style="background:'+col+'">'+nm+'<span onclick="event.stopPropagation();swgStaffMsRemove(\''+c.value+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';
+  }).join('');
+}
+function swgStaffMsFilter(inp){
+  var q=inp.value.toLowerCase();
+  Array.from(inp.closest('.svc-ms-dd').querySelectorAll('.svc-ms-opt')).forEach(function(o){
+    o.style.display=o.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
+
+// Toggles the staff selection card visible/hidden based on the staff mode radio.
+// 'any' hides the picker (system uses all eligible staff), 'specific' and
+// 'round_robin' both require explicit staff selection.
+function swgUpdateStaffMode(){
+  var mode='any';
+  var radios=document.getElementsByName('swg-staff-mode');
+  for(var i=0;i<radios.length;i++){if(radios[i].checked){mode=radios[i].value;break;}}
+  var wrap=document.getElementById('swg-staff-pick-wrap');
+  if(wrap)wrap.style.display=(mode==='any'?'none':'');
 }
 async function openMediaPicker(targetId){
   if(!state.media||!state.media.loaded){
@@ -11433,6 +11548,15 @@ function saveServiceWidget(id){
   var name=(document.getElementById('swg-name')||{}).value;
   if(!name||!name.trim()){toast('Widget name is required.','error');return;}
   var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
+  var staffIds=Array.from(document.querySelectorAll('.swg-staff-chk:checked')).map(function(c){return c.value;});
+  // Read staff mode from radios
+  var staffMode='any';
+  var radios=document.getElementsByName('swg-staff-mode');
+  for(var i=0;i<radios.length;i++){if(radios[i].checked){staffMode=radios[i].value;break;}}
+  // Validate: specific or round_robin requires at least one staff selected
+  if((staffMode==='specific'||staffMode==='round_robin')&&!staffIds.length){
+    toast('Pick at least one staff member for that staff mode.','error');return;
+  }
   var w={
     id:id||uid(),
     name:name.trim(),
@@ -11440,7 +11564,13 @@ function saveServiceWidget(id){
     primary_color:(document.getElementById('swg-color')||{}).value||'#6b21ea',
     logo_url:((document.getElementById('swg-logo')||{}).value||'').trim(),
     tagline:((document.getElementById('swg-tag')||{}).value||'').trim(),
-    active:(document.getElementById('swg-active')||{}).checked!==false
+    active:(document.getElementById('swg-active')||{}).checked!==false,
+    staff_mode:staffMode,
+    staff_ids:staffIds,
+    round_robin_config:{}, // placeholder for stage 4
+    require_payment:(document.getElementById('swg-req-pay')||{}).checked===true,
+    intake_form_id:null,
+    confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
   };
   fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
     method:'POST',credentials:'include',
@@ -11449,7 +11579,6 @@ function saveServiceWidget(id){
   }).then(function(r){
     if(!r.ok){toast('Failed to save widget.','error');return;}
     return r.json().then(function(data){
-      // Update local state from authoritative server response
       if(!db.serviceWidgets)db.serviceWidgets=[];
       var serverWidget=data.widget||w;
       var ex=db.serviceWidgets.find(function(x){return x.id===serverWidget.id;});
@@ -11484,6 +11613,21 @@ function copyWidgetCode(id){
     ta.value=code;document.body.appendChild(ta);ta.select();
     document.execCommand('copy');document.body.removeChild(ta);
     toast('Embed code copied.','success');
+  }
+}
+
+// Direct link to the booking page. Use when the patient prefers a link
+// (texted, emailed, in a social bio) rather than embedding.
+function copyWidgetLink(id){
+  var slug=state.subaccountSlug||'your-clinic';
+  var url='https://book.mysparkplus.app/'+slug+'/'+id;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(url).then(function(){toast('Booking link copied.','success');});
+  } else {
+    var ta=document.createElement('textarea');
+    ta.value=url;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    toast('Booking link copied.','success');
   }
 }
 
