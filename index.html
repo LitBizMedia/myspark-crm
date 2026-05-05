@@ -11109,12 +11109,6 @@ function _renderSvcWidgetsTab(){
   widgets.forEach(function(w){
     var svcCount=(w.service_ids||[]).length;
     var svcLabel=svcCount?(svcCount+' service'+(svcCount!==1?'s':'')):'All services';
-    var staffMode=w.staff_mode||'any';
-    var staffCount=(w.staff_ids||[]).length;
-    var staffLabel='';
-    if(staffMode==='any')staffLabel='Any staff';
-    else if(staffMode==='specific')staffLabel='Specific staff ('+staffCount+')';
-    else if(staffMode==='round_robin')staffLabel='Round robin ('+staffCount+')';
     h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:14px;border-left:4px solid '+(w.primary_color||'#6b21ea')+'">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
       +'<div style="font-weight:700;font-size:13px">'+esc(w.name)+'</div>'
@@ -11122,7 +11116,6 @@ function _renderSvcWidgetsTab(){
       +'</div>'
       +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">'
       +'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-card);color:var(--text-muted);border:1px solid var(--main-border)">'+svcLabel+'</span>'
-      +'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-card);color:var(--text-muted);border:1px solid var(--main-border)">'+staffLabel+'</span>'
       +(w.require_payment?'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(251,146,60,.15);color:var(--orange);border:1px solid rgba(251,146,60,.3)">Payment required</span>':'')
       +'</div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
@@ -11364,35 +11357,13 @@ function openServiceWidgetModal(id){
       :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No services yet. Add services in Service Calendars first.</div>')
     +'</div>'
 
-    // Staff mode + selection
-    +'<div class="form-group"><label>Staff Selection</label>'
-    +'<div style="display:flex;flex-direction:column;gap:10px;background:var(--bg-card);border-radius:6px;padding:14px">'
-    +'<div style="display:flex;align-items:flex-start;gap:10px;cursor:pointer" onclick="document.querySelector(\'input[name=swg-staff-mode][value=any]\').click()">'
-    +'<input type="radio" name="swg-staff-mode" value="any"'+(staffMode==='any'?' checked':'')+' onchange="swgUpdateStaffMode()" style="margin-top:3px;flex-shrink:0">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:400;color:var(--text);line-height:1.4"><span style="font-weight:600">Any staff</span><span style="color:var(--text-muted);font-weight:400"> - patient picks from all available, simple alphabetical fallback</span></div>'
-    +'</div>'
-    +'<div style="display:flex;align-items:flex-start;gap:10px;cursor:pointer" onclick="document.querySelector(\'input[name=swg-staff-mode][value=specific]\').click()">'
-    +'<input type="radio" name="swg-staff-mode" value="specific"'+(staffMode==='specific'?' checked':'')+' onchange="swgUpdateStaffMode()" style="margin-top:3px;flex-shrink:0">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:400;color:var(--text);line-height:1.4"><span style="font-weight:600">Specific staff only</span><span style="color:var(--text-muted);font-weight:400"> - only chosen staff shown to patients</span></div>'
-    +'</div>'
-    +'<div style="display:flex;align-items:flex-start;gap:10px;cursor:pointer" onclick="document.querySelector(\'input[name=swg-staff-mode][value=round_robin]\').click()">'
-    +'<input type="radio" name="swg-staff-mode" value="round_robin"'+(staffMode==='round_robin'?' checked':'')+' onchange="swgUpdateStaffMode()" style="margin-top:3px;flex-shrink:0">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:400;color:var(--text);line-height:1.4"><span style="font-weight:600">Round robin</span><span style="color:var(--text-muted);font-weight:400"> - system auto-assigns from selected staff (rules configured later)</span></div>'
-    +'</div>'
-    +'</div></div>'
-
-    +'<div class="form-group" id="swg-staff-pick-wrap" style="'+(staffMode==='any'?'display:none':'')+'">'
-    +'<label>Available Staff <span style="color:var(--text-muted);font-weight:400">(empty = all)</span></label>'
-    +(staffMsOpts
-      ?'<div class="svc-ms-wrap" id="swg-staff-ms">'
-        +'<div class="svc-ms-display" onclick="swgStaffMsOpen(event)">'
-        +'<div class="svc-ms-chips" id="swg-staff-chips">'+initialStaffChips+'</div>'
-        +'<span class="svc-ms-arrow">&#9660;</span></div>'
-        +'<div class="svc-ms-dd hidden" id="swg-staff-dd">'
-        +'<input type="text" class="svc-ms-search" placeholder="Search staff..." oninput="swgStaffMsFilter(this)">'
-        +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
-        +'</div></div>'
-      :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No active staff.</div>')
+    // Staff selection: REMOVED for service widgets.
+    // Staff is INHERITED from the services included in this widget. To control which
+    // staff can perform a service, edit the service. Stage 3 will reintroduce a staff
+    // picker for the appointment widget type only (which has no service catalog).
+    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
+    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin-bottom:4px">Staff</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.5">Staff is inherited from the services in this widget. Patients see only staff who can perform the service they pick. To change which staff perform a service, edit the service.</div>'
     +'</div>'
 
     +'<div class="form-row">'
@@ -11514,9 +11485,10 @@ function swgStaffMsFilter(inp){
   });
 }
 
-// Toggles the staff selection card visible/hidden based on the staff mode radio.
-// 'any' hides the picker (system uses all eligible staff), 'specific' and
-// 'round_robin' both require explicit staff selection.
+// DORMANT in Stage 1: service widgets inherit staff from services and don't expose
+// staff_mode in the editor. This helper will be reactivated in Stage 3 for the
+// appointment widget type, which keeps its own staff_ids list. Safe no-op when
+// the staff mode radios don't exist on the page.
 function swgUpdateStaffMode(){
   var mode='any';
   var radios=document.getElementsByName('swg-staff-mode');
@@ -11572,15 +11544,8 @@ function saveServiceWidget(id){
   var name=(document.getElementById('swg-name')||{}).value;
   if(!name||!name.trim()){toast('Widget name is required.','error');return;}
   var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
-  var staffIds=Array.from(document.querySelectorAll('.swg-staff-chk:checked')).map(function(c){return c.value;});
-  // Read staff mode from radios
-  var staffMode='any';
-  var radios=document.getElementsByName('swg-staff-mode');
-  for(var i=0;i<radios.length;i++){if(radios[i].checked){staffMode=radios[i].value;break;}}
-  // Validate: specific or round_robin requires at least one staff selected
-  if((staffMode==='specific'||staffMode==='round_robin')&&!staffIds.length){
-    toast('Pick at least one staff member for that staff mode.','error');return;
-  }
+  // Service widgets inherit staff from services. staff_mode and staff_ids are not user-set
+  // for this widget type. Stage 3 reintroduces these fields for appointment widgets.
   var w={
     id:id||uid(),
     name:name.trim(),
@@ -11589,8 +11554,8 @@ function saveServiceWidget(id){
     logo_url:((document.getElementById('swg-logo')||{}).value||'').trim(),
     tagline:((document.getElementById('swg-tag')||{}).value||'').trim(),
     active:(document.getElementById('swg-active')||{}).checked!==false,
-    staff_mode:staffMode,
-    staff_ids:staffIds,
+    staff_mode:'any',
+    staff_ids:[],
     round_robin_config:{}, // placeholder for stage 4
     require_payment:(document.getElementById('swg-req-pay')||{}).checked===true,
     intake_form_id:null,
