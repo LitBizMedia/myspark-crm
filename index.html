@@ -7609,7 +7609,7 @@ function delProduct(id){
 }
 function confirmDelProduct(){const id=state.modal&&state.modal.id;if(!id)return;
   db.products=db.products.filter(p=>p.id!==id);
-  saveData();renderProducts();toast('Product removed.','success');
+  saveData();closeModal();renderProducts();toast('Product removed.','success');
 }
 
 function invBadge(p){
@@ -18266,6 +18266,7 @@ function renderPaySettings(){
     +'<div class="bh-toggle'+(tx.enabled?' on':'')+'" id="tax-toggle" onclick="toggleTaxCollection()" style="position:relative;flex-shrink:0"></div>'
     +'<span style="font-size:13px;color:var(--main-text-muted)">'+(tx.enabled?'Collecting tax':'Disabled')+'</span>'
     +'</div>'
+    +(tx.enabled&&(parseFloat(tx.rate)||0)<=0?'<div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;color:#d97706"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span style="color:var(--main-text)">Set a rate above to start collecting tax. Tax is not being applied yet.</span></div>':'')
     +'<div id="tax-fields" style="'+(tx.enabled?'':'display:none;')+'display:flex;flex-direction:column;gap:12px">'
     +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
     +'<div class="form-group" style="flex:2;min-width:140px"><label>Tax Label</label><input id="tax-label" type="text" style="'+inp+'" value="'+esc(tx.label||'Sales Tax')+'" placeholder="e.g. Sales Tax" oninput="savePaySettings()"></div>'
@@ -18302,7 +18303,21 @@ function toggleTaxCollection(){
   saveData();
   renderPaySettings();
   if(state.paymentsTab==='pos'&&typeof calcTotals==='function')calcTotals();
-  toast('Tax collection '+(db.paySettings.tax.enabled?'enabled':'disabled')+'.','success');
+  if(db.paySettings.tax.enabled){
+    var rate=parseFloat(db.paySettings.tax.rate)||0;
+    if(rate<=0){
+      // Nudge the user to set a rate. Without one, tax does nothing.
+      setTimeout(function(){
+        var el=document.getElementById('tax-rate');
+        if(el){el.focus();el.select();}
+      },50);
+      toast('Tax collection enabled. Enter a rate to start collecting.','success');
+    }else{
+      toast('Tax collection enabled.','success');
+    }
+  }else{
+    toast('Tax collection disabled.','success');
+  }
 }
 
 // Returns tax config if tax is enabled and rate is positive, otherwise null.
@@ -18368,10 +18383,15 @@ function savePaySettings(){
   if(amt)af.amount=parseFloat(amt.value)||0;
   var tlbl=document.getElementById('tax-label');
   var trate=document.getElementById('tax-rate');
+  var prevRateZero=(parseFloat(tx.rate)||0)<=0;
   if(tlbl)tx.label=tlbl.value||'Sales Tax';
   if(trate)tx.rate=parseFloat(trate.value)||0;
+  var nowRateZero=(parseFloat(tx.rate)||0)<=0;
   saveData();
-  if(state.paymentsTab==='pos')calcTotals();
+  if(state.paymentsTab==='pos'&&typeof calcTotals==='function')calcTotals();
+  // Re-render only when the warning visibility changed (rate crosses the 0 boundary).
+  // Avoids re-rendering on every keystroke which would steal focus.
+  if(tx.enabled&&(prevRateZero!==nowRateZero))renderPaySettings();
 }
  // only admin permanently deletes
 function canManageGiftCards(){ return hasRole('admin','manager'); }
