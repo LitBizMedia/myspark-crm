@@ -29,8 +29,7 @@ html{font-family:var(--font-body);background:var(--bg);color:var(--text);min-hei
 body{min-height:100vh;display:flex;flex-direction:column}
 
 /* ── Header ── */
-#bw-header{background:var(--card);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:14px}
-#bw-logo{max-height:40px;max-width:140px;object-fit:contain;border-radius:4px}
+#bw-header{background:var(--card);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:14px}#bw-logo{max-height:40px;max-width:140px;object-fit:contain;border-radius:4px}
 #bw-biz-name{font-family:var(--font-head);font-size:18px;font-weight:700;color:var(--text)}
 #bw-tagline{font-size:12px;color:var(--text-muted);margin-top:2px}
 
@@ -626,15 +625,30 @@ function renderBookingForm(el) {
     </div>`;
   }
 
-  // Determine if calendar pane should be active. On mobile we collapse it
-  // until name+email are filled. On desktop both panes show together.
+  // The calendar+slots are gated. They become visible only when:
+  //   1. The form has at least name + email (so we don't waste their effort
+  //      picking a time before their info is collected)
+  //   2. An appointment type is selected (so the calendar reflects that
+  //      type's availability and we don't show empty slots after they pick a date)
+  // The type picker itself stays OUTSIDE the gate so the user can see it and
+  // engage with it. The staff picker can also live outside the gate.
   const hasMinForm = !!(S.client.name && S.client.email);
-  const calPaneClass = ''; // CSS handles mobile collapse via media query if we choose; here we always show
+  const hasType = !!S.appointment_type;
+  const showCalendar = hasMinForm && hasType;
 
-  // Booking pane (calendar + time slots inline)
-  const bookingPaneInner = `
-    ${typePicker}
-    ${staffPicker}
+  // Build the gating message based on what's missing
+  let gateMessage = '';
+  if (!hasMinForm && !hasType && types.length >= 2) {
+    gateMessage = 'Enter your name and email above, then pick an appointment type.';
+  } else if (!hasMinForm) {
+    gateMessage = 'Enter your name and email to see available times.';
+  } else if (!hasType && types.length >= 2) {
+    gateMessage = 'Pick an appointment type to see available times.';
+  }
+
+  // Type picker + staff picker live OUTSIDE the gate (always visible).
+  // Calendar + slots live INSIDE the gate.
+  const calendarSection = `
     ${renderInlineCalendar()}
     ${renderInlineTimeSlots()}
     <div class="bw-pick-time-msg" id="bw-pick-time-msg">Please pick a time before continuing.</div>
@@ -669,8 +683,10 @@ function renderBookingForm(el) {
       </div>
       <div class="bw-booking-pane" id="bw-cal-pane">
         <div class="bw-booking-pane-title">Pick a time</div>
-        <div class="bw-booking-pane-sub" id="bw-cal-pane-sub">${hasMinForm ? '' : 'Enter your name and email to see available times.'}</div>
-        <div id="bw-cal-pane-content" style="${hasMinForm ? '' : 'display:none'}">${bookingPaneInner}</div>
+        ${typePicker}
+        ${staffPicker}
+        <div class="bw-booking-pane-sub" id="bw-cal-pane-sub" style="${showCalendar ? 'display:none' : ''}">${gateMessage}</div>
+        <div id="bw-cal-pane-content" style="${showCalendar ? '' : 'display:none'}">${calendarSection}</div>
       </div>
     </div>
     ${cancellationPolicyHtml()}
@@ -680,16 +696,29 @@ function renderBookingForm(el) {
   `;
 }
 
-// Re-runs when the user types in the form. Show/hide the calendar pane on
-// mobile based on whether name+email are filled. On desktop, this is just a
-// no-op since the calendar pane is always visible.
+// Re-runs when the user types in the form. Toggles calendar pane visibility
+// based on whether the gating conditions (name+email AND type chosen) are met.
 function onFormFieldChange() {
   const hasMinForm = !!(S.client.name && S.client.email);
+  const hasType = !!S.appointment_type;
+  const showCalendar = hasMinForm && hasType;
   const sub = document.getElementById('bw-cal-pane-sub');
   const content = document.getElementById('bw-cal-pane-content');
   if (sub && content) {
-    sub.textContent = hasMinForm ? '' : 'Enter your name and email to see available times.';
-    content.style.display = hasMinForm ? '' : 'none';
+    let msg = '';
+    const types = (D.widget && Array.isArray(D.widget.appointment_types))
+      ? D.widget.appointment_types.filter(t => t && t.active !== false)
+      : [];
+    if (!hasMinForm && !hasType && types.length >= 2) {
+      msg = 'Enter your name and email above, then pick an appointment type.';
+    } else if (!hasMinForm) {
+      msg = 'Enter your name and email to see available times.';
+    } else if (!hasType && types.length >= 2) {
+      msg = 'Pick an appointment type to see available times.';
+    }
+    sub.textContent = msg;
+    sub.style.display = showCalendar ? 'none' : '';
+    content.style.display = showCalendar ? '' : 'none';
   }
   // Clear field errors as user types
   if (S.client.name) document.getElementById('bw-fld-name')?.classList.remove('bw-field-error');
