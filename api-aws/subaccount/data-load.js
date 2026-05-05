@@ -7,6 +7,46 @@ const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
+// Maps an appointments table row (snake_case + Date date) to the camelCase
+// shape the frontend expects (matching the legacy blob shape).
+// Date column is normalized from JS Date object to YYYY-MM-DD string.
+function appointmentToFrontend(row) {
+  if (!row) return row;
+  // Normalize date column (Postgres DATE comes back as a JS Date)
+  let dateStr = row.date;
+  if (row.date instanceof Date) {
+    // Use UTC to avoid timezone drift
+    const y = row.date.getUTCFullYear();
+    const m = String(row.date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(row.date.getUTCDate()).padStart(2, '0');
+    dateStr = `${y}-${m}-${d}`;
+  } else if (typeof row.date === 'string' && row.date.length > 10) {
+    // ISO-like string; truncate to YYYY-MM-DD
+    dateStr = row.date.slice(0, 10);
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    contactId: row.contact_id,
+    assignedTo: row.assigned_to,
+    date: dateStr,
+    time: row.time,
+    duration: row.duration,
+    status: row.status,
+    location: row.location,
+    notes: row.notes,
+    buffer_before: row.buffer_before,
+    buffer_after: row.buffer_after,
+    service_id: row.service_id,
+    // Coalesce variation_id into service_variation_id (variation_id is legacy column,
+    // both are written by different code paths; service_variation_id is canonical).
+    service_variation_id: row.service_variation_id || row.variation_id || null,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
+  };
+}
+
 // Maps a payments table row (snake_case) to the camelCase shape the
 // frontend expects (matching the legacy blob shape).
 function paymentToFrontend(row) {
@@ -66,6 +106,43 @@ function paymentToFrontend(row) {
   };
 }
 
+// Maps an appointments table row (snake_case) to the camelCase shape the
+// frontend expects. Date column comes back as a JS Date; we normalize to
+// 'YYYY-MM-DD' string to match what the frontend has historically read from
+// blob.appointments. Coalesces variation_id and service_variation_id into one
+// canonical service_variation_id field.
+function appointmentToFrontend(row) {
+  if (!row) return row;
+  let dateStr = row.date;
+  if (dateStr instanceof Date) {
+    // Format as local YYYY-MM-DD (avoid timezone drift from toISOString)
+    const y = dateStr.getUTCFullYear();
+    const m = String(dateStr.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(dateStr.getUTCDate()).padStart(2, '0');
+    dateStr = `${y}-${m}-${d}`;
+  } else if (typeof dateStr === 'string' && dateStr.length > 10) {
+    dateStr = dateStr.slice(0, 10);
+  }
+  return {
+    id: row.id,
+    title: row.title,
+    contactId: row.contact_id,
+    assignedTo: row.assigned_to,
+    date: dateStr,
+    time: row.time,
+    duration: row.duration,
+    status: row.status,
+    location: row.location,
+    notes: row.notes,
+    buffer_before: row.buffer_before || 0,
+    buffer_after: row.buffer_after || 0,
+    service_id: row.service_id,
+    service_variation_id: row.service_variation_id || row.variation_id || null,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
+  };
+}
+
 async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -75,7 +152,7 @@ async function handler(req, res) {
   const subaccountId = auth.subaccount_id;
 
   try {
-    const [blobResult, servicesResult, variationsResult, classesResult, usersResult, widgetsResult, paymentsResult] = await Promise.all([
+    const [blobResult, servicesResult, variationsResult, classesResult, usersResult, widgetsResult, paymentsResult, appointmentsResult] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
         [subaccountId]
@@ -111,6 +188,10 @@ async function handler(req, res) {
       db.query(
         'SELECT * FROM payments WHERE subaccount_id = $1 ORDER BY created_at DESC',
         [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM appointments WHERE subaccount_id = $1 ORDER BY date ASC, time ASC',
+        [subaccountId]
       )
     ]);
 
@@ -122,7 +203,8 @@ async function handler(req, res) {
       users: usersResult.rows,
       serviceCategories: blobResult.rows[0]?.service_categories || [],
       serviceWidgets: widgetsResult.rows,
-      payments: paymentsResult.rows.map(paymentToFrontend)
+      payments: paymentsResult.rows.map(paymentToFrontend),
+      appointments: appointmentsResult.rows.map(appointmentToFrontend)
     });
   } catch (e) {
     console.error('data-load error:', e.message);

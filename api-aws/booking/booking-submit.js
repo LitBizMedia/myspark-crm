@@ -367,7 +367,7 @@ async function handler(req, res) {
     await db.query(`
       INSERT INTO appointments (
         id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
-        status, location, notes, service_id, variation_id, buffer_before, buffer_after,
+        status, location, notes, service_id, service_variation_id, buffer_before, buffer_after,
         created_at, updated_at
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,NOW(),NOW())
     `, [
