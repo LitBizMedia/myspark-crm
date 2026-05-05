@@ -12858,7 +12858,7 @@ function txnBuildShell(){
     +'</select>'
     +'</div>'
     +'<div class="tbl-wrap" style="overflow-x:auto">'
-    +'<table class="ct-table" id="txn-table" style="min-width:880px"><thead id="txn-thead"></thead><tbody id="txn-tbody"></tbody></table>'
+    +'<table class="ct-table" id="txn-table" style="min-width:960px"><thead id="txn-thead"></thead><tbody id="txn-tbody"></tbody></table>'
     +'</div>'
     +'<div id="txn-pg-wrap"></div>';
 }
@@ -12936,13 +12936,14 @@ function txnRenderTable(){
     +'<th style="text-align:right;min-width:85px">Subtotal</th>'
     +'<th style="text-align:right;min-width:85px">Discount</th>'
     +'<th style="text-align:right;min-width:90px">After Disc.</th>'
+    +'<th style="text-align:right;min-width:75px">Tax</th>'
     +'<th style="text-align:right;min-width:70px">Tip</th>'
     +'<th style="min-width:120px">Method</th>'
     +'<th style="min-width:90px">Status</th>'
     +'<th style="width:40px"></th>'
     +'</tr>';
   if(!slice.length){
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">'
+    tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state">'
       +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'
       +'<h3>No transactions found</h3><p>Process a sale in Point of Sale or adjust your filters.</p></div></td></tr>';
     document.getElementById('txn-pg-wrap').innerHTML = '';
@@ -12970,6 +12971,7 @@ function txnRenderTable(){
       +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.subtotal)+'</td>'
       +'<td style="text-align:right;font-size:13px">'+(t.discountAmount>0?'<span style="color:#34d399">-'+fmt$(t.discountAmount)+'</span>':'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
       +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.afterDiscount)+'</td>'
+      +'<td style="text-align:right;font-size:13px">'+(t.taxAmount>0?fmt$(t.taxAmount):'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
       +'<td style="text-align:right;font-size:13px">'+(t.tipAmount>0?fmt$(t.tipAmount):'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
       +'<td style="font-size:12px">'+methodLabel+'</td>'
       +'<td>'+statusBadge+'</td>'
@@ -13322,7 +13324,7 @@ function txnExportCSV(){
   logSubaccountAudit('subaccount.report.export', {
     metadata: { report_type: 'transactions', count: filtered.length, format: 'csv' }
   });
-  var headers = ['Date','Time','Contact','Staff','Items','Subtotal','Discount ($)','After Discount','Tip','Credits Applied','Total','Payment Method','Card Last 4','Status','Discount Reason','Notes','Square Payment ID'];
+  var headers = ['Date','Time','Contact','Staff','Items','Subtotal','Discount ($)','After Discount','Tax','Fee','Tip','Credits Applied','Total','Payment Method','Card Last 4','Status','Discount Reason','Notes','Square Payment ID'];
   var rows = filtered.map(function(p){
     var t = txnNorm(p);
     var staff = t.staffId ? getUserById(t.staffId) : null;
@@ -13338,6 +13340,8 @@ function txnExportCSV(){
       t.subtotal.toFixed(2),
       t.discountAmount.toFixed(2),
       t.afterDiscount.toFixed(2),
+      (t.taxAmount||0).toFixed(2),
+      (t.feeAmount||0).toFixed(2),
       t.tipAmount.toFixed(2),
       t.creditApplied.toFixed(2),
       t.total.toFixed(2),
