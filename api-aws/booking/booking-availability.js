@@ -116,7 +116,7 @@ async function handler(req, res) {
     if (appointment_type_id) {
       // Appointment widget path: pull duration/buffers from widget.appointment_types
       const wRes = await db.query(
-        `SELECT id, widget_type, staff_ids, appointment_types, widget_availability, booking_lead_time_hours
+        `SELECT id, widget_type, staff_ids, appointment_types, widget_availability
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1`,
         [widget_id, subaccountId]
@@ -135,7 +135,9 @@ async function handler(req, res) {
       duration = parseInt(aType.duration) || 30;
       bufBefore = parseInt(aType.buffer_before) || 0;
       bufAfter = parseInt(aType.buffer_after) || 0;
-      leadTimeHours = parseInt(widget.booking_lead_time_hours) || 0;
+      // booking_lead_time_hours column may not exist on service_widgets yet.
+      // Default to 0 (no lead time) for now. Future enhancement: add column.
+      leadTimeHours = 0;
       // Appointment widgets use widget_availability as the booking window.
       // Treated the same as service.availability: {sun:{on,start,end},mon:{...},...}
       serviceAvailabilityWindow = (widget.widget_availability && typeof widget.widget_availability === 'object')
