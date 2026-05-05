@@ -12884,30 +12884,51 @@ function txnRenderSummary(){
   var el = document.getElementById('txn-summary-grid');
   if(!el) return;
   var now = new Date();
-  var td = todayStr();
+  // This Week (Sun-Sat)
   var wd = now.getDay();
-  var wStart = new Date(now); wStart.setDate(now.getDate() - wd);
+  var wStart = new Date(now); wStart.setDate(now.getDate() - wd); wStart.setHours(0,0,0,0);
   var wEnd = new Date(wStart); wEnd.setDate(wStart.getDate() + 6);
-  var mStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  var mEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  var wsStr = wStart.toISOString().split('T')[0];
-  var weStr = wEnd.toISOString().split('T')[0];
-  var all = db.payments || [];
-  var todayRev = all.filter(function(p){ return (p.createdAt||'').split('T')[0] === td && p.status !== 'voided'; })
-    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
-  var weekRev = all.filter(function(p){ var d=(p.createdAt||'').split('T')[0]; return d>=wsStr&&d<=weStr&&p.status!=='voided'; })
-    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
-  var monthRev = all.filter(function(p){ var d=(p.createdAt||'').split('T')[0]; return d>=mStart&&d<=mEnd&&p.status!=='voided'; })
-    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
-  var filtered = txnGetFiltered();
-  var r = txnGetRange(); var from = r.from; var to = r.to;
-  var periodRev = filtered.filter(function(p){ return p.status!=='voided'; })
-    .reduce(function(s,p){ return s + (p.total != null ? p.total : (p.amount||0)); }, 0);
+  // Last Week (the week before This Week)
+  var lwStart = new Date(wStart); lwStart.setDate(wStart.getDate() - 7);
+  var lwEnd = new Date(wEnd); lwEnd.setDate(wEnd.getDate() - 7);
+  // MTD: 1st of current month through today
+  var mStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // YTD: Jan 1 of current year through today
+  var yStart = new Date(now.getFullYear(), 0, 1);
+  var fmtYMD = function(d){ return d.toISOString().split('T')[0]; };
+  var todayYMD = fmtYMD(now);
+  // Revenue = afterDiscount minus refunded portion. Excludes tax, tip, fee, credits.
+  // Per-transaction:
+  //   gross = afterDiscount (or subtotal as legacy fallback)
+  //   refunded share = (refundedAmt / total) * gross  if total > 0, else refundedAmt
+  // This nets refunds out of the revenue figure proportionally.
+  function revFor(p){
+    if(p.status === 'voided') return 0;
+    var gross = (p.afterDiscount != null) ? parseFloat(p.afterDiscount)
+              : (p.subtotal != null ? parseFloat(p.subtotal) : (parseFloat(p.amount)||0));
+    var refunded = (p.refundLog || []).reduce(function(rs, r){ return rs + (r.total || 0); }, 0);
+    if(refunded <= 0) return gross;
+    var total = parseFloat(p.total) || gross;
+    if(total <= 0) return Math.max(0, gross - refunded);
+    var refShare = (refunded / total) * gross;
+    return Math.max(0, gross - refShare);
+  }
+  function sumRange(fromYMD, toYMD){
+    return (db.payments || []).reduce(function(sum, p){
+      var d = (p.createdAt || '').split('T')[0];
+      if(d < fromYMD || d > toYMD) return sum;
+      return sum + revFor(p);
+    }, 0);
+  }
+  var ytdRev   = sumRange(fmtYMD(yStart),  todayYMD);
+  var mtdRev   = sumRange(fmtYMD(mStart),  todayYMD);
+  var weekRev  = sumRange(fmtYMD(wStart),  fmtYMD(wEnd));
+  var lWeekRev = sumRange(fmtYMD(lwStart), fmtYMD(lwEnd));
   var cards = [
-    {label:'Today', val: fmt$(todayRev), color:'var(--orange)', sub: null},
-    {label:'This Week', val: fmt$(weekRev), color:'var(--purple)', sub: null},
-    {label:'This Month', val: fmt$(monthRev), color:'#34d399', sub: null},
-    {label:'Period Total', val: fmt$(periodRev), color:'var(--main-text)', sub: filtered.length+' transaction'+(filtered.length!==1?'s':'')}
+    {label:'Year to Date',  val: fmt$(ytdRev),   color:'var(--orange)',     sub:null},
+    {label:'Month to Date', val: fmt$(mtdRev),   color:'var(--purple)',     sub:null},
+    {label:'This Week',     val: fmt$(weekRev),  color:'#34d399',           sub:null},
+    {label:'Last Week',     val: fmt$(lWeekRev), color:'var(--main-text)',  sub:null}
   ];
   el.innerHTML = cards.map(function(c){
     return '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:14px 16px;border-top:3px solid '+c.color+';box-shadow:0 2px 12px rgba(107,33,234,.07)">'
@@ -12916,6 +12937,8 @@ function txnRenderSummary(){
       +(c.sub?'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+c.sub+'</div>':'')
       +'</div>';
   }).join('');
+  var filtered = txnGetFiltered();
+  var r = txnGetRange(); var from = r.from; var to = r.to;
   var lbl = document.getElementById('txn-sub-label');
   if(lbl) lbl.textContent = filtered.length + ' transaction' + (filtered.length !== 1 ? 's' : '') + (from === to ? ' on '+fmtDate(from) : ' from '+fmtDate(from)+' to '+fmtDate(to));
 }
