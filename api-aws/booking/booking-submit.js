@@ -325,48 +325,40 @@ async function handler(req, res) {
       chargeOccurred = true;
     }
 
-    // 11. Find or create contact in contacts table (NOT blob)
-    let contact = null;
+    // 11. Find or create contact.
+    //
+    // Note: Path D (contacts blob -> RDS table) hasn't migrated yet. Contacts live in the
+    // subaccount_data blob under blob.contacts. When Path D ships, this code will need to
+    // switch to writing/reading from the contacts table. For now, blob is the source of truth.
     let contactId;
     const cleanEmail = (client_info.email || '').toLowerCase().trim();
+    const contactsBlob = Array.isArray(blob.contacts) ? blob.contacts : [];
+
+    let existing = null;
     if (cleanEmail) {
-      const cRes = await db.query(
-        `SELECT id FROM contacts WHERE subaccount_id = $1 AND LOWER(email) = $2 LIMIT 1`,
-        [subaccountId, cleanEmail]
+      existing = contactsBlob.find(c =>
+        c && c.email && String(c.email).toLowerCase().trim() === cleanEmail
       );
-      if (cRes.rows.length) contact = cRes.rows[0];
     }
-    if (contact) {
-      contactId = contact.id;
+
+    if (existing) {
+      contactId = existing.id;
     } else {
       contactId = uid();
-      // Stage 4 backlog: contacts table currently exists but contacts may also live in blob
-      // depending on migration state. For now, write to whichever path exists.
-      try {
-        await db.query(
-          `INSERT INTO contacts (id, subaccount_id, name, email, phone, source, tags, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, 'booking_widget', '[]'::jsonb, NOW(), NOW())`,
-          [contactId, subaccountId, client_info.name, cleanEmail, client_info.phone || '']
-        );
-      } catch (e) {
-        // Fallback: write to blob if contacts table doesn't exist or insert fails for other reason
-        console.warn('Contacts table insert failed, falling back to blob:', e.message);
-        const contactsBlob = blob.contacts || [];
-        contactsBlob.push({
-          id: contactId,
-          name: client_info.name,
-          email: cleanEmail,
-          phone: client_info.phone || '',
-          createdAt: now_(),
-          tags: [],
-          source: 'booking_widget'
-        });
-        const updatedBlob = { ...blob, contacts: contactsBlob };
-        await db.query(
-          'UPDATE subaccount_data SET data = $1 WHERE subaccount_id = $2',
-          [JSON.stringify(updatedBlob), subaccountId]
-        );
-      }
+      contactsBlob.push({
+        id: contactId,
+        name: client_info.name,
+        email: cleanEmail,
+        phone: client_info.phone || '',
+        createdAt: now_(),
+        tags: [],
+        source: 'booking_widget'
+      });
+      const updatedBlob = { ...blob, contacts: contactsBlob };
+      await db.query(
+        'UPDATE subaccount_data SET data = $1 WHERE subaccount_id = $2',
+        [JSON.stringify(updatedBlob), subaccountId]
+      );
     }
 
     // 12. Create appointment in appointments table (NOT blob)
