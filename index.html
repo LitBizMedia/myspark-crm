@@ -60,6 +60,36 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .form-group input[type="month"]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.7;cursor:pointer}
 .form-group input[type="date"]::-webkit-calendar-picker-indicator:hover,
 .form-group input[type="time"]::-webkit-calendar-picker-indicator:hover{opacity:1}
+
+/* Globally fix native time/date input contrast in dark theme. The internal
+   ::-webkit-datetime-edit shadow elements don't inherit color: from the
+   input itself, so we have to target each part. Applies to all inputs in
+   the app, not just .form-group ones. */
+input[type="time"], input[type="date"], input[type="datetime-local"], input[type="month"]{
+  color-scheme: dark;
+  color: var(--text);
+}
+input[type="time"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit,
+input[type="month"]::-webkit-datetime-edit{color:var(--text)}
+input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper,
+input[type="month"]::-webkit-datetime-edit-fields-wrapper{color:var(--text)}
+input[type="time"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="datetime-local"]::-webkit-datetime-edit-text,
+input[type="month"]::-webkit-datetime-edit-text{color:var(--text-muted)}
+input[type="time"]::-webkit-datetime-edit-hour-field,
+input[type="time"]::-webkit-datetime-edit-minute-field,
+input[type="time"]::-webkit-datetime-edit-second-field,
+input[type="time"]::-webkit-datetime-edit-ampm-field,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field{color:var(--text)}
+input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)}
+
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 
