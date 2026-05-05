@@ -36,6 +36,9 @@ async function handler(req, res) {
   if (w.appointment_types != null && !Array.isArray(w.appointment_types)) {
     return res.status(400).json({ error: 'appointment_types must be an array' });
   }
+  if (w.widget_availability != null && (typeof w.widget_availability !== 'object' || Array.isArray(w.widget_availability))) {
+    return res.status(400).json({ error: 'widget_availability must be an object' });
+  }
 
   // For appointment widgets, validate appointment_types shape
   if (w.widget_type === 'appointment' && Array.isArray(w.appointment_types)) {
@@ -81,13 +84,13 @@ async function handler(req, res) {
     await db.query(`
       INSERT INTO service_widgets (
         id, subaccount_id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,
-        staff_mode, staff_ids, round_robin_config, appointment_types,
+        staff_mode, staff_ids, round_robin_config, appointment_types, widget_availability,
         require_payment, intake_form_id, confirm_message,
         created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9,
-        $10, $11::jsonb, $12::jsonb, $13::jsonb,
-        $14, $15, $16,
+        $10, $11::jsonb, $12::jsonb, $13::jsonb, $14::jsonb,
+        $15, $16, $17,
         NOW(), NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -101,6 +104,7 @@ async function handler(req, res) {
         staff_ids = EXCLUDED.staff_ids,
         round_robin_config = EXCLUDED.round_robin_config,
         appointment_types = EXCLUDED.appointment_types,
+        widget_availability = EXCLUDED.widget_availability,
         require_payment = EXCLUDED.require_payment,
         intake_form_id = EXCLUDED.intake_form_id,
         confirm_message = EXCLUDED.confirm_message,
@@ -117,6 +121,7 @@ async function handler(req, res) {
       JSON.stringify(w.staff_ids || []),
       JSON.stringify(w.round_robin_config || {}),
       JSON.stringify(w.appointment_types || []),
+      JSON.stringify(w.widget_availability || {}),
       !!w.require_payment,
       w.intake_form_id || null,
       w.confirm_message || null

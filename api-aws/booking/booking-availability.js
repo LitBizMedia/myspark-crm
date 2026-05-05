@@ -17,7 +17,7 @@ function minsToTime(m) {
   return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 }
 
-function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailability) {
+function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailability, strictAvailability) {
   const dayKey = DAY_KEYS[new Date(date + 'T12:00:00').getDay()];
   const schedule = staff.schedule || {};
   const daySchedule = schedule[dayKey];
@@ -30,12 +30,20 @@ function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, lea
   let workStart = timeToMins(daySchedule.start || '08:00');
   let workEnd   = timeToMins(daySchedule.end   || '17:00');
 
-  // Intersect with service availability window if defined
-  if (serviceAvailability && serviceAvailability[dayKey]) {
+  // Intersect with service/widget availability window if defined.
+  // strictAvailability=true means: any day not explicitly 'on' is treated as off.
+  // strictAvailability=false (default) means: missing days fall through to staff schedule.
+  const hasAnyAvail = serviceAvailability && Object.keys(serviceAvailability).length > 0;
+  if (hasAnyAvail) {
     const sAvail = serviceAvailability[dayKey];
-    if (!sAvail.on) return [];
-    workStart = Math.max(workStart, timeToMins(sAvail.start || '08:00'));
-    workEnd   = Math.min(workEnd,   timeToMins(sAvail.end   || '17:00'));
+    if (!sAvail || !sAvail.on) {
+      if (strictAvailability) return [];
+      // non-strict: missing or off day, but we still allow staff schedule below
+      // (this preserves the old service.availability behavior)
+    } else {
+      workStart = Math.max(workStart, timeToMins(sAvail.start || '08:00'));
+      workEnd   = Math.min(workEnd,   timeToMins(sAvail.end   || '17:00'));
+    }
   }
 
   if (workStart >= workEnd) return [];
@@ -108,7 +116,7 @@ async function handler(req, res) {
     if (appointment_type_id) {
       // Appointment widget path: pull duration/buffers from widget.appointment_types
       const wRes = await db.query(
-        `SELECT id, widget_type, staff_ids, appointment_types, booking_lead_time_hours
+        `SELECT id, widget_type, staff_ids, appointment_types, widget_availability, booking_lead_time_hours
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1`,
         [widget_id, subaccountId]
@@ -128,7 +136,11 @@ async function handler(req, res) {
       bufBefore = parseInt(aType.buffer_before) || 0;
       bufAfter = parseInt(aType.buffer_after) || 0;
       leadTimeHours = parseInt(widget.booking_lead_time_hours) || 0;
-      // Appointment widgets don't have a service availability window.
+      // Appointment widgets use widget_availability as the booking window.
+      // Treated the same as service.availability: {sun:{on,start,end},mon:{...},...}
+      serviceAvailabilityWindow = (widget.widget_availability && typeof widget.widget_availability === 'object')
+        ? widget.widget_availability
+        : {};
     } else {
       // Service widget path
       const svcResult = await db.query(
@@ -210,10 +222,14 @@ async function handler(req, res) {
     }
 
     // 7. Compute available slots
+    // strictAvailability: when true, days not explicitly enabled in the
+    // availability map are treated as off. We use strict for widget_availability
+    // (appointment widgets) and lax for service.availability (service widgets).
+    const strictAvailability = !!appointment_type_id;
     const slotMap = {};
     for (const staff of staffPool) {
       const appts = apptsByStaff[staff.id] || [];
-      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailabilityWindow);
+      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailabilityWindow, strictAvailability);
       for (const s of staffSlots) {
         if (!slotMap[s.time]) slotMap[s.time] = [];
         slotMap[s.time].push(staff.id);

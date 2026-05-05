@@ -11477,12 +11477,31 @@ function openServiceWidgetEditor(w,isNew){
 // Working copy of appointment_types while editing the widget. Reset every time
 // the modal opens. saveAppointmentWidget reads from this.
 var _apptWidgetTypes=[];
+// Working copy of widget_availability while editing.
+// Shape: {sun:{on:false,start:'09:00',end:'17:00'}, mon:{on:true,start:...,end:...}, ...}
+var _apptWidgetAvail={};
 function openAppointmentWidgetModal(w,isNew){
   // Working copy of appointment_types so user edits don't mutate the stored widget
   // until they save.
   _apptWidgetTypes=Array.isArray(w&&w.appointment_types)
     ?JSON.parse(JSON.stringify(w.appointment_types))
     :[];
+
+  // Working copy of widget_availability. Default to Mon-Fri 9-5 if empty.
+  var savedAvail=(w&&w.widget_availability&&typeof w.widget_availability==='object')?w.widget_availability:null;
+  if(savedAvail&&Object.keys(savedAvail).length){
+    _apptWidgetAvail=JSON.parse(JSON.stringify(savedAvail));
+  }else{
+    _apptWidgetAvail={
+      sun:{on:false,start:'09:00',end:'17:00'},
+      mon:{on:true,start:'09:00',end:'17:00'},
+      tue:{on:true,start:'09:00',end:'17:00'},
+      wed:{on:true,start:'09:00',end:'17:00'},
+      thu:{on:true,start:'09:00',end:'17:00'},
+      fri:{on:true,start:'09:00',end:'17:00'},
+      sat:{on:false,start:'09:00',end:'17:00'}
+    };
+  }
 
   var _selStaff=(w&&w.staff_ids)||[];
   var allUsers=(db.users||[]).filter(function(u){return u.active!==false;});
@@ -11530,6 +11549,13 @@ function openAppointmentWidgetModal(w,isNew){
     +'</div>'
     +'<div id="swg-appt-types-list">'+renderApptTypesList()+'</div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-transform:none;font-weight:400">Each appointment type has its own duration, price, and description. Patients pick one when they book.</div>'
+    +'</div>'
+
+    // Booking availability (when patients can book)
+    +'<div class="form-group">'
+    +'<label style="margin-bottom:6px;display:block">Booking Availability</label>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:none;font-weight:400;line-height:1.5">When patients can book through this widget. Each provider also needs to be working at the chosen time, so this acts as an additional filter on top of staff schedules.</div>'
+    +'<div id="swg-avail-grid" style="background:var(--bg-card);border:1px solid var(--main-border);border-radius:6px;padding:10px">'+renderApptWidgetAvailGrid()+'</div>'
     +'</div>'
 
     +'<div class="form-row">'
@@ -11661,6 +11687,48 @@ function removeApptType(idx){
   if(listEl)listEl.innerHTML=renderApptTypesList();
 }
 
+// Render the 7-row day-of-week availability grid for the appointment widget editor.
+// Reads from _apptWidgetAvail working copy.
+function renderApptWidgetAvailGrid(){
+  var DAYS=[
+    {key:'sun',label:'Sunday'},
+    {key:'mon',label:'Monday'},
+    {key:'tue',label:'Tuesday'},
+    {key:'wed',label:'Wednesday'},
+    {key:'thu',label:'Thursday'},
+    {key:'fri',label:'Friday'},
+    {key:'sat',label:'Saturday'}
+  ];
+  return DAYS.map(function(d){
+    var v=_apptWidgetAvail[d.key]||{on:false,start:'09:00',end:'17:00'};
+    var on=!!v.on;
+    return'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;'+(on?'':'opacity:.55')+'" id="swg-avail-row-'+d.key+'">'
+      +'<label style="display:flex;align-items:center;gap:6px;width:120px;cursor:pointer;font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin:0">'
+      +'<input type="checkbox"'+(on?' checked':'')+' onchange="apptAvailToggle(\''+d.key+'\',this.checked)" style="margin:0">'
+      +d.label
+      +'</label>'
+      +'<input type="time" value="'+esc(v.start||'09:00')+'" onchange="apptAvailSetStart(\''+d.key+'\',this.value)" '+(on?'':'disabled')+' style="font-size:12px;padding:4px 6px;border:1px solid var(--main-border);border-radius:4px;background:var(--main-bg);color:var(--text)">'
+      +'<span style="font-size:11px;color:var(--text-muted)">to</span>'
+      +'<input type="time" value="'+esc(v.end||'17:00')+'" onchange="apptAvailSetEnd(\''+d.key+'\',this.value)" '+(on?'':'disabled')+' style="font-size:12px;padding:4px 6px;border:1px solid var(--main-border);border-radius:4px;background:var(--main-bg);color:var(--text)">'
+      +'</div>';
+  }).join('');
+}
+
+function apptAvailToggle(day,on){
+  if(!_apptWidgetAvail[day])_apptWidgetAvail[day]={start:'09:00',end:'17:00'};
+  _apptWidgetAvail[day].on=!!on;
+  var el=document.getElementById('swg-avail-grid');
+  if(el)el.innerHTML=renderApptWidgetAvailGrid();
+}
+function apptAvailSetStart(day,val){
+  if(!_apptWidgetAvail[day])_apptWidgetAvail[day]={on:false,start:'09:00',end:'17:00'};
+  _apptWidgetAvail[day].start=val||'09:00';
+}
+function apptAvailSetEnd(day,val){
+  if(!_apptWidgetAvail[day])_apptWidgetAvail[day]={on:false,start:'09:00',end:'17:00'};
+  _apptWidgetAvail[day].end=val||'17:00';
+}
+
 function saveAppointmentWidget(id){
   var name=((document.getElementById('swg-name')||{}).value||'').trim();
   if(!name){toast('Widget name is required.','error');return;}
@@ -11682,6 +11750,7 @@ function saveAppointmentWidget(id){
     staff_ids:staffIds,
     round_robin_config:{},
     appointment_types:_apptWidgetTypes,
+    widget_availability:_apptWidgetAvail,
     require_payment:(document.getElementById('swg-req-pay')||{}).checked===true,
     intake_form_id:null,
     confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
