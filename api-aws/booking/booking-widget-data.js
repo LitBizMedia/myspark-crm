@@ -74,9 +74,13 @@ async function handler(req, res) {
     const blob = blobResult.rows[0]?.data || {};
 
     // 4. Get active services. If widget restricts services, filter them.
+    // Appointment widgets don't use services at all, return empty array.
+    const widgetType = (widget && widget.widget_type) || 'service';
     const widgetServiceIds = widget && Array.isArray(widget.service_ids) ? widget.service_ids : [];
-    let svcQuery, svcArgs;
-    if (widgetServiceIds.length) {
+    let svcQuery, svcArgs, skipServiceQuery = false;
+    if (widgetType === 'appointment') {
+      skipServiceQuery = true;
+    } else if (widgetServiceIds.length) {
       svcQuery = `SELECT * FROM services
                   WHERE subaccount_id = $1 AND active = true
                     AND id = ANY($2::text[])
@@ -90,14 +94,18 @@ async function handler(req, res) {
     }
 
     const [svcResult, varResult] = await Promise.all([
-      db.query(svcQuery, svcArgs),
-      db.query(
-        `SELECT sv.* FROM service_variations sv
-         JOIN services s ON sv.service_id = s.id
-         WHERE s.subaccount_id = $1 AND sv.active = true
-         ORDER BY sv.service_id, sv.name`,
-        [subaccountId]
-      )
+      skipServiceQuery
+        ? Promise.resolve({ rows: [] })
+        : db.query(svcQuery, svcArgs),
+      skipServiceQuery
+        ? Promise.resolve({ rows: [] })
+        : db.query(
+            `SELECT sv.* FROM service_variations sv
+             JOIN services s ON sv.service_id = s.id
+             WHERE s.subaccount_id = $1 AND sv.active = true
+             ORDER BY sv.service_id, sv.name`,
+            [subaccountId]
+          )
     ]);
 
     // 5. Staff: read from subaccount_users (single source of truth).
@@ -111,7 +119,7 @@ async function handler(req, res) {
     //
     // For class widgets (Stage 3), staff comes from class session instructors,
     // not from widget config.
-    const widgetType = (widget && widget.widget_type) || 'service';
+    // widgetType already declared above.
 
     let eligibleStaffIds = null; // null = no filter (load all), array = filter to these IDs
     if (widgetType === 'service') {

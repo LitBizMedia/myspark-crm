@@ -1714,6 +1714,20 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
   </div>
 </div>
 
+<!-- Secondary modal stacks on top of primary. Used for sub-editors like the
+     appointment_types editor inside the widget editor. Higher z-index so it
+     sits above the main modal. -->
+<div id="modal-overlay-2" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:none;align-items:center;justify-content:center;padding:20px">
+  <div id="modal-box-2" class="modal" style="max-width:520px;width:100%">
+    <div class="modal-head">
+      <div class="modal-title" id="modal-title-2"></div>
+      <button class="btn btn-icon btn-sm" onclick="closeSecondaryModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body" id="modal-body-2"></div>
+    <div class="modal-foot" id="modal-foot-2"></div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 
 <script>
@@ -3551,6 +3565,17 @@ function closeModal(){
   var cb=state.modalAfterClose;
   state.modalAfterClose=null;
   if(typeof cb==='function')setTimeout(cb,80);
+}
+// Secondary (stacked) modal. Used to layer a sub-editor on top of an existing
+// modal without closing the primary. Closing the secondary does NOT close the primary.
+function openSecondaryModal(title,bodyHTML,footHTML){
+  document.getElementById('modal-title-2').textContent=title;
+  document.getElementById('modal-body-2').innerHTML=bodyHTML;
+  document.getElementById('modal-foot-2').innerHTML=footHTML;
+  document.getElementById('modal-overlay-2').style.display='flex';
+}
+function closeSecondaryModal(){
+  document.getElementById('modal-overlay-2').style.display='none';
 }
 function onModalBg(e){}
 
@@ -11110,15 +11135,25 @@ function _renderSvcWidgetsTab(){
   }
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">';
   widgets.forEach(function(w){
+    var widgetType=w.widget_type||'service';
     var svcCount=(w.service_ids||[]).length;
-    var svcLabel=svcCount?(svcCount+' service'+(svcCount!==1?'s':'')):'All services';
+    var apptTypeCount=Array.isArray(w.appointment_types)?w.appointment_types.length:0;
+    var staffCount=Array.isArray(w.staff_ids)?w.staff_ids.length:0;
+    var typeLabel=widgetType==='appointment'?'Appointment':'Service';
+    var typeBg=widgetType==='appointment'?'rgba(96,165,250,.15)':'rgba(167,139,250,.15)';
+    var typeColor=widgetType==='appointment'?'#60a5fa':'#a78bfa';
+    var typeBorder=widgetType==='appointment'?'rgba(96,165,250,.3)':'rgba(167,139,250,.3)';
+    var contentLabel=widgetType==='appointment'
+      ?(apptTypeCount+' appt type'+(apptTypeCount!==1?'s':'')+' · '+staffCount+' provider'+(staffCount!==1?'s':''))
+      :(svcCount?(svcCount+' service'+(svcCount!==1?'s':'')):'All services');
     h+='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;padding:14px;border-left:4px solid '+(w.primary_color||'#6b21ea')+'">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
       +'<div style="font-weight:700;font-size:13px">'+esc(w.name)+'</div>'
       +(w.active!==false?'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.15);color:#4ade80;font-weight:600">Active</span>':'<span style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(156,163,175,.15);color:#9ca3af;font-weight:600">Inactive</span>')
       +'</div>'
       +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">'
-      +'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-card);color:var(--text-muted);border:1px solid var(--main-border)">'+svcLabel+'</span>'
+      +'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:'+typeBg+';color:'+typeColor+';border:1px solid '+typeBorder+';font-weight:600">'+typeLabel+'</span>'
+      +'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-card);color:var(--text-muted);border:1px solid var(--main-border)">'+contentLabel+'</span>'
       +(w.require_payment?'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(251,146,60,.15);color:var(--orange);border:1px solid rgba(251,146,60,.3)">Payment required</span>':'')
       +'</div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
@@ -11308,6 +11343,51 @@ function saveBookingSettings(){
 
 function openServiceWidgetModal(id){
   var w=id?(db.serviceWidgets||[]).find(function(x){return x.id===id;}):null;
+  // widget_type defaults to 'service'. New widgets pick a type; existing are locked.
+  var widgetType=(w&&w.widget_type)||'service';
+  // For NEW widgets, show a type picker. For existing, render the editor for the saved type.
+  if(!w){
+    openWidgetTypePicker();
+    return;
+  }
+  if(widgetType==='appointment'){
+    return openAppointmentWidgetModal(w);
+  }
+  // service widget editor (existing path)
+  return openServiceWidgetEditor(w);
+}
+
+// Step 1: when the user clicks "New Widget", show a type picker.
+// The choice locks widget_type for the lifetime of the widget.
+function openWidgetTypePicker(){
+  var body='<div style="display:flex;flex-direction:column;gap:12px">'
+    +'<div style="font-size:13px;color:var(--text-muted);text-transform:none;line-height:1.5">Pick the kind of widget. The type is locked once the widget is created.</div>'
+    +'<div onclick="closeModal();openNewWidgetOfType(\'service\')" style="cursor:pointer;background:var(--bg-card);border:2px solid var(--main-border);border-radius:8px;padding:14px;display:flex;gap:12px;align-items:flex-start;transition:border-color .15s" onmouseover="this.style.borderColor=\'#a78bfa\'" onmouseout="this.style.borderColor=\'var(--main-border)\'">'
+    +'<div style="font-size:24px;line-height:1;flex-shrink:0">📅</div>'
+    +'<div style="flex:1">'
+    +'<div style="font-size:14px;font-weight:600;color:var(--text);text-transform:none;margin-bottom:4px">Service Calendar</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.4">Patients pick a service first, then a provider. Best for spas, salons, and clinics offering specific services.</div>'
+    +'</div></div>'
+    +'<div onclick="closeModal();openNewWidgetOfType(\'appointment\')" style="cursor:pointer;background:var(--bg-card);border:2px solid var(--main-border);border-radius:8px;padding:14px;display:flex;gap:12px;align-items:flex-start;transition:border-color .15s" onmouseover="this.style.borderColor=\'#a78bfa\'" onmouseout="this.style.borderColor=\'var(--main-border)\'">'
+    +'<div style="font-size:24px;line-height:1;flex-shrink:0">👤</div>'
+    +'<div style="flex:1">'
+    +'<div style="font-size:14px;font-weight:600;color:var(--text);text-transform:none;margin-bottom:4px">Appointment Calendar</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.4">Patients pick a provider first, then an appointment type. Best for consultations, follow-ups, and one-on-one meetings.</div>'
+    +'</div></div>'
+    +'</div>';
+  openModal('New Widget',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>');
+}
+
+function openNewWidgetOfType(type){
+  // Stub widget object with the chosen type, render the editor for that type
+  var stub={widget_type:type,active:true};
+  if(type==='appointment'){
+    return openAppointmentWidgetModal(stub,true);
+  }
+  return openServiceWidgetEditor(stub,true);
+}
+
+function openServiceWidgetEditor(w,isNew){
   var _selSvcs=(w&&w.service_ids)||[];
   var svcMsOpts=(db.services||[]).map(function(s){
     var col=s.color||'#6b21ea';
@@ -11323,25 +11403,7 @@ function openServiceWidgetModal(id){
     ?_selSvcs.map(function(sid){var s=(db.services||[]).find(function(x){return x.id===sid;});var col=s?s.color||'#6b21ea':'#6b21ea';var nm=s?esc(s.name):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();swgMsRemove(\''+sid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
     :'<span style="color:var(--text-muted);font-size:12px">All services (none selected)</span>';
 
-  // Staff selection setup
-  var _selStaff=(w&&w.staff_ids)||[];
-  var staffMode=(w&&w.staff_mode)||'any';
-  var allUsers=(db.users||[]).filter(function(u){return u.active!==false;});
-  var staffMsOpts=allUsers.map(function(u){
-    var col=u.color||'#6b21ea';
-    var nm=u.name||u.username||'Unnamed';
-    return'<div class="svc-ms-opt" onclick="swgStaffMsToggle(\''+u.id+'\')">'
-      +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
-      +esc(nm)
-      +'<span id="swg-staff-ck-'+u.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selStaff.includes(u.id)?'':'display:none')+'">&#10003;</span>'
-      +'<input type="checkbox" id="swg-staff-'+u.id+'" class="swg-staff-chk" value="'+u.id+'" style="display:none"'+(_selStaff.includes(u.id)?' checked':'')+'>'
-      +'</div>';
-  }).join('');
-  var initialStaffChips=_selStaff.length
-    ?_selStaff.map(function(uid){var u=allUsers.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username||'?'):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();swgStaffMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
-    :'<span style="color:var(--text-muted);font-size:12px">All staff (none selected)</span>';
-
-  var curLogo=w&&w.logo_url||'';
+  var curLogo=(w&&w.logo_url)||'';
   var requirePayment=!!(w&&w.require_payment);
   var confirmMsg=(w&&w.confirm_message)||'';
 
@@ -11399,10 +11461,247 @@ function openServiceWidgetModal(id){
 
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
-  var footer=(w?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
+  var existing=w&&w.id;
+  var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveServiceWidget('+(w?'\''+w.id+'\'':'null')+')">Save</button>';
-  openModal(w?'Edit Widget':'New Service Widget',body,footer,'modal-lg');
+    +'<button class="btn btn-primary" onclick="saveServiceWidget('+(existing?'\''+w.id+'\'':'null')+')">Save</button>';
+  openModal(existing?'Edit Service Widget':'New Service Widget',body,footer,'modal-lg');
+}
+
+// =============================================================
+// APPOINTMENT WIDGET EDITOR
+// Staff-first booking. No service catalog. Provider picks an appointment type
+// (configured per widget) and a time. Used for consultations, follow-ups,
+// established patient flows.
+// =============================================================
+// Working copy of appointment_types while editing the widget. Reset every time
+// the modal opens. saveAppointmentWidget reads from this.
+var _apptWidgetTypes=[];
+function openAppointmentWidgetModal(w,isNew){
+  // Working copy of appointment_types so user edits don't mutate the stored widget
+  // until they save.
+  _apptWidgetTypes=Array.isArray(w&&w.appointment_types)
+    ?JSON.parse(JSON.stringify(w.appointment_types))
+    :[];
+
+  var _selStaff=(w&&w.staff_ids)||[];
+  var allUsers=(db.users||[]).filter(function(u){return u.active!==false;});
+  var staffMsOpts=allUsers.map(function(u){
+    var col=u.color||'#6b21ea';
+    var nm=u.name||u.username||'Unnamed';
+    return'<div class="svc-ms-opt" onclick="swgStaffMsToggle(\''+u.id+'\')">'
+      +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
+      +esc(nm)
+      +'<span id="swg-staff-ck-'+u.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selStaff.includes(u.id)?'':'display:none')+'">&#10003;</span>'
+      +'<input type="checkbox" id="swg-staff-'+u.id+'" class="swg-staff-chk" value="'+u.id+'" style="display:none"'+(_selStaff.includes(u.id)?' checked':'')+'>'
+      +'</div>';
+  }).join('');
+  var initialStaffChips=_selStaff.length
+    ?_selStaff.map(function(uid){var u=allUsers.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username||'?'):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();swgStaffMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
+    :'<span style="color:var(--text-muted);font-size:12px">Select providers...</span>';
+
+  var curLogo=(w&&w.logo_url)||'';
+  var requirePayment=!!(w&&w.require_payment);
+  var confirmMsg=(w&&w.confirm_message)||'';
+
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name||'':'')+'" placeholder="Consultation Bookings"></div>'
+
+    // Providers (staff_ids - required for appointment widgets)
+    +'<div class="form-group"><label>Providers *</label>'
+    +(staffMsOpts
+      ?'<div class="svc-ms-wrap" id="swg-staff-ms">'
+        +'<div class="svc-ms-display" onclick="swgStaffMsOpen(event)">'
+        +'<div class="svc-ms-chips" id="swg-staff-chips">'+initialStaffChips+'</div>'
+        +'<span class="svc-ms-arrow">&#9660;</span></div>'
+        +'<div class="svc-ms-dd hidden" id="swg-staff-dd">'
+        +'<input type="text" class="svc-ms-search" placeholder="Search providers..." oninput="swgStaffMsFilter(this)">'
+        +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
+        +'</div></div>'
+      :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No active staff. Add staff in Settings first.</div>')
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-transform:none;font-weight:400">Patients will see only the providers you select here.</div>'
+    +'</div>'
+
+    // Appointment Types editor
+    +'<div class="form-group">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+    +'<label style="margin:0">Appointment Types *</label>'
+    +'<button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px" onclick="openAppointmentTypeEditor(null)">+ Add Type</button>'
+    +'</div>'
+    +'<div id="swg-appt-types-list">'+renderApptTypesList()+'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-transform:none;font-weight:400">Each appointment type has its own duration, price, and description. Patients pick one when they book.</div>'
+    +'</div>'
+
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Primary Color</label><input id="swg-color" type="color" value="'+(w&&w.primary_color||db.settings&&db.settings.bookingSettings&&db.settings.bookingSettings.widget_primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
+    +'<div class="form-group"><label>Logo</label>'
+    +'<div style="display:flex;gap:6px;align-items:center">'
+    +'<input id="swg-logo" type="text" placeholder="https://... or choose from media" value="'+esc(curLogo)+'" style="flex:1" oninput="swgLogoUpdate()">'
+    +'<button class="btn btn-ghost btn-sm" style="white-space:nowrap;flex-shrink:0" onclick="openMediaPicker(\'swg-logo\')">Media Library</button>'
+    +'</div>'
+    +'<div id="swg-logo-area" style="margin-top:8px;display:flex;align-items:center;gap:10px;'+(curLogo?'':'display:none')+'">'
+    +'<img id="swg-logo-preview" src="'+esc(curLogo)+'" style="max-height:48px;max-width:140px;border-radius:6px;border:1px solid var(--main-border);object-fit:contain;background:var(--main-bg);padding:4px" onerror="this.style.opacity=\'0.3\'">'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px;color:#f87171" onclick="swgLogoClear()">Remove</button>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Schedule a consultation" value="'+esc((w&&w.tagline)||'')+'"></div>'
+
+    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
+    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-req-pay\');c.checked=!c.checked">'
+    +'<input id="swg-req-pay" type="checkbox"'+(requirePayment?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()">'
+    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Require payment to book online</div>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-left:26px;text-transform:none;font-weight:400">When enabled, patients pay the appointment type price up front. Requires Square to be connected.</div>'
+    +'</div>'
+
+    +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after booking)</span></label>'
+    +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thank you! Your appointment is confirmed.">'+esc(confirmMsg)+'</textarea></div>'
+
+    +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
+    +'</div>';
+
+  var existing=w&&w.id;
+  var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveAppointmentWidget('+(existing?'\''+w.id+'\'':'null')+')">Save</button>';
+  openModal(existing?'Edit Appointment Widget':'New Appointment Widget',body,footer,'modal-lg');
+}
+
+// Render the inline list of appointment types (read from _apptWidgetTypes working copy)
+function renderApptTypesList(){
+  if(!_apptWidgetTypes.length){
+    return'<div style="background:var(--bg-card);border:1px dashed var(--main-border);border-radius:6px;padding:14px;text-align:center;font-size:12px;color:var(--text-muted);text-transform:none">No appointment types yet. Click + Add Type to create one.</div>';
+  }
+  var rows=_apptWidgetTypes.map(function(t,i){
+    var dur=parseInt(t.duration)||30;
+    var price=parseFloat(t.price)||0;
+    var inactive=t.active===false;
+    return'<div style="display:flex;align-items:center;gap:10px;background:var(--bg-card);border:1px solid var(--main-border);border-radius:6px;padding:10px;'+(inactive?'opacity:.5':'')+'">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--text);text-transform:none">'+esc(t.name||'Untitled')+(inactive?' <span style="font-size:10px;color:var(--text-muted);font-weight:400">(inactive)</span>':'')+'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted);text-transform:none;font-weight:400;margin-top:2px">'+dur+' min · '+fmt$(price)+'</div>'
+      +'</div>'
+      +'<button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px" onclick="openAppointmentTypeEditor('+i+')">Edit</button>'
+      +'<button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px;color:#f87171" onclick="removeApptType('+i+')">Remove</button>'
+      +'</div>';
+  }).join('');
+  return'<div style="display:flex;flex-direction:column;gap:6px">'+rows+'</div>';
+}
+
+// Open the inner modal for adding/editing one appointment type. The outer
+// widget editor stays open behind; we layer modals using a secondary container.
+function openAppointmentTypeEditor(idx){
+  var t=(idx!=null&&_apptWidgetTypes[idx])
+    ?_apptWidgetTypes[idx]
+    :{name:'',description:'',duration:30,price:0,taxable:true,buffer_before:0,buffer_after:0,active:true};
+  var isEdit=(idx!=null);
+
+  var html='<div style="display:flex;flex-direction:column;gap:12px">'
+    +'<div class="form-group"><label>Name *</label><input id="atyp-name" type="text" value="'+esc(t.name||'')+'" placeholder="Follow-up Visit"></div>'
+    +'<div class="form-group"><label>Description <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><textarea id="atyp-desc" rows="2" style="resize:vertical" placeholder="Routine check-in for established patients">'+esc(t.description||'')+'</textarea></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Duration (min) *</label><input id="atyp-dur" type="number" min="5" max="480" value="'+(parseInt(t.duration)||30)+'"></div>'
+    +'<div class="form-group"><label>Price ($)</label><input id="atyp-price" type="number" min="0" step="0.01" value="'+(parseFloat(t.price)||0)+'"></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Buffer Before (min)</label><input id="atyp-buf-before" type="number" min="0" max="120" value="'+(parseInt(t.buffer_before)||0)+'"></div>'
+    +'<div class="form-group"><label>Buffer After (min)</label><input id="atyp-buf-after" type="number" min="0" max="120" value="'+(parseInt(t.buffer_after)||0)+'"></div>'
+    +'</div>'
+    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:10px">'
+    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'atyp-tax\');c.checked=!c.checked">'
+    +'<input id="atyp-tax" type="checkbox"'+(t.taxable!==false?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()">'
+    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Taxable</div>'
+    +'</div>'
+    +'</div>'
+    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:10px">'
+    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'atyp-active\');c.checked=!c.checked">'
+    +'<input id="atyp-active" type="checkbox"'+(t.active!==false?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()">'
+    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active <span style="color:var(--text-muted);font-weight:400">(shown to patients)</span></div>'
+    +'</div>'
+    +'</div>'
+    +'</div>';
+
+  // Use the existing modal stack pattern. We put this in a stacked dialog
+  // so the outer widget editor stays in the DOM behind it.
+  openSecondaryModal(isEdit?'Edit Appointment Type':'New Appointment Type',html,
+    '<button class="btn btn-ghost" onclick="closeSecondaryModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveApptType('+(isEdit?idx:-1)+')">Save</button>');
+}
+
+function saveApptType(idx){
+  var name=((document.getElementById('atyp-name')||{}).value||'').trim();
+  if(!name){toast('Name is required.','error');return;}
+  var dur=parseInt((document.getElementById('atyp-dur')||{}).value)||30;
+  if(dur<5){toast('Duration must be at least 5 minutes.','error');return;}
+  var entry={
+    id:idx>=0?_apptWidgetTypes[idx].id:('atype-'+uid()),
+    name:name,
+    description:((document.getElementById('atyp-desc')||{}).value||'').trim(),
+    duration:dur,
+    price:parseFloat((document.getElementById('atyp-price')||{}).value)||0,
+    taxable:(document.getElementById('atyp-tax')||{}).checked!==false,
+    buffer_before:parseInt((document.getElementById('atyp-buf-before')||{}).value)||0,
+    buffer_after:parseInt((document.getElementById('atyp-buf-after')||{}).value)||0,
+    active:(document.getElementById('atyp-active')||{}).checked!==false
+  };
+  if(idx>=0){_apptWidgetTypes[idx]=entry;}
+  else{_apptWidgetTypes.push(entry);}
+  closeSecondaryModal();
+  // Re-render the list inline
+  var listEl=document.getElementById('swg-appt-types-list');
+  if(listEl)listEl.innerHTML=renderApptTypesList();
+}
+
+function removeApptType(idx){
+  if(idx<0||idx>=_apptWidgetTypes.length)return;
+  if(!confirm('Remove "'+(_apptWidgetTypes[idx].name||'this type')+'"?'))return;
+  _apptWidgetTypes.splice(idx,1);
+  var listEl=document.getElementById('swg-appt-types-list');
+  if(listEl)listEl.innerHTML=renderApptTypesList();
+}
+
+function saveAppointmentWidget(id){
+  var name=((document.getElementById('swg-name')||{}).value||'').trim();
+  if(!name){toast('Widget name is required.','error');return;}
+  var staffIds=Array.from(document.querySelectorAll('.swg-staff-chk:checked')).map(function(c){return c.value;});
+  if(!staffIds.length){toast('Pick at least one provider.','error');return;}
+  var activeTypes=_apptWidgetTypes.filter(function(t){return t.active!==false;});
+  if(!activeTypes.length){toast('Add at least one active appointment type.','error');return;}
+
+  var w={
+    id:id||uid(),
+    name:name,
+    widget_type:'appointment',
+    service_ids:[],
+    primary_color:(document.getElementById('swg-color')||{}).value||'#6b21ea',
+    logo_url:((document.getElementById('swg-logo')||{}).value||'').trim(),
+    tagline:((document.getElementById('swg-tag')||{}).value||'').trim(),
+    active:(document.getElementById('swg-active')||{}).checked!==false,
+    staff_mode:'specific',
+    staff_ids:staffIds,
+    round_robin_config:{},
+    appointment_types:_apptWidgetTypes,
+    require_payment:(document.getElementById('swg-req-pay')||{}).checked===true,
+    intake_form_id:null,
+    confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
+  };
+  fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(w)
+  }).then(function(r){
+    if(!r.ok){toast('Failed to save widget.','error');return;}
+    return r.json().then(function(data){
+      if(!db.serviceWidgets)db.serviceWidgets=[];
+      var serverWidget=data.widget||w;
+      var ex=db.serviceWidgets.find(function(x){return x.id===serverWidget.id;});
+      if(ex){Object.assign(ex,serverWidget);}else{db.serviceWidgets.push(serverWidget);}
+      closeModal();
+      renderBookingWidgets();
+      toast('Appointment widget saved.','success');
+    });
+  }).catch(function(){toast('Network error saving widget.','error');});
 }
 function swgMsOpen(e){
   e.stopPropagation();

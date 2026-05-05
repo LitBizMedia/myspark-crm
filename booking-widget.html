@@ -194,13 +194,13 @@ const parts = window.location.pathname.split('/').filter(Boolean);
 const SLUG = parts[0] || '';
 const WIDGET_ID = parts[1] || '';
 
-const STEPS = ['service','variation','staff','date','time','info','payment','confirm'];
-const STEP_LABELS = ['Service','Options','Provider','Date','Time','Your Info','Payment','Done'];
+const STEPS = ['service','variation','staff','appointment_type','date','time','info','payment','confirm'];
+const STEP_LABELS = ['Service','Options','Provider','Type','Date','Time','Your Info','Payment','Done'];
 
 let D = null; // widget data from API
 let S = {     // booking state
   step:'service',
-  service:null, variation:null, staff:null,
+  service:null, variation:null, staff:null, appointment_type:null,
   date:null, time:null, available_staff:[],
   slots:[], slots_loading:false,
   cal_month: new Date().getMonth(), cal_year: new Date().getFullYear(),
@@ -219,6 +219,10 @@ async function init() {
     const r = await fetch(`${API}/api/booking/widget-data?slug=${encodeURIComponent(SLUG)}&widget_id=${encodeURIComponent(WIDGET_ID)}`);
     if (!r.ok) { showError('This booking link is unavailable. Please contact the business.'); return; }
     D = await r.json();
+    // Initial step depends on widget type. Service widgets start at service picker.
+    // Appointment widgets start at staff picker (no service catalog).
+    const widgetType = (D.widget && D.widget.widget_type) || 'service';
+    S.step = widgetType === 'appointment' ? 'staff' : 'service';
     applyBranding();
     render();
   } catch(e) {
@@ -249,12 +253,20 @@ function showError(msg) {
 function stepIndex() { return STEPS.indexOf(S.step); }
 
 function visibleSteps() {
-  const steps = ['service'];
-  if (S.service) {
-    const vars = (D.variations||[]).filter(v => v.service_id === S.service.id && v.active !== false);
-    if (vars.length) steps.push('variation');
+  const widgetType = (D && D.widget && D.widget.widget_type) || 'service';
+  let steps;
+  if (widgetType === 'appointment') {
+    // Appointment widget: staff first, then appointment type, then date/time
+    steps = ['staff', 'appointment_type', 'date', 'time', 'info'];
+  } else {
+    // Service widget: service first, then optional variation, then staff
+    steps = ['service'];
+    if (S.service) {
+      const vars = (D.variations||[]).filter(v => v.service_id === S.service.id && v.active !== false);
+      if (vars.length) steps.push('variation');
+    }
+    steps.push('staff','date','time','info');
   }
-  steps.push('staff','date','time','info');
   // Widget-level payment requirement (overrides workspace default)
   const requirePayment = !!D.settings.require_payment;
   const tipEnabled = !!D.settings.tip_enabled;
@@ -302,14 +314,15 @@ function render() {
   el.innerHTML = '';
   if (S.error) el.innerHTML += `<div class="bw-error">${S.error}</div>`;
   switch (S.step) {
-    case 'service':   renderServices(el); break;
-    case 'variation': renderVariations(el); break;
-    case 'staff':     renderStaff(el); break;
-    case 'date':      renderDate(el); break;
-    case 'time':      renderTime(el); break;
-    case 'info':      renderInfo(el); break;
-    case 'payment':   renderPayment(el); break;
-    case 'confirm':   renderConfirm(el); break;
+    case 'service':         renderServices(el); break;
+    case 'variation':       renderVariations(el); break;
+    case 'staff':           renderStaff(el); break;
+    case 'appointment_type': renderAppointmentTypes(el); break;
+    case 'date':            renderDate(el); break;
+    case 'time':            renderTime(el); break;
+    case 'info':            renderInfo(el); break;
+    case 'payment':         renderPayment(el); break;
+    case 'confirm':         renderConfirm(el); break;
   }
 }
 
@@ -405,15 +418,29 @@ function selectVariation(id) {
 
 // ── Step: Staff ───────────────────────────────────────────────────────────────
 function renderStaff(el) {
-  const assigned = S.service.assigned_staff || [];
-  const pool = (D.staff||[]).filter(u => assigned.includes(u.id));
+  const widgetType = (D.widget && D.widget.widget_type) || 'service';
+  // For service widgets, filter staff by service.assigned_staff. For appointment
+  // widgets, the API already filtered staff by widget.staff_ids, so D.staff IS the pool.
+  let pool;
+  if (widgetType === 'appointment') {
+    pool = (D.staff || []);
+  } else {
+    const assigned = S.service.assigned_staff || [];
+    pool = (D.staff||[]).filter(u => assigned.includes(u.id));
+  }
 
   if (!pool.length) {
+    const msg = widgetType === 'appointment'
+      ? 'No providers configured for this widget. Please contact the business.'
+      : 'This service has no assigned providers. Please contact the business to book.';
     el.innerHTML = `<div class="bw-section-title">No Providers Available</div>
-      <div class="bw-section-sub">This service has no assigned providers. Please contact the business to book.</div>
+      <div class="bw-section-sub">${msg}</div>
       <div class="bw-nav"><button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button></div>`;
     return;
   }
+
+  // For appointment widgets, this is the FIRST step, so no back button.
+  const showBack = widgetType !== 'appointment';
 
   let html = `<div class="bw-section-title">Choose a Provider</div>
     <div class="bw-section-sub">Select who you'd like to see</div>
@@ -430,7 +457,7 @@ function renderStaff(el) {
   });
 
   html += `</div><div class="bw-nav">
-    <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
+    ${showBack ? '<button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>' : '<span></span>'}
     <button class="bw-btn bw-btn-primary" onclick="goNext()" ${!S.staff?'disabled':''}>Continue &rarr;</button>
   </div>`;
   el.innerHTML = html;
@@ -438,6 +465,51 @@ function renderStaff(el) {
 
 function selectStaff(id) {
   S.staff = id ? (D.staff||[]).find(u => u.id === id) : null;
+  S.date = null; S.time = null;
+  render();
+}
+
+// ── Step: Appointment Type (appointment widgets only) ────────────────────────
+function renderAppointmentTypes(el) {
+  const types = (D.widget && Array.isArray(D.widget.appointment_types))
+    ? D.widget.appointment_types.filter(t => t && t.active !== false)
+    : [];
+
+  if (!types.length) {
+    el.innerHTML = `<div class="bw-section-title">No Appointment Types</div>
+      <div class="bw-section-sub">This widget has no appointment types configured.</div>
+      <div class="bw-nav"><button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button></div>`;
+    return;
+  }
+
+  let html = `<div class="bw-section-title">Appointment Type</div>
+    <div class="bw-section-sub">Pick what you'd like to book</div>
+    <div class="bw-options">`;
+
+  types.forEach(t => {
+    const sel = S.appointment_type?.id === t.id ? 'selected' : '';
+    const dur = parseInt(t.duration) || 30;
+    const price = parseFloat(t.price) || 0;
+    const meta = `${dur} min${price > 0 ? ' · $' + price.toFixed(2) : ''}`;
+    html += `<div class="bw-option ${sel}" onclick="selectAppointmentType('${t.id}')">
+      <div>
+        <div class="bw-option-name">${esc(t.name)}</div>
+        <div class="bw-option-meta">${meta}</div>
+        ${t.description ? `<div class="bw-option-desc" style="font-size:12px;color:var(--text-muted);margin-top:4px">${esc(t.description)}</div>` : ''}
+      </div>
+    </div>`;
+  });
+
+  html += `</div><div class="bw-nav">
+    <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
+    <button class="bw-btn bw-btn-primary" onclick="goNext()" ${!S.appointment_type?'disabled':''}>Continue &rarr;</button>
+  </div>`;
+  el.innerHTML = html;
+}
+
+function selectAppointmentType(id) {
+  const types = (D.widget && Array.isArray(D.widget.appointment_types)) ? D.widget.appointment_types : [];
+  S.appointment_type = id ? types.find(t => t.id === id) : null;
   S.date = null; S.time = null;
   render();
 }
@@ -497,12 +569,26 @@ function selectDate(d) {
 
 // ── Step: Time ────────────────────────────────────────────────────────────────
 async function loadSlots() {
-  if (!S.date || !S.service) return;
+  if (!S.date) return;
+  const widgetType = (D.widget && D.widget.widget_type) || 'service';
+  if (widgetType === 'appointment') {
+    if (!S.appointment_type) return;
+  } else {
+    if (!S.service) return;
+  }
   S.slots_loading = true;
   const staffId = S.staff?.id || 'any';
-  const varId = S.variation?.id || '';
   try {
-    const url = `${API}/api/booking/availability?slug=${encodeURIComponent(SLUG)}&service_id=${S.service.id}&staff_id=${staffId}&date=${S.date}${varId?'&variation_id='+varId:''}`;
+    let url;
+    if (widgetType === 'appointment') {
+      url = `${API}/api/booking/availability?slug=${encodeURIComponent(SLUG)}`
+        + `&widget_id=${encodeURIComponent(WIDGET_ID)}`
+        + `&appointment_type_id=${encodeURIComponent(S.appointment_type.id)}`
+        + `&staff_id=${staffId}&date=${S.date}`;
+    } else {
+      const varId = S.variation?.id || '';
+      url = `${API}/api/booking/availability?slug=${encodeURIComponent(SLUG)}&service_id=${S.service.id}&staff_id=${staffId}&date=${S.date}${varId?'&variation_id='+varId:''}`;
+    }
     const r = await fetch(url);
     const data = await r.json();
     S.slots = data.slots || [];
@@ -584,7 +670,7 @@ function renderInfo(el) {
 }
 
 function renderCouponBlock() {
-  const subtotal = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  const subtotal = parseFloat(S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0) || 0;
   if (subtotal <= 0) return ''; // no coupon for free services
   const applied = !!S.coupon_code;
   const validating = !!S.coupon_validating;
@@ -621,7 +707,7 @@ async function applyCoupon() {
   S.coupon_message = '';
   render();
   try {
-    const subtotal = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+    const subtotal = parseFloat(S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0) || 0;
     const r = await fetch(`${API}/api/booking/validate-coupon`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -784,12 +870,10 @@ async function submitBooking() {
   let staffId = S.staff?.id || 'any';
   if (!S.staff && S.available_staff?.length) staffId = S.available_staff[0];
 
+  const widgetType = (D.widget && D.widget.widget_type) || 'service';
   const payload = {
     slug: SLUG,
     widget_id: WIDGET_ID,
-    service_id: S.service.id,
-    variation_id: S.variation?.id || null,
-    variation_name: S.variation?.name || null,
     staff_id: staffId,
     date: S.date,
     time: S.time,
@@ -799,6 +883,13 @@ async function submitBooking() {
     coupon_code: S.coupon_code || '',
     _hp: document.getElementById('_hp')?.value || ''
   };
+  if (widgetType === 'appointment') {
+    payload.appointment_type_id = S.appointment_type.id;
+  } else {
+    payload.service_id = S.service.id;
+    payload.variation_id = S.variation?.id || null;
+    payload.variation_name = S.variation?.name || null;
+  }
 
   try {
     const r = await fetch(`${API}/api/booking/submit`, {
@@ -843,12 +934,19 @@ function renderConfirm(el) {
       ${receipt.card_last4 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:right">${esc(receipt.card_brand||'Card')} ending in ${esc(receipt.card_last4)}</div>` : ''}
     </div>` : '';
 
+  // Item label and name vary by widget type
+  const widgetType = (D.widget && D.widget.widget_type) || 'service';
+  const itemLabel = widgetType === 'appointment' ? 'Appointment' : 'Service';
+  const itemName = S.appointment_type
+    ? S.appointment_type.name
+    : (S.service ? S.service.name + (S.variation ? ` - ${S.variation.name}` : '') : '');
+
   el.innerHTML = `<div class="bw-confirm">
     <div class="bw-confirm-icon">&#10003;</div>
     <div class="bw-confirm-title">You're Booked!</div>
     <div class="bw-confirm-sub">A confirmation has been sent to <strong>${esc(S.client.email)}</strong>.<br>We look forward to seeing you.</div>
     <div class="bw-confirm-card">
-      <div class="bw-confirm-row"><strong>Service</strong><span>${esc(S.service.name)}${S.variation?` - ${esc(S.variation.name)}`:''}</span></div>
+      <div class="bw-confirm-row"><strong>${itemLabel}</strong><span>${esc(itemName)}</span></div>
       <div class="bw-confirm-row"><strong>Date</strong><span>${fmtDate(S.date)}</span></div>
       <div class="bw-confirm-row"><strong>Time</strong><span>${fmtTime(S.time)}</span></div>
       ${staffUser?`<div class="bw-confirm-row"><strong>Provider</strong><span>${esc(staffUser.name)}</span></div>`:''}
@@ -861,27 +959,35 @@ function renderConfirm(el) {
 
 // ── Summary card ──────────────────────────────────────────────────────────────
 function bookingSummaryHtml(showTotal) {
-  if (!S.service) return '';
-  const subtotal = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  // Bookable item is either a service (with optional variation) or an appointment type.
+  const item = S.appointment_type || S.service;
+  if (!item) return '';
+  const itemName = S.appointment_type
+    ? S.appointment_type.name
+    : (S.service.name + (S.variation ? ` - ${S.variation.name}` : ''));
+  const subtotal = parseFloat(
+    S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0
+  ) || 0;
   const tipAmt = S.tip || 0;
   const couponDiscount = S.coupon_discount || 0;
   const afterDiscount = Math.max(0, subtotal - couponDiscount);
-  const taxable = S.service.taxable !== false;
+  const taxable = item.taxable !== false;
   const taxSettings = D.settings.tax || { enabled:false, rate:0, label:'Sales Tax' };
   const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
     ? Math.round(afterDiscount * taxSettings.rate) / 100
     : 0;
   const total = afterDiscount + taxAmount + tipAmt;
 
+  const itemLabel = S.appointment_type ? 'Appointment' : 'Service';
   const breakdown = showTotal && subtotal > 0 ? `<hr class="bw-summary-divider">
-    <div class="bw-summary-row"><span>Service</span><strong>$${subtotal.toFixed(2)}</strong></div>
+    <div class="bw-summary-row"><span>${itemLabel}</span><strong>$${subtotal.toFixed(2)}</strong></div>
     ${couponDiscount > 0 ? `<div class="bw-summary-row" style="color:#10b981"><span>Coupon (${esc(S.coupon_code)})</span><strong>-$${couponDiscount.toFixed(2)}</strong></div>` : ''}
     ${taxAmount > 0 ? `<div class="bw-summary-row"><span>${esc(taxSettings.label||'Tax')}</span><strong>$${taxAmount.toFixed(2)}</strong></div>` : ''}
     ${tipAmt > 0 ? `<div class="bw-summary-row"><span>Tip</span><strong>$${tipAmt.toFixed(2)}</strong></div>` : ''}
     <div class="bw-summary-row" style="font-size:15px;padding-top:6px;border-top:1px solid var(--border);margin-top:4px"><span>Total</span><strong>$${total.toFixed(2)}</strong></div>` : '';
 
   return `<div class="bw-summary">
-    <div class="bw-summary-row"><strong>${esc(S.service.name)}${S.variation?` - ${esc(S.variation.name)}`:''}</strong></div>
+    <div class="bw-summary-row"><strong>${esc(itemName)}</strong></div>
     ${S.date?`<div class="bw-summary-row"><span>${fmtDate(S.date)} ${S.time?'at '+fmtTime(S.time):''}</span></div>`:''}
     ${S.staff?`<div class="bw-summary-row"><span>with ${esc(S.staff.name)}</span></div>`:''}
     ${breakdown}
@@ -890,11 +996,14 @@ function bookingSummaryHtml(showTotal) {
 
 // Compute total - mirrors the math in bookingSummaryHtml. Used by submit and payment step.
 function computeTotal() {
-  const subtotal = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  const item = S.appointment_type || S.service;
+  const subtotal = parseFloat(
+    S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0
+  ) || 0;
   const tipAmt = S.tip || 0;
   const couponDiscount = S.coupon_discount || 0;
   const afterDiscount = Math.max(0, subtotal - couponDiscount);
-  const taxable = S.service && S.service.taxable !== false;
+  const taxable = item && item.taxable !== false;
   const taxSettings = D.settings.tax || { enabled:false, rate:0, label:'Sales Tax' };
   const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
     ? Math.round(afterDiscount * taxSettings.rate) / 100

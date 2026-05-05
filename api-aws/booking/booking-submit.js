@@ -83,6 +83,7 @@ async function handler(req, res) {
     widget_id,
     service_id,
     variation_id,
+    appointment_type_id,
     staff_id,
     date,
     time,
@@ -92,9 +93,14 @@ async function handler(req, res) {
     tip_amount
   } = body;
 
-  // Input validation
-  if (!slug || !service_id || !date || !time)
-    return res.status(400).json({ error: 'slug, service_id, date, and time are required' });
+  // Input validation. Service widgets pass service_id; appointment widgets pass
+  // appointment_type_id. Exactly one must be present.
+  if (!slug || !date || !time)
+    return res.status(400).json({ error: 'slug, date, and time are required' });
+  if (!service_id && !appointment_type_id)
+    return res.status(400).json({ error: 'service_id or appointment_type_id is required' });
+  if (service_id && appointment_type_id)
+    return res.status(400).json({ error: 'cannot specify both service_id and appointment_type_id' });
   if (!client_info?.name || !client_info?.email)
     return res.status(400).json({ error: 'Client name and email are required' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
@@ -116,7 +122,8 @@ async function handler(req, res) {
     let widget = null;
     if (widget_id) {
       const wResult = await db.query(
-        `SELECT id, name, widget_type, service_ids, staff_mode, staff_ids, require_payment, confirm_message
+        `SELECT id, name, widget_type, service_ids, staff_mode, staff_ids,
+                appointment_types, require_payment, confirm_message
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE LIMIT 1`,
         [widget_id, subaccountId]
@@ -126,41 +133,81 @@ async function handler(req, res) {
       }
       widget = wResult.rows[0];
 
-      // Verify the service is allowed by this widget
-      if (Array.isArray(widget.service_ids) && widget.service_ids.length &&
+      // Validate widget type matches what was sent
+      if (widget.widget_type === 'service' && appointment_type_id) {
+        return res.status(400).json({ error: 'This widget does not support appointment types' });
+      }
+      if (widget.widget_type === 'appointment' && service_id) {
+        return res.status(400).json({ error: 'This widget does not support service bookings' });
+      }
+
+      // For service widgets, verify the service is allowed
+      if (widget.widget_type === 'service' &&
+          Array.isArray(widget.service_ids) && widget.service_ids.length &&
           !widget.service_ids.includes(service_id)) {
         return res.status(400).json({ error: 'Service not available on this widget' });
       }
     }
 
-    // 3. Service lookup
-    const svcResult = await db.query(
-      'SELECT * FROM services WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1',
-      [service_id, subaccountId]
-    );
-    if (!svcResult.rows.length) return res.status(404).json({ error: 'Service not found' });
-    const service = svcResult.rows[0];
+    // 3. Look up the bookable item: either a service OR an appointment type.
+    // Both branches produce the same downstream values (basePrice, duration, etc.)
+    // so the rest of the function can treat them uniformly.
+    let service = null;          // null for appointment widgets
+    let appointmentType = null;  // null for service widgets
+    let title = '';
+    let duration = 60;
+    let bufBefore = 0;
+    let bufAfter = 0;
+    let basePrice = 0;
+    let taxableFlag = true;
+    let varName = '';
 
-    // 4. Variation overrides
-    let duration  = service.duration_default || 60;
-    let bufBefore = service.buffer_before    || 0;
-    let bufAfter  = service.buffer_after     || 0;
-    let basePrice = service.price != null ? parseFloat(service.price) : 0;
-    let varName   = '';
-
-    if (variation_id) {
-      const varResult = await db.query(
-        'SELECT * FROM service_variations WHERE id = $1 AND service_id = $2 LIMIT 1',
-        [variation_id, service_id]
-      );
-      if (varResult.rows.length) {
-        const v = varResult.rows[0];
-        duration  = v.duration             || duration;
-        bufBefore = v.buffer_before != null ? v.buffer_before : bufBefore;
-        bufAfter  = v.buffer_after  != null ? v.buffer_after  : bufAfter;
-        basePrice = v.price         != null ? parseFloat(v.price) : basePrice;
-        varName   = v.name || '';
+    if (appointment_type_id) {
+      // Appointment widget path
+      if (!widget) return res.status(400).json({ error: 'Widget required for appointment booking' });
+      const types = Array.isArray(widget.appointment_types) ? widget.appointment_types : [];
+      appointmentType = types.find(t => t && t.id === appointment_type_id && t.active !== false);
+      if (!appointmentType) {
+        return res.status(404).json({ error: 'Appointment type not found or inactive' });
       }
+      title       = appointmentType.name || 'Appointment';
+      duration    = parseInt(appointmentType.duration) || 30;
+      bufBefore   = parseInt(appointmentType.buffer_before) || 0;
+      bufAfter    = parseInt(appointmentType.buffer_after) || 0;
+      basePrice   = parseFloat(appointmentType.price) || 0;
+      taxableFlag = appointmentType.taxable !== false;
+    } else {
+      // Service widget path
+      const svcResult = await db.query(
+        'SELECT * FROM services WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1',
+        [service_id, subaccountId]
+      );
+      if (!svcResult.rows.length) return res.status(404).json({ error: 'Service not found' });
+      service = svcResult.rows[0];
+
+      duration  = service.duration_default || 60;
+      bufBefore = service.buffer_before    || 0;
+      bufAfter  = service.buffer_after     || 0;
+      basePrice = service.price != null ? parseFloat(service.price) : 0;
+      taxableFlag = service.taxable !== false;
+
+      // Variation overrides
+      if (variation_id) {
+        const varResult = await db.query(
+          'SELECT * FROM service_variations WHERE id = $1 AND service_id = $2 LIMIT 1',
+          [variation_id, service_id]
+        );
+        if (varResult.rows.length) {
+          const v = varResult.rows[0];
+          duration  = v.duration             || duration;
+          bufBefore = v.buffer_before != null ? v.buffer_before : bufBefore;
+          bufAfter  = v.buffer_after  != null ? v.buffer_after  : bufAfter;
+          basePrice = v.price         != null ? parseFloat(v.price) : basePrice;
+          varName   = v.name || '';
+        }
+      }
+
+      title = service.name + (varName ? ` - ${varName}` : '');
     }
 
     // 5. Read settings (for tax, square, confirmation email)
@@ -175,11 +222,11 @@ async function handler(req, res) {
 
     // 6. Resolve assigned staff (eligible pool).
     //
-    // Per MySpark-Booking-Widget-Spec: Service widgets INHERIT staff from
-    // service.assigned_staff. widget.staff_ids is ignored for service widgets.
-    // Appointment widgets (Stage 3) will use widget.staff_ids directly.
+    // Per MySpark-Booking-Widget-Spec:
+    // - Service widgets INHERIT staff from service.assigned_staff. widget.staff_ids ignored.
+    // - Appointment widgets use widget.staff_ids directly. There is no service.
     const widgetType = (widget && widget.widget_type) || 'service';
-    const assignedStaff = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
+    const assignedStaff = service && Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
 
     const staffDbRes = await db.query(
       `SELECT id, username, display_name FROM subaccount_users
@@ -265,9 +312,9 @@ async function handler(req, res) {
     }
 
     // 9. Compute totals per Payment Policy
+    // taxableFlag was already set in the lookup branch above.
     const subtotal = r2(basePrice);
     const afterDiscount = r2(Math.max(0, subtotal - couponDiscount));
-    const taxableFlag = service.taxable !== false;
     const { tax: taxAmount, taxableAmount } = calcTax(subtotal, taxableFlag, couponDiscount, taxSettings);
     const tip = r2(tip_amount || 0);
     const total = r2(afterDiscount + taxAmount + tip);
@@ -308,7 +355,7 @@ async function handler(req, res) {
           idempotency_key:  paymentId,
           amount_money:     { amount: Math.round(total * 100), currency: 'USD' },
           location_id:      squareSettings.locationId,
-          note:             `${service.name}${varName ? ' - ' + varName : ''} - ${date} ${time}`,
+          note:             `${title} - ${date} ${time}`,
           buyer_email_address: client_info.email
         })
       });
@@ -363,7 +410,10 @@ async function handler(req, res) {
 
     // 12. Create appointment in appointments table (NOT blob)
     const apptId = uid();
-    const title  = service.name + (varName ? ` - ${varName}` : '');
+    // title was already set in the lookup branch
+    const apptLocation = service ? (service.location || null) : null;
+    const apptServiceId = service ? service_id : null; // null for appointment widgets
+    const apptVariationId = service ? (variation_id || null) : null;
     await db.query(`
       INSERT INTO appointments (
         id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
@@ -373,8 +423,8 @@ async function handler(req, res) {
     `, [
       apptId, subaccountId, title, contactId, assignedStaffId,
       date, time, duration,
-      service.location || null, client_info.notes || null,
-      service_id, variation_id || null, bufBefore, bufAfter
+      apptLocation, client_info.notes || null,
+      apptServiceId, apptVariationId, bufBefore, bufAfter
     ]);
 
     // 13. Create payment record (always, even if total=0 with no Square charge - records the booking)
@@ -475,7 +525,9 @@ async function handler(req, res) {
       targetId: apptId,
       targetSubaccountId: subaccountId,
       metadata: {
-        service_id,
+        service_id: service_id || null,
+        appointment_type_id: appointment_type_id || null,
+        widget_type: widgetType,
         date,
         time,
         widget_id: widget_id || null,
