@@ -675,7 +675,7 @@ function renderBookingForm(el) {
     </div>
     ${cancellationPolicyHtml()}
     <div class="bw-nav" style="justify-content:flex-end">
-      <button class="bw-btn bw-btn-primary" onclick="submitBookingForm()">Continue &rarr;</button>
+      <button class="bw-btn bw-btn-primary" onclick="submitBookingForm()">${(D.settings.require_payment && subtotal > 0) ? 'Continue to payment &rarr;' : 'Book appointment'}</button>
     </div>
   `;
 }
