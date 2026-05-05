@@ -179,6 +179,14 @@ body{min-height:100vh;display:flex;flex-direction:column}
 /* ── Footer ── */
 #bw-footer{text-align:center;padding:14px;font-size:11px;color:var(--text-light);border-top:1px solid var(--border)}
 
+/* ── Embed mode (iframe) ──
+   Hide chrome (header, footer) and let the parent site provide framing.
+   The widget hugs the iframe edges with reduced top/bottom padding. */
+.bw-embed #bw-header{display:none}
+.bw-embed #bw-footer{display:none}
+.bw-embed #bw-progress{padding-top:12px}
+.bw-embed body, .bw-embed{background:transparent}
+
 /* ── Responsive ── */
 @media(max-width:520px){
   #bw-main{padding:16px 12px}
@@ -214,6 +222,13 @@ const API = 'https://api.mysparkplus.app';
 const parts = window.location.pathname.split('/').filter(Boolean);
 const SLUG = parts[0] || '';
 const WIDGET_ID = parts[1] || '';
+// Embed mode: when ?embed=1 is in the URL, hide header/footer chrome and
+// auto-post height to the parent window via postMessage. Used when the widget
+// is iframed on a third-party site.
+const EMBED = new URLSearchParams(window.location.search).get('embed') === '1';
+if (EMBED) {
+  document.documentElement.classList.add('bw-embed');
+}
 
 const STEPS = ['service','variation','staff','appointment_type','date','time','info','payment','confirm'];
 const STEP_LABELS = ['Service','Options','Provider','Type','Date','Time','Your Info','Payment','Done'];
@@ -348,6 +363,42 @@ function render() {
     case 'payment':         renderPayment(el); break;
     case 'confirm':         renderConfirm(el); break;
   }
+  if (EMBED) postHeightToParent();
+}
+
+// Notify parent window of our content height so it can resize the iframe.
+// Throttled via rAF to coalesce rapid renders. Parent should listen for
+// postMessage events with type='myspark-resize' and apply data.height to
+// its iframe element.
+let _heightPostScheduled = false;
+let _lastPostedHeight = 0;
+function postHeightToParent() {
+  if (_heightPostScheduled || !window.parent || window.parent === window) return;
+  _heightPostScheduled = true;
+  requestAnimationFrame(() => {
+    _heightPostScheduled = false;
+    // Use scrollHeight of the documentElement to capture all content
+    const h = Math.max(
+      document.documentElement.scrollHeight,
+      document.body ? document.body.scrollHeight : 0
+    );
+    if (h === _lastPostedHeight) return;
+    _lastPostedHeight = h;
+    try {
+      window.parent.postMessage({
+        type: 'myspark-resize',
+        widget_id: WIDGET_ID,
+        height: h
+      }, '*');
+    } catch(e) { /* parent may block postMessage; ignore */ }
+  });
+}
+
+// Also re-post height when window resizes (responsive layout shifts) or
+// when images/fonts load asynchronously.
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', () => { if (EMBED) postHeightToParent(); });
+  window.addEventListener('load', () => { if (EMBED) postHeightToParent(); });
 }
 
 // ── Step: Services ────────────────────────────────────────────────────────────

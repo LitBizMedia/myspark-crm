@@ -11998,15 +11998,56 @@ function deleteServiceWidget(id){
 
 function copyWidgetCode(id){
   var slug=state.subaccountSlug||'your-clinic';
-  var code='<iframe src="https://book.mysparkplus.app/'+slug+'/'+id+'" width="100%" height="700" frameborder="0" style="border:none;border-radius:8px"></iframe>';
-  if(navigator.clipboard){
-    navigator.clipboard.writeText(code).then(function(){toast('Embed code copied to clipboard.','success');});
-  } else {
-    var ta=document.createElement('textarea');
-    ta.value=code;document.body.appendChild(ta);ta.select();
-    document.execCommand('copy');document.body.removeChild(ta);
-    toast('Embed code copied.','success');
-  }
+  // Generate embed code: iframe + postMessage listener for auto-resize.
+  // The iframe loads with ?embed=1 which strips the chrome from the booking page.
+  var iframeId='myspark-booking-'+id.slice(-8);
+  var url='https://book.mysparkplus.app/'+slug+'/'+id+'?embed=1';
+  var code=
+    '<iframe id="'+iframeId+'" src="'+url+'" width="100%" height="800" frameborder="0" scrolling="no" style="border:none;width:100%;display:block"></iframe>\n'+
+    '<script>\n'+
+    '(function(){\n'+
+    '  var f=document.getElementById("'+iframeId+'");\n'+
+    '  if(!f)return;\n'+
+    '  window.addEventListener("message",function(e){\n'+
+    '    if(!e.data||e.data.type!=="myspark-resize")return;\n'+
+    '    if(e.data.widget_id!=="'+id+'")return;\n'+
+    '    if(typeof e.data.height==="number"&&e.data.height>0){\n'+
+    '      f.style.height=e.data.height+"px";\n'+
+    '    }\n'+
+    '  });\n'+
+    '})();\n'+
+    '<\/script>';
+  showEmbedCodeModal(code,url);
+}
+
+// Modal that shows the embed code in a textarea with a Copy button.
+// Better than a silent clipboard write because the user can preview the
+// snippet before pasting it on their site.
+function showEmbedCodeModal(code,url){
+  var body='<div style="display:flex;flex-direction:column;gap:12px">'
+    +'<div style="font-size:13px;color:var(--text-muted);text-transform:none;line-height:1.5">Paste this snippet into your website where you want the booking widget to appear. The iframe auto-resizes as the patient progresses through booking steps.</div>'
+    +'<textarea id="embed-code-ta" readonly style="width:100%;min-height:180px;padding:12px;font-family:Menlo,Monaco,monospace;font-size:11px;background:var(--bg-input);color:var(--text);border:1px solid var(--main-border);border-radius:6px;resize:vertical;line-height:1.5">'+esc(code)+'</textarea>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<button class="btn btn-primary btn-sm" onclick="doCopyEmbedCode()">Copy embed code</button>'
+    +'<a href="'+esc(url)+'" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="text-decoration:none">Preview in new tab</a>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);text-transform:none;line-height:1.5;border-top:1px solid var(--main-border);padding-top:10px;margin-top:4px">The widget loads in an iframe with chrome stripped. Your site provides the framing.</div>'
+    +'</div>';
+  openModal('Embed Code',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>');
+}
+
+function doCopyEmbedCode(){
+  var ta=document.getElementById('embed-code-ta');
+  if(!ta)return;
+  ta.select();
+  try{
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(ta.value).then(function(){toast('Embed code copied to clipboard.','success');});
+    } else {
+      document.execCommand('copy');
+      toast('Embed code copied.','success');
+    }
+  }catch(e){toast('Could not copy. Select and copy manually.','error');}
 }
 
 // Direct link to the booking page. Use when the patient prefers a link
