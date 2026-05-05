@@ -1451,6 +1451,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <div class="pos-tr hidden" id="pos-coupon-row"><span id="pos-coupon-row-label" style="color:#34d399">Coupon</span><span id="pos-coupon-row-amt" style="color:#34d399">-$0.00</span></div>
                 <div class="pos-tr hidden" id="pos-discount-row"><span id="pos-discount-label" style="color:#a78bfa">Discount</span><span id="pos-discount-amt" style="color:#a78bfa">-$0.00</span></div>
                 <div class="pos-tr" id="pos-after-row"><span>After Discounts</span><span id="pos-after-discount">$0.00</span></div>
+                <div class="pos-tr hidden" id="pos-tax-row"><span id="pos-tax-label">Sales Tax</span><span id="pos-tax-amt">$0.00</span></div>
                 <div class="pos-tr hidden" id="pos-fee-row"><span id="pos-fee-label">Additional Fee</span><span id="pos-fee-amt" style="color:var(--orange)">$0.00</span></div>
                 <div class="pos-tr"><span>Tip</span><span id="pos-tip-amt">$0.00</span></div>
                 <div class="pos-tr" id="pos-credit-row" style="display:none;align-items:center;justify-content:space-between">
@@ -3086,7 +3087,8 @@ function posAddItem(){
   const desc=document.getElementById('pos-desc').value.trim();
   const price=parseFloat(document.getElementById('pos-price').value)||0;
   if(!desc){toast('Enter an item description.','error');return}
-  state.posItems.push({id:uid(),desc,price});
+  // Custom items default to taxable. User can toggle off per-line.
+  state.posItems.push({id:uid(),desc,price,taxable:true,custom:true});
   document.getElementById('pos-desc').value='';
   document.getElementById('pos-price').value='';
   renderPosItems();calcTotals();
@@ -3097,7 +3099,23 @@ function renderPosItems(){
   if(!el)return;
   if(!state.posItems.length){el.innerHTML='';if(ne)ne.style.display='';return}
   if(ne)ne.style.display='none';
-  el.innerHTML=state.posItems.map(item=>'<div class="pos-line"><span class="pos-line-desc">'+esc(item.desc)+'</span><div style="display:flex;align-items:center;gap:8px"><span class="pos-line-price">'+fmt$(item.price)+'</span><button class="icon-btn-xs" onclick="rmPosItem(\''+item.id+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>').join('');
+  var taxOn=!!getTaxSettings();
+  el.innerHTML=state.posItems.map(item=>{
+    // Tax toggle only shows for custom (one-off) items when tax collection is enabled.
+    // Service/product lines inherit their taxable flag from the source object.
+    var taxToggle='';
+    if(taxOn&&item.custom){
+      taxToggle='<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);cursor:pointer;user-select:none" title="Charge tax on this line"><input type="checkbox" '+(item.taxable?'checked':'')+' onchange="posToggleLineTax(\''+item.id+'\')" style="margin:0">Tax</label>';
+    }
+    return '<div class="pos-line"><span class="pos-line-desc">'+esc(item.desc)+'</span><div style="display:flex;align-items:center;gap:10px">'+taxToggle+'<span class="pos-line-price">'+fmt$(item.price)+'</span><button class="icon-btn-xs" onclick="rmPosItem(\''+item.id+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>';
+  }).join('');
+}
+
+function posToggleLineTax(id){
+  var item=state.posItems.find(function(i){return i.id===id;});
+  if(!item)return;
+  item.taxable=!item.taxable;
+  calcTotals();
 }
 
 function rmPosItem(id){state.posItems=state.posItems.filter(i=>i.id!==id);renderPosItems();calcTotals()}
@@ -3127,13 +3145,19 @@ function calcTotals(){
   if(discVal>0){if(discType==='pct')discount=Math.min(afterCoupon,afterCoupon*(discVal/100));else discount=Math.min(afterCoupon,discVal);}
   const afterDiscount=afterCoupon-discount;
   const totalDiscountAmt=couponDiscount+discount;
+  // Step 3: Tax (on taxable items, after discount allocation)
+  // Order: Subtotal -> Coupon -> Discount -> Tax -> Fee -> Tip -> Total
+  // Fee is post-tax (not taxed). Tip is post-tax. GC and credits apply against final total.
+  const taxCalc=calcTax(state.posItems.map(function(i){return {price:i.price,taxable:!!i.taxable,qty:1};}), totalDiscountAmt);
+  const tax=taxCalc.tax;
+  // Step 4: Tip (computed on after-discount, not on tax)
   let tip=0;
   if(state.posTip==='10')tip=afterDiscount*.1;
   else if(state.posTip==='15')tip=afterDiscount*.15;
   else if(state.posTip==='20')tip=afterDiscount*.2;
   else if(state.posTip==='custom')tip=parseFloat(document.getElementById('pos-custom-tip')&&document.getElementById('pos-custom-tip').value)||0;
   const credit=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  // Additional fee
+  // Step 5: Additional fee (computed on after-discount, NOT taxed)
   let additionalFee=0;
   const ps=db.paySettings||{};
   if(ps.additionalFee&&ps.additionalFee.enabled){
@@ -3141,7 +3165,7 @@ function calcTotals(){
     if(ps.additionalFee.type==='pct')additionalFee=afterDiscount*(feeAmt/100);
     else additionalFee=feeAmt;
   }
-  const total=Math.max(0,afterDiscount+additionalFee+tip-credit);
+  const total=Math.max(0,afterDiscount+tax+additionalFee+tip-credit);
   // Update DOM
   const es=document.getElementById('pos-subtotal');
   const ead=document.getElementById('pos-after-discount');
@@ -3154,12 +3178,18 @@ function calcTotals(){
   const ecr=document.getElementById('pos-coupon-row');
   const ecra=document.getElementById('pos-coupon-row-amt');
   const ecrl=document.getElementById('pos-coupon-row-label');
+  const etxr=document.getElementById('pos-tax-row');
+  const etxa=document.getElementById('pos-tax-amt');
+  const etxl=document.getElementById('pos-tax-label');
   if(es)es.textContent=fmt$(sub);
   if(ecr)ecr.classList.toggle('hidden',couponDiscount<=0);
   if(ecra)ecra.textContent='-'+fmt$(couponDiscount);
   if(ecrl)ecrl.textContent='Coupon'+(appliedCoupon?' ('+appliedCoupon.code+')':'');
   if(ead)ead.textContent=fmt$(afterDiscount);
   if(ear)ear.style.display=totalDiscountAmt>0?'flex':'none';
+  if(etxr)etxr.classList.toggle('hidden',tax<=0);
+  if(etxa)etxa.textContent=fmt$(tax);
+  if(etxl)etxl.textContent=taxCalc.label+(taxCalc.rate?' ('+taxCalc.rate+'%)':'');
   const efr=document.getElementById('pos-fee-row');
   const efa=document.getElementById('pos-fee-amt');
   const efl=document.getElementById('pos-fee-label');
@@ -3171,7 +3201,7 @@ function calcTotals(){
   if(edr)edr.classList.toggle('hidden',discount<=0);
   if(eda)eda.textContent='-'+fmt$(discount);
   if(edl)edl.textContent='Discount'+(discType==='pct'&&discVal?' ('+discVal+'%)':'');
-  return{sub,couponDiscount,couponCode:appliedCoupon?appliedCoupon.code:'',couponId:appliedCoupon?appliedCoupon.id:'',discount,discountType:discType,discountVal:discVal,discountNote:discNote,afterCoupon,afterDiscount,additionalFee,tip,credit,total};
+  return{sub,couponDiscount,couponCode:appliedCoupon?appliedCoupon.code:'',couponId:appliedCoupon?appliedCoupon.id:'',discount,discountType:discType,discountVal:discVal,discountNote:discNote,afterCoupon,afterDiscount,tax,taxableAmount:taxCalc.taxableAmount,additionalFee,tip,credit,total};
 }
 
 function setPM(v){
@@ -3185,7 +3215,7 @@ function setPM(v){
 async function reviewCharge(){
   if(state.posPM==='cof'){chargeCardOnFile();return}
   if(!state.posItems.length){toast('Add at least one item.','error');return}
-  const{sub,couponDiscount,couponCode,couponId,discount,discountType,discountVal,discountNote,afterDiscount,additionalFee,tip,credit:creditCalc,total}=calcTotals();
+  const{sub,couponDiscount,couponCode,couponId,discount,discountType,discountVal,discountNote,afterDiscount,tax,taxableAmount,additionalFee,tip,credit:creditCalc,total}=calcTotals();
   const cid=document.getElementById('pos-c-id').value,c=cid?getContact(cid):null;
   const staffId=document.getElementById('pos-staff').value,staff=staffId?getUserById(staffId):null;
   const sqConnected=sqIsConnected();
@@ -3198,6 +3228,7 @@ async function reviewCharge(){
   const gcRemainder=isGC?Math.max(0,total-gcApplied):0;
   const remMethod=isGC?(state.posGCRemainderMethod||''):'';
   // Build payment breakdown rows
+  var taxLabel=getTaxSettings()?getTaxSettings().label:'Sales Tax';
   var breakdown='';
   breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Subtotal</span><span>'+fmt$(sub)+'</span></div>';
   if(couponDiscount>0){
@@ -3205,6 +3236,12 @@ async function reviewCharge(){
   }
   if(discount>0){
     breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:2px 0"><span>Discount'+(discountType==='pct'&&discountVal?' ('+discountVal+'%)':'')+'</span><span>-'+fmt$(discount)+'</span></div>';
+  }
+  if(tax>0){
+    breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>'+esc(taxLabel)+'</span><span>'+fmt$(tax)+'</span></div>';
+  }
+  if(additionalFee>0){
+    breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>'+esc((db.paySettings&&db.paySettings.additionalFee&&db.paySettings.additionalFee.label)||'Additional Fee')+'</span><span>'+fmt$(additionalFee)+'</span></div>';
   }
   if(tip>0){
     breakdown+='<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:2px 0"><span>Tip</span><span>'+fmt$(tip)+'</span></div>';
@@ -3243,7 +3280,7 @@ async function reviewCharge(){
     +'</div>'
     +'<p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
   const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,additionalFee:additionalFee||0,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
+  state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tax:tax||0,taxableAmount:taxableAmount||0,additionalFee:additionalFee||0,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="withBtnLock(this,()=>processCharge())">Process Payment</button>');
 }
 
@@ -3290,7 +3327,7 @@ async function processCharge(){  // ── Gift Card payment path ──
     var gcRemRef=gcRemMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
     var gcNotes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
     var gcPayId=uid();
-    var gcPmt={id:gcPayId,contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:gcRemMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()};
+    var gcPmt={id:gcPayId,contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,feeAmount:totals.additionalFee||0,taxAmount:totals.tax||0,taxableAmount:totals.taxableAmount||0,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:gcRemMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()};
     db.payments.push(gcPmt);
     _createPaymentRemote(gcPmt);
     saveData();
@@ -3363,7 +3400,7 @@ async function processCharge(){  // ── Gift Card payment path ──
     return;
   }
   // ── Normal payment path ──
-  const{cid,staffId,sub,couponDiscount,couponCode,couponId,discount,discountType,discountNote,afterDiscount,additionalFee,tip,total,pm,last4,items,useSquare,squareToken}=state.modal.extra;
+  const{cid,staffId,sub,couponDiscount,couponCode,couponId,discount,discountType,discountNote,afterDiscount,tax,taxableAmount,additionalFee,tip,total,pm,last4,items,useSquare,squareToken}=state.modal.extra;
   const tipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;const tipStaffId=tipStaffRaw||staffId||null;
   const creditApplied=state.modal.extra&&state.modal.extra.credit||0;
   const btn=document.getElementById('process-charge-btn');
@@ -3407,7 +3444,7 @@ async function processCharge(){  // ── Gift Card payment path ──
     }
   }
   const payId=uid();
-  var posPmt={id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,feeAmount:additionalFee||0,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()};
+  var posPmt={id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,feeAmount:additionalFee||0,taxAmount:tax||0,taxableAmount:taxableAmount||0,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()};
   db.payments.push(posPmt);
   _createPaymentRemote(posPmt);
   // Log coupon usage
@@ -12179,14 +12216,16 @@ async function chargeCardOnFile(){
   if(!cards.length){toast('No card on file for this contact.','error');return}
   const sq=db.settings.square||{};
   if(!sqIsConnected()){toast('Square not connected.','error');return}
-  const total=parseFloat((document.getElementById('pos-total').textContent||'0').replace('$',''))||0;
+  // Compute totals fresh for accuracy. DOM textContent is the display total.
+  const t=calcTotals();
+  const total=t.total;
   if(total<=0){toast('Total must be greater than $0.','error');return}
   const card=cards[state.posCOFIndex||0]||cards[0];
   const amountCents=Math.round(total*100);
   const staffId=document.getElementById('pos-staff')&&document.getElementById('pos-staff').value;
   const staff=getUserById(staffId);
   const notes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
-  state.modal={type:'charge-cof',data:{contact,card,amountCents,total,staffId,staff,notes}};
+  state.modal={type:'charge-cof',data:{contact,card,amountCents,total,staffId,staff,notes,totals:t,items:[...state.posItems]}};
   document.getElementById('modal-title').textContent='Confirm Charge';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML=
@@ -12239,8 +12278,22 @@ async function confirmChargeCoF(){
       contactId:d.contact.id,
       contactName:d.contact.name,
       squarePaymentId:data.payment&&data.payment.id||'',
-      amount:d.total,tip:0,
-      method:'card_on_file',
+      items:d.items||[],
+      subtotal:d.totals?d.totals.sub:d.total,
+      couponDiscount:d.totals?(d.totals.couponDiscount||0):0,
+      couponCode:d.totals?(d.totals.couponCode||''):'',
+      couponId:d.totals?(d.totals.couponId||''):'',
+      discountAmount:d.totals?(d.totals.discount||0):0,
+      discountType:d.totals?(d.totals.discountType||'flat'):'flat',
+      discountNote:d.totals?(d.totals.discountNote||''):'',
+      afterDiscount:d.totals?(d.totals.afterDiscount||d.total):d.total,
+      feeAmount:d.totals?(d.totals.additionalFee||0):0,
+      taxAmount:d.totals?(d.totals.tax||0):0,
+      taxableAmount:d.totals?(d.totals.taxableAmount||0):0,
+      tipAmount:d.totals?(d.totals.tip||0):0,
+      creditApplied:d.totals?(d.totals.credit||0):0,
+      total:d.total,
+      paymentMethod:'card_on_file',
       cardLast4:d.card.last4,
       cardBrand:d.card.brand,
       status:'completed',
@@ -12610,7 +12663,7 @@ function posAddProductItem(){
   const pricingVal=pricingSel&&!document.getElementById('pos-pricing-opt-wrap').classList.contains('hidden')&&pricingSel.value||'';
   const optName=pricingVal?pricingVal.split('|')[0]:'';
   const desc=prod?(prod.name+(optName?' - '+optName:'')):'Product';
-  state.posItems.push({id:uid(),desc,price,productId:prodId,pricingOption:optName});
+  state.posItems.push({id:uid(),desc,price,productId:prodId,pricingOption:optName,taxable:!!(prod&&prod.taxable!==false)});
   renderPosItems();calcTotals();
   if(prodSel)prodSel.value='';
   if(priceInp)priceInp.value='';
@@ -12657,6 +12710,9 @@ function txnNorm(p){
     discountAmount: p.discountAmount || 0,
     discountNote: p.discountNote || '',
     afterDiscount: p.afterDiscount != null ? p.afterDiscount : (p.subtotal != null ? p.subtotal : (p.amount || 0)),
+    feeAmount: p.feeAmount != null ? p.feeAmount : 0,
+    taxAmount: p.taxAmount != null ? p.taxAmount : 0,
+    taxableAmount: p.taxableAmount != null ? p.taxableAmount : 0,
     tipAmount: p.tipAmount != null ? p.tipAmount : (p.tip || 0),
     creditApplied: p.creditApplied || 0,
     total: p.total != null ? p.total : (p.amount || 0),
@@ -12992,6 +13048,8 @@ function txnOpenDetail(id){
     +(t.couponDiscount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:4px 0"><span>Coupon'+(t.couponCode?' ('+esc(t.couponCode)+')':'')+'</span><span>-'+fmt$(t.couponDiscount)+'</span></div>':'')
     +(t.discountAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:#34d399;padding:4px 0"><span>Discount'+(t.discountNote?' ('+esc(t.discountNote)+')':'')+'</span><span>-'+fmt$(t.discountAmount)+'</span></div>':'')
     +((t.couponDiscount>0||t.discountAmount>0)?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>After Discount</span><span>'+fmt$(t.afterDiscount)+'</span></div>':'')
+    +(t.taxAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>'+esc((db.paySettings&&db.paySettings.tax&&db.paySettings.tax.label)||'Sales Tax')+'</span><span>'+fmt$(t.taxAmount)+'</span></div>':'')
+    +(t.feeAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>'+esc((db.paySettings&&db.paySettings.additionalFee&&db.paySettings.additionalFee.label)||'Additional Fee')+'</span><span>'+fmt$(t.feeAmount)+'</span></div>':'')
     +(t.tipAmount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);padding:4px 0"><span>Tip</span><span>'+fmt$(t.tipAmount)+'</span></div>':'')
     +(t.creditApplied>0?'<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--purple-light);padding:4px 0"><span>Credits Applied</span><span>-'+fmt$(t.creditApplied)+'</span></div>':'')
     +'<div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;padding:8px 0;border-top:1px solid var(--border);margin-top:5px"><span style="color:var(--text)">Total</span><span style="color:var(--orange)">'+fmt$(t.total)+'</span></div>'
