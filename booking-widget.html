@@ -129,7 +129,29 @@ body{min-height:100vh;display:flex;flex-direction:column}
 /* ── Square payment ── */
 #bw-sq-card{min-height:90px;background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-top:8px}
 
-/* ── Confirm ── */
+/* ── Booking form layout (single-page Calendly-style for appointment widgets) ── */
+.bw-booking-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+@media(max-width:768px){.bw-booking-grid{grid-template-columns:1fr;gap:16px}}
+.bw-booking-pane{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+.bw-booking-pane-title{font-family:var(--font-head);font-size:18px;font-weight:700;margin-bottom:14px}
+.bw-booking-pane-sub{font-size:13px;color:var(--text-muted);margin-top:-10px;margin-bottom:14px;line-height:1.5}
+.bw-booking-divider{height:1px;background:var(--border);margin:16px 0}
+.bw-booking-pane.disabled{opacity:.5;pointer-events:none}
+.bw-field-error input,.bw-field-error textarea,.bw-field-error select{border-color:#ef4444}
+.bw-field-msg{font-size:11px;color:#ef4444;margin-top:4px;display:none}
+.bw-field-error .bw-field-msg{display:block}
+.bw-type-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.bw-type-chip{padding:8px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--card);font-size:13px;font-weight:600;cursor:pointer;transition:.12s}
+.bw-type-chip:hover{border-color:var(--brand);color:var(--brand)}
+.bw-type-chip.selected{background:var(--brand);border-color:var(--brand);color:#fff}
+.bw-type-dropdown{width:100%;height:42px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-family:var(--font-body);font-size:14px;background:var(--card);cursor:pointer;margin-bottom:16px}
+.bw-type-dropdown:focus{outline:none;border-color:var(--brand)}
+.bw-staff-select{width:100%;height:42px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-family:var(--font-body);font-size:14px;background:var(--card);cursor:pointer;margin-bottom:16px}
+.bw-staff-select:focus{outline:none;border-color:var(--brand)}
+.bw-summary-inline{background:var(--brand-light);border:1px solid var(--brand-mid);border-radius:var(--radius-sm);padding:12px;margin-top:16px;font-size:13px}
+.bw-pick-time-msg{margin-top:12px;font-size:12px;color:#ef4444;display:none}
+.bw-pick-time-msg.show{display:block}
+
 .bw-confirm{text-align:center;padding:32px 16px}
 .bw-confirm-icon{width:64px;height:64px;border-radius:50%;background:var(--brand);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px}
 .bw-confirm-title{font-family:var(--font-head);font-size:24px;margin-bottom:8px}
@@ -220,9 +242,9 @@ async function init() {
     if (!r.ok) { showError('This booking link is unavailable. Please contact the business.'); return; }
     D = await r.json();
     // Initial step depends on widget type. Service widgets start at service picker.
-    // Appointment widgets start at staff picker (no service catalog).
+    // Appointment widgets start at the single-page booking form.
     const widgetType = (D.widget && D.widget.widget_type) || 'service';
-    S.step = widgetType === 'appointment' ? 'staff' : 'service';
+    S.step = widgetType === 'appointment' ? 'book' : 'service';
     applyBranding();
     render();
   } catch(e) {
@@ -256,8 +278,8 @@ function visibleSteps() {
   const widgetType = (D && D.widget && D.widget.widget_type) || 'service';
   let steps;
   if (widgetType === 'appointment') {
-    // Appointment widget: staff first, then appointment type, then date/time
-    steps = ['staff', 'appointment_type', 'date', 'time', 'info'];
+    // Appointment widget: single-page booking form (book), then payment if required, then done.
+    steps = ['book'];
   } else {
     // Service widget: service first, then optional variation, then staff
     steps = ['service'];
@@ -293,7 +315,9 @@ function renderProgress() {
   const cur = vs.indexOf(S.step);
   const labels = {
     service:'Service', variation:'Options', staff:'Provider',
-    date:'Date', time:'Time', info:'Info', payment:'Payment', confirm:'Done'
+    appointment_type:'Type',
+    date:'Date', time:'Time', info:'Info', payment:'Payment', confirm:'Done',
+    book:'Booking'
   };
   let h = '';
   vs.forEach((step, i) => {
@@ -321,6 +345,7 @@ function render() {
     case 'date':            renderDate(el); break;
     case 'time':            renderTime(el); break;
     case 'info':            renderInfo(el); break;
+    case 'book':            renderBookingForm(el); break;
     case 'payment':         renderPayment(el); break;
     case 'confirm':         renderConfirm(el); break;
   }
@@ -512,6 +537,304 @@ function selectAppointmentType(id) {
   S.appointment_type = id ? types.find(t => t.id === id) : null;
   S.date = null; S.time = null;
   render();
+}
+
+// ── Step: BOOKING FORM (single-page, Calendly-style for appointment widgets) ──
+// This combines patient info, type pick, provider pick, calendar, and time
+// slots into one screen. On desktop shows side-by-side. On mobile, the
+// calendar pane stays hidden until the form has name + email entered.
+function renderBookingForm(el) {
+  const types = (D.widget && Array.isArray(D.widget.appointment_types))
+    ? D.widget.appointment_types.filter(t => t && t.active !== false)
+    : [];
+  const providers = D.staff || [];
+
+  // Auto-select if there's only one of each
+  if (types.length === 1 && !S.appointment_type) {
+    S.appointment_type = types[0];
+  }
+  if (providers.length === 1 && !S.staff) {
+    S.staff = providers[0];
+  }
+
+  if (!types.length) {
+    el.innerHTML = `<div class="bw-section-title">Unavailable</div>
+      <div class="bw-section-sub">No appointment types are configured for this widget.</div>`;
+    return;
+  }
+  if (!providers.length) {
+    el.innerHTML = `<div class="bw-section-title">Unavailable</div>
+      <div class="bw-section-sub">No providers are configured for this widget.</div>`;
+    return;
+  }
+
+  // Type picker block (chips for 2-4, dropdown for 5+)
+  let typePicker = '';
+  if (types.length >= 2) {
+    if (types.length <= 4) {
+      typePicker = '<div class="bw-type-chips">';
+      types.forEach(t => {
+        const sel = S.appointment_type?.id === t.id ? 'selected' : '';
+        const dur = parseInt(t.duration) || 30;
+        const price = parseFloat(t.price) || 0;
+        const lbl = t.name + ' · ' + dur + ' min' + (price > 0 ? ' · $' + price.toFixed(2) : '');
+        typePicker += `<div class="bw-type-chip ${sel}" onclick="selectBookingType('${t.id}')">${esc(lbl)}</div>`;
+      });
+      typePicker += '</div>';
+    } else {
+      typePicker = '<select class="bw-type-dropdown" onchange="selectBookingType(this.value)">';
+      typePicker += '<option value="">Select an appointment type</option>';
+      types.forEach(t => {
+        const sel = S.appointment_type?.id === t.id ? 'selected' : '';
+        const dur = parseInt(t.duration) || 30;
+        const price = parseFloat(t.price) || 0;
+        const lbl = t.name + ' (' + dur + ' min' + (price > 0 ? ', $' + price.toFixed(2) : '') + ')';
+        typePicker += `<option value="${t.id}" ${sel}>${esc(lbl)}</option>`;
+      });
+      typePicker += '</select>';
+    }
+  }
+
+  // Staff picker block (dropdown when 2+, hidden when 1)
+  let staffPicker = '';
+  if (providers.length >= 2) {
+    staffPicker = '<select class="bw-staff-select" onchange="selectBookingStaff(this.value)">';
+    staffPicker += `<option value="">Any provider</option>`;
+    providers.forEach(u => {
+      const sel = S.staff?.id === u.id ? 'selected' : '';
+      staffPicker += `<option value="${u.id}" ${sel}>${esc(u.name || 'Provider')}</option>`;
+    });
+    staffPicker += '</select>';
+  }
+
+  // Total summary
+  const subtotal = parseFloat(S.appointment_type?.price ?? 0) || 0;
+  const taxable = (S.appointment_type && S.appointment_type.taxable !== false);
+  const taxSettings = D.settings.tax || { enabled:false, rate:0, label:'Sales Tax' };
+  const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
+    ? Math.round(subtotal * taxSettings.rate) / 100
+    : 0;
+  const total = subtotal + taxAmount;
+
+  let summary = '';
+  if (S.appointment_type && subtotal > 0) {
+    summary = `<div class="bw-summary-inline">
+      <div class="bw-summary-row"><span>${esc(S.appointment_type.name)}</span><strong>$${subtotal.toFixed(2)}</strong></div>
+      ${taxAmount > 0 ? `<div class="bw-summary-row"><span>${esc(taxSettings.label||'Tax')}</span><strong>$${taxAmount.toFixed(2)}</strong></div>` : ''}
+      <hr class="bw-summary-divider">
+      <div class="bw-summary-row" style="font-size:14px"><strong>Total</strong><strong>$${total.toFixed(2)}</strong></div>
+    </div>`;
+  }
+
+  // Determine if calendar pane should be active. On mobile we collapse it
+  // until name+email are filled. On desktop both panes show together.
+  const hasMinForm = !!(S.client.name && S.client.email);
+  const calPaneClass = ''; // CSS handles mobile collapse via media query if we choose; here we always show
+
+  // Booking pane (calendar + time slots inline)
+  const bookingPaneInner = `
+    ${typePicker}
+    ${staffPicker}
+    ${renderInlineCalendar()}
+    ${renderInlineTimeSlots()}
+    <div class="bw-pick-time-msg" id="bw-pick-time-msg">Please pick a time before continuing.</div>
+  `;
+
+  el.innerHTML = `
+    <div class="bw-booking-grid">
+      <div class="bw-booking-pane">
+        <div class="bw-booking-pane-title">Your information</div>
+        <div class="bw-form">
+          <div class="bw-field" id="bw-fld-name">
+            <label>Name *</label>
+            <input id="c-name" type="text" value="${esc(S.client.name)}" oninput="S.client.name=this.value;onFormFieldChange()" autocomplete="name">
+            <div class="bw-field-msg">Required</div>
+          </div>
+          <div class="bw-field" id="bw-fld-email">
+            <label>Email *</label>
+            <input id="c-email" type="email" value="${esc(S.client.email)}" oninput="S.client.email=this.value;onFormFieldChange()" autocomplete="email">
+            <div class="bw-field-msg">Valid email required</div>
+          </div>
+          <div class="bw-field" id="bw-fld-phone">
+            <label>Phone</label>
+            <input id="c-phone" type="tel" value="${esc(S.client.phone)}" oninput="S.client.phone=this.value" autocomplete="tel">
+          </div>
+          <div class="bw-field" id="bw-fld-notes">
+            <label>Notes <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+            <textarea id="c-notes" oninput="S.client.notes=this.value">${esc(S.client.notes)}</textarea>
+          </div>
+          <input type="text" id="_hp" name="_hp" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off">
+        </div>
+        ${summary}
+      </div>
+      <div class="bw-booking-pane" id="bw-cal-pane">
+        <div class="bw-booking-pane-title">Pick a time</div>
+        <div class="bw-booking-pane-sub" id="bw-cal-pane-sub">${hasMinForm ? '' : 'Enter your name and email to see available times.'}</div>
+        <div id="bw-cal-pane-content" style="${hasMinForm ? '' : 'display:none'}">${bookingPaneInner}</div>
+      </div>
+    </div>
+    ${cancellationPolicyHtml()}
+    <div class="bw-nav" style="justify-content:flex-end">
+      <button class="bw-btn bw-btn-primary" onclick="submitBookingForm()">Continue &rarr;</button>
+    </div>
+  `;
+}
+
+// Re-runs when the user types in the form. Show/hide the calendar pane on
+// mobile based on whether name+email are filled. On desktop, this is just a
+// no-op since the calendar pane is always visible.
+function onFormFieldChange() {
+  const hasMinForm = !!(S.client.name && S.client.email);
+  const sub = document.getElementById('bw-cal-pane-sub');
+  const content = document.getElementById('bw-cal-pane-content');
+  if (sub && content) {
+    sub.textContent = hasMinForm ? '' : 'Enter your name and email to see available times.';
+    content.style.display = hasMinForm ? '' : 'none';
+  }
+  // Clear field errors as user types
+  if (S.client.name) document.getElementById('bw-fld-name')?.classList.remove('bw-field-error');
+  if (S.client.email && /^[^@]+@[^@]+\.[^@]+$/.test(S.client.email)) {
+    document.getElementById('bw-fld-email')?.classList.remove('bw-field-error');
+  }
+}
+
+function renderInlineCalendar() {
+  const now = new Date();
+  const yr = S.cal_year, mo = S.cal_month;
+  const firstDay = new Date(yr, mo, 1).getDay();
+  const daysInMonth = new Date(yr, mo+1, 0).getDate();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DOW = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+  let days = '';
+  DOW.forEach(d => { days += `<div class="bw-cal-dow">${d}</div>`; });
+  for (let i=0; i<firstDay; i++) days += `<div class="bw-cal-day empty"></div>`;
+
+  for (let d=1; d<=daysInMonth; d++) {
+    const dateStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt = new Date(yr, mo, d);
+    const isPast = dt < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const isTod = dateStr === now.toISOString().split('T')[0];
+    const isSel = dateStr === S.date;
+    const cls = ['bw-cal-day'];
+    if (isPast) cls.push('disabled');
+    if (isTod) cls.push('today');
+    if (isSel) cls.push('selected');
+    const click = isPast ? '' : `onclick="selectBookingDate('${dateStr}')"`;
+    days += `<div class="${cls.join(' ')}" ${click}>${d}</div>`;
+  }
+
+  return `<div class="bw-cal" style="box-shadow:none;border:1px solid var(--border)">
+    <div class="bw-cal-head">
+      <button class="bw-cal-nav" onclick="changeMonth(-1)">‹</button>
+      <div class="bw-cal-title">${monthNames[mo]} ${yr}</div>
+      <button class="bw-cal-nav" onclick="changeMonth(1)">›</button>
+    </div>
+    <div class="bw-cal-grid" style="padding:8px">${days}</div>
+  </div>`;
+}
+
+function renderInlineTimeSlots() {
+  if (!S.date) {
+    return '<div style="margin-top:14px;font-size:12px;color:var(--text-muted)">Pick a date above to see available times.</div>';
+  }
+  if (S.slots_loading) {
+    return '<div style="margin-top:14px;font-size:13px;color:var(--text-muted)">Loading times...</div>';
+  }
+  if (!S.slots.length) {
+    return '<div style="margin-top:14px;font-size:13px;color:var(--text-muted)">No available times on this date. Choose another date.</div>';
+  }
+  let html = '<div style="margin-top:14px;font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Available times</div>';
+  html += '<div class="bw-slots">';
+  S.slots.forEach(s => {
+    const sel = S.time === s.time ? 'selected' : '';
+    html += `<div class="bw-slot ${sel}" onclick="selectBookingTime('${s.time}', ${JSON.stringify(s.available_staff||[]).replace(/"/g,'&quot;')})">${fmtTime(s.time)}</div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function selectBookingType(id) {
+  const types = (D.widget && Array.isArray(D.widget.appointment_types)) ? D.widget.appointment_types : [];
+  S.appointment_type = id ? types.find(t => t.id === id) : null;
+  S.date = null; S.time = null; S.slots = [];
+  render();
+}
+
+function selectBookingStaff(id) {
+  S.staff = id ? (D.staff || []).find(u => u.id === id) : null;
+  S.date = null; S.time = null; S.slots = [];
+  render();
+}
+
+function selectBookingDate(date) {
+  S.date = date;
+  S.time = null;
+  S.slots = [];
+  loadSlots();
+  render();
+}
+
+function selectBookingTime(time, available) {
+  S.time = time;
+  S.available_staff = available || [];
+  document.getElementById('bw-pick-time-msg')?.classList.remove('show');
+  render();
+}
+
+function changeMonth(delta) {
+  S.cal_month += delta;
+  if (S.cal_month < 0) { S.cal_month = 11; S.cal_year--; }
+  if (S.cal_month > 11) { S.cal_month = 0; S.cal_year++; }
+  render();
+}
+
+// Validate form, advance to payment step (or directly submit if no payment).
+function submitBookingForm() {
+  let ok = true;
+
+  // Name
+  if (!S.client.name || !S.client.name.trim()) {
+    document.getElementById('bw-fld-name')?.classList.add('bw-field-error');
+    ok = false;
+  }
+  // Email
+  if (!S.client.email || !/^[^@]+@[^@]+\.[^@]+$/.test(S.client.email)) {
+    document.getElementById('bw-fld-email')?.classList.add('bw-field-error');
+    ok = false;
+  }
+  // Appointment type
+  if (!S.appointment_type) {
+    alert('Please pick an appointment type.');
+    ok = false;
+  }
+  // Time
+  if (!S.time) {
+    document.getElementById('bw-pick-time-msg')?.classList.add('show');
+    ok = false;
+  }
+
+  if (!ok) return;
+
+  // Resolve "any" staff: pick first available alphabetically (Stage 4 round robin)
+  if (!S.staff && Array.isArray(S.available_staff) && S.available_staff.length) {
+    const eligible = (D.staff || []).filter(u => S.available_staff.includes(u.id));
+    eligible.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    if (eligible.length) S.staff = eligible[0];
+  }
+
+  // Move to next step. visibleSteps decides if it's payment or confirm.
+  const vs = visibleSteps();
+  const idx = vs.indexOf(S.step);
+  if (idx < 0 || idx >= vs.length - 1) return;
+  const next = vs[idx + 1];
+  if (next === 'payment') {
+    S.step = 'payment';
+    render();
+  } else {
+    // No payment required; submit immediately
+    submitBooking();
+  }
 }
 
 // ── Step: Date ────────────────────────────────────────────────────────────────

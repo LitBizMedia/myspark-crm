@@ -76,9 +76,13 @@ async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', 'false');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { slug, service_id, variation_id, staff_id, date } = req.query;
-  if (!slug || !service_id || !date)
-    return res.status(400).json({ error: 'slug, service_id, and date are required' });
+  const { slug, service_id, variation_id, appointment_type_id, widget_id, staff_id, date } = req.query;
+  if (!slug || !date)
+    return res.status(400).json({ error: 'slug and date are required' });
+  if (!service_id && !appointment_type_id)
+    return res.status(400).json({ error: 'service_id or appointment_type_id is required' });
+  if (appointment_type_id && !widget_id)
+    return res.status(400).json({ error: 'widget_id is required when using appointment_type_id' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
     return res.status(400).json({ error: 'Invalid date format' });
 
@@ -90,29 +94,68 @@ async function handler(req, res) {
     if (!saResult.rows.length) return res.status(404).json({ error: 'Not found' });
     const subaccountId = saResult.rows[0].id;
 
-    // 2. Service
-    const svcResult = await db.query(
-      'SELECT * FROM services WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1',
-      [service_id, subaccountId]
-    );
-    if (!svcResult.rows.length) return res.status(404).json({ error: 'Service not found' });
-    const service = svcResult.rows[0];
+    // 2. Look up the bookable item: service OR appointment type from widget JSONB.
+    // Both branches produce the same downstream values: duration, buffers, and
+    // the staff pool to filter against.
+    let service = null;
+    let widget = null;
+    let duration = 60;
+    let bufBefore = 0;
+    let bufAfter = 0;
+    let leadTimeHours = 0;
+    let serviceAvailabilityWindow = {};
 
-    // 3. Variation overrides
-    let duration  = service.duration_default || 60;
-    let bufBefore = service.buffer_before    || 0;
-    let bufAfter  = service.buffer_after     || 0;
-
-    if (variation_id) {
-      const varResult = await db.query(
-        'SELECT * FROM service_variations WHERE id = $1 AND service_id = $2 LIMIT 1',
-        [variation_id, service_id]
+    if (appointment_type_id) {
+      // Appointment widget path: pull duration/buffers from widget.appointment_types
+      const wRes = await db.query(
+        `SELECT id, widget_type, staff_ids, appointment_types, booking_lead_time_hours
+         FROM service_widgets
+         WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1`,
+        [widget_id, subaccountId]
       );
-      if (varResult.rows.length) {
-        const v = varResult.rows[0];
-        duration  = v.duration             || duration;
-        bufBefore = v.buffer_before != null ? v.buffer_before : bufBefore;
-        bufAfter  = v.buffer_after  != null ? v.buffer_after  : bufAfter;
+      if (!wRes.rows.length) return res.status(404).json({ error: 'Widget not found or inactive' });
+      widget = wRes.rows[0];
+
+      if (widget.widget_type !== 'appointment') {
+        return res.status(400).json({ error: 'This widget does not support appointment types' });
+      }
+
+      const types = Array.isArray(widget.appointment_types) ? widget.appointment_types : [];
+      const aType = types.find(t => t && t.id === appointment_type_id && t.active !== false);
+      if (!aType) return res.status(404).json({ error: 'Appointment type not found or inactive' });
+
+      duration = parseInt(aType.duration) || 30;
+      bufBefore = parseInt(aType.buffer_before) || 0;
+      bufAfter = parseInt(aType.buffer_after) || 0;
+      leadTimeHours = parseInt(widget.booking_lead_time_hours) || 0;
+      // Appointment widgets don't have a service availability window.
+    } else {
+      // Service widget path
+      const svcResult = await db.query(
+        'SELECT * FROM services WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1',
+        [service_id, subaccountId]
+      );
+      if (!svcResult.rows.length) return res.status(404).json({ error: 'Service not found' });
+      service = svcResult.rows[0];
+
+      duration  = service.duration_default || 60;
+      bufBefore = service.buffer_before    || 0;
+      bufAfter  = service.buffer_after     || 0;
+      leadTimeHours = service.booking_lead_time_hours || 0;
+      serviceAvailabilityWindow = (service.availability && typeof service.availability === 'object') ? service.availability : {};
+
+      // Variation overrides
+      if (variation_id) {
+        const varResult = await db.query(
+          'SELECT * FROM service_variations WHERE id = $1 AND service_id = $2 LIMIT 1',
+          [variation_id, service_id]
+        );
+        if (varResult.rows.length) {
+          const v = varResult.rows[0];
+          duration  = v.duration             || duration;
+          bufBefore = v.buffer_before != null ? v.buffer_before : bufBefore;
+          bufAfter  = v.buffer_after  != null ? v.buffer_after  : bufAfter;
+        }
       }
     }
 
@@ -123,13 +166,19 @@ async function handler(req, res) {
     const blob     = blobResult.rows[0]?.data || {};
     const settings = blob.settings || {};
     const bs       = settings.bookingSettings || {};
-    const leadTimeHours = service.booking_lead_time_hours || 0;
+    // leadTimeHours and serviceAvailabilityWindow already set in the lookup branch above
 
-    // 5. Staff pool: from subaccount_users (single source of truth)
-    const assignedStaff = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
+    // 5. Staff pool: from subaccount_users (single source of truth).
+    // Service widgets filter by service.assigned_staff; appointment widgets by widget.staff_ids.
+    let allowedStaffIds = [];
+    if (service) {
+      allowedStaffIds = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
+    } else if (widget) {
+      allowedStaffIds = Array.isArray(widget.staff_ids) ? widget.staff_ids : [];
+    }
     const staffDbResult = await db.query(
-      `SELECT id, username, display_name, schedule, date_overrides 
-       FROM subaccount_users 
+      `SELECT id, username, display_name, schedule, date_overrides
+       FROM subaccount_users
        WHERE subaccount_id = $1 AND active = true`,
       [subaccountId]
     );
@@ -141,8 +190,8 @@ async function handler(req, res) {
     }));
     if (staff_id && staff_id !== 'any') {
       staffPool = staffPool.filter(u => u.id === staff_id);
-    } else if (assignedStaff.length) {
-      staffPool = staffPool.filter(u => assignedStaff.includes(u.id));
+    } else if (allowedStaffIds.length) {
+      staffPool = staffPool.filter(u => allowedStaffIds.includes(u.id));
     }
     if (!staffPool.length) return res.status(200).json({ slots: [], duration, date });
 
@@ -164,8 +213,7 @@ async function handler(req, res) {
     const slotMap = {};
     for (const staff of staffPool) {
       const appts = apptsByStaff[staff.id] || [];
-      const avail = (service.availability && typeof service.availability === 'object') ? service.availability : {};
-      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, avail);
+      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailabilityWindow);
       for (const s of staffSlots) {
         if (!slotMap[s.time]) slotMap[s.time] = [];
         slotMap[s.time].push(staff.id);
