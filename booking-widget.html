@@ -896,12 +896,12 @@ function submitBookingForm() {
 
   if (!ok) return;
 
-  // Resolve "any" staff: pick first available alphabetically (Stage 4 round robin)
-  if (!S.staff && Array.isArray(S.available_staff) && S.available_staff.length) {
-    const eligible = (D.staff || []).filter(u => S.available_staff.includes(u.id));
-    eligible.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    if (eligible.length) S.staff = eligible[0];
-  }
+  // For 'any' staff, we leave S.staff null and pass staff_id='any' to the
+  // backend. The backend uses widget.round_robin_config.strategy to pick a
+  // provider (random or least_busy). The frontend used to pre-resolve to
+  // alphabetical first, which meant the same provider always got every booking.
+  // The backend has full data (today's appointment counts, who's already
+  // booked at this time) so the selection happens server-side.
 
   // Move to next step. visibleSteps decides if it's payment or confirm.
   const vs = visibleSteps();
@@ -1270,8 +1270,10 @@ async function submitBooking() {
   }
 
   // Determine staff for booking
-  let staffId = S.staff?.id || 'any';
-  if (!S.staff && S.available_staff?.length) staffId = S.available_staff[0];
+  // staff_id: 'any' lets the backend pick the provider per the widget's
+  // round_robin_config strategy. If user picked a specific provider in the
+  // dropdown, S.staff is set and we send that ID.
+  const staffId = S.staff?.id || 'any';
 
   const widgetType = (D.widget && D.widget.widget_type) || 'service';
   const payload = {
@@ -1307,6 +1309,11 @@ async function submitBooking() {
     }
     S.appt_id = data.appointment_id;
     S.payment_receipt = data.payment || null;
+    // If backend assigned a provider (staff_id was 'any'), update S.staff
+    // so the confirmation screen shows the correct provider name.
+    if (!S.staff && data.staff_id) {
+      S.staff = (D.staff || []).find(u => u.id === data.staff_id) || null;
+    }
     S.loading = false;
     S.step = 'confirm';
     render();

@@ -123,7 +123,7 @@ async function handler(req, res) {
     if (widget_id) {
       const wResult = await db.query(
         `SELECT id, name, widget_type, service_ids, staff_mode, staff_ids,
-                appointment_types, require_payment, confirm_message
+                appointment_types, round_robin_config, require_payment, confirm_message
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE LIMIT 1`,
         [widget_id, subaccountId]
@@ -257,14 +257,60 @@ async function handler(req, res) {
     if (assignedStaffId && !allUsers.find(u => u.id === assignedStaffId)) {
       return res.status(400).json({ error: 'Selected staff member is not available for this service' });
     }
-    // Auto-assign if 'any' (Stage 1: alphabetical first; Stage 4 will use weighted round robin)
+    // Auto-assign if 'any'.
+    //
+    // Strategy comes from widget.round_robin_config.strategy:
+    //   - 'random' (default): pick a random eligible provider. Distributes
+    //     bookings approximately evenly over time without DB queries.
+    //   - 'least_busy': pick the provider with the fewest appointments TODAY,
+    //     random tiebreaker. Smooths daily load distribution.
+    //
+    // Eligibility filter: only providers who are NOT already booked at the
+    // chosen time. Otherwise we'd pick a busy person and immediately race-fail.
     if (!assignedStaffId) {
       if (!allUsers.length) {
         return res.status(400).json({ error: 'No staff available for this service' });
       }
-      // For now: first alphabetical. Stage 4 will use round_robin_config.
-      const sorted = [...allUsers].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      assignedStaffId = sorted[0].id;
+
+      // Filter out staff already booked at this exact time (avoid race-fail picks).
+      const bookedRes = await db.query(
+        `SELECT assigned_to FROM appointments
+         WHERE subaccount_id = $1 AND date = $2 AND time = $3 AND status != 'cancelled'`,
+        [subaccountId, date, time]
+      );
+      const bookedAtTime = new Set(bookedRes.rows.map(r => r.assigned_to).filter(Boolean));
+      const eligible = allUsers.filter(u => !bookedAtTime.has(u.id));
+      if (!eligible.length) {
+        return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
+      }
+
+      const strategy = (widget && widget.round_robin_config && widget.round_robin_config.strategy) || 'random';
+
+      if (strategy === 'least_busy') {
+        // Count today's appointments per eligible provider, pick lowest.
+        // Random tiebreaker so we don't always favor the same person at the
+        // start of the day when everyone has 0 bookings.
+        const eligibleIds = eligible.map(u => u.id);
+        const countRes = await db.query(
+          `SELECT assigned_to, COUNT(*)::int AS n
+           FROM appointments
+           WHERE subaccount_id = $1
+             AND date = $2
+             AND status != 'cancelled'
+             AND assigned_to = ANY($3)
+           GROUP BY assigned_to`,
+          [subaccountId, date, eligibleIds]
+        );
+        const countMap = {};
+        for (const u of eligible) countMap[u.id] = 0;
+        for (const r of countRes.rows) countMap[r.assigned_to] = r.n;
+        const minCount = Math.min(...eligible.map(u => countMap[u.id]));
+        const tied = eligible.filter(u => countMap[u.id] === minCount);
+        assignedStaffId = tied[Math.floor(Math.random() * tied.length)].id;
+      } else {
+        // 'random' (default)
+        assignedStaffId = eligible[Math.floor(Math.random() * eligible.length)].id;
+      }
     }
 
     // 7. Race condition check (slot still available?)
@@ -578,6 +624,7 @@ async function handler(req, res) {
     return res.status(200).json({
       success: true,
       appointment_id: apptId,
+      staff_id: assignedStaffId,
       payment: chargeOccurred ? {
         total: total,
         subtotal: subtotal,

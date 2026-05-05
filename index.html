@@ -11436,6 +11436,8 @@ function openServiceWidgetEditor(w,isNew){
   var curLogo=(w&&w.logo_url)||'';
   var requirePayment=!!(w&&w.require_payment);
   var confirmMsg=(w&&w.confirm_message)||'';
+  // Read saved round_robin_config strategy (default 'random')
+  var savedStrategy=(w&&w.round_robin_config&&w.round_robin_config.strategy)||'random';
 
   var body='<div style="display:flex;flex-direction:column;gap:14px">'
     +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'"></div>'
@@ -11476,6 +11478,22 @@ function openServiceWidgetEditor(w,isNew){
     +'</div>'
     +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Book your appointment online" value="'+esc(w&&w.tagline||'')+'"></div>'
 
+    // Provider assignment strategy (when staff='any')
+    +'<div class="form-group">'
+    +'<label style="margin-bottom:6px;display:block">Provider Assignment</label>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:none;font-weight:400;line-height:1.5">When a service has multiple staff and the system needs to auto-assign, how should it pick?</div>'
+    +'<div style="background:var(--bg-card);border:1px solid var(--main-border);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px">'
+    +'<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:6px 0;text-transform:none;font-weight:400;color:var(--text);margin:0">'
+    +'<input type="radio" name="swg-rr-strategy" value="random" '+(savedStrategy!=='least_busy'?'checked':'')+' style="margin-top:3px;flex-shrink:0">'
+    +'<span><span style="font-weight:600;font-size:13px">Random</span><br><span style="font-size:12px;color:var(--text-muted)">Pick a random eligible provider. Distributes bookings approximately evenly over time.</span></span>'
+    +'</label>'
+    +'<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:6px 0;text-transform:none;font-weight:400;color:var(--text);margin:0">'
+    +'<input type="radio" name="swg-rr-strategy" value="least_busy" '+(savedStrategy==='least_busy'?'checked':'')+' style="margin-top:3px;flex-shrink:0">'
+    +'<span><span style="font-weight:600;font-size:13px">Least busy</span><br><span style="font-size:12px;color:var(--text-muted)">Pick the provider with the fewest appointments today. Smooths daily load.</span></span>'
+    +'</label>'
+    +'</div>'
+    +'</div>'
+
     // Require payment toggle
     +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
     +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-req-pay\');c.checked=!c.checked">'
@@ -11510,6 +11528,9 @@ var _apptWidgetTypes=[];
 // Working copy of widget_availability while editing.
 // Shape: {sun:{on:false,start:'09:00',end:'17:00'}, mon:{on:true,start:...,end:...}, ...}
 var _apptWidgetAvail={};
+// Working copy of round_robin_config while editing.
+// Shape: {strategy: 'random' | 'least_busy', ...}
+var _apptWidgetRR={strategy:'random'};
 function openAppointmentWidgetModal(w,isNew){
   // Working copy of appointment_types so user edits don't mutate the stored widget
   // until they save.
@@ -11532,6 +11553,12 @@ function openAppointmentWidgetModal(w,isNew){
       sat:{on:false,start:'09:00',end:'17:00'}
     };
   }
+
+  // Working copy of round_robin_config. Default strategy='random'.
+  var savedRR=(w&&w.round_robin_config&&typeof w.round_robin_config==='object')?w.round_robin_config:null;
+  _apptWidgetRR=savedRR&&savedRR.strategy
+    ?JSON.parse(JSON.stringify(savedRR))
+    :{strategy:'random'};
 
   var _selStaff=(w&&w.staff_ids)||[];
   var allUsers=(db.users||[]).filter(function(u){return u.active!==false;});
@@ -11586,6 +11613,22 @@ function openAppointmentWidgetModal(w,isNew){
     +'<label style="margin-bottom:6px;display:block">Booking Availability</label>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:none;font-weight:400;line-height:1.5">When patients can book through this widget. Each provider also needs to be working at the chosen time, so this acts as an additional filter on top of staff schedules.</div>'
     +'<div id="swg-avail-grid" style="background:var(--bg-card);border:1px solid var(--main-border);border-radius:6px;padding:10px">'+renderApptWidgetAvailGrid()+'</div>'
+    +'</div>'
+
+    // Provider assignment strategy (round robin config)
+    +'<div class="form-group">'
+    +'<label style="margin-bottom:6px;display:block">Provider Assignment</label>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:none;font-weight:400;line-height:1.5">When a patient picks "Any provider", how should the system assign one?</div>'
+    +'<div style="background:var(--bg-card);border:1px solid var(--main-border);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px">'
+    +'<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:6px 0;text-transform:none;font-weight:400;color:var(--text);margin:0">'
+    +'<input type="radio" name="swg-rr-strategy" value="random" '+(_apptWidgetRR.strategy!=='least_busy'?'checked':'')+' style="margin-top:3px;flex-shrink:0">'
+    +'<span><span style="font-weight:600;font-size:13px">Random</span><br><span style="font-size:12px;color:var(--text-muted)">Pick a random eligible provider. Distributes bookings approximately evenly over time.</span></span>'
+    +'</label>'
+    +'<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:6px 0;text-transform:none;font-weight:400;color:var(--text);margin:0">'
+    +'<input type="radio" name="swg-rr-strategy" value="least_busy" '+(_apptWidgetRR.strategy==='least_busy'?'checked':'')+' style="margin-top:3px;flex-shrink:0">'
+    +'<span><span style="font-weight:600;font-size:13px">Least busy</span><br><span style="font-size:12px;color:var(--text-muted)">Pick the provider with the fewest appointments today. Smooths daily load.</span></span>'
+    +'</label>'
+    +'</div>'
     +'</div>'
 
     +'<div class="form-row">'
@@ -11770,6 +11813,10 @@ function saveAppointmentWidget(id){
   var activeTypes=_apptWidgetTypes.filter(function(t){return t.active!==false;});
   if(!activeTypes.length){toast('Add at least one active appointment type.','error');return;}
 
+  // Read assignment strategy from the radio group
+  var rrRadio=document.querySelector('input[name="swg-rr-strategy"]:checked');
+  var strategy=(rrRadio&&rrRadio.value==='least_busy')?'least_busy':'random';
+
   var w={
     id:id||uid(),
     name:name,
@@ -11781,7 +11828,7 @@ function saveAppointmentWidget(id){
     active:(document.getElementById('swg-active')||{}).checked!==false,
     staff_mode:'specific',
     staff_ids:staffIds,
-    round_robin_config:{},
+    round_robin_config:{strategy:strategy},
     appointment_types:_apptWidgetTypes,
     widget_availability:_apptWidgetAvail,
     require_payment:(document.getElementById('swg-req-pay')||{}).checked===true,
@@ -11948,6 +11995,9 @@ function saveServiceWidget(id){
   var name=(document.getElementById('swg-name')||{}).value;
   if(!name||!name.trim()){toast('Widget name is required.','error');return;}
   var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
+  // Read assignment strategy from the radio group
+  var rrRadio=document.querySelector('input[name="swg-rr-strategy"]:checked');
+  var strategy=(rrRadio&&rrRadio.value==='least_busy')?'least_busy':'random';
   // Service widgets inherit staff from services. staff_mode and staff_ids are not user-set
   // for this widget type. Stage 3 reintroduces these fields for appointment widgets.
   var w={
@@ -11960,7 +12010,7 @@ function saveServiceWidget(id){
     active:(document.getElementById('swg-active')||{}).checked!==false,
     staff_mode:'any',
     staff_ids:[],
-    round_robin_config:{}, // placeholder for stage 4
+    round_robin_config:{strategy:strategy},
     require_payment:(document.getElementById('swg-req-pay')||{}).checked===true,
     intake_form_id:null,
     confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
