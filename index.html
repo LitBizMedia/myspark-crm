@@ -12929,19 +12929,16 @@ function txnRenderTable(){
   if(state.txnPage > pages) state.txnPage = 1;
   var slice = filtered.slice((state.txnPage - 1) * TXN_PER_PAGE, state.txnPage * TXN_PER_PAGE);
   // Column totals across the full filtered set (not just current page).
-  // Excludes voided. Refunded amount nets against the original.
+  // Excludes voided. Period Total card above the table already shows net revenue.
   var totals = filtered.reduce(function(s, p){
     if(p.status === 'voided') return s;
     var t = txnNorm(p);
-    var refunded = (p.refundLog || []).reduce(function(rs, r){ return rs + (r.total || 0); }, 0);
-    var net = (t.total || 0) - refunded;
     s.subtotal += t.subtotal || 0;
     s.afterDiscount += t.afterDiscount || 0;
     s.tax += t.taxAmount || 0;
     s.tip += t.tipAmount || 0;
-    s.total += net;
     return s;
-  }, {subtotal:0, afterDiscount:0, tax:0, tip:0, total:0});
+  }, {subtotal:0, afterDiscount:0, tax:0, tip:0});
   var totalsRowStyle = 'background:rgba(107,33,234,.06);font-weight:700;border-bottom:2px solid var(--purple-border);position:sticky;top:32px;z-index:1';
   var totalsCellStyle = 'padding:8px 12px;font-size:12px;color:var(--main-text)';
   var totalsNumStyle = 'padding:8px 12px;font-size:13px;text-align:right;color:var(--main-text);font-weight:700;font-family:Exo 2,sans-serif';
@@ -12964,7 +12961,7 @@ function txnRenderTable(){
       +'<td style="'+totalsNumStyle+'">'+fmt$(totals.afterDiscount)+'</td>'
       +'<td style="'+totalsNumStyle+'">'+fmt$(totals.tax)+'</td>'
       +'<td style="'+totalsNumStyle+'">'+fmt$(totals.tip)+'</td>'
-      +'<td style="'+totalsCellStyle+';color:var(--main-text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em" colspan="3">Net Total: <span style="color:var(--orange);font-size:13px;font-weight:700;font-family:Exo 2,sans-serif;text-transform:none;letter-spacing:0">'+fmt$(totals.total)+'</span></td>'
+      +'<td colspan="3"></td>'
       +'</tr>':'');
   if(!slice.length){
     tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">'
