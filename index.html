@@ -12832,8 +12832,8 @@ function txnBuildShell(){
   var staffVal = state.txnStaff || '';
   var methodVal = state.txnMethod || '';
   var isCustom = rangeVal === 'custom';
-  var ranges = ['today','this_week','this_month','last_month','custom'];
-  var rangeLabels = {'today':'Today','this_week':'This Week','this_month':'This Month','last_month':'Last Month','custom':'Custom Range'};
+  var ranges = ['today','this_week','last_week','this_month','last_month','custom'];
+  var rangeLabels = {'today':'Today','this_week':'This Week','last_week':'Last Week','this_month':'This Month','last_month':'Last Month','custom':'Custom Range'};
   var rangeOpts = ranges.map(function(v){ return '<option value="'+v+'"'+(rangeVal===v?' selected':'')+'>'+rangeLabels[v]+'</option>'; }).join('');
   return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Transactions</div>'
