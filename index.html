@@ -15084,7 +15084,9 @@ async function spProcessSale(){
       if(gc.balance<0)gc.balance=0;
       if(!gc.log)gc.log=[];
       gc.log.push({type:'redeemed',amount:price,note:'Session Pack: '+tmpl.name,date:now_()});
-      spSellFinalize(tmpl,contactId,staffId,'gift_card',gc.code,notes,'',price,taxAmount,taxableAmount);
+      spSellFinalize(tmpl,contactId,staffId,'gift_card','',notes,'',
+        {gcId:gc.id,gcCode:gc.code,gcApplied:price},
+        taxAmount,taxableAmount);
       return;
     }
 
@@ -15144,7 +15146,10 @@ async function spProcessSale(){
 
       // Build a hybrid payment method label
       var hybridPm='gift_card+'+remMethod;
-      spSellFinalize(tmpl,contactId,staffId,hybridPm,gc.code,notes,squarePaymentId,gcApplied,taxAmount,taxableAmount);
+      var rRef=remMethod==='other'?ref:'';
+      spSellFinalize(tmpl,contactId,staffId,hybridPm,'',notes,squarePaymentId,
+        {gcId:gc.id,gcCode:gc.code,gcApplied:gcApplied,remainderMethod:remMethod,remainderRef:rRef,remainderStatus:'completed'},
+        taxAmount,taxableAmount);
     }catch(e){
       if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
       toast('Error: '+e.message,'error');
@@ -15165,7 +15170,7 @@ async function spProcessSale(){
         if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
         toast('Charge failed: '+(chargeData3.error||'Unknown error'),'error');return;
       }
-      spSellFinalize(tmpl,contactId,staffId,'card_on_file',ref,notes,chargeData3.payment&&chargeData3.payment.id||'',0,taxAmount,taxableAmount);
+      spSellFinalize(tmpl,contactId,staffId,'card_on_file',ref,notes,chargeData3.payment&&chargeData3.payment.id||'',null,taxAmount,taxableAmount);
     }catch(e){
       if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
       toast('Error: '+e.message,'error');
@@ -15192,7 +15197,7 @@ async function spProcessSale(){
         return;
       }
       spSellSqCard=null;
-      spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,chargeData.payment&&chargeData.payment.id||'',0,taxAmount,taxableAmount);
+      spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,chargeData.payment&&chargeData.payment.id||'',null,taxAmount,taxableAmount);
     }catch(e){
       if(errEl)errEl.textContent='Charge failed: '+e.message;
       if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
@@ -15201,10 +15206,13 @@ async function spProcessSale(){
   }
 
   // ── CASH / OTHER paths (no charge needed) ──
-  spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,'',0,taxAmount,taxableAmount);
+  spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,'',null,taxAmount,taxableAmount);
 }
 
-function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcAppliedAmt,taxAmount,taxableAmount){
+// Finalizes a session pack sale. gcInfo is optional and carries gift card
+// details when GC was used (full or partial coverage):
+//   { gcId, gcCode, gcApplied, remainderMethod, remainderRef, remainderStatus }
+function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcInfo,taxAmount,taxableAmount){
   var payId=uid();
   var packId='sp-'+uid();
   var today=todayStr();
@@ -15228,9 +15236,14 @@ function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcAp
     isSessionPackSale:true,sessionPackId:packId,
     createdAt:now_()
   };
-  // If GC was applied, add the GC fields (gcAppliedAmt is the amount used)
-  if(gcAppliedAmt&&gcAppliedAmt>0){
-    spSalePmt.giftCardApplied=gcAppliedAmt;
+  // GC bookkeeping. gcInfo present when gift card covered all or part of sale.
+  if(gcInfo&&gcInfo.gcApplied&&gcInfo.gcApplied>0){
+    spSalePmt.giftCardId=gcInfo.gcId||null;
+    spSalePmt.giftCardCode=gcInfo.gcCode||'';
+    spSalePmt.giftCardApplied=gcInfo.gcApplied;
+    if(gcInfo.remainderMethod)spSalePmt.remainderMethod=gcInfo.remainderMethod;
+    if(gcInfo.remainderRef)spSalePmt.remainderRef=gcInfo.remainderRef;
+    if(gcInfo.remainderStatus)spSalePmt.remainderStatus=gcInfo.remainderStatus;
   }
   db.payments.push(spSalePmt);
   _createPaymentRemote(spSalePmt);
@@ -15367,7 +15380,7 @@ function spDrawerIssuePack(contactId){
   var taxableFlag=tmpl.taxable!==false;
   var spTaxCalc=calcTax([{price:tmpl.price,taxable:taxableFlag,qty:1}],0);
   closeModal();
-  spSellFinalize(tmpl,contactId,staffId,pm,'',notes,'',0,spTaxCalc.tax,spTaxCalc.taxableAmount);
+  spSellFinalize(tmpl,contactId,staffId,pm,'',notes,'',null,spTaxCalc.tax,spTaxCalc.taxableAmount);
 }
 
 // =====================================================
