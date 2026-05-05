@@ -206,9 +206,10 @@ let S = {     // booking state
   cal_month: new Date().getMonth(), cal_year: new Date().getFullYear(),
   client:{name:'',email:'',phone:'',notes:''},
   tip:0, tip_custom:'',
+  coupon_input:'', coupon_code:'', coupon_discount:0, coupon_validating:false, coupon_status:null, coupon_message:'',
   sq_card:null, sq_payments:null,
   loading:false, error:null,
-  appt_id:null
+  appt_id:null, payment_receipt:null
 };
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -254,10 +255,10 @@ function visibleSteps() {
     if (vars.length) steps.push('variation');
   }
   steps.push('staff','date','time','info');
-  const pm = D.settings.default_payment_mode || 'none';
-  if (pm !== 'none' && D.settings.tip_enabled) steps.push('payment');
-  else if (pm !== 'none') steps.push('payment');
-  else if (D.settings.tip_enabled) steps.push('payment');
+  // Widget-level payment requirement (overrides workspace default)
+  const requirePayment = !!D.settings.require_payment;
+  const tipEnabled = !!D.settings.tip_enabled;
+  if (requirePayment || tipEnabled) steps.push('payment');
   steps.push('confirm');
   return steps;
 }
@@ -544,8 +545,9 @@ function selectTime(t, staffList) {
 
 // ── Step: Info ────────────────────────────────────────────────────────────────
 function renderInfo(el) {
+  const couponBlock = renderCouponBlock();
   el.innerHTML = `
-    ${bookingSummaryHtml()}
+    ${bookingSummaryHtml(true)}
     <div class="bw-section-title">Your Information</div>
     <div class="bw-section-sub">We'll send your confirmation here</div>
     <div class="bw-form" id="bw-info-form">
@@ -567,6 +569,7 @@ function renderInfo(el) {
         <label>Notes for provider</label>
         <textarea id="c-notes" placeholder="Any special requests or information..." oninput="S.client.notes=this.value">${esc(S.client.notes)}</textarea>
       </div>
+      ${couponBlock}
     </div>
     ${cancellationPolicyHtml()}
     <div class="bw-nav">
@@ -578,6 +581,87 @@ function renderInfo(el) {
         }
       </button>
     </div>`;
+}
+
+function renderCouponBlock() {
+  const subtotal = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  if (subtotal <= 0) return ''; // no coupon for free services
+  const applied = !!S.coupon_code;
+  const validating = !!S.coupon_validating;
+  const status = S.coupon_status; // 'success' | 'error' | null
+  const msg = S.coupon_message || '';
+
+  if (applied) {
+    return `<div class="bw-field" style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:var(--radius-sm);padding:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#10b981">Coupon "${esc(S.coupon_code)}" applied</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">You're saving $${(S.coupon_discount||0).toFixed(2)}</div>
+        </div>
+        <button type="button" class="bw-btn bw-btn-ghost" style="padding:6px 12px;font-size:12px" onclick="removeCoupon()">Remove</button>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="bw-field">
+    <label>Coupon Code <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="c-coupon" value="${esc(S.coupon_input||'')}" placeholder="Enter code" oninput="S.coupon_input=this.value.toUpperCase().trim();this.value=S.coupon_input" style="text-transform:uppercase;flex:1" ${validating?'disabled':''}>
+      <button type="button" class="bw-btn bw-btn-ghost" onclick="applyCoupon()" ${validating?'disabled':''} style="white-space:nowrap;padding:0 16px">${validating?'Checking...':'Apply'}</button>
+    </div>
+    ${status==='error' ? `<div style="font-size:12px;color:#ef4444;margin-top:6px">${esc(msg)}</div>` : ''}
+  </div>`;
+}
+
+async function applyCoupon() {
+  const code = (S.coupon_input||'').trim().toUpperCase();
+  if (!code) return;
+  S.coupon_validating = true;
+  S.coupon_status = null;
+  S.coupon_message = '';
+  render();
+  try {
+    const subtotal = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+    const r = await fetch(`${API}/api/booking/validate-coupon`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        slug: SLUG,
+        widget_id: WIDGET_ID,
+        coupon_code: code,
+        subtotal: subtotal,
+        date: S.date
+      })
+    });
+    const data = await r.json();
+    S.coupon_validating = false;
+    if (!r.ok || !data.valid) {
+      S.coupon_status = 'error';
+      S.coupon_message = data.error || 'Coupon is not valid.';
+      render();
+      return;
+    }
+    S.coupon_code = data.code;
+    S.coupon_discount = parseFloat(data.discount) || 0;
+    S.coupon_status = 'success';
+    S.coupon_message = '';
+    S.coupon_input = '';
+    render();
+  } catch (e) {
+    S.coupon_validating = false;
+    S.coupon_status = 'error';
+    S.coupon_message = 'Could not validate coupon. Please try again.';
+    render();
+  }
+}
+
+function removeCoupon() {
+  S.coupon_code = '';
+  S.coupon_discount = 0;
+  S.coupon_status = null;
+  S.coupon_message = '';
+  S.coupon_input = '';
+  render();
 }
 
 function validateInfo() {
@@ -596,49 +680,50 @@ function validateInfo() {
 
 // ── Step: Payment ─────────────────────────────────────────────────────────────
 function renderPayment(el) {
-  const pm = D.settings.default_payment_mode || 'none';
+  const requirePayment = !!D.settings.require_payment;
   const tipEnabled = D.settings.tip_enabled;
   const tipPcts = D.settings.tip_percentages || [10,15,20];
-  const price = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  const t = computeTotal();
+  const tipBase = t.afterDiscount + t.taxAmount; // tip on post-tax base
 
   let tipHtml = '';
-  if (tipEnabled && price > 0) {
+  if (tipEnabled && tipBase > 0) {
     const tipOpts = tipPcts.map(p => {
-      const amt = (price * p / 100).toFixed(2);
-      const active = S.tip === parseFloat(amt) ? 'active' : '';
+      const amt = (tipBase * p / 100).toFixed(2);
+      const active = Math.abs((S.tip||0) - parseFloat(amt)) < 0.005 ? 'active' : '';
       return `<button class="bw-tip-btn ${active}" onclick="setTip(${amt})">${p}% ($${amt})</button>`;
     }).join('');
     tipHtml = `<div class="bw-field" style="margin-top:16px">
       <label>Add a Tip (optional)</label>
       <div class="bw-tip-opts">
-        <button class="bw-tip-btn ${S.tip===0?'active':''}" onclick="setTip(0)">No tip</button>
+        <button class="bw-tip-btn ${(S.tip||0)===0?'active':''}" onclick="setTip(0)">No tip</button>
         ${tipOpts}
-        ${D.settings.tip_allow_custom ? `<input class="bw-tip-custom" type="number" min="0" step="0.01" placeholder="Custom $" id="tip-custom" oninput="setCustomTip(this.value)" value="${S.tip_custom}">` : ''}
+        ${D.settings.tip_allow_custom ? `<input class="bw-tip-custom" type="number" min="0" step="0.01" placeholder="Custom $" id="tip-custom" oninput="setCustomTip(this.value)" value="${S.tip_custom||''}">` : ''}
       </div>
     </div>`;
   }
 
   let payHtml = '';
-  if (pm !== 'none' && price > 0) {
+  if (requirePayment && t.total > 0) {
     payHtml = `<div class="bw-field" style="margin-top:16px">
-      <label>${pm==='deposit'?'Deposit Required':'Payment'}</label>
+      <label>Payment</label>
       <div id="bw-sq-card"><div class="bw-loading" style="padding:12px"><div class="bw-spinner"></div>Loading payment form...</div></div>
     </div>`;
   }
 
   el.innerHTML = `${bookingSummaryHtml(true)}
-    <div class="bw-section-title">${pm==='none'?'Almost Done':'Payment'}</div>
-    <div class="bw-section-sub">${pm==='none'?'Review your booking details below':'Enter your payment information'}</div>
+    <div class="bw-section-title">${requirePayment?'Payment':'Almost Done'}</div>
+    <div class="bw-section-sub">${requirePayment?'Enter your payment information':'Review your booking details below'}</div>
     ${tipHtml}
     ${payHtml}
     <div class="bw-nav">
       <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
       <button class="bw-btn bw-btn-primary bw-btn-full" id="bw-submit-btn" onclick="submitBooking()" ${S.loading?'disabled':''}>
-        ${S.loading?'Booking...':'Confirm Booking'}
+        ${S.loading?'Booking...':(requirePayment&&t.total>0?`Pay $${t.total.toFixed(2)} and Book`:'Confirm Booking')}
       </button>
     </div>`;
 
-  if (pm !== 'none' && price > 0) initSquare();
+  if (requirePayment && t.total > 0) initSquare();
 }
 
 function setTip(amt) {
@@ -678,10 +763,10 @@ async function submitBooking() {
   S.error = null; S.loading = true; render();
 
   let squareNonce = null;
-  const pm = D.settings.default_payment_mode || 'none';
-  const price = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  const requirePayment = !!D.settings.require_payment;
+  const t = computeTotal();
 
-  if (pm !== 'none' && price > 0 && S.sq_card) {
+  if (requirePayment && t.total > 0 && S.sq_card) {
     try {
       const result = await S.sq_card.tokenize();
       if (result.status !== 'OK') {
@@ -701,6 +786,7 @@ async function submitBooking() {
 
   const payload = {
     slug: SLUG,
+    widget_id: WIDGET_ID,
     service_id: S.service.id,
     variation_id: S.variation?.id || null,
     variation_name: S.variation?.name || null,
@@ -710,6 +796,7 @@ async function submitBooking() {
     client_info: S.client,
     square_nonce: squareNonce,
     tip_amount: S.tip || 0,
+    coupon_code: S.coupon_code || '',
     _hp: document.getElementById('_hp')?.value || ''
   };
 
@@ -725,6 +812,7 @@ async function submitBooking() {
       S.loading = false; render(); return;
     }
     S.appt_id = data.appointment_id;
+    S.payment_receipt = data.payment || null;
     S.loading = false;
     S.step = 'confirm';
     render();
@@ -740,6 +828,21 @@ function renderConfirm(el) {
     ? (D.staff||[]).find(u => u.id === S.available_staff[0])
     : null);
 
+  const receipt = S.payment_receipt;
+  const customMsg = D.settings.confirm_message || '';
+  const taxLabel = (D.settings.tax && D.settings.tax.label) || 'Tax';
+
+  const receiptHtml = receipt && receipt.total > 0 ? `
+    <div class="bw-confirm-card" style="margin-top:12px">
+      <div style="font-weight:600;margin-bottom:8px;font-size:13px">Receipt</div>
+      <div class="bw-confirm-row"><span>Service</span><span>$${(receipt.subtotal||0).toFixed(2)}</span></div>
+      ${receipt.coupon_discount > 0 ? `<div class="bw-confirm-row" style="color:#10b981"><span>Coupon discount</span><span>-$${receipt.coupon_discount.toFixed(2)}</span></div>` : ''}
+      ${receipt.tax > 0 ? `<div class="bw-confirm-row"><span>${esc(taxLabel)}</span><span>$${receipt.tax.toFixed(2)}</span></div>` : ''}
+      ${receipt.tip > 0 ? `<div class="bw-confirm-row"><span>Tip</span><span>$${receipt.tip.toFixed(2)}</span></div>` : ''}
+      <div class="bw-confirm-row" style="font-weight:600;padding-top:6px;border-top:1px solid var(--border);margin-top:4px"><span>Total Charged</span><span>$${receipt.total.toFixed(2)}</span></div>
+      ${receipt.card_last4 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:right">${esc(receipt.card_brand||'Card')} ending in ${esc(receipt.card_last4)}</div>` : ''}
+    </div>` : '';
+
   el.innerHTML = `<div class="bw-confirm">
     <div class="bw-confirm-icon">&#10003;</div>
     <div class="bw-confirm-title">You're Booked!</div>
@@ -750,6 +853,8 @@ function renderConfirm(el) {
       <div class="bw-confirm-row"><strong>Time</strong><span>${fmtTime(S.time)}</span></div>
       ${staffUser?`<div class="bw-confirm-row"><strong>Provider</strong><span>${esc(staffUser.name)}</span></div>`:''}
     </div>
+    ${receiptHtml}
+    ${customMsg ? `<p style="font-size:13px;color:var(--text);line-height:1.6;margin-top:16px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border)">${esc(customMsg)}</p>` : ''}
     ${D.settings.cancellation_policy_text?`<p style="font-size:12px;color:var(--text-muted);line-height:1.6">${esc(D.settings.cancellation_policy_text)}</p>`:''}
   </div>`;
 }
@@ -757,17 +862,44 @@ function renderConfirm(el) {
 // ── Summary card ──────────────────────────────────────────────────────────────
 function bookingSummaryHtml(showTotal) {
   if (!S.service) return '';
-  const price = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  const subtotal = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
   const tipAmt = S.tip || 0;
+  const couponDiscount = S.coupon_discount || 0;
+  const afterDiscount = Math.max(0, subtotal - couponDiscount);
+  const taxable = S.service.taxable !== false;
+  const taxSettings = D.settings.tax || { enabled:false, rate:0, label:'Sales Tax' };
+  const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
+    ? Math.round(afterDiscount * taxSettings.rate) / 100
+    : 0;
+  const total = afterDiscount + taxAmount + tipAmt;
+
+  const breakdown = showTotal && subtotal > 0 ? `<hr class="bw-summary-divider">
+    <div class="bw-summary-row"><span>Service</span><strong>$${subtotal.toFixed(2)}</strong></div>
+    ${couponDiscount > 0 ? `<div class="bw-summary-row" style="color:#10b981"><span>Coupon (${esc(S.coupon_code)})</span><strong>-$${couponDiscount.toFixed(2)}</strong></div>` : ''}
+    ${taxAmount > 0 ? `<div class="bw-summary-row"><span>${esc(taxSettings.label||'Tax')}</span><strong>$${taxAmount.toFixed(2)}</strong></div>` : ''}
+    ${tipAmt > 0 ? `<div class="bw-summary-row"><span>Tip</span><strong>$${tipAmt.toFixed(2)}</strong></div>` : ''}
+    <div class="bw-summary-row" style="font-size:15px;padding-top:6px;border-top:1px solid var(--border);margin-top:4px"><span>Total</span><strong>$${total.toFixed(2)}</strong></div>` : '';
+
   return `<div class="bw-summary">
     <div class="bw-summary-row"><strong>${esc(S.service.name)}${S.variation?` - ${esc(S.variation.name)}`:''}</strong></div>
     ${S.date?`<div class="bw-summary-row"><span>${fmtDate(S.date)} ${S.time?'at '+fmtTime(S.time):''}</span></div>`:''}
     ${S.staff?`<div class="bw-summary-row"><span>with ${esc(S.staff.name)}</span></div>`:''}
-    ${showTotal&&price>0?`<hr class="bw-summary-divider">
-    <div class="bw-summary-row"><span>Service</span><strong>$${price.toFixed(2)}</strong></div>
-    ${tipAmt>0?`<div class="bw-summary-row"><span>Tip</span><strong>$${tipAmt.toFixed(2)}</strong></div>`:''}
-    <div class="bw-summary-row"><span>Total</span><strong>$${(price+tipAmt).toFixed(2)}</strong></div>`:''}
+    ${breakdown}
   </div>`;
+}
+
+// Compute total - mirrors the math in bookingSummaryHtml. Used by submit and payment step.
+function computeTotal() {
+  const subtotal = parseFloat(S.variation?.price ?? S.service?.price ?? 0) || 0;
+  const tipAmt = S.tip || 0;
+  const couponDiscount = S.coupon_discount || 0;
+  const afterDiscount = Math.max(0, subtotal - couponDiscount);
+  const taxable = S.service && S.service.taxable !== false;
+  const taxSettings = D.settings.tax || { enabled:false, rate:0, label:'Sales Tax' };
+  const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
+    ? Math.round(afterDiscount * taxSettings.rate) / 100
+    : 0;
+  return { subtotal, couponDiscount, afterDiscount, taxAmount, tipAmt, total: afterDiscount + taxAmount + tipAmt };
 }
 
 function cancellationPolicyHtml() {

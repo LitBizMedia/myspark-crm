@@ -111,7 +111,7 @@ async function handler(req, res) {
       staffQuery = `SELECT id, username, display_name, color, schedule, date_overrides
                     FROM subaccount_users
                     WHERE subaccount_id = $1 AND active = true
-                      AND id = ANY($2::text[])
+                      AND id = ANY($2::uuid[])
                     ORDER BY created_at ASC`;
       staffArgs = [subaccountId, widgetStaffIds];
     } else {
