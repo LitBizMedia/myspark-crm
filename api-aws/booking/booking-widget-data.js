@@ -39,8 +39,8 @@ async function handler(req, res) {
     let widget = null;
     if (widget_id) {
       const wResult = await db.query(
-        `SELECT id, name, service_ids, primary_color, logo_url, tagline, active,
-                staff_mode, staff_ids, round_robin_config, require_payment,
+        `SELECT id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,
+                staff_mode, staff_ids, round_robin_config, appointment_types, require_payment,
                 intake_form_id, confirm_message
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE
@@ -54,8 +54,8 @@ async function handler(req, res) {
     } else {
       // Fallback: pick first active widget (legacy support; new flows always pass widget_id)
       const wResult = await db.query(
-        `SELECT id, name, service_ids, primary_color, logo_url, tagline, active,
-                staff_mode, staff_ids, round_robin_config, require_payment,
+        `SELECT id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,
+                staff_mode, staff_ids, round_robin_config, appointment_types, require_payment,
                 intake_form_id, confirm_message
          FROM service_widgets
          WHERE subaccount_id = $1 AND active = TRUE
@@ -100,20 +100,44 @@ async function handler(req, res) {
       )
     ]);
 
-    // 5. Staff: read from subaccount_users (single source of truth)
-    // Filter by widget.staff_ids if staff_mode is 'specific' or 'round_robin'.
-    const widgetStaffIds = widget && Array.isArray(widget.staff_ids) ? widget.staff_ids : [];
-    const staffMode = widget && widget.staff_mode || 'any';
-    const filterByWidgetStaff = (staffMode === 'specific' || staffMode === 'round_robin') && widgetStaffIds.length > 0;
+    // 5. Staff: read from subaccount_users (single source of truth).
+    //
+    // For service widgets, staff is INHERITED from the services included in the widget.
+    // The widget exposes only staff who can perform at least one of its services.
+    // widget.staff_ids and widget.staff_mode are IGNORED for service widgets.
+    //
+    // For appointment widgets (Stage 3), staff comes from widget.staff_ids directly,
+    // since there's no service to inherit from.
+    //
+    // For class widgets (Stage 3), staff comes from class session instructors,
+    // not from widget config.
+    const widgetType = (widget && widget.widget_type) || 'service';
+
+    let eligibleStaffIds = null; // null = no filter (load all), array = filter to these IDs
+    if (widgetType === 'service') {
+      // Compute the union of assigned_staff across all services in this widget
+      const staffSet = new Set();
+      for (const svc of svcResult.rows) {
+        const assigned = Array.isArray(svc.assigned_staff) ? svc.assigned_staff : [];
+        for (const sid of assigned) staffSet.add(sid);
+      }
+      // If no services have assigned_staff, fall through to load all (rare; usually a misconfig)
+      eligibleStaffIds = staffSet.size > 0 ? Array.from(staffSet) : null;
+    } else if (widgetType === 'appointment') {
+      // Appointment widget uses widget.staff_ids directly
+      const widgetStaffIds = widget && Array.isArray(widget.staff_ids) ? widget.staff_ids : [];
+      eligibleStaffIds = widgetStaffIds.length > 0 ? widgetStaffIds : null;
+    }
+    // Class widgets: leave eligibleStaffIds = null; per-session instructor handled elsewhere
 
     let staffQuery, staffArgs;
-    if (filterByWidgetStaff) {
+    if (eligibleStaffIds && eligibleStaffIds.length) {
       staffQuery = `SELECT id, username, display_name, color, schedule, date_overrides
                     FROM subaccount_users
                     WHERE subaccount_id = $1 AND active = true
                       AND id = ANY($2::uuid[])
                     ORDER BY created_at ASC`;
-      staffArgs = [subaccountId, widgetStaffIds];
+      staffArgs = [subaccountId, eligibleStaffIds];
     } else {
       staffQuery = `SELECT id, username, display_name, color, schedule, date_overrides
                     FROM subaccount_users

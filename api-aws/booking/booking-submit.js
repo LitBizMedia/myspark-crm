@@ -116,7 +116,7 @@ async function handler(req, res) {
     let widget = null;
     if (widget_id) {
       const wResult = await db.query(
-        `SELECT id, name, service_ids, staff_mode, staff_ids, require_payment, confirm_message
+        `SELECT id, name, widget_type, service_ids, staff_mode, staff_ids, require_payment, confirm_message
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE LIMIT 1`,
         [widget_id, subaccountId]
@@ -173,10 +173,13 @@ async function handler(req, res) {
     const paySettings = settings.paySettings || {};
     const taxSettings = paySettings.tax || bs.tax || { enabled: false, rate: 0, label: 'Sales Tax' };
 
-    // 6. Resolve assigned staff (eligible pool)
+    // 6. Resolve assigned staff (eligible pool).
+    //
+    // Per MySpark-Booking-Widget-Spec: Service widgets INHERIT staff from
+    // service.assigned_staff. widget.staff_ids is ignored for service widgets.
+    // Appointment widgets (Stage 3) will use widget.staff_ids directly.
+    const widgetType = (widget && widget.widget_type) || 'service';
     const assignedStaff = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
-    const widgetStaffIds = widget && Array.isArray(widget.staff_ids) ? widget.staff_ids : [];
-    const staffMode = widget && widget.staff_mode || 'any';
 
     const staffDbRes = await db.query(
       `SELECT id, username, display_name FROM subaccount_users
@@ -188,14 +191,19 @@ async function handler(req, res) {
       name: u.display_name || u.username
     }));
 
-    // Apply widget filtering
-    if ((staffMode === 'specific' || staffMode === 'round_robin') && widgetStaffIds.length) {
-      allUsers = allUsers.filter(u => widgetStaffIds.includes(u.id));
+    if (widgetType === 'service') {
+      // Service widget: filter by service.assigned_staff only
+      if (assignedStaff.length) {
+        allUsers = allUsers.filter(u => assignedStaff.includes(u.id));
+      }
+    } else if (widgetType === 'appointment') {
+      // Appointment widget: filter by widget.staff_ids
+      const widgetStaffIds = widget && Array.isArray(widget.staff_ids) ? widget.staff_ids : [];
+      if (widgetStaffIds.length) {
+        allUsers = allUsers.filter(u => widgetStaffIds.includes(u.id));
+      }
     }
-    // Apply service filtering
-    if (assignedStaff.length) {
-      allUsers = allUsers.filter(u => assignedStaff.includes(u.id));
-    }
+    // class type: leave allUsers alone; instructor handled per session
 
     let assignedStaffId = (staff_id && staff_id !== 'any') ? staff_id : null;
     // Verify the requested staff is eligible
