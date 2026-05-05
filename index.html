@@ -12302,7 +12302,35 @@ async function confirmChargeCoF(){
     });
     const data=await r.json();
     if(data.error){
-      const pmt={id:uid(),contactId:d.contact.id,contactName:d.contact.name,amount:d.total,tip:0,method:'card_on_file',status:'failed',failReason:data.error,staffId:d.staffId,staffName:d.staff&&d.staff.name||'',notes:d.notes,createdAt:now_()};
+      const pmt={
+        id:uid(),
+        contactId:d.contact.id,
+        contactName:d.contact.name,
+        items:d.items||[],
+        subtotal:d.totals?d.totals.sub:d.total,
+        couponDiscount:d.totals?(d.totals.couponDiscount||0):0,
+        couponCode:d.totals?(d.totals.couponCode||''):'',
+        couponId:d.totals?(d.totals.couponId||''):'',
+        discountAmount:d.totals?(d.totals.discount||0):0,
+        discountType:d.totals?(d.totals.discountType||'flat'):'flat',
+        discountNote:d.totals?(d.totals.discountNote||''):'',
+        afterDiscount:d.totals?(d.totals.afterDiscount||d.total):d.total,
+        feeAmount:d.totals?(d.totals.additionalFee||0):0,
+        taxAmount:d.totals?(d.totals.tax||0):0,
+        taxableAmount:d.totals?(d.totals.taxableAmount||0):0,
+        tipAmount:d.totals?(d.totals.tip||0):0,
+        creditApplied:d.totals?(d.totals.credit||0):0,
+        total:d.total,
+        paymentMethod:'card_on_file',
+        cardLast4:d.card.last4,
+        cardBrand:d.card.brand,
+        status:'failed',
+        failReason:data.error,
+        staffId:d.staffId,
+        staffName:d.staff&&d.staff.name||'',
+        notes:d.notes,
+        createdAt:now_()
+      };
       db.payments.push(pmt);_createPaymentRemote(pmt);saveData();
       closeModal();
       toast('Charge failed: '+data.error,'error');
@@ -14116,9 +14144,12 @@ async function gcProcessSale(){
 function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squarePaymentId){
   var payId=uid();
   var code=gcGenCode();
+  // Gift card sales are not taxed at sale (US convention: tax happens at redemption).
+  // Explicit zeroes for clarity and to keep payment record schema consistent.
   var gcSalePmt={id:payId,contactId:contactId||null,staffId:staffId||null,
-    items:[{desc:'Gift Card: '+prod.name+' ('+code+')',price:amt}],
-    subtotal:amt,discountAmount:0,afterDiscount:amt,tipAmount:0,creditApplied:0,
+    items:[{desc:'Gift Card: '+prod.name+' ('+code+')',price:amt,taxable:false}],
+    subtotal:amt,couponDiscount:0,discountAmount:0,afterDiscount:amt,
+    feeAmount:0,taxAmount:0,taxableAmount:0,tipAmount:0,creditApplied:0,
     total:amt,paymentMethod:pm,paymentRef:ref,squarePaymentId:squarePaymentId,
     status:'completed',notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,createdAt:now_()};
   db.payments.push(gcSalePmt);
