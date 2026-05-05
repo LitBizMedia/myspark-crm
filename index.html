@@ -11702,14 +11702,17 @@ function renderApptWidgetAvailGrid(){
   return DAYS.map(function(d){
     var v=_apptWidgetAvail[d.key]||{on:false,start:'09:00',end:'17:00'};
     var on=!!v.on;
-    return'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;'+(on?'':'opacity:.55')+'" id="swg-avail-row-'+d.key+'">'
-      +'<label style="display:flex;align-items:center;gap:6px;width:120px;cursor:pointer;font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin:0">'
-      +'<input type="checkbox"'+(on?' checked':'')+' onchange="apptAvailToggle(\''+d.key+'\',this.checked)" style="margin:0">'
+    var rowStyle='display:grid;grid-template-columns:130px 1fr 24px 1fr;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--main-border)';
+    var inputStyle='font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--main-border);border-radius:5px;background:var(--main-bg);color:var(--text);width:100%';
+    var disabledStyle=on?'':';opacity:.4;cursor:not-allowed';
+    return'<div style="'+rowStyle+'" id="swg-avail-row-'+d.key+'">'
+      +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin:0;user-select:none">'
+      +'<input type="checkbox"'+(on?' checked':'')+' onchange="apptAvailToggle(\''+d.key+'\',this.checked)" style="margin:0;flex-shrink:0">'
       +d.label
       +'</label>'
-      +'<input type="time" value="'+esc(v.start||'09:00')+'" onchange="apptAvailSetStart(\''+d.key+'\',this.value)" '+(on?'':'disabled')+' style="font-size:12px;padding:4px 6px;border:1px solid var(--main-border);border-radius:4px;background:var(--main-bg);color:var(--text)">'
-      +'<span style="font-size:11px;color:var(--text-muted)">to</span>'
-      +'<input type="time" value="'+esc(v.end||'17:00')+'" onchange="apptAvailSetEnd(\''+d.key+'\',this.value)" '+(on?'':'disabled')+' style="font-size:12px;padding:4px 6px;border:1px solid var(--main-border);border-radius:4px;background:var(--main-bg);color:var(--text)">'
+      +'<input type="time" value="'+esc(v.start||'09:00')+'" onchange="apptAvailSetStart(\''+d.key+'\',this.value)" '+(on?'':'disabled')+' style="'+inputStyle+disabledStyle+'">'
+      +'<span style="font-size:12px;color:var(--text-muted);text-align:center">to</span>'
+      +'<input type="time" value="'+esc(v.end||'17:00')+'" onchange="apptAvailSetEnd(\''+d.key+'\',this.value)" '+(on?'':'disabled')+' style="'+inputStyle+disabledStyle+'">'
       +'</div>';
   }).join('');
 }
