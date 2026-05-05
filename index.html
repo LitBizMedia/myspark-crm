@@ -12858,7 +12858,7 @@ function txnBuildShell(){
     +'</select>'
     +'</div>'
     +'<div class="tbl-wrap" style="overflow-x:auto">'
-    +'<table class="ct-table" id="txn-table" style="min-width:960px"><thead id="txn-thead"></thead><tbody id="txn-tbody"></tbody></table>'
+    +'<table class="ct-table" id="txn-table" style="min-width:880px"><thead id="txn-thead"></thead><tbody id="txn-tbody"></tbody></table>'
     +'</div>'
     +'<div id="txn-pg-wrap"></div>';
 }
@@ -12934,7 +12934,6 @@ function txnRenderTable(){
     +'<th style="min-width:120px">Contact</th>'
     +'<th>Items</th>'
     +'<th style="text-align:right;min-width:85px">Subtotal</th>'
-    +'<th style="text-align:right;min-width:85px">Discount</th>'
     +'<th style="text-align:right;min-width:90px">After Disc.</th>'
     +'<th style="text-align:right;min-width:75px">Tax</th>'
     +'<th style="text-align:right;min-width:70px">Tip</th>'
@@ -12943,7 +12942,7 @@ function txnRenderTable(){
     +'<th style="width:40px"></th>'
     +'</tr>';
   if(!slice.length){
-    tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state">'
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">'
       +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'
       +'<h3>No transactions found</h3><p>Process a sale in Point of Sale or adjust your filters.</p></div></td></tr>';
     document.getElementById('txn-pg-wrap').innerHTML = '';
@@ -12969,7 +12968,6 @@ function txnRenderTable(){
       +'<td style="font-size:12px">'+(contactName?esc(contactName):'<span style="color:var(--main-text-muted)">Walk-in</span>')+'</td>'
       +'<td style="font-size:12px">'+itemLabel+'</td>'
       +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.subtotal)+'</td>'
-      +'<td style="text-align:right;font-size:13px">'+(t.discountAmount>0?'<span style="color:#34d399">-'+fmt$(t.discountAmount)+'</span>':'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
       +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.afterDiscount)+'</td>'
       +'<td style="text-align:right;font-size:13px">'+(t.taxAmount>0?fmt$(t.taxAmount):'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
       +'<td style="text-align:right;font-size:13px">'+(t.tipAmount>0?fmt$(t.tipAmount):'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
