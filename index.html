@@ -4266,6 +4266,13 @@ function _eventPaymentStatus(a){
 //   onSuccess: optional callback after a successful payment (e.g., refresh roster)
 function _buildApptPayCtx(appt){
   var staff=appt.assignedTo?(db.users||[]).find(function(u){return u.id===appt.assignedTo;}):null;
+  // Resolve taxable flag from service. Default true if service not found
+  // (matches default behavior for new services). Variations inherit from parent.
+  var taxable=true;
+  if(appt.service_id){
+    var svc=(db.services||[]).find(function(s){return s.id===appt.service_id;});
+    if(svc)taxable=svc.taxable!==false;
+  }
   return {
     type:'appt',
     linkage:{appointmentId:appt.id},
@@ -4273,6 +4280,7 @@ function _buildApptPayCtx(appt){
     price:_getApptPrice(appt),
     paid:_getApptPaidAmount(appt.id),
     itemDesc:appt.title||'Appointment payment',
+    taxable:taxable,
     tipStaffId:appt.assignedTo||null,
     tipStaffName:staff?(staff.name||staff.username):null,
     onSuccess:function(){switchApptTab('payment');}
@@ -4284,9 +4292,13 @@ function _buildClassPayCtx(session, contactId, opts){
   // Class instructor is whoever taught it. Use session.instructor_id or the
   // service's first assigned staff as a fallback.
   var instructorId=session.instructor_id||null;
-  if(!instructorId&&session.service_id){
+  var taxable=true;
+  if(session.service_id){
     var svc=(db.services||[]).find(function(s){return s.id===session.service_id;});
-    if(svc&&svc.assigned_staff&&svc.assigned_staff.length)instructorId=svc.assigned_staff[0];
+    if(svc){
+      taxable=svc.taxable!==false;
+      if(!instructorId&&svc.assigned_staff&&svc.assigned_staff.length)instructorId=svc.assigned_staff[0];
+    }
   }
   var staff=instructorId?(db.users||[]).find(function(u){return u.id===instructorId;}):null;
   var contact=(db.contacts||[]).find(function(c){return c.id===contactId;});
@@ -4297,6 +4309,7 @@ function _buildClassPayCtx(session, contactId, opts){
     price:_getClassPrice(session),
     paid:_getClassParticipantPaidAmount(session.id, contactId),
     itemDesc:(session.title||'Class')+(contact?' - '+contact.name:''),
+    taxable:taxable,
     tipStaffId:instructorId,
     tipStaffName:staff?(staff.name||staff.username):null,
     sessionId:session.id,
@@ -4622,6 +4635,7 @@ function apptUpdateTotals(){
   var tipInput=document.getElementById('apt-pay-tip');
   if(!totalsBox)return null;
 
+  var ctx=state.payCtx||{};
   var subtotal=parseFloat((amountInput||{}).value)||0;
   var discType=state.apptDiscType||'flat';
   var discVal=parseFloat((discInput||{}).value)||0;
@@ -4650,7 +4664,16 @@ function apptUpdateTotals(){
   discountAmount=Math.min(discountAmount, afterCoupon);
 
   var afterDiscount=Math.max(0, afterCoupon-discountAmount);
-  var total=afterDiscount+tipAmount;
+
+  // Tax. Treat the appointment/class as a single line where the line is the
+  // entire subtotal. Taxable flag comes from ctx (resolved from the source service).
+  // Discount allocation is the full discount since there's only one line.
+  var taxableFlag=ctx.taxable!==false;
+  var taxCalc=calcTax([{price:subtotal,taxable:taxableFlag,qty:1}], couponDiscount+discountAmount);
+  var taxAmount=taxCalc.tax;
+  var taxableAmount=taxCalc.taxableAmount;
+
+  var total=afterDiscount+taxAmount+tipAmount;
 
   // Gift card application: only when GC method is active AND a GC has been applied
   var gcApplied=0;
@@ -4664,16 +4687,18 @@ function apptUpdateTotals(){
     if(remWrap)remWrap.style.display=(gcRemainder>0?'block':'none');
     var balLbl=document.getElementById('apt-pay-gc-balance-label');
     if(balLbl){
-      balLbl.textContent='GC balance: '+fmt$(state.apptGC.balance||0)+' · Will apply: '+fmt$(gcApplied)+(gcRemainder>0?(' · Remainder: '+fmt$(gcRemainder)):'');
+      balLbl.textContent='GC balance: '+fmt$(state.apptGC.balance||0)+' \u00b7 Will apply: '+fmt$(gcApplied)+(gcRemainder>0?(' \u00b7 Remainder: '+fmt$(gcRemainder)):'');
     }
     _refreshPaymentFieldVisibility();
   }
 
   // Render breakdown
+  var taxLabel=getTaxSettings()?getTaxSettings().label:'Sales Tax';
   var rows='';
   rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Subtotal</span><span>'+fmt$(subtotal)+'</span></div>';
   if(couponDiscount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Coupon ('+esc(coupon.code)+')</span><span>-'+fmt$(couponDiscount)+'</span></div>';
   if(discountAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Discount</span><span>-'+fmt$(discountAmount)+'</span></div>';
+  if(taxAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>'+esc(taxLabel)+'</span><span>+'+fmt$(taxAmount)+'</span></div>';
   if(tipAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Tip</span><span>+'+fmt$(tipAmount)+'</span></div>';
   rows+='<div style="display:flex;justify-content:space-between;padding:6px 0 2px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700;color:var(--text)"><span>Total</span><span style="color:var(--text);font-size:14px">'+fmt$(total)+'</span></div>';
   if(inGC){
@@ -4696,6 +4721,8 @@ function apptUpdateTotals(){
     discountType:discType,
     discountVal:discVal,
     afterDiscount:afterDiscount,
+    taxAmount:taxAmount,
+    taxableAmount:taxableAmount,
     tipAmount:tipAmount,
     total:total,
     giftCard:inGC?state.apptGC:null,
@@ -4908,7 +4935,7 @@ async function takeApptPayment(){
     staffId:staffId,
     staffName:staffName,
     tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
-    items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal}],
+    items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal,taxable:ctx.taxable!==false}],
     subtotal:totals.subtotal,
     couponDiscount:totals.couponDiscount,
     couponCode:totals.couponCode,
@@ -4917,6 +4944,8 @@ async function takeApptPayment(){
     discountType:totals.discountType,
     discountVal:totals.discountVal,
     afterDiscount:totals.afterDiscount,
+    taxAmount:totals.taxAmount||0,
+    taxableAmount:totals.taxableAmount||0,
     tipAmount:totals.tipAmount,
     creditApplied:0,
     total:totals.total,
@@ -4976,11 +5005,12 @@ async function _takeApptPaymentCard(ctx, totals, notes, staffId, staffName, tipS
       staffId:staffId,
       staffName:staffName,
       tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
-      items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal}],
+      items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal,taxable:ctx.taxable!==false}],
       subtotal:totals.subtotal,
       couponDiscount:totals.couponDiscount,couponCode:totals.couponCode,couponId:totals.couponId,
       discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
       afterDiscount:totals.afterDiscount,
+      taxAmount:totals.taxAmount||0,taxableAmount:totals.taxableAmount||0,
       tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
       paymentMethod:'card',
       notes:notes,
@@ -5053,11 +5083,12 @@ async function _takeApptPaymentCOF(ctx, totals, notes, staffId, staffName, tipSt
       staffId:staffId,
       staffName:staffName,
       tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
-      items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal}],
+      items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal,taxable:ctx.taxable!==false}],
       subtotal:totals.subtotal,
       couponDiscount:totals.couponDiscount,couponCode:totals.couponCode,couponId:totals.couponId,
       discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
       afterDiscount:totals.afterDiscount,
+      taxAmount:totals.taxAmount||0,taxableAmount:totals.taxableAmount||0,
       tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
       paymentMethod:'card_on_file',
       cardLast4:card.last4,
@@ -5129,11 +5160,12 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
     staffId:staffId,
     staffName:staffName,
     tipStaffId:totals.tipAmount>0?(tipStaffId||null):null,
-    items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal}],
+    items:[{desc:ctx.itemDesc||'Payment',price:totals.subtotal,taxable:ctx.taxable!==false}],
     subtotal:totals.subtotal,
     couponDiscount:totals.couponDiscount,couponCode:totals.couponCode,couponId:totals.couponId,
     discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
     afterDiscount:totals.afterDiscount,
+    taxAmount:totals.taxAmount||0,taxableAmount:totals.taxableAmount||0,
     tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
     paymentMethod:'gift_card',
     giftCardId:gObj.id,
@@ -10981,34 +11013,37 @@ function renderStaffReporting(){
   const sub=document.getElementById('staff-rpt-sub');
   if(sub)sub.textContent=fmtDate(from)+' \u2013 '+fmtDate(to);
   const users=allUsers();
-  const payments=(db.payments||[]).filter(function(p){return p.createdAt&&p.createdAt>=from&&p.createdAt<=to+'T23:59:59';});
+  const payments=(db.payments||[]).filter(function(p){return p.createdAt&&p.createdAt>=from&&p.createdAt<=to+'T23:59:59'&&p.status!=='failed';});
   const appts=(db.appointments||[]).filter(function(a){return a.date>=from&&a.date<=to;});
-  let totalSales=0,totalTips=0;
+  const taxOn=!!getTaxSettings();
+  const taxLabel=taxOn?getTaxSettings().label:'Tax';
+  let totalSales=0,totalTips=0,totalTax=0;
   const rows=users.map(function(u){
     const uPay=payments.filter(function(p){return p.staffId===u.id;});
     const uTipPay=payments.filter(function(p){return(p.tipStaffId||p.staffId)===u.id&&p.tipAmount>0;});
     const sales=uPay.reduce(function(s,p){return s+(p.subtotal||0);},0);
     const tips=uTipPay.reduce(function(s,p){return s+(p.tipAmount||0);},0);
+    const tax=uPay.reduce(function(s,p){return s+(p.taxAmount||0);},0);
     const apptCount=appts.filter(function(a){return a.assignedTo===u.id;}).length;
     const txCount=uPay.length;
-    totalSales+=sales;totalTips+=tips;
-    return{u,sales,tips,apptCount,txCount};
+    totalSales+=sales;totalTips+=tips;totalTax+=tax;
+    return{u,sales,tips,tax,apptCount,txCount};
   });
   let h='<button class="btn btn-ghost btn-sm" onclick="exportAllStaffCSV()" style="margin-bottom:10px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export All to CSV</button>'
     +'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden"><table class="rpt-table"><thead><tr>'
-    +'<th>Team Member</th><th>Role</th><th>Appts</th><th>Transactions</th><th>Sales</th><th style="color:#34d399">Tips</th><th style="color:var(--orange)">Total</th></tr></thead><tbody>';
+    +'<th>Team Member</th><th>Role</th><th>Appts</th><th>Transactions</th><th>Sales</th>'+(taxOn?'<th>'+esc(taxLabel)+'</th>':'')+'<th style="color:#34d399">Tips</th></tr></thead><tbody>';
   rows.forEach(function(r){
-    var isTip=r.type==='Tip';var isAppt=r.type==='Appointment';
     h+='<tr style="cursor:pointer" onclick="openStaffDrillDown(\''+r.u.id+'\')">'
       +'<td><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:'+(r.u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;font-family:\'Syne\',sans-serif">'+initials(r.u.name||r.u.username)+'</div>'+esc(r.u.name||r.u.username)+'</div></td>'
       +'<td><span class="role-badge role-'+r.u.role+'">'+r.u.role+'</span></td>'
       +'<td>'+r.apptCount+'</td>'
       +'<td>'+r.txCount+'</td>'
       +'<td>$'+r.sales.toFixed(2)+'</td>'
+      +(taxOn?'<td>$'+r.tax.toFixed(2)+'</td>':'')
       +'<td style="color:#34d399">$'+r.tips.toFixed(2)+'</td>'
       +'</tr>';
   });
-  h+='<tr class="rpt-total-row"><td colspan="4" style="font-weight:700">Totals</td><td>$'+totalSales.toFixed(2)+'</td><td style="color:#34d399">$'+totalTips.toFixed(2)+'</td><td style="color:var(--orange)">$'+(totalSales+totalTips).toFixed(2)+'</td></tr>';
+  h+='<tr class="rpt-total-row"><td colspan="4" style="font-weight:700">Totals</td><td>$'+totalSales.toFixed(2)+'</td>'+(taxOn?'<td>$'+totalTax.toFixed(2)+'</td>':'')+'<td style="color:#34d399">$'+totalTips.toFixed(2)+'</td></tr>';
   h+='</tbody></table></div>';
   el.innerHTML=h;
 }
@@ -14749,12 +14784,27 @@ function spSellUpdatePrice(){
   if(!tmpl){el.style.display='none';return;}
   var svcTxt=tmpl.serviceRestriction==='specific'&&tmpl.services&&tmpl.services.length?tmpl.services.join(', '):'Any service';
   var expTxt=tmpl.expiresMonths?tmpl.expiresMonths+' months from purchase':'Never expires';
+  // Tax preview
+  var taxableFlag=tmpl.taxable!==false;
+  var spTaxCalc=calcTax([{price:tmpl.price,taxable:taxableFlag,qty:1}],0);
+  var hasTax=spTaxCalc.tax>0;
+  var totalWithTax=tmpl.price+spTaxCalc.tax;
   el.style.display='';
+  var priceCol;
+  if(hasTax){
+    priceCol='<div style="text-align:right">'
+      +'<div style="font-size:12px;color:var(--main-text-muted)">Subtotal: '+fmt$(tmpl.price)+'</div>'
+      +'<div style="font-size:12px;color:var(--main-text-muted)">'+esc(spTaxCalc.label)+' ('+spTaxCalc.rate+'%): '+fmt$(spTaxCalc.tax)+'</div>'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:700;color:var(--orange);margin-top:2px">'+fmt$(totalWithTax)+'</div>'
+      +'</div>';
+  }else{
+    priceCol='<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:700;color:var(--orange)">'+fmt$(tmpl.price)+'</div>';
+  }
   el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
     +'<div><strong style="color:var(--main-text)">'+esc(tmpl.name)+'</strong>'
     +(tmpl.description?'<div style="color:var(--main-text-muted);font-size:12px;margin-top:2px">'+esc(tmpl.description)+'</div>':'')
     +'<div style="color:var(--main-text-muted);font-size:12px;margin-top:4px">'+tmpl.sessionsPaid+' sessions paid, '+tmpl.sessionsTotal+' total sessions issued<br>Applies to: '+esc(svcTxt)+'<br>'+expTxt+'</div></div>'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:700;color:var(--orange)">'+fmt$(tmpl.price)+'</div></div>';
+    +priceCol+'</div>';
 }
 
 function spSellSetPM(m){
@@ -14962,7 +15012,14 @@ async function spProcessSale(){
   var ref=(document.getElementById('sp-sell-ref')&&document.getElementById('sp-sell-ref').value||'').trim();
   var btn=document.getElementById('sp-sell-btn');
   var errEl=document.getElementById('sp-sq-card-errors');
-  var price=tmpl.price;
+  var subtotal=tmpl.price;
+  // Tax math: pack inherits taxable flag from template (defaults true).
+  // Discount/coupon are not supported on pack sale today, so preTaxDiscount=0.
+  var taxableFlag=tmpl.taxable!==false;
+  var taxCalc=calcTax([{price:subtotal,taxable:taxableFlag,qty:1}],0);
+  var taxAmount=taxCalc.tax;
+  var taxableAmount=taxCalc.taxableAmount;
+  var price=subtotal+taxAmount;
 
   // ── GIFT CARD path (now uses applied state, supports partial balance) ──
   if(pm==='gc'){
@@ -14980,7 +15037,7 @@ async function spProcessSale(){
       if(gc.balance<0)gc.balance=0;
       if(!gc.log)gc.log=[];
       gc.log.push({type:'redeemed',amount:price,note:'Session Pack: '+tmpl.name,date:now_()});
-      spSellFinalize(tmpl,contactId,staffId,'gift_card',gc.code,notes,'');
+      spSellFinalize(tmpl,contactId,staffId,'gift_card',gc.code,notes,'',price,taxAmount,taxableAmount);
       return;
     }
 
@@ -15040,7 +15097,7 @@ async function spProcessSale(){
 
       // Build a hybrid payment method label
       var hybridPm='gift_card+'+remMethod;
-      spSellFinalize(tmpl,contactId,staffId,hybridPm,gc.code,notes,squarePaymentId,gcApplied);
+      spSellFinalize(tmpl,contactId,staffId,hybridPm,gc.code,notes,squarePaymentId,gcApplied,taxAmount,taxableAmount);
     }catch(e){
       if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
       toast('Error: '+e.message,'error');
@@ -15061,7 +15118,7 @@ async function spProcessSale(){
         if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
         toast('Charge failed: '+(chargeData3.error||'Unknown error'),'error');return;
       }
-      spSellFinalize(tmpl,contactId,staffId,'card_on_file',ref,notes,chargeData3.payment&&chargeData3.payment.id||'');
+      spSellFinalize(tmpl,contactId,staffId,'card_on_file',ref,notes,chargeData3.payment&&chargeData3.payment.id||'',0,taxAmount,taxableAmount);
     }catch(e){
       if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
       toast('Error: '+e.message,'error');
@@ -15088,7 +15145,7 @@ async function spProcessSale(){
         return;
       }
       spSellSqCard=null;
-      spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,chargeData.payment&&chargeData.payment.id||'');
+      spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,chargeData.payment&&chargeData.payment.id||'',0,taxAmount,taxableAmount);
     }catch(e){
       if(errEl)errEl.textContent='Charge failed: '+e.message;
       if(btn){btn.disabled=false;btn.textContent='Process and Issue Pack';}
@@ -15097,10 +15154,10 @@ async function spProcessSale(){
   }
 
   // ── CASH / OTHER paths (no charge needed) ──
-  spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,'');
+  spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,'',0,taxAmount,taxableAmount);
 }
 
-function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId){
+function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcAppliedAmt,taxAmount,taxableAmount){
   var payId=uid();
   var packId='sp-'+uid();
   var today=todayStr();
@@ -15109,16 +15166,25 @@ function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId){
     var d=new Date();d.setMonth(d.getMonth()+tmpl.expiresMonths);
     expiresDate=d.toISOString().split('T')[0];
   }
+  var taxableFlag=tmpl.taxable!==false;
+  var tx=parseFloat(taxAmount)||0;
+  var taxBase=parseFloat(taxableAmount)||0;
+  var spTotal=tmpl.price+tx;
   var spSalePmt={
     id:payId,contactId:contactId||null,staffId:staffId||null,
-    items:[{desc:'Session Pack: '+tmpl.name,price:tmpl.price}],
+    items:[{desc:'Session Pack: '+tmpl.name,price:tmpl.price,taxable:taxableFlag}],
     subtotal:tmpl.price,discountAmount:0,afterDiscount:tmpl.price,
-    feeAmount:0,tipAmount:0,creditApplied:0,total:tmpl.price,
+    feeAmount:0,taxAmount:tx,taxableAmount:taxBase,
+    tipAmount:0,creditApplied:0,total:spTotal,
     paymentMethod:pm,paymentRef:ref||'',squarePaymentId:squarePaymentId||'',
     status:'completed',notes:notes||'Session pack sale',
     isSessionPackSale:true,sessionPackId:packId,
     createdAt:now_()
   };
+  // If GC was applied, add the GC fields (gcAppliedAmt is the amount used)
+  if(gcAppliedAmt&&gcAppliedAmt>0){
+    spSalePmt.giftCardApplied=gcAppliedAmt;
+  }
   db.payments.push(spSalePmt);
   _createPaymentRemote(spSalePmt);
   if(!db.sessionPacks)db.sessionPacks=[];
@@ -15250,8 +15316,11 @@ function spDrawerIssuePack(contactId){
   var pm=document.getElementById('sp-drawer-pm')&&document.getElementById('sp-drawer-pm').value||'card';
   var notes=(document.getElementById('sp-drawer-notes')&&document.getElementById('sp-drawer-notes').value||'').trim();
   var staffId=state.user&&state.user.id||'';
+  // Tax math: pack inherits taxable flag from template
+  var taxableFlag=tmpl.taxable!==false;
+  var spTaxCalc=calcTax([{price:tmpl.price,taxable:taxableFlag,qty:1}],0);
   closeModal();
-  spSellFinalize(tmpl,contactId,staffId,pm,'',notes,'');
+  spSellFinalize(tmpl,contactId,staffId,pm,'',notes,'',0,spTaxCalc.tax,spTaxCalc.taxableAmount);
 }
 
 // =====================================================
