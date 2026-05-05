@@ -40,7 +40,7 @@ async function handler(req, res) {
     if (widget_id) {
       const wResult = await db.query(
         `SELECT id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,
-                staff_mode, staff_ids, round_robin_config, appointment_types, require_payment,
+                staff_mode, staff_ids, round_robin_config, appointment_types, widget_availability, require_payment,
                 intake_form_id, confirm_message
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE
@@ -55,7 +55,7 @@ async function handler(req, res) {
       // Fallback: pick first active widget (legacy support; new flows always pass widget_id)
       const wResult = await db.query(
         `SELECT id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,
-                staff_mode, staff_ids, round_robin_config, appointment_types, require_payment,
+                staff_mode, staff_ids, round_robin_config, appointment_types, widget_availability, require_payment,
                 intake_form_id, confirm_message
          FROM service_widgets
          WHERE subaccount_id = $1 AND active = TRUE
