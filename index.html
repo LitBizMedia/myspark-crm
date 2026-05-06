@@ -207,9 +207,11 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .stat-val{font-family:'Exo 2',sans-serif;font-size:24px;font-weight:800;color:var(--main-text)}
 .dash-grid{display:grid;grid-template-columns:3fr 2fr;gap:16px;align-items:start}
 .dash-grid-left{display:flex;flex-direction:column;gap:16px;min-width:0}
-.dash-card-fixed{display:flex;flex-direction:column}
-.dash-card-fixed .dash-scroll-list{max-height:280px;min-height:160px}
-.dash-card-activity .dash-scroll-list{max-height:600px}
+.dash-grid-right{display:flex;flex-direction:column;gap:16px;min-width:0}
+.dash-card-fixed{display:flex;flex-direction:column;height:280px}
+.dash-card-fixed .dash-scroll-list{flex:1;overflow-y:auto}
+.dash-card-activity{display:flex;flex-direction:column;height:462px}
+.dash-card-activity .dash-scroll-list{flex:1;overflow-y:auto}
 @media (max-width:900px){.dash-grid{grid-template-columns:1fr}}
 .dash-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;box-shadow:0 2px 12px rgba(107,33,234,.07)}
 .dash-card-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
@@ -232,12 +234,12 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .dash-hero-sub{font-size:11px;color:var(--main-text-muted)}
 
 /* Quick action buttons */
-.dash-quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.dash-quick-actions{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .dash-qa-btn{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .15s;font-family:inherit;color:var(--main-text);text-align:left}
 .dash-qa-btn:hover{border-color:var(--orange);background:var(--main-card-hover);transform:translateY(-1px)}
 .dash-qa-btn svg{width:18px;height:18px;color:var(--orange);flex-shrink:0}
 .dash-qa-btn-label{font-size:13px;font-weight:600}
-@media (max-width:780px){.dash-quick-actions{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:780px){.dash-quick-actions{grid-template-columns:repeat(2,1fr);gap:8px}}
 
 /* Activity feed */
 .dash-act-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
@@ -1223,12 +1225,14 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div id="dash-tasks" class="dash-scroll-list"></div>
             </div>
           </div>
-          <div class="dash-card dash-card-activity">
-            <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Recent Activity</div>
-            <div id="dash-activity" class="dash-scroll-list"></div>
+          <div class="dash-grid-right">
+            <div class="dash-card dash-card-activity">
+              <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Recent Activity</div>
+              <div id="dash-activity" class="dash-scroll-list"></div>
+            </div>
+            <div id="dash-quick-actions" class="dash-quick-actions"></div>
           </div>
         </div>
-        <div id="dash-quick-actions" class="dash-quick-actions"></div>
       </div>
 
       <!-- CONTACTS -->
