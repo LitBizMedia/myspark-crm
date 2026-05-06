@@ -910,41 +910,61 @@ function renderClassesForm(el) {
     </div>`;
   }
 
-  // Session cards (right pane)
+  // Session cards (right pane), grouped by date.
+  // Each date gets a header; sessions on that date are compact rows underneath.
+  // This scales well from a once-a-week class to multi-class daily schedules.
   let sessionsHtml = '';
   if (!allSessions.length) {
     sessionsHtml = '<div class="bw-empty-state" style="padding:32px 16px;text-align:center;color:var(--text-muted);font-size:13px">No upcoming class sessions. Please check back later.</div>';
   } else {
-    sessionsHtml = '<div class="bw-class-list" style="display:flex;flex-direction:column;gap:10px">';
-    allSessions.forEach(sess => {
-      const svc = svcMap[sess.service_id];
-      const instr = staffMap[sess.instructor_id];
-      const isFull = sess.spots_remaining <= 0;
-      const isSelected = S.class_session && S.class_session.id === sess.id;
-      const datePretty = fmtDate(sess.date);
-      const timePretty = fmtTime(sess.time);
-      const spotsText = isFull ? 'FULL' : `${sess.spots_remaining} spot${sess.spots_remaining===1?'':'s'} left`;
-      const spotsColor = isFull ? '#ef4444' : (sess.spots_remaining <= 2 ? '#f59e0b' : '#10b981');
-      const priceText = sess.price > 0 ? `$${sess.price.toFixed(2)}` : 'Free';
-      const cursor = isFull ? 'not-allowed' : 'pointer';
-      const opacity = isFull ? '0.55' : '1';
-      const borderColor = isSelected ? 'var(--brand)' : 'var(--border)';
-      const bg = isSelected ? 'rgba(107,33,234,0.06)' : 'var(--bg-card)';
-      const onclick = isFull ? '' : `onclick="selectClassSession('${sess.id}')"`;
-      sessionsHtml += `<div class="bw-class-card" ${onclick} style="border:2px solid ${borderColor};background:${bg};border-radius:8px;padding:12px;cursor:${cursor};opacity:${opacity};transition:all 0.15s">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+    // Group by date string (sessions already arrive sorted by date,time from the Lambda)
+    const groups = {};
+    const dateOrder = [];
+    allSessions.forEach(s => {
+      const key = s.date;
+      if (!groups[key]) { groups[key] = []; dateOrder.push(key); }
+      groups[key].push(s);
+    });
+
+    sessionsHtml = '<div class="bw-class-list" style="display:flex;flex-direction:column;gap:14px;max-height:560px;overflow-y:auto;padding-right:4px">';
+
+    dateOrder.forEach(dateKey => {
+      const dayLabel = fmtDate(dateKey);
+      sessionsHtml += `<div class="bw-class-day-group">
+        <div class="bw-class-day-header" style="font-weight:700;font-size:13px;color:var(--text);text-transform:uppercase;letter-spacing:0.04em;padding:6px 0;margin-bottom:6px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg-card);z-index:1">${dayLabel}</div>
+        <div style="display:flex;flex-direction:column;gap:6px">`;
+
+      groups[dateKey].forEach(sess => {
+        const svc = svcMap[sess.service_id];
+        const instr = staffMap[sess.instructor_id];
+        const isFull = sess.spots_remaining <= 0;
+        const isSelected = S.class_session && S.class_session.id === sess.id;
+        const timePretty = fmtTime(sess.time);
+        const spotsText = isFull ? 'FULL' : `${sess.spots_remaining} left`;
+        const spotsColor = isFull ? '#ef4444' : (sess.spots_remaining <= 2 ? '#f59e0b' : '#10b981');
+        const priceText = sess.price > 0 ? `$${sess.price.toFixed(2)}` : 'Free';
+        const cursor = isFull ? 'not-allowed' : 'pointer';
+        const opacity = isFull ? '0.55' : '1';
+        const borderColor = isSelected ? 'var(--brand)' : 'var(--border)';
+        const bg = isSelected ? 'rgba(107,33,234,0.06)' : 'transparent';
+        const onclick = isFull ? '' : `onclick="selectClassSession('${sess.id}')"`;
+
+        sessionsHtml += `<div class="bw-class-row" ${onclick} style="border:1.5px solid ${borderColor};background:${bg};border-radius:6px;padding:10px 12px;cursor:${cursor};opacity:${opacity};transition:all 0.15s;display:flex;align-items:center;gap:10px">
+          <div style="font-weight:700;font-size:13px;color:var(--text);min-width:64px;flex-shrink:0">${timePretty}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:14px;color:var(--text);margin-bottom:4px">${esc(svc ? svc.name : sess.title)}</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:2px">${datePretty} at ${timePretty}</div>
-            ${instr ? `<div style="font-size:12px;color:var(--text-muted)">with ${esc(instr.name)}</div>` : ''}
+            <div style="font-weight:600;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(svc ? svc.name : sess.title)}</div>
+            ${instr ? `<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">with ${esc(instr.name)}</div>` : ''}
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">${priceText}</div>
-            <div style="font-size:11px;font-weight:600;color:${spotsColor};text-transform:uppercase;letter-spacing:0.04em">${spotsText}</div>
+            <div style="font-weight:700;font-size:13px;color:var(--text)">${priceText}</div>
+            <div style="font-size:10px;font-weight:600;color:${spotsColor};text-transform:uppercase;letter-spacing:0.04em">${spotsText}</div>
           </div>
-        </div>
-      </div>`;
+        </div>`;
+      });
+
+      sessionsHtml += '</div></div>';
     });
+
     sessionsHtml += '</div>';
   }
 

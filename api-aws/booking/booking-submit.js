@@ -549,9 +549,12 @@ async function handler(req, res) {
 
     if (classSession) {
       participantId = uid();
+      // Match the existing participant schema used by svcEnroll and the dashboard
+      // roster: {contact_id, status, enrolled_at}. Adding extra fields (id, source)
+      // is fine - existing code ignores unknown keys.
       const newParticipant = {
         id: participantId,
-        contactId: contactId,
+        contact_id: contactId,
         status: 'enrolled',
         enrolled_at: now_(),
         source: 'booking_widget'
