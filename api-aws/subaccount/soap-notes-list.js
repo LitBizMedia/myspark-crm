@@ -27,6 +27,7 @@ function rowToNote(row) {
     objective:  row.objective  || '',
     assessment: row.assessment || '',
     plan:       row.plan       || '',
+    vitals: row.vitals || {},
     visitDate: row.visit_date || null,
     templateUsed: row.template_used || null,
     signedAt: row.signed_at,

@@ -68,6 +68,7 @@ async function handler(req, res) {
 
     // signed flag triggers immediate lock by setting signed_at
     const signedAt = n.signed ? new Date().toISOString() : (row.signed_at || null);
+    const vitals = (n.vitals && typeof n.vitals === 'object') ? n.vitals : {};
 
     await db.query(`
       UPDATE soap_notes SET
@@ -76,14 +77,16 @@ async function handler(req, res) {
         objective = $3,
         assessment = $4,
         plan = $5,
-        visit_date = $6,
-        template_used = $7,
-        signed_at = $8,
+        vitals = $6::jsonb,
+        visit_date = $7,
+        template_used = $8,
+        signed_at = $9,
         updated_at = NOW()
-      WHERE id = $9 AND subaccount_id = $10
+      WHERE id = $10 AND subaccount_id = $11
     `, [
       n.appointmentId || null,
       n.subjective || '', n.objective || '', n.assessment || '', n.plan || '',
+      JSON.stringify(vitals),
       n.visitDate || null, n.templateUsed || null, signedAt,
       n.id, subaccountId
     ]);

@@ -34,18 +34,23 @@ async function handler(req, res) {
   // signed flag from frontend means "lock immediately"; we set signed_at.
   const signedAt = n.signed ? new Date().toISOString() : null;
 
+  // Vitals are an arbitrary JSON object. Frontend validates the shape; we
+  // store as-is with a default of {} for notes that have no vitals.
+  const vitals = (n.vitals && typeof n.vitals === 'object') ? n.vitals : {};
+
   try {
     await db.query(`
       INSERT INTO soap_notes (
         id, subaccount_id, contact_id, appointment_id, author_id,
-        subjective, objective, assessment, plan,
+        subjective, objective, assessment, plan, vitals,
         visit_date, template_used, signed_at,
         created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, NOW(), NOW())
     `, [
       n.id, subaccountId, n.contactId, n.appointmentId || null, auth.user_id,
       n.subjective || '', n.objective || '', n.assessment || '', n.plan || '',
+      JSON.stringify(vitals),
       n.visitDate || null, n.templateUsed || null, signedAt
     ]);
 
