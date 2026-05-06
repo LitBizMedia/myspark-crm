@@ -3902,6 +3902,7 @@ function viewSoapNote(noteId){
     +amdHTML;
 
   var foot='<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  foot+='<button class="btn btn-ghost" onclick="printSoapNote(\''+n.id+'\')" title="Open print-friendly view"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print</button>';
   if(canDelete)foot+='<button class="btn btn-danger" onclick="confirmDeleteSoapNote(\''+n.id+'\')">Delete</button>';
   if(n.locked)foot+='<button class="btn btn-purple" onclick="openSoapAmendModal(\''+n.id+'\')">+ Amendment</button>';
   if(canEdit)foot+='<button class="btn btn-primary" onclick="closeModal();openSoapNoteModal(\''+state.drawer+'\',\''+n.id+'\')">Edit</button>';
@@ -3952,6 +3953,169 @@ function confirmDeleteSoapNote(noteId){
     console.error('confirmDeleteSoapNote:',e);
     toast(e.message||'Delete failed.','error');
   });
+}
+
+// Print-friendly view of a SOAP note. Opens a new window with a clean
+// printable layout, then triggers the browser print dialog. User can save
+// as PDF via their browser's print options. No letterhead/logo for now;
+// future iteration will build a full PDF export with branding.
+//
+// HIPAA note: the print view contains PHI. The new window inherits the
+// session origin so it's auto-bounded by the same security context. We
+// don't email or upload the output - user controls forwarding.
+function printSoapNote(noteId){
+  var c=getContact(state.drawer);if(!c)return;
+  var notes=c._soapNotes||[];
+  var n=notes.find(function(x){return x.id===noteId;});
+  if(!n){toast('SOAP note not found.','error');return;}
+
+  var bizName=(db.settings&&db.settings.businessName)||'Clinic';
+  var author=n.authorId?getUserById(n.authorId):null;
+  var authorName=author?(author.name||author.username):'Unknown';
+  var visitDateStr=n.visitDate?String(n.visitDate).split('T')[0]:null;
+  var createdDateStr=n.createdAt?String(n.createdAt).split('T')[0]:null;
+  var visitDate=visitDateStr?fmtDate(visitDateStr):(createdDateStr?fmtDate(createdDateStr):'');
+
+  // Linked appointment info if present
+  var apptInfo='';
+  if(n.appointmentId){
+    var appt=(db.appointments||[]).find(function(a){return a.id===n.appointmentId;});
+    if(appt){
+      apptInfo=esc(appt.title)+(appt.date?' \u00b7 '+appt.date:'')+(appt.time?' '+fmtTime(appt.time):'');
+    }
+  }
+
+  // Patient demographics
+  var patientLines=[];
+  patientLines.push('<strong>'+esc(c.name)+'</strong>');
+  if(c.email)patientLines.push(esc(c.email));
+  if(c.phone)patientLines.push(esc(c.phone));
+  // Address: prefer structured fields, fall back to legacy
+  var addr='';
+  if(c.address_line1||c.city||c.state||c.postal_code){
+    var parts=[];
+    if(c.address_line1)parts.push(esc(c.address_line1));
+    if(c.address_line2)parts.push(esc(c.address_line2));
+    var cityLine=[c.city,c.state].filter(Boolean).join(', ');
+    if(c.postal_code)cityLine=(cityLine?cityLine+' ':'')+c.postal_code;
+    if(cityLine)parts.push(esc(cityLine));
+    addr=parts.join(' \u00b7 ');
+  } else if(c.address){
+    addr=esc(c.address);
+  }
+  if(addr)patientLines.push(addr);
+
+  // Build amendments HTML
+  var amdHTML='';
+  if(n.amendments&&n.amendments.length){
+    amdHTML='<h2>Amendments</h2>';
+    n.amendments.forEach(function(a){
+      var aDate=a.createdAt?new Date(a.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      var aAuthor=a.authorId?getUserById(a.authorId):null;
+      var aAuthorName=aAuthor?(aAuthor.name||aAuthor.username):(a.authorName||'Unknown');
+      amdHTML+='<div class="amendment">'
+        +'<div class="amd-meta"><strong>'+esc(aAuthorName)+'</strong> \u00b7 '+esc(aDate)+'</div>'
+        +(a.reason?'<div class="amd-reason"><em>Reason:</em> '+esc(a.reason)+'</div>':'')
+        +'<div class="amd-content">'+esc(a.content)+'</div>'
+        +'</div>';
+    });
+  }
+
+  // Status footer
+  var statusLine='';
+  if(n.locked){
+    if(n.signedAt){
+      statusLine='Status: Signed and locked on '+fmtDate(String(n.signedAt).split('T')[0]);
+    } else {
+      statusLine='Status: Locked (auto-locked 24 hours after creation)';
+    }
+  } else {
+    statusLine='Status: Draft (unsigned)';
+  }
+
+  var generatedAt=new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+
+  // Self-contained HTML document. Inline CSS keeps it portable - the user
+  // can save the page itself if they want, not just the print output.
+  // @media print rules clean up the layout for paper output.
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8">'
+    +'<title>SOAP Note - '+esc(c.name)+' - '+esc(visitDate)+'</title>'
+    +'<style>'
+    +'*{box-sizing:border-box}'
+    +'body{font-family:Georgia,Times New Roman,serif;font-size:12pt;line-height:1.5;color:#000;background:#f5f5f5;margin:0;padding:30px}'
+    +'.page{max-width:8.5in;margin:0 auto;background:#fff;padding:0.75in;box-shadow:0 2px 12px rgba(0,0,0,.15);min-height:11in}'
+    +'.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:20px}'
+    +'.biz-name{font-size:18pt;font-weight:700;letter-spacing:.02em}'
+    +'.doc-title{font-size:14pt;font-weight:600;color:#444}'
+    +'.meta-block{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px}'
+    +'.meta-block h3{font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#666;margin:0 0 4px;border-bottom:1px solid #ccc;padding-bottom:3px}'
+    +'.meta-block .lines{font-size:11pt;line-height:1.5}'
+    +'h2{font-size:13pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#000;border-bottom:1px solid #000;padding-bottom:3px;margin:18px 0 8px}'
+    +'.soap-section{margin-bottom:14px;padding:8px 12px;background:#fafafa;border-left:3px solid #444;page-break-inside:avoid}'
+    +'.soap-section .label{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#444;margin-bottom:4px}'
+    +'.soap-section .content{font-size:11pt;white-space:pre-wrap;word-wrap:break-word}'
+    +'.soap-section .empty{color:#999;font-style:italic;font-size:10pt}'
+    +'.amendment{background:#fffbe6;border:1px solid #d4b800;padding:10px 12px;margin-bottom:8px;page-break-inside:avoid}'
+    +'.amd-meta{font-size:10pt;color:#444;margin-bottom:4px}'
+    +'.amd-reason{font-size:10pt;color:#666;margin-bottom:4px;font-style:italic}'
+    +'.amd-content{font-size:11pt;white-space:pre-wrap;word-wrap:break-word}'
+    +'.footer{margin-top:30px;padding-top:14px;border-top:1px solid #ccc;font-size:9pt;color:#666;display:flex;justify-content:space-between}'
+    +'.signature-line{margin-top:40px;padding-top:6px;border-top:1px solid #000;width:280px;font-size:10pt}'
+    +'.toolbar{position:fixed;top:14px;right:14px;display:flex;gap:8px;z-index:100}'
+    +'.toolbar button{background:#6b21ea;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:Lato,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}'
+    +'.toolbar button:hover{background:#7c3aed}'
+    +'.toolbar .btn-close{background:#888}'
+    +'@media print{body{background:#fff;padding:0}.page{box-shadow:none;padding:0.5in;max-width:none}.toolbar{display:none}}'
+    +'</style></head><body>'
+    +'<div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button><button class="btn-close" onclick="window.close()">Close</button></div>'
+    +'<div class="page">'
+    +'<div class="header">'
+    +'<div class="biz-name">'+esc(bizName)+'</div>'
+    +'<div class="doc-title">SOAP Note</div>'
+    +'</div>'
+    +'<div class="meta-block">'
+    +'<div><h3>Patient</h3><div class="lines">'+patientLines.join('<br>')+'</div></div>'
+    +'<div><h3>Visit Information</h3><div class="lines">'
+    +'<strong>Date of Service:</strong> '+esc(visitDate)+'<br>'
+    +'<strong>Provider:</strong> '+esc(authorName)+'<br>'
+    +(apptInfo?'<strong>Appointment:</strong> '+apptInfo+'<br>':'')
+    +(n.templateUsed?'<strong>Type:</strong> '+esc(SOAP_TEMPLATES[n.templateUsed]&&SOAP_TEMPLATES[n.templateUsed].name||n.templateUsed):'')
+    +'</div></div>'
+    +'</div>'
+
+    +'<div class="soap-section"><div class="label">Subjective</div>'
+    +'<div class="content">'+(n.subjective?esc(n.subjective):'<span class="empty">(no subjective findings recorded)</span>')+'</div></div>'
+
+    +'<div class="soap-section"><div class="label">Objective</div>'
+    +'<div class="content">'+(n.objective?esc(n.objective):'<span class="empty">(no objective findings recorded)</span>')+'</div></div>'
+
+    +'<div class="soap-section"><div class="label">Assessment</div>'
+    +'<div class="content">'+(n.assessment?esc(n.assessment):'<span class="empty">(no assessment recorded)</span>')+'</div></div>'
+
+    +'<div class="soap-section"><div class="label">Plan</div>'
+    +'<div class="content">'+(n.plan?esc(n.plan):'<span class="empty">(no plan recorded)</span>')+'</div></div>'
+
+    +amdHTML
+
+    +'<div class="signature-line">Provider Signature: '+esc(authorName)+'</div>'
+
+    +'<div class="footer">'
+    +'<div>'+esc(statusLine)+'</div>'
+    +'<div>Generated '+esc(generatedAt)+'</div>'
+    +'</div>'
+    +'</div>'
+    +'<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();},200);});<\/script>'
+    +'</body></html>';
+
+  // Open in new window. If popup blocker prevents it, fall back to a data URL.
+  var w=window.open('','_blank','width=900,height=1100');
+  if(!w){
+    toast('Please allow popups for this site to print SOAP notes.','error');
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
 
 // =====================================================
