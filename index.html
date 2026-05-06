@@ -196,16 +196,20 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .page-subtitle{font-size:12px;color:var(--main-text-muted);margin-top:2px}
 
 /* DASHBOARD */
-.dash-greeting h2{font-family:'Exo 2',sans-serif;font-size:24px;font-weight:800;margin-bottom:4px;color:var(--main-text)}
+.dash-greeting{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.dash-greeting h2{font-family:'Exo 2',sans-serif;font-size:24px;font-weight:800;margin-bottom:0;color:var(--main-text)}
 .dash-greeting h2 span{color:var(--orange)}
-.dash-datetime{font-size:13px;color:var(--main-text-muted);margin-bottom:18px}
+.dash-datetime{font-size:13px;color:var(--main-text-muted)}
 .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
 .stat-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);
   padding:14px 16px;border-top:2px solid var(--purple);box-shadow:0 2px 12px rgba(107,33,234,.07)}
 .stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;margin-bottom:4px}
 .stat-val{font-family:'Exo 2',sans-serif;font-size:24px;font-weight:800;color:var(--main-text)}
-.dash-grid{display:grid;grid-template-columns:3fr 2fr;gap:16px}
+.dash-grid{display:grid;grid-template-columns:3fr 2fr;gap:16px;align-items:start}
 .dash-grid-left{display:flex;flex-direction:column;gap:16px;min-width:0}
+.dash-card-fixed{display:flex;flex-direction:column}
+.dash-card-fixed .dash-scroll-list{max-height:280px;min-height:160px}
+.dash-card-activity .dash-scroll-list{max-height:600px}
 @media (max-width:900px){.dash-grid{grid-template-columns:1fr}}
 .dash-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;box-shadow:0 2px 12px rgba(107,33,234,.07)}
 .dash-card-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
@@ -228,7 +232,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .dash-hero-sub{font-size:11px;color:var(--main-text-muted)}
 
 /* Quick action buttons */
-.dash-quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.dash-quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
 .dash-qa-btn{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .15s;font-family:inherit;color:var(--main-text);text-align:left}
 .dash-qa-btn:hover{border-color:var(--orange);background:var(--main-card-hover);transform:translateY(-1px)}
 .dash-qa-btn svg{width:18px;height:18px;color:var(--orange);flex-shrink:0}
@@ -1197,32 +1201,34 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
       <!-- DASHBOARD -->
       <div id="panel-dashboard" class="panel">
-        <div class="dash-greeting"><h2 id="dash-greet"></h2><div class="dash-datetime" id="dash-time"></div></div>
+        <div class="dash-greeting">
+          <h2 id="dash-greet"></h2>
+          <div class="dash-datetime" id="dash-time"></div>
+        </div>
         <div id="dash-hero"></div>
-        <div id="dash-quick-actions" class="dash-quick-actions"></div>
         <div class="dash-week" id="dash-week"></div>
         <div class="dash-grid">
           <div class="dash-grid-left">
-            <div class="dash-card">
+            <div class="dash-card dash-card-fixed">
               <div class="dash-card-title-row">
                 <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Today's Appointments</div>
                 <div id="dash-appt-toggle"></div>
               </div>
               <div id="dash-appts" class="dash-scroll-list"></div>
             </div>
-            <div class="dash-card">
+            <div class="dash-card dash-card-fixed">
               <div class="dash-card-title-row">
                 <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Tasks Due Soon</div>
-                <div id="dash-task-toggle"></div>
               </div>
               <div id="dash-tasks" class="dash-scroll-list"></div>
             </div>
           </div>
-          <div class="dash-card">
+          <div class="dash-card dash-card-activity">
             <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Recent Activity</div>
             <div id="dash-activity" class="dash-scroll-list"></div>
           </div>
         </div>
+        <div id="dash-quick-actions" class="dash-quick-actions"></div>
       </div>
 
       <!-- CONTACTS -->
@@ -2750,14 +2756,7 @@ function renderDash(){
     }
   }
   const taskToggleEl=document.getElementById('dash-task-toggle');
-  if(taskToggleEl){
-    // Mirror the appointment toggle for consistency (single state controls both)
-    if(isAdminish){
-      taskToggleEl.innerHTML='<span style="font-size:10px;color:var(--main-text-muted)">'+(scope==='me'?'Just me':'All')+'</span>';
-    } else {
-      taskToggleEl.innerHTML='';
-    }
-  }
+  if(taskToggleEl)taskToggleEl.innerHTML='';
 
   const ae=document.getElementById('dash-appts');
   if(!todayAppts.length){
@@ -2780,14 +2779,15 @@ function renderDash(){
     }).join('');
   }
 
-  // Tasks: overdue + due today + due tomorrow, scoped to user (or all for admin)
+  // Tasks: overdue + due today + due tomorrow. Always scoped to the current
+  // user regardless of admin/manager dashboard scope toggle. Admins can see
+  // the full team task view in the Tasks tab.
   const tomorrowDate=new Date();tomorrowDate.setDate(tomorrowDate.getDate()+1);
   const tomorrow=tomorrowDate.getFullYear()+'-'+String(tomorrowDate.getMonth()+1).padStart(2,'0')+'-'+String(tomorrowDate.getDate()).padStart(2,'0');
   const dueTasks=db.tasks.filter(function(t){
     if(t.status==='done')return false;
-    if(scope==='me' && t.assignedTo && t.assignedTo!==uid)return false;
+    if(t.assignedTo && t.assignedTo!==uid)return false;
     if(!t.dueDate)return false;
-    // Include: overdue (date < today), due today (date === today), due tomorrow
     return t.dueDate<=tomorrow;
   }).sort(function(a,b){return (a.dueDate||'9').localeCompare(b.dueDate||'9');});
 
@@ -2917,15 +2917,17 @@ function _renderDashHero(td, uid, scope, isAdminish){
   }
 
   // Open tasks count (scoped)
+  // Open tasks count: always scoped to current user (admins see team-wide
+  // view in the Tasks tab; dashboard reflects personal accountability).
   const openTasks=db.tasks.filter(function(t){
     if(t.status==='done')return false;
-    if(scope==='me' && t.assignedTo && t.assignedTo!==uid)return false;
+    if(t.assignedTo && t.assignedTo!==uid)return false;
     return true;
   }).length;
   const tasksBlock='<div class="dash-hero-block">'
     +'<div class="dash-hero-label">Open Tasks</div>'
     +'<div class="dash-hero-val">'+openTasks+'</div>'
-    +'<div class="dash-hero-sub">'+(scope==='me'?'assigned to you':'across the team')+'</div>'
+    +'<div class="dash-hero-sub">assigned to you</div>'
     +'</div>';
 
   el.className='dash-hero';
@@ -13088,8 +13090,7 @@ function renderDashWeek(){
   const dow=now.getDay();
   const td=todayStr();
 
-  let h='<div class="dash-week-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>My Week</div>';
-  h+='<div class="week-sched-grid">';
+  let h='<div class="week-sched-grid">';
 
   for(var i=0;i<7;i++){
     const d=new Date(now);d.setDate(now.getDate()-dow+i);
