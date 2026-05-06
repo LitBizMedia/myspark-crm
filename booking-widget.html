@@ -1240,8 +1240,11 @@ function renderTime(el) {
     }).join('') + `</div>`;
   }
 
+  const tzSrv = D.settings && D.settings.timezone;
+  const tzNote = tzSrv ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">All times shown in ${tzLabel(tzSrv)}</div>` : '';
   el.innerHTML = `<div class="bw-section-title">Available Times</div>
     <div class="bw-section-sub">${S.date ? fmtDate(S.date) : ''}</div>
+    ${tzNote}
     ${slotsHtml}
     <div class="bw-nav">
       <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
