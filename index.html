@@ -2161,12 +2161,91 @@ function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
 // Legacy sync code removed - using server-side subaccount_data
 
 function setSyncSt(s){
+  if(s==='synced')_lastSyncMs=Date.now();
   ['','2'].forEach(x=>{
     const dot=document.getElementById('sync-dot'+x),lbl=document.getElementById('sync-lbl'+x);
     if(dot)dot.className='sync-dot '+s;
-    if(lbl)lbl.textContent={synced:'Synced',syncing:'Syncing...',error:'Sync Error'}[s]||'–';
+    if(lbl)lbl.textContent=_syncLabelFor(s);
   });
 }
+
+// Sync label takes the current state and (when synced) appends "X ago".
+// Updated periodically by _tickSyncLabel so it stays current without re-fetching.
+var _lastSyncMs=null;
+function _syncLabelFor(s){
+  if(s==='syncing')return 'Syncing...';
+  if(s==='error')return 'Sync Error';
+  if(s==='synced'){
+    if(!_lastSyncMs)return 'Synced';
+    var ago=_relTime(_lastSyncMs);
+    return 'Synced '+ago;
+  }
+  return '–';
+}
+function _relTime(ms){
+  var d=Math.max(0,Math.floor((Date.now()-ms)/1000));
+  if(d<5)return 'now';
+  if(d<60)return d+'s ago';
+  var m=Math.floor(d/60);
+  if(m<60)return m+'m ago';
+  var h=Math.floor(m/60);
+  return h+'h ago';
+}
+function _tickSyncLabel(){
+  var dot=document.getElementById('sync-dot');
+  if(!dot)return;
+  if(dot.classList.contains('synced')&&_lastSyncMs){
+    var lbl=document.getElementById('sync-lbl');
+    if(lbl)lbl.textContent=_syncLabelFor('synced');
+    var lbl2=document.getElementById('sync-lbl2');
+    if(lbl2)lbl2.textContent=_syncLabelFor('synced');
+  }
+}
+setInterval(_tickSyncLabel, 10000);
+
+// Background polling: refresh db from the server every 30 seconds while the
+// tab is focused. Skips when a modal is open or the tab is hidden, to avoid
+// disrupting active user input. After refresh, re-renders the current view
+// so other users' changes appear without a manual reload.
+var _pollIntervalMs=30000;
+var _pollTimer=null;
+function startBackgroundPoll(){
+  if(_pollTimer)clearInterval(_pollTimer);
+  _pollTimer=setInterval(_pollTick, _pollIntervalMs);
+}
+function _pollTick(){
+  // Don't poll if tab is in background - saves Lambda invocations
+  if(document.hidden)return;
+  // Don't poll if a modal is open - avoid disrupting active user input
+  var overlay=document.getElementById('modal-overlay');
+  if(overlay&&overlay.classList.contains('open'))return;
+  // Don't poll if we're already mid-sync
+  var dot=document.getElementById('sync-dot');
+  if(dot&&dot.classList.contains('syncing'))return;
+  // Don't poll on the login screen (state.user not set yet)
+  if(!state||!state.user||!state.user.id)return;
+
+  fetchFromServer().then(function(ok){
+    if(!ok)return;
+    // Re-render the view that's currently visible. fetchFromServer mutates db
+    // in place, so we just need to redraw whatever the user is looking at.
+    try{
+      if(state.panel==='calendar')renderCal();
+      if(typeof renderApptList==='function')renderApptList();
+      if(state.panel==='contacts'&&typeof renderContacts==='function')renderContacts();
+      if(state.drawer&&typeof renderDrawer==='function')renderDrawer();
+    }catch(e){console.warn('poll redraw error',e);}
+  });
+}
+// Refresh immediately when tab regains focus (handles return from break, etc.)
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden && state && state.user && state.user.id){
+    _pollTick();
+  }
+});
+// Kick off polling once the app is ready. Wrapped in a small delay so initial
+// load completes before we start hammering the server.
+setTimeout(startBackgroundPoll, 5000);
 
 // =====================================================
 // AUDIT (HIPAA: PHI access logging)
@@ -5731,15 +5810,20 @@ function sendApptConfirmation(data){
   fetch(apiUrl('/api/email/send'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:state.subaccountSlug,to:contact.email,subject:'Appointment Confirmed: '+data.title+' on '+dateStr,html:html,fromName:bizName,templateType:'appt-confirmation',contactId:contact.id,vars:{contact_name:contact.name,contact_email:contact.email||'',contact_phone:contact.phone||'',appointment_date:dateStr,appointment_time:timeStr,appointment_service:data.title,staff_name:staffName,business_name:bizName}})}).catch(function(){});
 }
 
-function syncAppointment(appt,deleted){
+// Sync appointment to server. Returns a promise resolving to:
+//   { ok: true } on success
+//   { ok: false, conflict: {...} } if server detected a 409 race-condition
+//   { ok: false, error: '...' } on other failures
+// The override flag re-attempts the save bypassing the server's conflict check
+// (used when the user has confirmed they want to double-book intentionally).
+function syncAppointment(appt, deleted, override){
   if(deleted){
-    fetch(apiUrl('/api/subaccount/appointments-delete'),{
+    return fetch(apiUrl('/api/subaccount/appointments-delete'),{
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({id:appt.id})
-    }).catch(function(){});
-    return;
+    }).then(function(r){return {ok:r.ok};}).catch(function(){return {ok:false};});
   }
   var payload={
     id:appt.id,
@@ -5757,12 +5841,19 @@ function syncAppointment(appt,deleted){
     service_id:appt.service_id||null,
     service_variation_id:appt.service_variation_id||null
   };
-  fetch(apiUrl('/api/subaccount/appointments-upsert'),{
+  if(override)payload.override=true;
+  return fetch(apiUrl('/api/subaccount/appointments-upsert'),{
     method:'POST',
     credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(payload)
-  }).catch(function(){});
+  }).then(function(r){
+    if(r.ok)return {ok:true};
+    if(r.status===409){
+      return r.json().then(function(j){return {ok:false,conflict:j.conflict||null};}).catch(function(){return {ok:false};});
+    }
+    return {ok:false,error:'http_'+r.status};
+  }).catch(function(){return {ok:false,error:'network'};});
 }
 
 // Backward-compat alias for renamed function. Drop in future cleanup.
@@ -5781,17 +5872,86 @@ function saveAppt(){
   const data={title,contactId:document.getElementById('af-cv').value||null,date,time:document.getElementById('af-time').value,duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0,service_id:serviceId,service_variation_id:variationId};
   var isNewAppt=!state.modal.id;
   var apptIdForAudit=state.modal.id||null;
-  if(state.modal.id){const a=getAppt(state.modal.id);if(a)Object.assign(a,data)}
-  else{var newAppt={id:uid(),...data,createdAt:now_()};db.appointments.push(newAppt);apptIdForAudit=newAppt.id;sendApptConfirmation(data);syncAppointment(newAppt,false);}
-  if(state.modal.id){const updated=getAppt(state.modal.id);if(updated)syncAppointment(updated,false);}
-  saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();updateNotifBadge();
-  // Audit
-  logSubaccountAudit(isNewAppt ? 'subaccount.appointment.create' : 'subaccount.appointment.update', {
-    targetId: apptIdForAudit,
-    targetType: 'appointment',
-    metadata: { title: data.title, date: data.date, time: data.time, contact_id: data.contactId, assigned_to: data.assignedTo, status: data.status, service_id: serviceId, service_variation_id: variationId }
+  // Snapshot state for potential rollback if the server returns a 409 race conflict
+  var rollback=null;
+  if(state.modal.id){
+    const a=getAppt(state.modal.id);
+    if(a){rollback={kind:'update',id:a.id,prev:JSON.parse(JSON.stringify(a))};Object.assign(a,data);}
+  } else {
+    var newAppt={id:uid(),...data,createdAt:now_()};
+    db.appointments.push(newAppt);
+    apptIdForAudit=newAppt.id;
+    rollback={kind:'create',id:newAppt.id};
+    sendApptConfirmation(data);
+  }
+  var apptForSync = state.modal.id ? getAppt(state.modal.id) : db.appointments[db.appointments.length-1];
+  // Override flag: user already overrode in the local conflict UI (apptOverride),
+  // tell the server to skip its own race check.
+  syncAppointment(apptForSync, false, !!apptOverride).then(function(res){
+    if(res && res.ok){
+      // Audit only on success
+      logSubaccountAudit(isNewAppt ? 'subaccount.appointment.create' : 'subaccount.appointment.update', {
+        targetId: apptIdForAudit,
+        targetType: 'appointment',
+        metadata: { title: data.title, date: data.date, time: data.time, contact_id: data.contactId, assigned_to: data.assignedTo, status: data.status, service_id: serviceId, service_variation_id: variationId }
+      });
+      return;
+    }
+    if(res && res.conflict){
+      // Server detected a race condition - another user booked this slot while
+      // this client had stale data. Rollback the local change and show a
+      // conflict warning so the user can decide whether to override.
+      _rollbackAppt(rollback);
+      saveData();
+      if(state.panel==='calendar')renderCal();
+      typeof renderApptList==='function'&&renderApptList();
+      var c=res.conflict;
+      var staffName='another staff member';
+      try{
+        var u=allUsers().find(function(x){return x.id===data.assignedTo;});
+        if(u)staffName=u.name||u.username||'this staff member';
+      }catch(e){}
+      var msg='Scheduling conflict: '+staffName+' was just booked for "'+esc(c.title||'an appointment')+'" at '+(c.time?fmtTime(c.time):'this time')+'. Refresh and try a different time, or override to schedule anyway.';
+      // Reopen the modal with a warning + override button
+      _showApptConflictRecovery(msg, data, isNewAppt, state.modal&&state.modal.id);
+      return;
+    }
+    toast('Could not save appointment. Check your connection.','error');
   });
+  saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();updateNotifBadge();
   toast(isNewAppt?'Appointment saved.':'Appointment updated.','success');
+}
+
+// Roll back an optimistic save. Used when the server returns 409 conflict.
+function _rollbackAppt(rb){
+  if(!rb)return;
+  if(rb.kind==='create'){
+    db.appointments=db.appointments.filter(function(a){return a.id!==rb.id;});
+  } else if(rb.kind==='update'){
+    var idx=db.appointments.findIndex(function(a){return a.id===rb.id;});
+    if(idx>=0&&rb.prev)db.appointments[idx]=rb.prev;
+  }
+}
+
+// Show a recovery modal when the server reports a race-condition conflict
+// after the user already saved locally. They can dismiss (the local change is
+// already rolled back) or override (re-open the appointment editor with the
+// override flag pre-set so the next save bypasses the server check).
+function _showApptConflictRecovery(message, data, isNew, editingId){
+  state.modal={type:'appt-conflict'};
+  document.getElementById('modal-title').textContent='Scheduling Conflict';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">'+message+'</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Dismiss</button><button class="btn btn-primary" onclick="_reopenWithOverride(\''+(editingId||'')+'\')">Reopen and Override</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+  // Stash the form data so we could re-prefill if needed (currently just reopens)
+  state._pendingApptData=data;
+  state._pendingApptEditId=editingId;
+}
+function _reopenWithOverride(editingId){
+  closeModal();
+  apptOverride=true;
+  openApptModal(null, editingId||null);
 }
 
 function delAppt(id){

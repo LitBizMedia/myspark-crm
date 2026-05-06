@@ -6,10 +6,6 @@
 // can show service color stripes and so booking flows can prefill from
 // catalog services. Both fields are nullable; existing free-form appointments
 // continue to work unchanged.
-//
-// Phase C.1 update: persists buffer_before and buffer_after. Frontend has been
-// sending these all along but the Lambda was silently dropping them. Columns
-// added to appointments table in 2026-05-03-phase-c-1-buffers.sql migration.
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
@@ -58,18 +54,59 @@ async function handler(req, res) {
     );
     const isNew = existing.rows.length === 0;
 
-    // Coerce buffer values: accept number or numeric string, default 0.
-    const bufferBefore = parseInt(a.buffer_before, 10);
-    const bufferAfter  = parseInt(a.buffer_after, 10);
+    // Race-condition check: detect double-booking by another user that wasn't
+    // visible in this client's stale state. Frontend has its own check using
+    // local db.appointments, but if another staff member just booked the same
+    // slot, that data wouldn't be on this client until the next refresh.
+    //
+    // The frontend can already override conflicts intentionally (legitimate
+    // overlapping appointments do exist). When the user has chosen to override,
+    // they pass `override: true` in the body and we skip this check.
+    //
+    // Only checks scheduled status; cancelled/no-show appointments don't block.
+    if (a.assignedTo && a.date && a.time && !req.body.override) {
+      const dur = parseInt(a.duration) || 60;
+      const conflict = await db.query(`
+        SELECT id, title, time, duration FROM appointments
+        WHERE subaccount_id = $1
+          AND assigned_to = $2
+          AND date = $3
+          AND status = 'scheduled'
+          AND id != $4
+          AND (
+            -- New appt starts during existing one
+            ($5::time >= time AND $5::time < (time + (duration || ' minutes')::interval))
+            OR
+            -- New appt ends during existing one
+            (($5::time + ($6 || ' minutes')::interval) > time AND $5::time < time)
+            OR
+            -- New appt fully contains existing one
+            ($5::time <= time AND ($5::time + ($6 || ' minutes')::interval) >= (time + (duration || ' minutes')::interval))
+          )
+        LIMIT 1
+      `, [subaccountId, a.assignedTo, a.date, a.id, a.time, String(dur)]);
+
+      if (conflict.rows.length > 0) {
+        const c = conflict.rows[0];
+        return res.status(409).json({
+          error: 'conflict',
+          conflict: {
+            id: c.id,
+            title: c.title,
+            time: typeof c.time === 'string' ? c.time : (c.time && c.time.toString().slice(0,5)),
+            duration: c.duration
+          }
+        });
+      }
+    }
 
     await db.query(`
       INSERT INTO appointments (
         id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
         status, location, notes, service_id, service_variation_id,
-        buffer_before, buffer_after,
         created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
         contact_id = EXCLUDED.contact_id,
@@ -82,17 +119,13 @@ async function handler(req, res) {
         notes = EXCLUDED.notes,
         service_id = EXCLUDED.service_id,
         service_variation_id = EXCLUDED.service_variation_id,
-        buffer_before = EXCLUDED.buffer_before,
-        buffer_after = EXCLUDED.buffer_after,
         updated_at = NOW()
       WHERE appointments.subaccount_id = $2
     `, [
       a.id, subaccountId, a.title, a.contactId || null, a.assignedTo || null,
       a.date, a.time || null, parseInt(a.duration) || 60,
       a.status || 'scheduled', a.location || null, a.notes || null,
-      a.service_id || null, a.service_variation_id || null,
-      isNaN(bufferBefore) ? 0 : bufferBefore,
-      isNaN(bufferAfter)  ? 0 : bufferAfter
+      a.service_id || null, a.service_variation_id || null
     ]);
 
     await logAudit({
@@ -113,9 +146,7 @@ async function handler(req, res) {
         assigned_to: a.assignedTo,
         status: a.status,
         service_id: a.service_id || null,
-        service_variation_id: a.service_variation_id || null,
-        buffer_before: isNaN(bufferBefore) ? 0 : bufferBefore,
-        buffer_after:  isNaN(bufferAfter)  ? 0 : bufferAfter
+        service_variation_id: a.service_variation_id || null
       }
     });
 
