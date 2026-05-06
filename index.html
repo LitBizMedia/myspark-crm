@@ -955,6 +955,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .credit-hist-row:last-child{border-bottom:none}
 .credit-pos{color:#34d399;font-weight:700}
 .credit-neg{color:#f87171;font-weight:700}
+.dpay-tile{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px}
+.dpay-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px}
+.dpay-tile-val{font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;color:var(--text);line-height:1.2}
 
 /* Media Library */
 .media-grid-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-top:14px}
@@ -3126,7 +3129,21 @@ function openDrawer(id){
   });
 }
 function closeDrawer(){document.getElementById('drawer-overlay').classList.remove('open');document.getElementById('contact-drawer').classList.remove('open');state.drawer=null}
-function switchDTab(t){state.dTab=t;renderDrawer()}
+function switchDTab(t){
+  // Reset sub-tab pagination/state when leaving a tab so a return visit
+  // shows the default view, not whatever the user was last digging into.
+  if(state.dTab!==t){
+    state.dApptShowAll=false;
+    state.dPaySubFilter=null;
+    state.dPayDateRange=null;
+  }
+  state.dTab=t;
+  renderDrawer();
+}
+function setDApptTab(t){state.dApptTab=t;state.dApptShowAll=false;renderDrawer();}
+function dApptShowAll(){state.dApptShowAll=true;renderDrawer();}
+function dApptCollapse(){state.dApptShowAll=false;renderDrawer();}
+function setDPayTab(t){state.dPayTab=t;renderDrawer();}
 
 function renderDrawer(){
   const c=getContact(state.drawer);if(!c)return;
@@ -3178,16 +3195,41 @@ function renderDrawer(){
       +(notes.length?notes.map(n=>'<div class="note-item"><div style="display:flex;justify-content:space-between;align-items:center"><span class="note-date">'+new Date(n.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})+'</span><div style="display:flex;gap:3px"><button class="icon-btn-xs" onclick="openNoteModal(\''+c.id+'\',\''+n.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delNote(\''+c.id+'\',\''+n.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div><div class="note-text">'+esc(n.text)+'</div></div>').join('')
       :'<div style="color:var(--text-muted);font-size:13px;padding-top:8px">No notes yet.</div>');
   }else if(state.dTab==='appointments'){
+    // Default to upcoming view; reset 'show all' flag when switching tabs
+    if(!state.dApptTab)state.dApptTab='upcoming';
     const sorted=cAppts.sort((a,b)=>a.date.localeCompare(b.date));
-    const up=sorted.filter(a=>a.date>=todayStr()&&a.status!=='cancelled'),past=sorted.filter(a=>a.date<todayStr()||a.status==='cancelled');
+    const up=sorted.filter(a=>a.date>=todayStr()&&a.status!=='cancelled');
+    const past=sorted.filter(a=>a.date<todayStr()||a.status==='cancelled').reverse();
     const aHTML=arr=>arr.map(a=>{
       const u=a.assignedTo?getUserById(a.assignedTo):null,uc=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
       const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
       return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span>'+payPill+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
     }).join('');
-    body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Upcoming ('+up.length+')</div><button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">+ Book</button></div>'
-      +'<div style="margin-top:8px">'+(up.length?aHTML(up):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No upcoming appointments.</div>')+'</div>'
-      +(past.length?'<div class="sec-label" style="margin-top:14px">Past ('+past.length+')</div>'+aHTML(past):'');
+    // Sub-tab pill row + Book button on the right
+    const subTabs='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">'
+      +'<div class="task-chip-row" style="margin-bottom:0">'
+      +'<button class="chip'+(state.dApptTab==='upcoming'?' active':'')+'" onclick="setDApptTab(\'upcoming\')">Upcoming ('+up.length+')</button>'
+      +'<button class="chip'+(state.dApptTab==='past'?' active':'')+'" onclick="setDApptTab(\'past\')">Past ('+past.length+')</button>'
+      +'</div>'
+      +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">+ Book</button>'
+      +'</div>';
+    // Active list with truncation: show first 10 unless user expanded
+    const active=state.dApptTab==='past'?past:up;
+    const showAll=!!state.dApptShowAll;
+    const visible=showAll?active:active.slice(0,10);
+    const remaining=active.length-visible.length;
+    let listHTML;
+    if(!active.length){
+      listHTML='<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No '+state.dApptTab+' appointments.</div>';
+    }else{
+      listHTML=aHTML(visible);
+      if(remaining>0){
+        listHTML+='<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" onclick="dApptShowAll()">Show all '+active.length+'</button>';
+      }else if(showAll&&active.length>10){
+        listHTML+='<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" onclick="dApptCollapse()">Show less</button>';
+      }
+    }
+    body=subTabs+'<div>'+listHTML+'</div>';
   }else if(state.dTab==='tasks'){
     const open=cTasks.filter(t=>t.status!=='done'),done=cTasks.filter(t=>t.status==='done');
     const tHTML=arr=>arr.map(function(t){
@@ -3201,33 +3243,249 @@ function renderDrawer(){
   }else if(state.dTab==='cards'){
     body=renderCardsTab(c);
   }else if(state.dTab==='payments'){
-    const activeSubs=cSubs.filter(s=>s.status==='active');
-    const subHTML=activeSubs.length?activeSubs.map(s=>{
-      const cycle=s.billingCycle||'monthly';
-      const total=(s.items||[]).reduce((t,i)=>t+(i.price*( i.qty||1)),0);
-      return'<div class="appt-row-sm" style="cursor:pointer;border-left-color:#34d399" onclick="openSubDetail(\''+s.id+'\')">'
-        +'<div style="flex:1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+'</div>'
-        +'<div class="appt-sm-meta">'+fmtDate(s.startDate)+' · '+fmt$(total)+'/'+cycle+'</div>'
-        +'<span class="sub-cycle-badge">'+cycle+'</span></div>'
-        +'<span class="sub-pay-badge '+(s.paymentStatus==='paid'?'spb-paid':s.paymentStatus==='overdue'?'spb-overdue':'spb-unpaid')+'">'+( s.paymentStatus||'unpaid')+'</span></div>';
-    }).join(''):'<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No active subscriptions.</div>';
-    const recentPays=[...cPays].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,10);
-    const payHTML=recentPays.length?recentPays.map(p=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">'
-      +'<div><div style="font-size:13px;font-weight:500;color:var(--text)">'+(p.items&&p.items.length?esc(p.items[0].desc)+(p.items.length>1?' + '+(p.items.length-1)+' more':''):'Payment')+'</div>'
-      +'<div style="font-size:11px;color:var(--text-muted)">'+(p.createdAt?new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'')+'</div></div>'
-      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(p.total)+'</div></div>').join('')
-      :'<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No purchase history.</div>';
-    body=renderContactCredits(c.id)
-      +renderContactSessionPacks(c.id)
-      +'<div class="sec-row" style="margin-top:14px"><div class="sec-label" style="margin-bottom:0">Active Subscriptions ('+activeSubs.length+')</div><button class="btn btn-purple btn-sm" onclick="openSubModal(null,\''+c.id+'\')">+ New</button></div>'
-      +'<div style="margin-top:8px">'+subHTML+'</div>'
-      +'<div class="sec-label" style="margin-top:16px">Purchase History</div>'+payHTML
-      +'<div class="sec-label" style="margin-top:16px">Invoices</div><div style="font-size:13px;color:var(--text-muted);padding:6px 0;font-style:italic">Invoicing coming soon.</div>';
+    if(!state.dPayTab)state.dPayTab='overview';
+    body=_renderDPaymentsTab(c,cSubs,cPays);
   }
   document.getElementById('drawer-content').innerHTML=
     '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Archive</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
     +'<div class="drawer-tabs">'+tabs.map(t=>'<button class="drawer-tab'+(state.dTab===t?' active':'')+'" onclick="switchDTab(\''+t+'\')">'+labels[t]+'</button>').join('')+'</div>'
     +'<div class="drawer-body" id="drawer-tab-body">'+body+'</div>';
+}
+
+// =====================================================
+// CONTACT DRAWER - PAYMENTS SUB-TABS
+// =====================================================
+// The payments tab is split into five sub-views to keep each list focused
+// and prevent the drawer from becoming a wall of unrelated rows. Default
+// is Overview; switching tabs preserves state.dPayTab between renders.
+function _renderDPaymentsTab(c,cSubs,cPays){
+  const tab=state.dPayTab||'overview';
+  const subTabs='<div class="task-chip-row" style="margin-bottom:14px">'
+    +'<button class="chip'+(tab==='overview'?' active':'')+'" onclick="setDPayTab(\'overview\')">Overview</button>'
+    +'<button class="chip'+(tab==='transactions'?' active':'')+'" onclick="setDPayTab(\'transactions\')">Transactions</button>'
+    +'<button class="chip'+(tab==='subscriptions'?' active':'')+'" onclick="setDPayTab(\'subscriptions\')">Subscriptions</button>'
+    +'<button class="chip'+(tab==='packs'?' active':'')+'" onclick="setDPayTab(\'packs\')">Session Packs</button>'
+    +'<button class="chip'+(tab==='giftcards'?' active':'')+'" onclick="setDPayTab(\'giftcards\')">Gift Cards</button>'
+    +'</div>';
+  let inner='';
+  if(tab==='overview')inner=_dPayOverview(c,cSubs,cPays);
+  else if(tab==='transactions')inner=_dPayTransactions(c,cPays);
+  else if(tab==='subscriptions')inner=_dPaySubscriptions(c,cSubs);
+  else if(tab==='packs')inner=_dPayPacks(c);
+  else if(tab==='giftcards')inner=_dPayGiftCards(c);
+  return subTabs+inner;
+}
+
+// Overview: account credits + lifetime stat tiles. The "stat tile" pattern
+// is the same one used on the dashboard hero card so the visual language
+// stays consistent.
+function _dPayOverview(c,cSubs,cPays){
+  const cr=getContactCredits(c.id);
+  const completedPays=cPays.filter(function(p){return p.status==='completed'||p.status==='partial_refund';});
+  const lifetimeSpent=completedPays.reduce(function(s,p){
+    const refunded=parseFloat(p.refundedAmount||0);
+    return s+(parseFloat(p.total||0)-refunded);
+  },0);
+  const sortedPays=[...cPays].sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');});
+  const lastPay=sortedPays[0];
+  const lastPayDate=lastPay&&lastPay.createdAt?new Date(lastPay.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'No payments yet';
+  const activeSubs=cSubs.filter(function(s){return s.status==='active';}).length;
+
+  // Credits card uses the existing visual; add quick-add/deduct affordance
+  let h='<div class="credit-balance-card" style="margin-bottom:12px">'
+    +'<div><div class="credit-balance-label">Account Credits</div><div class="credit-balance-amt">$'+cr.balance.toFixed(2)+'</div></div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button class="btn btn-purple btn-sm" onclick="openCreditModal(\''+c.id+'\',\'add\')">+ Add</button>'
+    +'<button class="btn btn-danger btn-sm" onclick="openCreditModal(\''+c.id+'\',\'deduct\')">- Deduct</button>'
+    +'</div></div>';
+
+  // Three summary tiles
+  h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">'
+    +'<div class="dpay-tile"><div class="dpay-tile-label">Lifetime Spent</div><div class="dpay-tile-val">'+fmt$(lifetimeSpent)+'</div></div>'
+    +'<div class="dpay-tile"><div class="dpay-tile-label">Last Payment</div><div class="dpay-tile-val" style="font-size:13px">'+lastPayDate+'</div></div>'
+    +'<div class="dpay-tile"><div class="dpay-tile-label">Active Subs</div><div class="dpay-tile-val">'+activeSubs+'</div></div>'
+    +'</div>';
+
+  // Recent credit log: the credits balance card already shows the balance,
+  // but seeing the last few add/deducts gives context. Limit to 5.
+  if(cr.history&&cr.history.length){
+    h+='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:6px">Recent Credit History</div>';
+    cr.history.slice(0,5).forEach(function(entry){
+      const delta=entry.type==='add'?'+'+entry.amount.toFixed(2):'-'+entry.amount.toFixed(2);
+      h+='<div class="credit-hist-row">'
+        +'<span class="'+(entry.type==='add'?'credit-pos':'credit-neg')+'">'+delta+'</span>'
+        +'<span style="flex:1;font-size:12px;color:var(--text)">'+esc(entry.note||'No reason given')+'</span>'
+        +'<span style="font-size:11px;color:var(--text-muted)">'+fmtDate(entry.date&&entry.date.split('T')[0]||'')+'</span>'
+        +'</div>';
+    });
+  }
+  return h;
+}
+
+// Transactions: full payment list with optional date-range filter chips.
+// Voided payments are still shown so the user can see what was attempted;
+// they're styled muted.
+function _dPayTransactions(c,cPays){
+  const range=state.dPayDateRange||'all';
+  const today=new Date();today.setHours(0,0,0,0);
+  let cutoff=null;
+  if(range==='30')cutoff=new Date(today.getTime()-30*86400000);
+  else if(range==='90')cutoff=new Date(today.getTime()-90*86400000);
+  else if(range==='365')cutoff=new Date(today.getTime()-365*86400000);
+  const filtered=cPays.filter(function(p){
+    if(!cutoff)return true;
+    if(!p.createdAt)return false;
+    return new Date(p.createdAt)>=cutoff;
+  }).sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');});
+
+  let h='<div class="task-chip-row" style="margin-bottom:10px">'
+    +'<button class="chip'+(range==='all'?' active':'')+'" onclick="setDPayDateRange(null)">All time</button>'
+    +'<button class="chip'+(range==='30'?' active':'')+'" onclick="setDPayDateRange(\'30\')">Last 30 days</button>'
+    +'<button class="chip'+(range==='90'?' active':'')+'" onclick="setDPayDateRange(\'90\')">Last 90 days</button>'
+    +'<button class="chip'+(range==='365'?' active':'')+'" onclick="setDPayDateRange(\'365\')">Last year</button>'
+    +'</div>';
+
+  if(!filtered.length){
+    h+='<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No transactions in this range.</div>';
+    return h;
+  }
+
+  // Compact row: description, date, amount, status pill if not completed
+  filtered.forEach(function(p){
+    const isVoided=p.status==='voided';
+    const isFailed=p.status==='failed';
+    const isRefunded=p.status==='refunded'||p.status==='partial_refund';
+    const desc=p.items&&p.items.length?p.items[0].desc+(p.items.length>1?' + '+(p.items.length-1)+' more':''):'Payment';
+    const dateStr=p.createdAt?new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    let statusPill='';
+    if(isVoided)statusPill='<span class="sb-sm canc" style="margin-left:6px">voided</span>';
+    else if(isFailed)statusPill='<span class="sb-sm canc" style="margin-left:6px">failed</span>';
+    else if(isRefunded)statusPill='<span class="sb-sm reschd" style="margin-left:6px">'+(p.status==='refunded'?'refunded':'partial refund')+'</span>';
+    const opacity=isVoided||isFailed?'.55':'1';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);opacity:'+opacity+'">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;color:var(--text)">'+esc(desc)+statusPill+'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted)">'+dateStr+(p.paymentMethod?' \u00b7 '+esc(p.paymentMethod):'')+'</div></div>'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange);flex-shrink:0;margin-left:10px">'+fmt$(p.total)+'</div></div>';
+  });
+  return h;
+}
+function setDPayDateRange(r){state.dPayDateRange=r;renderDrawer();}
+
+// Subscriptions: lifecycle chips (Active/Paused/Cancelled), default Active.
+// Click a sub row to open its detail modal.
+function _dPaySubscriptions(c,cSubs){
+  const filter=state.dPaySubFilter||'active';
+  const buckets={
+    active:cSubs.filter(function(s){return s.status==='active';}),
+    paused:cSubs.filter(function(s){return s.status==='paused';}),
+    cancelled:cSubs.filter(function(s){return s.status==='cancelled';})
+  };
+  const list=buckets[filter]||[];
+
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px">'
+    +'<div class="task-chip-row" style="margin-bottom:0">'
+    +'<button class="chip'+(filter==='active'?' active':'')+'" onclick="setDPaySubFilter(\'active\')">Active ('+buckets.active.length+')</button>'
+    +'<button class="chip'+(filter==='paused'?' active':'')+'" onclick="setDPaySubFilter(\'paused\')">Paused ('+buckets.paused.length+')</button>'
+    +'<button class="chip'+(filter==='cancelled'?' active':'')+'" onclick="setDPaySubFilter(\'cancelled\')">Cancelled ('+buckets.cancelled.length+')</button>'
+    +'</div>'
+    +'<button class="btn btn-purple btn-sm" onclick="openSubModal(null,\''+c.id+'\')">+ New</button>'
+    +'</div>';
+
+  if(!list.length){
+    h+='<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No '+filter+' subscriptions.</div>';
+    return h;
+  }
+  list.forEach(function(s){
+    const cycle=s.billingCycle||'monthly';
+    const total=(s.items||[]).reduce(function(t,i){return t+(i.price*(i.qty||1));},0);
+    const borderColor=filter==='active'?'#34d399':filter==='paused'?'#fbbf24':'#94a3b8';
+    h+='<div class="appt-row-sm" style="cursor:pointer;border-left-color:'+borderColor+'" onclick="openSubDetail(\''+s.id+'\')">'
+      +'<div style="flex:1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+'</div>'
+      +'<div class="appt-sm-meta">'+fmtDate(s.startDate)+' \u00b7 '+fmt$(total)+'/'+cycle+'</div>'
+      +'<span class="sub-cycle-badge">'+cycle+'</span></div>'
+      +(filter==='active'?'<span class="sub-pay-badge '+(s.paymentStatus==='paid'?'spb-paid':s.paymentStatus==='overdue'?'spb-overdue':'spb-unpaid')+'">'+(s.paymentStatus||'unpaid')+'</span>':'')
+      +'</div>';
+  });
+  return h;
+}
+function setDPaySubFilter(f){state.dPaySubFilter=f;renderDrawer();}
+
+// Session Packs: full list this time (active + exhausted + expired)
+// because the drawer already filters to this contact, so the volume is
+// bounded. Status filter chips for clarity.
+function _dPayPacks(c){
+  const all=(db.sessionPacks||[]).filter(function(p){return p.contactId===c.id;});
+  const today=todayStr();
+  // Auto-update statuses (mirrors renderContactSessionPacks logic)
+  all.forEach(function(p){
+    if(p.status==='active'&&p.expiresDate&&p.expiresDate<today)p.status='expired';
+    if(p.status==='active'&&p.sessionsUsed>=p.sessionsTotal)p.status='exhausted';
+  });
+  const filter=state.dPayPackFilter||'active';
+  const buckets={
+    active:all.filter(function(p){return p.status==='active';}),
+    exhausted:all.filter(function(p){return p.status==='exhausted';}),
+    expired:all.filter(function(p){return p.status==='expired';})
+  };
+  const list=buckets[filter]||[];
+
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px">'
+    +'<div class="task-chip-row" style="margin-bottom:0">'
+    +'<button class="chip'+(filter==='active'?' active':'')+'" onclick="setDPayPackFilter(\'active\')">Active ('+buckets.active.length+')</button>'
+    +'<button class="chip'+(filter==='exhausted'?' active':'')+'" onclick="setDPayPackFilter(\'exhausted\')">Used Up ('+buckets.exhausted.length+')</button>'
+    +'<button class="chip'+(filter==='expired'?' active':'')+'" onclick="setDPayPackFilter(\'expired\')">Expired ('+buckets.expired.length+')</button>'
+    +'</div>'
+    +'<button class="btn btn-purple btn-sm" onclick="spOpenIssueModal(\''+c.id+'\')">+ Issue</button>'
+    +'</div>';
+
+  if(!list.length){
+    h+='<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No '+(filter==='exhausted'?'used-up':filter)+' session packs.</div>';
+    return h;
+  }
+  list.forEach(function(p){
+    const pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
+    const remaining=p.sessionsTotal-(p.sessionsUsed||0);
+    const pct=Math.max(0,Math.min(100,(remaining/p.sessionsTotal)*100));
+    const isActive=p.status==='active';
+    h+='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-top:6px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(pName)+'</div>'
+      +'<span class="status-badge '+(isActive?'sb-active':'sb-inactive')+'">'+p.status+'</span></div>'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      +'<div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">'
+      +'<div style="height:100%;width:'+pct+'%;background:'+(isActive?'var(--orange)':'#94a3b8')+';border-radius:3px;transition:width .3s"></div></div>'
+      +'<div style="font-size:13px;font-weight:700;color:'+(isActive?'var(--orange)':'var(--text-muted)')+';white-space:nowrap">'+(p.sessionsUsed||0)+' / '+p.sessionsTotal+'</div></div>'
+      +(p.expiresDate?'<div style="font-size:11px;color:var(--text-muted);margin-bottom:'+(isActive?'8px':'0')+'">Expires '+fmtDate(p.expiresDate)+'</div>':'')
+      +(isActive?'<button class="btn btn-primary btn-sm" onclick="spUseSession(\''+p.id+'\')">Use Session</button>':'')
+      +'</div>';
+  });
+  return h;
+}
+function setDPayPackFilter(f){state.dPayPackFilter=f;renderDrawer();}
+
+// Gift Cards: only cards where this contact is the RECIPIENT (gc.contactId
+// matches). Cards bought by this contact for someone else don't appear
+// here; those live on the Gift Cards admin tab.
+function _dPayGiftCards(c){
+  const cards=(db.giftCards||[]).filter(function(g){return g.contactId===c.id;})
+    .sort(function(a,b){return(b.issuedAt||'').localeCompare(a.issuedAt||'');});
+
+  if(!cards.length){
+    return '<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No gift cards have been issued to this contact.</div>';
+  }
+  let h='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Gift cards issued to '+esc(c.name)+' as the recipient.</div>';
+  cards.forEach(function(g){
+    const statusColor=g.status==='active'?'#34d399':g.status==='partial'?'#fbbf24':g.status==='redeemed'?'#94a3b8':g.status==='refunded'?'#f87171':'#94a3b8';
+    h+='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+      +'<div style="font-family:monospace;font-size:13px;font-weight:700;color:var(--text);letter-spacing:.05em">'+esc(g.code||'')+'</div>'
+      +'<span style="display:inline-block;padding:2px 9px;border-radius:11px;font-size:10px;font-weight:700;text-transform:uppercase;background:'+statusColor+'22;color:'+statusColor+';border:1px solid '+statusColor+'55">'+(g.status||'active')+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">'
+      +'<div style="color:var(--text-muted)">Original: '+fmt$(g.originalAmount||0)+(g.issuedAt?' \u00b7 Issued '+fmtDate(g.issuedAt.split('T')[0]):'')+'</div>'
+      +'<div style="font-family:Exo 2,sans-serif;font-weight:700;color:var(--orange);font-size:14px">'+fmt$(g.balance||0)+' left</div>'
+      +'</div></div>';
+  });
+  return h;
 }
 
 // =====================================================
@@ -16918,6 +17176,42 @@ function spDrawerUpdateSummary(){
   if(!tmpl){el.textContent='';return;}
   var svcTxt=tmpl.serviceRestriction==='specific'&&tmpl.services&&tmpl.services.length?tmpl.services.join(', '):'Any service';
   el.textContent=tmpl.sessionsPaid+' paid, '+tmpl.sessionsTotal+' total sessions. '+svcTxt+(tmpl.expiresMonths?' Expires in '+tmpl.expiresMonths+' months.':' No expiration.');
+}
+
+// Issue Session Pack from contact drawer. Quick issuance modal that
+// reuses spSellFinalize via spDrawerIssuePack. For complex sales (gift
+// card payment, partial payment), users should use the Session Packs
+// panel instead since this modal keeps the form simple.
+function spOpenIssueModal(contactId){
+  var c=getContact(contactId);
+  if(!c){toast('Contact not found.','error');return;}
+  var templates=(db.sessionPackTemplates||[]).filter(function(t){return t.active!==false;});
+  if(!templates.length){
+    toast('Create a session pack template first.','error');
+    return;
+  }
+  var tmplOpts=templates.map(function(t){
+    var price=t.price?fmt$(t.price):'free';
+    return '<option value="'+t.id+'">'+esc(t.name)+' \u00b7 '+t.sessionsTotal+' sessions \u00b7 '+price+'</option>';
+  }).join('');
+  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">For: <strong style="color:var(--text)">'+esc(c.name)+'</strong></div>'
+    +'<div class="form-group"><label>Template</label>'
+    +'<select id="sp-drawer-tmpl" style="'+inpS+'" onchange="spDrawerUpdateSummary()">'
+    +'<option value="">-- Pick a template --</option>'+tmplOpts
+    +'</select>'
+    +'<div id="sp-drawer-summary" style="font-size:11px;color:var(--text-muted);margin-top:6px"></div></div>'
+    +'<div class="form-group"><label>Payment Method</label>'
+    +'<select id="sp-drawer-pm" style="'+inpS+'">'
+    +'<option value="card">Card</option>'
+    +'<option value="cash">Cash</option>'
+    +'<option value="other">Other</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Notes <span style="font-weight:400;color:var(--main-text-muted)">(optional)</span></label>'
+    +'<textarea id="sp-drawer-notes" rows="2" style="'+inpS+'" placeholder="Internal notes for this pack sale"></textarea></div>';
+  openModal('Issue Session Pack',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="spDrawerIssuePack(\''+contactId+'\')">Issue Pack</button>');
 }
 
 function spDrawerIssuePack(contactId){
