@@ -3190,7 +3190,11 @@ function renderDrawer(){
       +(past.length?'<div class="sec-label" style="margin-top:14px">Past ('+past.length+')</div>'+aHTML(past):'');
   }else if(state.dTab==='tasks'){
     const open=cTasks.filter(t=>t.status!=='done'),done=cTasks.filter(t=>t.status==='done');
-    const tHTML=arr=>arr.map(t=>'<div class="task-sm"><div class="tch-sm '+t.status+'" onclick="cycleTask(\''+t.id+'\')">'+( t.status==='done'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div><div style="flex:1"><div class="'+(t.status==='done'?'tsk-done':'')+'" style="font-size:13px;font-weight:500">'+esc(t.title)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px"><span class="pri-badge p'+t.priority[0]+'">'+t.priority+'</span>'+(t.dueDate?' \u00b7 Due '+fmtDate(t.dueDate):'')+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openTaskModal(\''+c.id+'\',\''+t.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delTask(\''+t.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>').join('');
+    const tHTML=arr=>arr.map(function(t){
+      var canDel=_canDeleteTask(t);
+      var delBtn=canDel?'<button class="icon-btn-xs" onclick="delTask(\''+t.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>':'';
+      return '<div class="task-sm"><div class="tch-sm '+t.status+'" onclick="cycleTask(\''+t.id+'\')">'+(t.status==='done'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div><div style="flex:1"><div class="'+(t.status==='done'?'tsk-done':'')+'" style="font-size:13px;font-weight:500">'+esc(t.title)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px"><span class="pri-badge p'+t.priority[0]+'">'+t.priority+'</span>'+(t.dueDate?' \u00b7 Due '+fmtDate(t.dueDate):'')+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openTaskModal(\''+c.id+'\',\''+t.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+delBtn+'</div></div>';
+    }).join('');
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Open ('+open.length+')</div><button class="btn btn-purple btn-sm" onclick="openTaskModal(\''+c.id+'\',null)">+ Add</button></div>'
       +'<div style="margin-top:8px">'+(open.length?tHTML(open):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No open tasks.</div>')+'</div>'
       +(done.length?'<div class="sec-label" style="margin-top:14px">Done ('+done.length+')</div>'+tHTML(done):'');
@@ -3700,11 +3704,12 @@ function renderTasks(){
   list.innerHTML=slice.map(t=>{
     const c=t.contactId?getContact(t.contactId):null,ov=t.status!=='done'&&isOverdue(t.dueDate);
     const au=t.assignedTo?getUserById(t.assignedTo):null;
+    const canDel=_canDeleteTask(t);
     return'<div class="task-card">'
       +'<div class="task-chk '+t.status+'" onclick="cycleTask(\''+t.id+'\')">'+( t.status==='done'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div>'
       +'<div class="task-body"><div class="task-title'+(t.status==='done'?' done':'')+'">'+esc(t.title)+'</div>'+(t.description?'<div class="task-desc">'+esc(t.description.slice(0,160))+(t.description.length>160?'\u2026':'')+'</div>':'')
       +'<div class="task-meta"><span class="pri-badge p'+t.priority[0]+'">'+t.priority+'</span>'+(c?'<span class="task-link" onclick="event.stopPropagation();openDrawer(\''+c.id+'\')">@'+esc(c.name)+'</span>':'')+(au?'<span style="font-size:11px;color:'+(au.color||'var(--text-muted)')+'">@'+esc(au.name||au.username)+'</span>':'')+(t.dueDate?'<span class="task-due'+(ov?' overdue':'')+'">Due '+fmtDate(t.dueDate)+(ov?' (overdue)':'')+'</span>':'')+'</div></div>'
-      +'<div class="task-actions"><button class="btn btn-ghost btn-sm" onclick="openTaskModal(\''+( t.contactId||'')+'\',\''+t.id+'\')">Edit</button><button class="btn btn-danger btn-sm" onclick="delTask(\''+t.id+'\')">Del</button></div></div>';
+      +'<div class="task-actions"><button class="btn btn-ghost btn-sm" onclick="openTaskModal(\''+( t.contactId||'')+'\',\''+t.id+'\')">Edit</button>'+(canDel?'<button class="btn btn-danger btn-sm" onclick="delTask(\''+t.id+'\')">Del</button>':'')+'</div></div>';
   }).join('');
   renderPg('tasks-pg',state.tPage,pages,'tPg');
 }
@@ -6392,8 +6397,25 @@ function saveTask(){
   saveData();closeModal();if(state.panel==='tasks')renderTasks();if(state.drawer)renderDrawer();if(state.panel==='calendar')renderCal();updateNotifBadge();toast(state.modal.id?'Task updated.':'Task added.','success');
 }
 
+// Returns true if the current user is allowed to delete this task. Admins
+// and managers can delete any task; everyone else can only delete tasks
+// assigned to them, or tasks with no assignee. This protects users from
+// accidentally or maliciously deleting another person's work.
+function _canDeleteTask(t){
+  if(!t)return false;
+  if(isAdminOrManager())return true;
+  var uid=state.user&&state.user.id;
+  if(!uid)return false;
+  if(!t.assignedTo)return true;
+  return t.assignedTo===uid;
+}
+
 function delTask(id){
   const t=db.tasks.find(x=>x.id===id);
+  if(!_canDeleteTask(t)){
+    toast('Only admins can delete another person\u2019s task.','error');
+    return;
+  }
   state.modal={type:'del-task',id:id};
   document.getElementById('modal-title').textContent='Delete Task';
   document.getElementById('modal-box').className='modal';
@@ -6401,7 +6423,23 @@ function delTask(id){
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelTask()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelTask(){const id=state.modal&&state.modal.id;if(!id)return;db.tasks=db.tasks.filter(t=>t.id!==id);saveData();closeModal();if(state.panel==='tasks')renderTasks();if(state.drawer)renderDrawer();updateNotifBadge();toast('Task removed.','success')}
+function confirmDelTask(){
+  const id=state.modal&&state.modal.id;if(!id)return;
+  const t=db.tasks.find(x=>x.id===id);
+  // Defense in depth: re-check permission at confirm time in case the user
+  // somehow opened the modal for a task they shouldn\u2019t be able to delete.
+  if(!_canDeleteTask(t)){
+    closeModal();
+    toast('Only admins can delete another person\u2019s task.','error');
+    return;
+  }
+  db.tasks=db.tasks.filter(t=>t.id!==id);
+  saveData();closeModal();
+  if(state.panel==='tasks')renderTasks();
+  if(state.drawer)renderDrawer();
+  updateNotifBadge();
+  toast('Task removed.','success');
+}
 
 // NOTE MODAL
 function openNoteModal(cid,nid){
