@@ -230,13 +230,13 @@ if (EMBED) {
   document.documentElement.classList.add('bw-embed');
 }
 
-const STEPS = ['service','variation','staff','date','time','info','book','payment','confirm'];
-const STEP_LABELS = ['Service','Options','Provider','Date','Time','Your Info','Booking','Payment','Done'];
+const STEPS = ['service','variation','staff','date','time','info','book','classes','payment','confirm'];
+const STEP_LABELS = ['Service','Options','Provider','Date','Time','Your Info','Booking','Class','Payment','Done'];
 
 let D = null; // widget data from API
 let S = {     // booking state
   step:'service',
-  service:null, variation:null, staff:null, appointment_type:null,
+  service:null, variation:null, staff:null, appointment_type:null, class_session:null,
   date:null, time:null, available_staff:[],
   slots:[], slots_loading:false,
   cal_month: new Date().getMonth(), cal_year: new Date().getFullYear(),
@@ -257,8 +257,11 @@ async function init() {
     D = await r.json();
     // Initial step depends on widget type. Service widgets start at service picker.
     // Appointment widgets start at the single-page booking form.
+    // Class widgets start at the session picker form.
     const widgetType = (D.widget && D.widget.widget_type) || 'service';
-    S.step = widgetType === 'appointment' ? 'book' : 'service';
+    if (widgetType === 'appointment') S.step = 'book';
+    else if (widgetType === 'class') S.step = 'classes';
+    else S.step = 'service';
     applyBranding();
     render();
   } catch(e) {
@@ -291,7 +294,10 @@ function stepIndex() { return STEPS.indexOf(S.step); }
 function visibleSteps() {
   const widgetType = (D && D.widget && D.widget.widget_type) || 'service';
   let steps;
-  if (widgetType === 'appointment') {
+  if (widgetType === 'class') {
+    // Class widget: pick a session, fill info, register. Single-page flow.
+    steps = ['classes'];
+  } else if (widgetType === 'appointment') {
     // Appointment widget: single-page booking form (book), then payment if required, then done.
     steps = ['book'];
   } else {
@@ -330,7 +336,7 @@ function renderProgress() {
   const labels = {
     service:'Service', variation:'Options', staff:'Provider',
     date:'Date', time:'Time', info:'Info', payment:'Payment', confirm:'Done',
-    book:'Booking'
+    book:'Booking', classes:'Class'
   };
   let h = '';
   vs.forEach((step, i) => {
@@ -358,6 +364,7 @@ function render() {
     case 'time':            renderTime(el); break;
     case 'info':            renderInfo(el); break;
     case 'book':            renderBookingForm(el); break;
+    case 'classes':         renderClassesForm(el); break;
     case 'payment':         renderPayment(el); break;
     case 'confirm':         renderConfirm(el); break;
   }
@@ -870,6 +877,164 @@ function submitBookingForm() {
   }
 }
 
+// ── Step: CLASS REGISTRATION FORM (single-page for class widgets) ───────────
+// Patient picks an upcoming session and fills name/email. Capacity is shown
+// per session. The backend enforces capacity atomically when registering.
+function renderClassesForm(el) {
+  const sessions = (D.class_sessions || []).filter(s => s && s.spots_remaining > 0);
+  const allSessions = D.class_sessions || [];
+
+  // Build a map of service_id -> service name for display
+  const svcMap = {};
+  (D.services || []).forEach(s => { svcMap[s.id] = s; });
+  // Build a map of staff_id -> name
+  const staffMap = {};
+  (D.staff || []).forEach(u => { staffMap[u.id] = u; });
+
+  // Patient info form (left pane)
+  let summary = '';
+  if (S.class_session) {
+    const sess = S.class_session;
+    const svc = svcMap[sess.service_id];
+    const instr = staffMap[sess.instructor_id];
+    const datePretty = fmtDateLong(sess.date);
+    const timePretty = fmtTime(sess.time);
+    const priceLine = sess.price > 0 ? `<div class="bw-summary-row"><span>Price</span><span>$${sess.price.toFixed(2)}</span></div>` : '';
+    summary = `<div class="bw-summary">
+      <div class="bw-summary-title">Selected Class</div>
+      <div class="bw-summary-row"><span>Class</span><span>${esc(svc ? svc.name : sess.title)}</span></div>
+      <div class="bw-summary-row"><span>Date</span><span>${datePretty}</span></div>
+      <div class="bw-summary-row"><span>Time</span><span>${timePretty}</span></div>
+      ${instr ? `<div class="bw-summary-row"><span>Instructor</span><span>${esc(instr.name)}</span></div>` : ''}
+      ${priceLine}
+    </div>`;
+  }
+
+  // Session cards (right pane)
+  let sessionsHtml = '';
+  if (!allSessions.length) {
+    sessionsHtml = '<div class="bw-empty-state" style="padding:32px 16px;text-align:center;color:var(--text-muted);font-size:13px">No upcoming class sessions. Please check back later.</div>';
+  } else {
+    sessionsHtml = '<div class="bw-class-list" style="display:flex;flex-direction:column;gap:10px">';
+    allSessions.forEach(sess => {
+      const svc = svcMap[sess.service_id];
+      const instr = staffMap[sess.instructor_id];
+      const isFull = sess.spots_remaining <= 0;
+      const isSelected = S.class_session && S.class_session.id === sess.id;
+      const datePretty = fmtDateLong(sess.date);
+      const timePretty = fmtTime(sess.time);
+      const spotsText = isFull ? 'FULL' : `${sess.spots_remaining} spot${sess.spots_remaining===1?'':'s'} left`;
+      const spotsColor = isFull ? '#ef4444' : (sess.spots_remaining <= 2 ? '#f59e0b' : '#10b981');
+      const priceText = sess.price > 0 ? `$${sess.price.toFixed(2)}` : 'Free';
+      const cursor = isFull ? 'not-allowed' : 'pointer';
+      const opacity = isFull ? '0.55' : '1';
+      const borderColor = isSelected ? 'var(--brand)' : 'var(--border)';
+      const bg = isSelected ? 'rgba(107,33,234,0.06)' : 'var(--bg-card)';
+      const onclick = isFull ? '' : `onclick="selectClassSession('${sess.id}')"`;
+      sessionsHtml += `<div class="bw-class-card" ${onclick} style="border:2px solid ${borderColor};background:${bg};border-radius:8px;padding:12px;cursor:${cursor};opacity:${opacity};transition:all 0.15s">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:14px;color:var(--text);margin-bottom:4px">${esc(svc ? svc.name : sess.title)}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:2px">${datePretty} at ${timePretty}</div>
+            ${instr ? `<div style="font-size:12px;color:var(--text-muted)">with ${esc(instr.name)}</div>` : ''}
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">${priceText}</div>
+            <div style="font-size:11px;font-weight:600;color:${spotsColor};text-transform:uppercase;letter-spacing:0.04em">${spotsText}</div>
+          </div>
+        </div>
+      </div>`;
+    });
+    sessionsHtml += '</div>';
+  }
+
+  // Gating message when no session picked
+  const hasMinForm = !!(S.client.name && S.client.email);
+  const hasSession = !!S.class_session;
+
+  el.innerHTML = `
+    <div class="bw-booking-grid">
+      <div class="bw-booking-pane">
+        <div class="bw-booking-pane-title">Your information</div>
+        <div class="bw-form">
+          <div class="bw-field" id="bw-fld-name">
+            <label>Name *</label>
+            <input id="c-name" type="text" value="${esc(S.client.name)}" oninput="S.client.name=this.value;onClassFormFieldChange()" autocomplete="name">
+            <div class="bw-field-msg">Required</div>
+          </div>
+          <div class="bw-field" id="bw-fld-email">
+            <label>Email *</label>
+            <input id="c-email" type="email" value="${esc(S.client.email)}" oninput="S.client.email=this.value;onClassFormFieldChange()" autocomplete="email">
+            <div class="bw-field-msg">Valid email required</div>
+          </div>
+          <div class="bw-field" id="bw-fld-phone">
+            <label>Phone</label>
+            <input id="c-phone" type="tel" value="${esc(S.client.phone)}" oninput="S.client.phone=this.value" autocomplete="tel">
+          </div>
+          <div class="bw-field" id="bw-fld-notes">
+            <label>Notes <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+            <textarea id="c-notes" oninput="S.client.notes=this.value">${esc(S.client.notes)}</textarea>
+          </div>
+          <input type="text" id="_hp" name="_hp" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off">
+        </div>
+        ${summary}
+      </div>
+      <div class="bw-booking-pane" id="bw-cal-pane">
+        <div class="bw-booking-pane-title">Pick a class</div>
+        ${sessionsHtml}
+      </div>
+    </div>
+    ${cancellationPolicyHtml()}
+    <div class="bw-nav" style="justify-content:flex-end">
+      <button class="bw-btn bw-btn-primary" onclick="submitClassesForm()">${(D.settings.require_payment && S.class_session && S.class_session.price > 0) ? 'Continue to payment &rarr;' : 'Register'}</button>
+    </div>
+  `;
+}
+
+function onClassFormFieldChange() {
+  // Clear field errors as user types
+  if (S.client.name) document.getElementById('bw-fld-name')?.classList.remove('bw-field-error');
+  if (S.client.email && /^[^@]+@[^@]+\.[^@]+$/.test(S.client.email)) {
+    document.getElementById('bw-fld-email')?.classList.remove('bw-field-error');
+  }
+}
+
+function selectClassSession(sessionId) {
+  const sess = (D.class_sessions || []).find(s => s.id === sessionId);
+  if (!sess || sess.spots_remaining <= 0) return;
+  S.class_session = sess;
+  render();
+}
+
+function submitClassesForm() {
+  let ok = true;
+  if (!S.client.name || !S.client.name.trim()) {
+    document.getElementById('bw-fld-name')?.classList.add('bw-field-error');
+    ok = false;
+  }
+  if (!S.client.email || !/^[^@]+@[^@]+\.[^@]+$/.test(S.client.email)) {
+    document.getElementById('bw-fld-email')?.classList.add('bw-field-error');
+    ok = false;
+  }
+  if (!S.class_session) {
+    alert('Please pick a class session.');
+    ok = false;
+  }
+  if (!ok) return;
+
+  // Move to next step: payment if required and class has a price, else submit
+  const vs = visibleSteps();
+  const idx = vs.indexOf(S.step);
+  if (idx < 0 || idx >= vs.length - 1) return;
+  const next = vs[idx + 1];
+  if (next === 'payment' && S.class_session.price > 0) {
+    S.step = 'payment';
+    render();
+  } else {
+    submitBooking();
+  }
+}
+
 // ── Step: Date ────────────────────────────────────────────────────────────────
 function renderDate(el) {
   const now = new Date();
@@ -1026,7 +1191,7 @@ function renderInfo(el) {
 }
 
 function renderCouponBlock() {
-  const subtotal = parseFloat(S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0) || 0;
+  const subtotal = parseFloat(S.class_session?.price ?? S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0) || 0;
   if (subtotal <= 0) return ''; // no coupon for free services
   const applied = !!S.coupon_code;
   const validating = !!S.coupon_validating;
@@ -1063,7 +1228,7 @@ async function applyCoupon() {
   S.coupon_message = '';
   render();
   try {
-    const subtotal = parseFloat(S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0) || 0;
+    const subtotal = parseFloat(S.class_session?.price ?? S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0) || 0;
     const r = await fetch(`${API}/api/booking/validate-coupon`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -1243,6 +1408,13 @@ async function submitBooking() {
   };
   if (widgetType === 'appointment') {
     payload.appointment_type_id = S.appointment_type.id;
+  } else if (widgetType === 'class') {
+    payload.class_session_id = S.class_session.id;
+    // Class bookings don't need date/time/staff in the payload - the session
+    // row is the source of truth on the backend.
+    delete payload.date;
+    delete payload.time;
+    delete payload.staff_id;
   } else {
     payload.service_id = S.service.id;
     payload.variation_id = S.variation?.id || null;
@@ -1299,20 +1471,38 @@ function renderConfirm(el) {
 
   // Item label and name vary by widget type
   const widgetType = (D.widget && D.widget.widget_type) || 'service';
-  const itemLabel = widgetType === 'appointment' ? 'Appointment' : 'Service';
-  const itemName = S.appointment_type
-    ? S.appointment_type.name
-    : (S.service ? S.service.name + (S.variation ? ` - ${S.variation.name}` : '') : '');
+  const isClass = widgetType === 'class' || !!S.class_session;
+  const itemLabel = isClass ? 'Class' : (widgetType === 'appointment' ? 'Appointment' : 'Service');
+
+  let itemName = '';
+  let displayDate = S.date;
+  let displayTime = S.time;
+  if (S.class_session) {
+    const svc = (D.services || []).find(s => s.id === S.class_session.service_id);
+    itemName = svc ? svc.name : (S.class_session.title || 'Class');
+    displayDate = S.class_session.date;
+    displayTime = S.class_session.time;
+  } else if (S.appointment_type) {
+    itemName = S.appointment_type.name;
+  } else if (S.service) {
+    itemName = S.service.name + (S.variation ? ` - ${S.variation.name}` : '');
+  }
+
+  const headline = isClass ? 'You\'re Registered!' : 'You\'re Booked!';
+  const sub = isClass
+    ? `A confirmation has been sent to <strong>${esc(S.client.email)}</strong>.<br>See you in class!`
+    : `A confirmation has been sent to <strong>${esc(S.client.email)}</strong>.<br>We look forward to seeing you.`;
+  const providerLabel = isClass ? 'Instructor' : 'Provider';
 
   el.innerHTML = `<div class="bw-confirm">
     <div class="bw-confirm-icon">&#10003;</div>
-    <div class="bw-confirm-title">You're Booked!</div>
-    <div class="bw-confirm-sub">A confirmation has been sent to <strong>${esc(S.client.email)}</strong>.<br>We look forward to seeing you.</div>
+    <div class="bw-confirm-title">${headline}</div>
+    <div class="bw-confirm-sub">${sub}</div>
     <div class="bw-confirm-card">
       <div class="bw-confirm-row"><strong>${itemLabel}</strong><span>${esc(itemName)}</span></div>
-      <div class="bw-confirm-row"><strong>Date</strong><span>${fmtDate(S.date)}</span></div>
-      <div class="bw-confirm-row"><strong>Time</strong><span>${fmtTime(S.time)}</span></div>
-      ${staffUser?`<div class="bw-confirm-row"><strong>Provider</strong><span>${esc(staffUser.name)}</span></div>`:''}
+      <div class="bw-confirm-row"><strong>Date</strong><span>${fmtDate(displayDate)}</span></div>
+      <div class="bw-confirm-row"><strong>Time</strong><span>${fmtTime(displayTime)}</span></div>
+      ${staffUser?`<div class="bw-confirm-row"><strong>${providerLabel}</strong><span>${esc(staffUser.name)}</span></div>`:''}
     </div>
     ${receiptHtml}
     ${customMsg ? `<p style="font-size:13px;color:var(--text);line-height:1.6;margin-top:16px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border)">${esc(customMsg)}</p>` : ''}
@@ -1329,7 +1519,7 @@ function bookingSummaryHtml(showTotal) {
     ? S.appointment_type.name
     : (S.service.name + (S.variation ? ` - ${S.variation.name}` : ''));
   const subtotal = parseFloat(
-    S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0
+    S.class_session?.price ?? S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0
   ) || 0;
   const tipAmt = S.tip || 0;
   const couponDiscount = S.coupon_discount || 0;
@@ -1361,7 +1551,7 @@ function bookingSummaryHtml(showTotal) {
 function computeTotal() {
   const item = S.appointment_type || S.service;
   const subtotal = parseFloat(
-    S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0
+    S.class_session?.price ?? S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0
   ) || 0;
   const tipAmt = S.tip || 0;
   const couponDiscount = S.coupon_discount || 0;

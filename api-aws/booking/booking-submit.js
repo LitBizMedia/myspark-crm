@@ -84,6 +84,7 @@ async function handler(req, res) {
     service_id,
     variation_id,
     appointment_type_id,
+    class_session_id,
     staff_id,
     date,
     time,
@@ -94,18 +95,25 @@ async function handler(req, res) {
   } = body;
 
   // Input validation. Service widgets pass service_id; appointment widgets pass
-  // appointment_type_id. Exactly one must be present.
-  if (!slug || !date || !time)
-    return res.status(400).json({ error: 'slug, date, and time are required' });
-  if (!service_id && !appointment_type_id)
-    return res.status(400).json({ error: 'service_id or appointment_type_id is required' });
-  if (service_id && appointment_type_id)
-    return res.status(400).json({ error: 'cannot specify both service_id and appointment_type_id' });
+  // appointment_type_id; class widgets pass class_session_id (date/time/staff
+  // come from the session). Exactly one identifier must be present.
+  if (!slug)
+    return res.status(400).json({ error: 'slug is required' });
+  const idCount = [service_id, appointment_type_id, class_session_id].filter(Boolean).length;
+  if (idCount === 0)
+    return res.status(400).json({ error: 'service_id, appointment_type_id, or class_session_id is required' });
+  if (idCount > 1)
+    return res.status(400).json({ error: 'cannot specify multiple booking identifiers' });
+  // Class bookings have date/time/staff baked into the session row; everyone else needs them in the request.
+  if (!class_session_id) {
+    if (!date || !time)
+      return res.status(400).json({ error: 'date and time are required' });
+  }
   if (!client_info?.name || !client_info?.email)
     return res.status(400).json({ error: 'Client name and email are required' });
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date))
     return res.status(400).json({ error: 'Invalid date format' });
-  if (!/^\d{2}:\d{2}$/.test(time))
+  if (time && !/^\d{2}:\d{2}$/.test(time))
     return res.status(400).json({ error: 'Invalid time format' });
   if (!/^[a-z0-9-]{1,64}$/i.test(slug))
     return res.status(400).json({ error: 'invalid slug format' });
@@ -134,11 +142,14 @@ async function handler(req, res) {
       widget = wResult.rows[0];
 
       // Validate widget type matches what was sent
-      if (widget.widget_type === 'service' && appointment_type_id) {
-        return res.status(400).json({ error: 'This widget does not support appointment types' });
+      if (widget.widget_type === 'service' && (appointment_type_id || class_session_id)) {
+        return res.status(400).json({ error: 'This widget does not support that booking type' });
       }
-      if (widget.widget_type === 'appointment' && service_id) {
-        return res.status(400).json({ error: 'This widget does not support service bookings' });
+      if (widget.widget_type === 'appointment' && (service_id || class_session_id)) {
+        return res.status(400).json({ error: 'This widget does not support that booking type' });
+      }
+      if (widget.widget_type === 'class' && (service_id || appointment_type_id)) {
+        return res.status(400).json({ error: 'This widget only supports class registrations' });
       }
 
       // For service widgets, verify the service is allowed
@@ -152,8 +163,9 @@ async function handler(req, res) {
     // 3. Look up the bookable item: either a service OR an appointment type.
     // Both branches produce the same downstream values (basePrice, duration, etc.)
     // so the rest of the function can treat them uniformly.
-    let service = null;          // null for appointment widgets
-    let appointmentType = null;  // null for service widgets
+    let service = null;          // null for appointment widgets and class widgets
+    let appointmentType = null;  // null for service widgets and class widgets
+    let classSession = null;     // null for service and appointment widgets
     let title = '';
     let duration = 60;
     let bufBefore = 0;
@@ -162,7 +174,41 @@ async function handler(req, res) {
     let taxableFlag = true;
     let varName = '';
 
-    if (appointment_type_id) {
+    if (class_session_id) {
+      // Class widget path: session is the source of truth for date/time/duration/instructor.
+      // Capacity check happens later inside a transaction so we don't oversell.
+      const csResult = await db.query(
+        `SELECT id, service_id, instructor_id, title, date, time, duration,
+                capacity, location, status, price, participants
+         FROM class_sessions
+         WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
+        [class_session_id, subaccountId]
+      );
+      if (!csResult.rows.length) return res.status(404).json({ error: 'Class session not found' });
+      classSession = csResult.rows[0];
+      if (classSession.status === 'cancelled') {
+        return res.status(400).json({ error: 'This class session has been cancelled' });
+      }
+      // Look up the parent service for taxable flag (price comes from session, not service)
+      const svcResult = await db.query(
+        'SELECT * FROM services WHERE id = $1 AND subaccount_id = $2 LIMIT 1',
+        [classSession.service_id, subaccountId]
+      );
+      if (!svcResult.rows.length) return res.status(404).json({ error: 'Class service not found' });
+      service = svcResult.rows[0];
+      if (service.type !== 'class') {
+        return res.status(400).json({ error: 'Service is not a class' });
+      }
+
+      title       = classSession.title || service.name || 'Class';
+      duration    = parseInt(classSession.duration) || parseInt(service.duration_default) || 60;
+      basePrice   = parseFloat(classSession.price);
+      if (isNaN(basePrice) || basePrice == null) basePrice = parseFloat(service.price) || 0;
+      taxableFlag = service.taxable !== false;
+      // Buffer doesn't apply to class sessions - they're fixed time blocks
+      bufBefore   = 0;
+      bufAfter    = 0;
+    } else if (appointment_type_id) {
       // Appointment widget path
       if (!widget) return res.status(400).json({ error: 'Widget required for appointment booking' });
       const types = Array.isArray(widget.appointment_types) ? widget.appointment_types : [];
@@ -226,57 +272,89 @@ async function handler(req, res) {
     // - Service widgets INHERIT staff from service.assigned_staff. widget.staff_ids ignored.
     // - Appointment widgets use widget.staff_ids directly. There is no service.
     const widgetType = (widget && widget.widget_type) || 'service';
-    const assignedStaff = service && Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
 
-    const staffDbRes = await db.query(
-      `SELECT id, username, display_name FROM subaccount_users
-       WHERE subaccount_id = $1 AND active = true`,
-      [subaccountId]
-    );
-    let allUsers = staffDbRes.rows.map(u => ({
-      id: u.id,
-      name: u.display_name || u.username
-    }));
+    let assignedStaffId;
+    let bookingDate;
+    let bookingTime;
+    let allUsers = [];   // staff list, populated for non-class flows; needed later for email
 
-    if (widgetType === 'service') {
-      // Service widget: filter by service.assigned_staff only
-      if (assignedStaff.length) {
-        allUsers = allUsers.filter(u => assignedStaff.includes(u.id));
+    if (classSession) {
+      // Class booking: instructor and time come from the session. Skip the
+      // appointment-widget staff resolution entirely. The session row is the
+      // source of truth.
+      assignedStaffId = classSession.instructor_id || null;
+      bookingDate     = classSession.date;          // session date
+      bookingTime     = classSession.time;          // session time
+      if (typeof bookingDate === 'object' && bookingDate instanceof Date) {
+        bookingDate = bookingDate.toISOString().slice(0, 10);
       }
-    } else if (widgetType === 'appointment') {
-      // Appointment widget: filter by widget.staff_ids
-      const widgetStaffIds = widget && Array.isArray(widget.staff_ids) ? widget.staff_ids : [];
-      if (widgetStaffIds.length) {
-        allUsers = allUsers.filter(u => widgetStaffIds.includes(u.id));
+      // Look up the instructor for the confirmation email
+      if (assignedStaffId) {
+        const instrRes = await db.query(
+          `SELECT id, username, display_name FROM subaccount_users
+           WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
+          [assignedStaffId, subaccountId]
+        );
+        if (instrRes.rows.length) {
+          const u = instrRes.rows[0];
+          allUsers.push({ id: u.id, name: u.display_name || u.username });
+        }
       }
-    }
-    // class type: leave allUsers alone; instructor handled per session
+    } else {
+      // Service and appointment widgets: resolve staff per widget config.
+      bookingDate = date;
+      bookingTime = time;
 
-    let assignedStaffId = (staff_id && staff_id !== 'any') ? staff_id : null;
-    // Verify the requested staff is eligible
-    if (assignedStaffId && !allUsers.find(u => u.id === assignedStaffId)) {
-      return res.status(400).json({ error: 'Selected staff member is not available for this service' });
-    }
-    // Auto-assign if 'any'.
-    //
-    // Strategy comes from widget.round_robin_config.strategy:
-    //   - 'random' (default): pick a random eligible provider. Distributes
-    //     bookings approximately evenly over time without DB queries.
-    //   - 'least_busy': pick the provider with the fewest appointments TODAY,
-    //     random tiebreaker. Smooths daily load distribution.
-    //
-    // Eligibility filter: only providers who are NOT already booked at the
-    // chosen time. Otherwise we'd pick a busy person and immediately race-fail.
-    if (!assignedStaffId) {
-      if (!allUsers.length) {
-        return res.status(400).json({ error: 'No staff available for this service' });
+      const assignedStaff = service && Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
+
+      const staffDbRes = await db.query(
+        `SELECT id, username, display_name FROM subaccount_users
+         WHERE subaccount_id = $1 AND active = true`,
+        [subaccountId]
+      );
+      allUsers = staffDbRes.rows.map(u => ({
+        id: u.id,
+        name: u.display_name || u.username
+      }));
+
+      if (widgetType === 'service') {
+        // Service widget: filter by service.assigned_staff only
+        if (assignedStaff.length) {
+          allUsers = allUsers.filter(u => assignedStaff.includes(u.id));
+        }
+      } else if (widgetType === 'appointment') {
+        // Appointment widget: filter by widget.staff_ids
+        const widgetStaffIds = widget && Array.isArray(widget.staff_ids) ? widget.staff_ids : [];
+        if (widgetStaffIds.length) {
+          allUsers = allUsers.filter(u => widgetStaffIds.includes(u.id));
+        }
       }
 
-      // Filter out staff already booked at this exact time (avoid race-fail picks).
-      const bookedRes = await db.query(
-        `SELECT assigned_to FROM appointments
-         WHERE subaccount_id = $1 AND date = $2 AND time = $3 AND status != 'cancelled'`,
-        [subaccountId, date, time]
+      assignedStaffId = (staff_id && staff_id !== 'any') ? staff_id : null;
+      // Verify the requested staff is eligible
+      if (assignedStaffId && !allUsers.find(u => u.id === assignedStaffId)) {
+        return res.status(400).json({ error: 'Selected staff member is not available for this service' });
+      }
+      // Auto-assign if 'any'.
+      //
+      // Strategy comes from widget.round_robin_config.strategy:
+      //   - 'random' (default): pick a random eligible provider. Distributes
+      //     bookings approximately evenly over time without DB queries.
+      //   - 'least_busy': pick the provider with the fewest appointments TODAY,
+      //     random tiebreaker. Smooths daily load distribution.
+      //
+      // Eligibility filter: only providers who are NOT already booked at the
+      // chosen time. Otherwise we'd pick a busy person and immediately race-fail.
+      if (!assignedStaffId) {
+        if (!allUsers.length) {
+          return res.status(400).json({ error: 'No staff available for this service' });
+        }
+
+        // Filter out staff already booked at this exact time (avoid race-fail picks).
+        const bookedRes = await db.query(
+          `SELECT assigned_to FROM appointments
+           WHERE subaccount_id = $1 AND date = $2 AND time = $3 AND status != 'cancelled'`,
+          [subaccountId, date, time]
       );
       const bookedAtTime = new Set(bookedRes.rows.map(r => r.assigned_to).filter(Boolean));
       const eligible = allUsers.filter(u => !bookedAtTime.has(u.id));
@@ -312,16 +390,21 @@ async function handler(req, res) {
         assignedStaffId = eligible[Math.floor(Math.random() * eligible.length)].id;
       }
     }
+    } // end else (non-class) staff resolution block
 
     // 7. Race condition check (slot still available?)
-    const conflictResult = await db.query(
-      `SELECT id FROM appointments
-       WHERE subaccount_id = $1 AND date = $2 AND assigned_to = $3
-         AND time = $4 AND status != 'cancelled' LIMIT 1`,
-      [subaccountId, date, assignedStaffId, time]
-    );
-    if (conflictResult.rows.length) {
-      return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
+    // Skipped for class bookings - capacity is enforced inside the transaction
+    // when we increment the participants array.
+    if (!classSession) {
+      const conflictResult = await db.query(
+        `SELECT id FROM appointments
+         WHERE subaccount_id = $1 AND date = $2 AND assigned_to = $3
+           AND time = $4 AND status != 'cancelled' LIMIT 1`,
+        [subaccountId, bookingDate, assignedStaffId, bookingTime]
+      );
+      if (conflictResult.rows.length) {
+        return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
+      }
     }
 
     // 8. Coupon validation
@@ -454,24 +537,78 @@ async function handler(req, res) {
       );
     }
 
-    // 12. Create appointment in appointments table (NOT blob)
-    const apptId = uid();
-    // title was already set in the lookup branch
-    const apptLocation = service ? (service.location || null) : null;
-    const apptServiceId = service ? service_id : null; // null for appointment widgets
-    const apptVariationId = service ? (variation_id || null) : null;
-    await db.query(`
-      INSERT INTO appointments (
-        id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
-        status, location, notes, service_id, service_variation_id, buffer_before, buffer_after,
-        created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,NOW(),NOW())
-    `, [
-      apptId, subaccountId, title, contactId, assignedStaffId,
-      date, time, duration,
-      apptLocation, client_info.notes || null,
-      apptServiceId, apptVariationId, bufBefore, bufAfter
-    ]);
+    // 12. Create the booking record.
+    //
+    // For service and appointment widgets: insert into appointments table.
+    // For class widgets: append the participant to the JSONB array using a
+    // conditional UPDATE that ALSO checks capacity in the same SQL statement.
+    // PostgreSQL's row-level write atomicity guarantees no two concurrent
+    // registrations can both consume the last spot.
+    let apptId = null;            // null for class bookings
+    let participantId = null;     // null for service/appointment bookings
+
+    if (classSession) {
+      participantId = uid();
+      const newParticipant = {
+        id: participantId,
+        contactId: contactId,
+        status: 'enrolled',
+        enrolled_at: now_(),
+        source: 'booking_widget'
+      };
+      // Conditional UPDATE: only succeeds if session is scheduled AND capacity available.
+      // The WHERE clause counts current 'enrolled' participants and compares to capacity
+      // in the same statement that appends, making the check + write atomic.
+      const updateRes = await db.query(
+        `UPDATE class_sessions
+         SET participants = COALESCE(participants, '[]'::jsonb) || $1::jsonb,
+             updated_at = NOW()
+         WHERE id = $2
+           AND subaccount_id = $3
+           AND status = 'scheduled'
+           AND (
+             SELECT COUNT(*)
+             FROM jsonb_array_elements(COALESCE(participants, '[]'::jsonb)) AS p
+             WHERE p->>'status' = 'enrolled'
+           ) < capacity
+         RETURNING id`,
+        [JSON.stringify(newParticipant), classSession.id, subaccountId]
+      );
+      if (!updateRes.rows.length) {
+        // Either cancelled or full. Re-read to give the user a useful error.
+        const checkRes = await db.query(
+          `SELECT status, capacity, participants FROM class_sessions
+           WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
+          [classSession.id, subaccountId]
+        );
+        if (!checkRes.rows.length) {
+          return res.status(404).json({ error: 'Class session not found' });
+        }
+        const row = checkRes.rows[0];
+        if (row.status === 'cancelled') {
+          return res.status(400).json({ error: 'This class session has been cancelled' });
+        }
+        return res.status(409).json({ error: 'This class is full. Please pick another session.' });
+      }
+    } else {
+      // Service or appointment widget: standard appointment INSERT
+      apptId = uid();
+      const apptLocation = service ? (service.location || null) : null;
+      const apptServiceId = service ? service_id : null; // null for appointment widgets
+      const apptVariationId = service ? (variation_id || null) : null;
+      await db.query(`
+        INSERT INTO appointments (
+          id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
+          status, location, notes, service_id, service_variation_id, buffer_before, buffer_after,
+          created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,NOW(),NOW())
+      `, [
+        apptId, subaccountId, title, contactId, assignedStaffId,
+        bookingDate, bookingTime, duration,
+        apptLocation, client_info.notes || null,
+        apptServiceId, apptVariationId, bufBefore, bufAfter
+      ]);
+    }
 
     // 13. Create payment record (always, even if total=0 with no Square charge - records the booking)
     // Per Payment Policy: every booking through the widget creates a payment record.
@@ -506,7 +643,9 @@ async function handler(req, res) {
         square_payment_id: squarePaymentId,
         status: 'completed',
         notes: 'Booked via widget' + (widget ? ` (${widget.name})` : ''),
-        appointment_id: apptId
+        appointment_id: apptId,                // null for class bookings
+        class_session_id: classSession ? classSession.id : null,
+        participant_contact_id: classSession ? contactId : null
       };
       await db.query(`
         INSERT INTO payments (
@@ -515,14 +654,16 @@ async function handler(req, res) {
           discount_amount, after_discount, fee_amount, tax_amount, taxable_amount,
           tip_amount, credit_applied, total,
           payment_method, card_last4, card_brand, square_payment_id,
-          status, notes, appointment_id, created_at, updated_at
+          status, notes, appointment_id, class_session_id, participant_contact_id,
+          created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5::jsonb,
           $6, $7, $8, $9,
           $10, $11, $12, $13, $14,
           $15, $16, $17,
           $18, $19, $20, $21,
-          $22, $23, $24, NOW(), NOW()
+          $22, $23, $24, $25, $26,
+          NOW(), NOW()
         )
       `, [
         pmt.id, pmt.subaccount_id, pmt.contact_id, pmt.staff_id, pmt.items,
@@ -530,7 +671,7 @@ async function handler(req, res) {
         pmt.discount_amount, pmt.after_discount, pmt.fee_amount, pmt.tax_amount, pmt.taxable_amount,
         pmt.tip_amount, pmt.credit_applied, pmt.total,
         pmt.payment_method, pmt.card_last4, pmt.card_brand, pmt.square_payment_id,
-        pmt.status, pmt.notes, pmt.appointment_id
+        pmt.status, pmt.notes, pmt.appointment_id, pmt.class_session_id, pmt.participant_contact_id
       ]);
     }
 
@@ -566,16 +707,17 @@ async function handler(req, res) {
       actorId: contactId,
       actorUsername: client_info.email,
       actorRole: 'client',
-      action: 'booking.appointment.create',
-      targetType: 'appointment',
-      targetId: apptId,
+      action: classSession ? 'booking.class.register' : 'booking.appointment.create',
+      targetType: classSession ? 'class_participant' : 'appointment',
+      targetId: classSession ? participantId : apptId,
       targetSubaccountId: subaccountId,
       metadata: {
-        service_id: service_id || null,
+        service_id: service_id || (classSession ? classSession.service_id : null),
         appointment_type_id: appointment_type_id || null,
+        class_session_id: class_session_id || null,
         widget_type: widgetType,
-        date,
-        time,
+        date: bookingDate,
+        time: bookingTime,
         widget_id: widget_id || null,
         payment_status: chargeOccurred ? 'charged' : 'no_charge',
         total: total,
@@ -588,19 +730,21 @@ async function handler(req, res) {
     if (bs.send_confirmation_email !== false) {
       const bizName = settings.businessName || slug;
       const staffUser = allUsers.find(u => u.id === assignedStaffId) || null;
-      const staffName = staffUser ? staffUser.name : 'your provider';
-      const subject = bs.confirmation_subject || `Appointment Confirmed - ${bizName}`;
+      const staffLabel = classSession ? 'Instructor' : 'Provider';
+      const staffName = staffUser ? staffUser.name : (classSession ? 'TBD' : 'your provider');
+      const headline = classSession ? 'Class Registration Confirmed' : 'Appointment Confirmed';
+      const subject = bs.confirmation_subject || `${headline} - ${bizName}`;
       const customMsg = (widget && widget.confirm_message) || bs.confirmation_message || '';
 
       const html = `
         <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-          <h2 style="margin-bottom:4px;color:#1a1030">Appointment Confirmed</h2>
+          <h2 style="margin-bottom:4px;color:#1a1030">${headline}</h2>
           <p style="color:#6b7280;margin-top:0">${bizName}</p>
           <div style="background:#f9f7ff;border-radius:8px;padding:20px;margin:20px 0">
-            <div style="margin-bottom:8px"><strong>Service:</strong> ${title}</div>
-            <div style="margin-bottom:8px"><strong>Date:</strong> ${date}</div>
-            <div style="margin-bottom:8px"><strong>Time:</strong> ${fmtTime(time)}</div>
-            <div style="margin-bottom:8px"><strong>Provider:</strong> ${staffName}</div>
+            <div style="margin-bottom:8px"><strong>${classSession ? 'Class' : 'Service'}:</strong> ${title}</div>
+            <div style="margin-bottom:8px"><strong>Date:</strong> ${bookingDate}</div>
+            <div style="margin-bottom:8px"><strong>Time:</strong> ${fmtTime(bookingTime)}</div>
+            <div style="margin-bottom:8px"><strong>${staffLabel}:</strong> ${staffName}</div>
             ${chargeOccurred ? `
               <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e0ff">
                 <div style="margin-bottom:4px"><strong>Subtotal:</strong> $${subtotal.toFixed(2)}</div>
@@ -610,7 +754,7 @@ async function handler(req, res) {
                 <div style="margin-top:8px;padding-top:8px;border-top:1px solid #e5e0ff;font-size:15px"><strong>Total Charged:</strong> $${total.toFixed(2)}</div>
                 ${cardLast4 ? `<div style="font-size:12px;color:#6b7280;margin-top:4px">${cardBrand || 'Card'} ending in ${cardLast4}</div>` : ''}
               </div>
-            ` : (basePrice > 0 ? `<div style="margin-top:8px"><strong>Price:</strong> $${basePrice.toFixed(2)} (to be paid at appointment)</div>` : '')}
+            ` : (basePrice > 0 ? `<div style="margin-top:8px"><strong>Price:</strong> $${basePrice.toFixed(2)} (to be paid at ${classSession ? 'class' : 'appointment'})</div>` : '')}
           </div>
           ${customMsg ? `<p>${customMsg}</p>` : ''}
           ${bs.cancellation_policy_text ? `<p style="font-size:12px;color:#6b7280"><strong>Cancellation policy:</strong> ${bs.cancellation_policy_text}</p>` : ''}
@@ -623,7 +767,9 @@ async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      appointment_id: apptId,
+      appointment_id: apptId,                   // null for class bookings
+      class_session_id: classSession ? classSession.id : null,
+      participant_id: participantId,            // null for service/appointment
       staff_id: assignedStaffId,
       payment: chargeOccurred ? {
         total: total,
@@ -635,7 +781,9 @@ async function handler(req, res) {
         card_brand: cardBrand
       } : null,
       confirm_message: (widget && widget.confirm_message) || null,
-      message: 'Your appointment has been booked. Check your email for confirmation.'
+      message: classSession
+        ? 'You are registered for the class. Check your email for confirmation.'
+        : 'Your appointment has been booked. Check your email for confirmation.'
     });
 
   } catch (e) {

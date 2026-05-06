@@ -75,11 +75,28 @@ async function handler(req, res) {
 
     // 4. Get active services. If widget restricts services, filter them.
     // Appointment widgets don't use services at all, return empty array.
+    // Class widgets filter to type='class' services AND only the ones in service_ids.
     const widgetType = (widget && widget.widget_type) || 'service';
     const widgetServiceIds = widget && Array.isArray(widget.service_ids) ? widget.service_ids : [];
     let svcQuery, svcArgs, skipServiceQuery = false;
     if (widgetType === 'appointment') {
       skipServiceQuery = true;
+    } else if (widgetType === 'class') {
+      // Class widget: only return services with type='class', filtered to service_ids if set
+      if (widgetServiceIds.length) {
+        svcQuery = `SELECT * FROM services
+                    WHERE subaccount_id = $1 AND active = true
+                      AND type = 'class'
+                      AND id = ANY($2::text[])
+                    ORDER BY name ASC`;
+        svcArgs = [subaccountId, widgetServiceIds];
+      } else {
+        svcQuery = `SELECT * FROM services
+                    WHERE subaccount_id = $1 AND active = true
+                      AND type = 'class'
+                    ORDER BY name ASC`;
+        svcArgs = [subaccountId];
+      }
     } else if (widgetServiceIds.length) {
       svcQuery = `SELECT * FROM services
                   WHERE subaccount_id = $1 AND active = true
@@ -162,6 +179,55 @@ async function handler(req, res) {
       dateOverrides: u.date_overrides || []
     }));
 
+    // 5b. Class widgets: fetch upcoming sessions (next 30 days, scheduled status)
+    // for the services in this widget. Each session is enriched with current
+    // enrolled count so the public page shows availability.
+    let classSessions = [];
+    if (widgetType === 'class') {
+      const classServiceIds = svcResult.rows.map(s => s.id);
+      if (classServiceIds.length) {
+        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const horizon = new Date();
+        horizon.setDate(horizon.getDate() + 30);
+        const horizonStr = horizon.toISOString().slice(0, 10);
+
+        const sessionsResult = await db.query(
+          `SELECT id, service_id, instructor_id, title, date, time, duration,
+                  capacity, location, status, price, participants
+           FROM class_sessions
+           WHERE subaccount_id = $1
+             AND service_id = ANY($2::text[])
+             AND status = 'scheduled'
+             AND date >= $3 AND date <= $4
+           ORDER BY date ASC, time ASC`,
+          [subaccountId, classServiceIds, today, horizonStr]
+        );
+
+        // Enrich each session with enrolled count and spots remaining.
+        // Filter out cancelled participants. participants is JSONB array.
+        classSessions = sessionsResult.rows.map(s => {
+          const parts = Array.isArray(s.participants) ? s.participants : [];
+          const enrolled = parts.filter(p => p && p.status === 'enrolled').length;
+          const cap = parseInt(s.capacity) || 10;
+          return {
+            id: s.id,
+            service_id: s.service_id,
+            instructor_id: s.instructor_id,
+            title: s.title,
+            date: s.date,
+            time: s.time,
+            duration: s.duration,
+            capacity: cap,
+            enrolled: enrolled,
+            spots_remaining: Math.max(0, cap - enrolled),
+            location: s.location,
+            price: parseFloat(s.price) || 0
+          };
+          // NOTE: do NOT include the full participants array. PHI exposure risk.
+        });
+      }
+    }
+
     // 6. Public-safe settings (workspace level, plus widget-level overrides)
     const settings = blob.settings || {};
     const bs = settings.bookingSettings || {};
@@ -198,6 +264,7 @@ async function handler(req, res) {
       widget,                    // full widget row (includes new fields)
       services: svcResult.rows,
       variations: varResult.rows,
+      class_sessions: classSessions,
       staff: publicStaff,
       settings: publicSettings
     });

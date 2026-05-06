@@ -11211,6 +11211,9 @@ function openServiceWidgetModal(id){
   if(widgetType==='appointment'){
     return openAppointmentWidgetModal(w);
   }
+  if(widgetType==='class'){
+    return openClassWidgetEditor(w);
+  }
   // service widget editor (existing path)
   return openServiceWidgetEditor(w);
 }
@@ -11232,6 +11235,12 @@ function openWidgetTypePicker(){
     +'<div style="font-size:14px;font-weight:600;color:var(--text);text-transform:none;margin-bottom:4px">Appointment Calendar</div>'
     +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.4">Patients pick a provider first, then an appointment type. Best for consultations, follow-ups, and one-on-one meetings.</div>'
     +'</div></div>'
+    +'<div onclick="closeModal();openNewWidgetOfType(\'class\')" style="cursor:pointer;background:var(--bg-card);border:2px solid var(--main-border);border-radius:8px;padding:14px;display:flex;gap:12px;align-items:flex-start;transition:border-color .15s" onmouseover="this.style.borderColor=\'#a78bfa\'" onmouseout="this.style.borderColor=\'var(--main-border)\'">'
+    +'<div style="font-size:24px;line-height:1;flex-shrink:0">🧘</div>'
+    +'<div style="flex:1">'
+    +'<div style="font-size:14px;font-weight:600;color:var(--text);text-transform:none;margin-bottom:4px">Class Calendar</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.4">Patients browse upcoming class sessions and register. Best for group fitness, workshops, and recurring sessions.</div>'
+    +'</div></div>'
     +'</div>';
   openModal('New Widget',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>');
 }
@@ -11241,6 +11250,9 @@ function openNewWidgetOfType(type){
   var stub={widget_type:type,active:true};
   if(type==='appointment'){
     return openAppointmentWidgetModal(stub,true);
+  }
+  if(type==='class'){
+    return openClassWidgetEditor(stub,true);
   }
   return openServiceWidgetEditor(stub,true);
 }
@@ -11348,6 +11360,145 @@ function openServiceWidgetEditor(w,isNew){
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="saveServiceWidget('+(existing?'\''+w.id+'\'':'null')+')">Save</button>';
   openModal(existing?'Edit Service Widget':'New Service Widget',body,footer,'modal-lg');
+}
+
+// =============================================================
+// CLASS WIDGET EDITOR
+// Patients browse upcoming class sessions and register. Capacity is enforced
+// per-session. Used for group fitness, workshops, and recurring sessions.
+// =============================================================
+function openClassWidgetEditor(w,isNew){
+  // Filter db.services to only class type for the picker
+  var classServices=(db.services||[]).filter(function(s){return s.type==='class' && s.active!==false;});
+  var _selSvcs=(w&&w.service_ids)||[];
+
+  var svcMsOpts=classServices.map(function(s){
+    var col=s.color||'#6b21ea';
+    return'<div class="svc-ms-opt" onclick="swgMsToggle(\''+s.id+'\')">'
+      +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
+      +esc(s.name)
+      +'<span id="swg-ms-ck-'+s.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selSvcs.includes(s.id)?'':'display:none')+'">&#10003;</span>'
+      +'<input type="checkbox" id="swg-svc-'+s.id+'" class="swg-svc-chk" value="'+s.id+'" style="display:none"'+(_selSvcs.includes(s.id)?' checked':'')+'>'
+      +'</div>';
+  }).join('');
+
+  var initialChips=_selSvcs.length
+    ?_selSvcs.map(function(sid){var s=classServices.find(function(x){return x.id===sid;});var col=s?s.color||'#6b21ea':'#6b21ea';var nm=s?esc(s.name):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();swgMsRemove(\''+sid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
+    :'<span style="color:var(--text-muted);font-size:12px">All classes (none selected)</span>';
+
+  // Count upcoming sessions for context
+  var today=new Date().toISOString().slice(0,10);
+  var upcomingCount=(db.classSessions||[]).filter(function(cs){
+    return cs.status!=='cancelled' && cs.date>=today;
+  }).length;
+
+  var curLogo=(w&&w.logo_url)||'';
+  var requirePayment=!!(w&&w.require_payment);
+  var confirmMsg=(w&&w.confirm_message)||'';
+
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    // Heads up if no class services exist
+    +(classServices.length===0
+      ?'<div style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:6px;padding:10px 12px;font-size:12px;text-transform:none;line-height:1.5">No class services yet. Create a service with type "Class" first, then come back to build the widget.</div>'
+      :'')
+
+    +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'" placeholder="e.g. Group Yoga Sessions"></div>'
+
+    // Class service picker
+    +'<div class="form-group"><label>Included Classes <span style="color:var(--text-muted);font-weight:400">(none = show all class services)</span></label>'
+    +(classServices.length
+      ?'<div class="svc-ms-wrap" id="swg-svc-ms">'
+        +'<div class="svc-ms-display" onclick="swgMsOpen(event)">'
+        +'<div class="svc-ms-chips" id="swg-ms-chips">'+initialChips+'</div>'
+        +'<span class="svc-ms-arrow">&#9660;</span></div>'
+        +'<div class="svc-ms-dd hidden" id="swg-ms-dd">'
+        +'<input type="text" class="svc-ms-search" placeholder="Search classes..." oninput="swgMsFilter(this)">'
+        +'<div class="svc-ms-options">'+svcMsOpts+'</div>'
+        +'</div></div>'
+      :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No class services configured.</div>')
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-transform:none;font-weight:400;line-height:1.4">Patients see upcoming sessions for the selected classes. '+upcomingCount+' upcoming session'+(upcomingCount===1?'':'s')+' total across your workspace.</div>'
+    +'</div>'
+
+    // Instructor info (read-only - comes from sessions)
+    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
+    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin-bottom:4px">Instructor</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.5">Each class session has its own instructor, set when you create the session. Patients see the instructor name on each session card.</div>'
+    +'</div>'
+
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Primary Color</label><input id="swg-color" type="color" value="'+(w&&w.primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
+    +'<div class="form-group"><label>Logo</label>'
+    +'<div style="display:flex;gap:6px;align-items:center">'
+    +'<input id="swg-logo" type="text" placeholder="https://... or choose from media" value="'+esc(curLogo)+'" style="flex:1" oninput="swgLogoUpdate()">'
+    +'<button class="btn btn-ghost btn-sm" style="white-space:nowrap;flex-shrink:0" onclick="openMediaPicker(\'swg-logo\')">Media Library</button>'
+    +'</div>'
+    +'<div id="swg-logo-area" style="margin-top:8px;display:flex;align-items:center;gap:10px;'+(curLogo?'':'display:none')+'">'
+    +'<img id="swg-logo-preview" src="'+esc(curLogo)+'" style="max-height:48px;max-width:140px;border-radius:6px;border:1px solid var(--main-border);object-fit:contain;background:var(--main-bg);padding:4px" onerror="this.style.opacity=\'0.3\'">'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px;color:#f87171" onclick="swgLogoClear()">Remove</button>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Reserve your spot in our upcoming classes" value="'+esc(w&&w.tagline||'')+'"></div>'
+
+    // Require payment toggle
+    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
+    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-req-pay\');c.checked=!c.checked">'
+    +'<input id="swg-req-pay" type="checkbox"'+(requirePayment?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()">'
+    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Require payment to register</div>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-left:26px;text-transform:none;font-weight:400">When enabled, patients must pay the session price before registration is confirmed. Each session has its own price set in the class service.</div>'
+    +'</div>'
+
+    // Custom confirmation message
+    +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after registration)</span></label>'
+    +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thanks for registering! See you in class.">'+esc(confirmMsg)+'</textarea></div>'
+
+    +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
+    +'</div>';
+  var existing=w&&w.id;
+  var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveClassWidget('+(existing?'\''+w.id+'\'':'null')+')">Save</button>';
+  openModal(existing?'Edit Class Widget':'New Class Widget',body,footer,'modal-lg');
+}
+
+function saveClassWidget(id){
+  var name=((document.getElementById('swg-name')||{}).value||'').trim();
+  if(!name){toast('Widget name is required.','error');return;}
+  var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
+  // Class widgets store the chosen class service IDs. If none chosen, all class services show.
+  var w={
+    id:id||uid(),
+    name:name,
+    widget_type:'class',
+    service_ids:svcIds,
+    primary_color:(document.getElementById('swg-color')||{}).value||'#6b21ea',
+    logo_url:((document.getElementById('swg-logo')||{}).value||'').trim(),
+    tagline:((document.getElementById('swg-tag')||{}).value||'').trim(),
+    active:(document.getElementById('swg-active')||{}).checked!==false,
+    staff_mode:'any',         // not used for class widgets but column is NOT NULL
+    staff_ids:[],
+    round_robin_config:{},    // not used for class widgets
+    appointment_types:[],     // not used for class widgets
+    require_payment:(document.getElementById('swg-req-pay')||{}).checked===true,
+    intake_form_id:null,
+    confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
+  };
+  fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(w)
+  }).then(function(r){
+    if(!r.ok){toast('Failed to save widget.','error');return;}
+    return r.json().then(function(data){
+      if(!db.serviceWidgets)db.serviceWidgets=[];
+      var serverWidget=data.widget||w;
+      var ex=db.serviceWidgets.find(function(x){return x.id===serverWidget.id;});
+      if(ex){Object.assign(ex,serverWidget);}else{db.serviceWidgets.push(serverWidget);}
+      closeModal();
+      renderBookingWidgets();
+    });
+  }).catch(function(){toast('Network error saving widget.','error');});
 }
 
 // =============================================================
