@@ -206,6 +206,41 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .stat-val{font-family:'Exo 2',sans-serif;font-size:24px;font-weight:800;color:var(--main-text)}
 .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .dash-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;box-shadow:0 2px 12px rgba(107,33,234,.07)}
+.dash-card-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
+.dash-card-title-row .dash-card-title{margin-bottom:0}
+.dash-card-title{font-family:'Exo 2',sans-serif;font-size:13px;font-weight:700;margin-bottom:14px;color:var(--main-text);
+  display:flex;align-items:center;gap:8px}
+.dash-card-title svg{width:14px;height:14px;color:var(--orange)}
+.dash-scroll-list{max-height:340px;overflow-y:auto;padding-right:4px}
+.dash-scroll-list::-webkit-scrollbar{width:6px}
+.dash-scroll-list::-webkit-scrollbar-thumb{background:var(--main-border);border-radius:3px}
+.dash-scope-pill{display:inline-flex;background:var(--main-bg);border:1px solid var(--main-border);border-radius:999px;padding:2px;font-size:11px;font-weight:600}
+.dash-scope-pill button{background:transparent;border:none;color:var(--main-text-muted);padding:3px 10px;border-radius:999px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit}
+.dash-scope-pill button.active{background:var(--orange);color:#fff}
+
+/* Hero card: today at a glance */
+.dash-hero{background:linear-gradient(135deg,rgba(107,33,234,.18) 0%,rgba(255,64,0,.10) 100%);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px 22px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap}
+.dash-hero-block{display:flex;flex-direction:column;gap:4px;min-width:120px}
+.dash-hero-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted)}
+.dash-hero-val{font-family:'Exo 2',sans-serif;font-size:22px;font-weight:800;color:var(--main-text);line-height:1.1}
+.dash-hero-sub{font-size:11px;color:var(--main-text-muted)}
+
+/* Quick action buttons */
+.dash-quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.dash-qa-btn{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .15s;font-family:inherit;color:var(--main-text);text-align:left}
+.dash-qa-btn:hover{border-color:var(--orange);background:var(--main-card-hover);transform:translateY(-1px)}
+.dash-qa-btn svg{width:18px;height:18px;color:var(--orange);flex-shrink:0}
+.dash-qa-btn-label{font-size:13px;font-weight:600}
+@media (max-width:780px){.dash-quick-actions{grid-template-columns:repeat(2,1fr)}}
+
+/* Activity feed */
+.dash-act-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.dash-act-row:last-child{border-bottom:none}
+.dash-act-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(107,33,234,.18)}
+.dash-act-icon svg{width:12px;height:12px;color:#a855f7}
+.dash-act-text{font-size:12px;color:var(--main-text);line-height:1.4}
+.dash-act-when{font-size:10px;color:var(--main-text-muted);margin-top:2px}
+
 .dash-card-title{font-family:'Exo 2',sans-serif;font-size:13px;font-weight:700;margin-bottom:14px;color:var(--main-text);
   display:flex;align-items:center;gap:8px}
 .dash-card-title svg{width:14px;height:14px;color:var(--orange)}
@@ -220,7 +255,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
   flex-shrink:0;margin-top:2px;cursor:pointer;transition:border-color .18s}
 .dash-task-chk:hover{border-color:var(--orange)}
 .dash-task-name{font-size:13px;font-weight:500;color:var(--main-text)}
-.dash-task-due{font-size:11px;color:var(--main-text-muted)}.dash-task-due.overdue{color:#f87171}
+.dash-task-due{font-size:11px;color:var(--main-text-muted)}.dash-task-due.overdue{color:#f87171}.dash-task-due.due-today{color:#fbbf24}
 .dash-empty{font-size:13px;color:var(--main-text-muted);padding:12px 0;text-align:center}
 
 /* CONTACT TABLE */
@@ -863,7 +898,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .data-table tbody tr:hover{background:var(--main-card-hover)}
 .rpt-total-row td{font-weight:700;background:var(--main-bg);color:var(--main-text)}
 /* WEEK SCHEDULE DASHBOARD */
-.dash-week{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;margin-top:16px;box-shadow:0 2px 12px rgba(107,33,234,.07)}
+.dash-week{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;margin-top:16px;box-shadow:0 2px 12px rgba(107,33,234,.07);grid-column:1 / -1}
 .dash-week-title{font-family:'Exo 2',sans-serif;font-size:13px;font-weight:700;color:var(--main-text);margin-bottom:14px;display:flex;align-items:center;gap:7px}
 .week-day-col{margin-bottom:12px}
 .week-day-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:5px}
@@ -1161,15 +1196,28 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <!-- DASHBOARD -->
       <div id="panel-dashboard" class="panel">
         <div class="dash-greeting"><h2 id="dash-greet"></h2><div class="dash-datetime" id="dash-time"></div></div>
-        <div class="stat-row" id="dash-stats"></div>
+        <div id="dash-hero"></div>
+        <div id="dash-quick-actions" class="dash-quick-actions"></div>
         <div class="dash-grid">
           <div class="dash-card">
-            <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Today's Appointments</div>
-            <div id="dash-appts"></div>
+            <div class="dash-card-title-row">
+              <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Today's Appointments</div>
+              <div id="dash-appt-toggle"></div>
+            </div>
+            <div id="dash-appts" class="dash-scroll-list"></div>
           </div>
-          <div class="dash-card">
-            <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Tasks Due Soon</div>
-            <div id="dash-tasks"></div>
+          <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+            <div class="dash-card">
+              <div class="dash-card-title-row">
+                <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Tasks Due Soon</div>
+                <div id="dash-task-toggle"></div>
+              </div>
+              <div id="dash-tasks" class="dash-scroll-list"></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Recent Activity</div>
+              <div id="dash-activity" class="dash-scroll-list"></div>
+            </div>
           </div>
           <div class="dash-week" id="dash-week"></div>
         </div>
@@ -2642,6 +2690,20 @@ function handleNotifClick(kind,id){
 // =====================================================
 // DASHBOARD
 // =====================================================
+// Dashboard scope: 'me' shows only the logged-in user's items; 'all' shows
+// clinic-wide. Practitioners are forced to 'me'. Admins/managers default to
+// 'all' but can toggle. Persisted in state, not localStorage (resets per session).
+function _dashScope(){
+  if (userRole() === 'practitioner') return 'me';
+  if (!state._dashScope) state._dashScope = 'all';
+  return state._dashScope;
+}
+function setDashScope(s){
+  if (userRole() === 'practitioner') return;
+  state._dashScope = s;
+  renderDash();
+}
+
 function renderDash(){
   renderDashWeek&&setTimeout(renderDashWeek,0);
   const h=new Date().getHours();
@@ -2650,31 +2712,323 @@ function renderDash(){
   document.getElementById('dash-greet').innerHTML=greet+', <span>'+esc(name)+'!</span>';
   const now2=new Date();
   document.getElementById('dash-time').textContent=now2.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+' \u00b7 '+now2.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'});
-  const all=db.contacts.filter(function(c){return!c.archived;});
-  document.getElementById('dash-stats').innerHTML=
-    '<div class="stat-card"><div class="stat-label">Total Contacts</div><div class="stat-val">'+all.length+'</div></div>'+
-    '<div class="stat-card" style="border-top-color:var(--orange)"><div class="stat-label">Leads</div><div class="stat-val">'+all.filter(c=>c.type==='lead').length+'</div></div>'+
-    '<div class="stat-card" style="border-top-color:#a855f7"><div class="stat-label">Clients</div><div class="stat-val">'+all.filter(c=>c.type==='client').length+'</div></div>'+
-    '<div class="stat-card" style="border-top-color:#34d399"><div class="stat-label">Open Tasks</div><div class="stat-val">'+db.tasks.filter(t=>t.status!=='done').length+'</div></div>';
-  const td=todayStr(),uid=state.user&&state.user.id;
-  const todayAppts=db.appointments.filter(a=>a.date===td&&a.status==='scheduled'&&(!a.assignedTo||a.assignedTo===uid||state.user&&state.user.role==='admin'))
-    .sort((a,b)=>t2m(a.time||'00:00')-t2m(b.time||'00:00'));
+
+  const td=todayStr();
+  const uid=state.user&&state.user.id;
+  const role=userRole();
+  const scope=_dashScope();
+  const isAdminish=role==='admin'||role==='manager';
+
+  // Hero card: today at a glance
+  _renderDashHero(td, uid, scope, isAdminish);
+
+  // Quick actions row
+  _renderDashQuickActions(role);
+
+  // Today's appointments - filter by scope
+  const todayAppts=db.appointments.filter(function(a){
+    if(a.date!==td)return false;
+    if(a.status!=='scheduled')return false;
+    if(scope==='me' && a.assignedTo && a.assignedTo!==uid)return false;
+    return true;
+  }).sort(function(a,b){return t2m(a.time||'00:00')-t2m(b.time||'00:00');});
+
+  // Scope toggle (admins/managers only)
+  const toggleEl=document.getElementById('dash-appt-toggle');
+  if(toggleEl){
+    if(isAdminish){
+      toggleEl.innerHTML='<div class="dash-scope-pill">'
+        +'<button class="'+(scope==='all'?'active':'')+'" onclick="setDashScope(\'all\')">All</button>'
+        +'<button class="'+(scope==='me'?'active':'')+'" onclick="setDashScope(\'me\')">Just Me</button>'
+        +'</div>';
+    } else {
+      toggleEl.innerHTML='';
+    }
+  }
+  const taskToggleEl=document.getElementById('dash-task-toggle');
+  if(taskToggleEl){
+    // Mirror the appointment toggle for consistency (single state controls both)
+    if(isAdminish){
+      taskToggleEl.innerHTML='<span style="font-size:10px;color:var(--main-text-muted)">'+(scope==='me'?'Just me':'All')+'</span>';
+    } else {
+      taskToggleEl.innerHTML='';
+    }
+  }
+
   const ae=document.getElementById('dash-appts');
-  if(!todayAppts.length)ae.innerHTML='<div class="dash-empty">No appointments today.</div>';
-  else ae.innerHTML=todayAppts.map(a=>{
-    const c=a.contactId?getContact(a.contactId):null;
-    const col=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
-    const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
-    return'<div class="dash-appt-row"><div class="dash-appt-time" style="color:'+col+'">'+(fmtTime(a.time)||'TBD')+'</div><div style="flex:1"><div class="dash-appt-title">'+esc(a.title)+'</div><div class="dash-appt-sub">'+(c?esc(c.name)+' \u00b7 ':'')+( a.duration||60)+' min'+(a.location?' \u00b7 '+esc(a.location):'')+'</div></div>'+(payPill?'<div style="flex-shrink:0">'+payPill+'</div>':'')+'</div>';
-  }).join('');
-  const nd=new Date();nd.setDate(nd.getDate()+7);const ns=nd.toISOString().split('T')[0];
-  const dueTasks=db.tasks.filter(t=>t.status!=='done'&&(t.dueDate<=ns||isOverdue(t.dueDate))&&(!t.assignedTo||t.assignedTo===uid||state.user&&state.user.role==='admin'))
-    .sort((a,b)=>(a.dueDate||'9').localeCompare(b.dueDate||'9')).slice(0,8);
+  if(!todayAppts.length){
+    ae.innerHTML='<div class="dash-empty">No appointments today.</div>';
+  } else {
+    ae.innerHTML=todayAppts.map(function(a){
+      const c=a.contactId?getContact(a.contactId):null;
+      const col=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
+      const u=a.assignedTo?getUserById(a.assignedTo):null;
+      const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
+      const staffName=isAdminish&&scope==='all'&&u?(u.name||u.username):'';
+      return '<div class="dash-appt-row" style="cursor:pointer" onclick="_calEventClick(\''+a.id+'\')">'
+        +'<div class="dash-appt-time" style="color:'+col+'">'+(fmtTime(a.time)||'TBD')+'</div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div class="dash-appt-title">'+esc(a.title)+'</div>'
+        +'<div class="dash-appt-sub">'+(c?esc(c.name)+' \u00b7 ':'')+(a.duration||60)+' min'+(staffName?' \u00b7 '+esc(staffName):'')+(a.location?' \u00b7 '+esc(a.location):'')+'</div>'
+        +'</div>'
+        +(payPill?'<div style="flex-shrink:0">'+payPill+'</div>':'')
+        +'</div>';
+    }).join('');
+  }
+
+  // Tasks: overdue + due today + due tomorrow, scoped to user (or all for admin)
+  const tomorrowDate=new Date();tomorrowDate.setDate(tomorrowDate.getDate()+1);
+  const tomorrow=tomorrowDate.getFullYear()+'-'+String(tomorrowDate.getMonth()+1).padStart(2,'0')+'-'+String(tomorrowDate.getDate()).padStart(2,'0');
+  const dueTasks=db.tasks.filter(function(t){
+    if(t.status==='done')return false;
+    if(scope==='me' && t.assignedTo && t.assignedTo!==uid)return false;
+    if(!t.dueDate)return false;
+    // Include: overdue (date < today), due today (date === today), due tomorrow
+    return t.dueDate<=tomorrow;
+  }).sort(function(a,b){return (a.dueDate||'9').localeCompare(b.dueDate||'9');});
+
   const te=document.getElementById('dash-tasks');
-  if(!dueTasks.length)te.innerHTML='<div class="dash-empty">No upcoming tasks.</div>';
-  else te.innerHTML=dueTasks.map(t=>{
-    const ov=isOverdue(t.dueDate);
-    return'<div class="dash-task-row"><div class="dash-task-chk" onclick="cycleTask(\''+t.id+'\');renderDash()"></div><div><div class="dash-task-name">'+esc(t.title)+'</div>'+(t.dueDate?'<div class="dash-task-due'+(ov?' overdue':'')+'">Due: '+fmtDate(t.dueDate)+(ov?' (overdue)':'')+'</div>':'')+'</div></div>';
+  if(!dueTasks.length){
+    te.innerHTML='<div class="dash-empty">No tasks due soon.</div>';
+  } else {
+    te.innerHTML=dueTasks.map(function(t){
+      const ov=isOverdue(t.dueDate);
+      const isToday=t.dueDate===td;
+      const dueLabel=ov?'Overdue: '+fmtDate(t.dueDate):isToday?'Due today':'Due '+fmtDate(t.dueDate);
+      const dueClass=ov?' overdue':(isToday?' due-today':'');
+      return '<div class="dash-task-row">'
+        +'<div class="dash-task-chk" onclick="cycleTask(\''+t.id+'\');renderDash()"></div>'
+        +'<div style="flex:1;min-width:0;cursor:pointer" onclick="openTaskModal(null,\''+t.id+'\')">'
+        +'<div class="dash-task-name">'+esc(t.title)+'</div>'
+        +'<div class="dash-task-due'+dueClass+'">'+dueLabel+'</div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  // Recent Activity feed
+  _renderDashActivity(scope, uid, isAdminish);
+}
+
+// Today at a glance hero card. Shows next appointment countdown, today total,
+// and (admin only) revenue today + week vs last week.
+function _renderDashHero(td, uid, scope, isAdminish){
+  const el=document.getElementById('dash-hero');
+  if(!el)return;
+  // Today's appointments scoped to current view
+  const todayAppts=db.appointments.filter(function(a){
+    if(a.date!==td)return false;
+    if(a.status!=='scheduled')return false;
+    if(scope==='me' && a.assignedTo && a.assignedTo!==uid)return false;
+    return true;
+  }).sort(function(a,b){return t2m(a.time||'00:00')-t2m(b.time||'00:00');});
+
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
+  const upcoming=todayAppts.filter(function(a){return t2m(a.time||'00:00')>=nowMin;});
+  const next=upcoming[0]||null;
+  let nextBlock='';
+  if(next){
+    const m=t2m(next.time)-nowMin;
+    let when;
+    if(m<=0)when='Now';
+    else if(m<60)when='in '+m+' min';
+    else if(m<24*60)when='in '+Math.floor(m/60)+'h '+(m%60)+'m';
+    else when=fmtTime(next.time);
+    const u=next.assignedTo?getUserById(next.assignedTo):null;
+    const c=next.contactId?getContact(next.contactId):null;
+    const subParts=[];
+    if(c)subParts.push(esc(c.name));
+    if(isAdminish&&scope==='all'&&u)subParts.push(esc(u.name||u.username));
+    nextBlock='<div class="dash-hero-block">'
+      +'<div class="dash-hero-label">Next Up</div>'
+      +'<div class="dash-hero-val">'+when+'</div>'
+      +'<div class="dash-hero-sub">'+esc(next.title)+(subParts.length?' \u00b7 '+subParts.join(' \u00b7 '):'')+'</div>'
+      +'</div>';
+  } else if(todayAppts.length){
+    nextBlock='<div class="dash-hero-block">'
+      +'<div class="dash-hero-label">Today</div>'
+      +'<div class="dash-hero-val">All done</div>'
+      +'<div class="dash-hero-sub">No more appointments today</div>'
+      +'</div>';
+  } else {
+    nextBlock='<div class="dash-hero-block">'
+      +'<div class="dash-hero-label">Today</div>'
+      +'<div class="dash-hero-val">Open</div>'
+      +'<div class="dash-hero-sub">No appointments scheduled</div>'
+      +'</div>';
+  }
+
+  // Total appts today
+  const totalBlock='<div class="dash-hero-block">'
+    +'<div class="dash-hero-label">Today\'s Schedule</div>'
+    +'<div class="dash-hero-val">'+todayAppts.length+'</div>'
+    +'<div class="dash-hero-sub">'+(todayAppts.length===1?'appointment':'appointments')+(scope==='me'?' (yours)':'')+'</div>'
+    +'</div>';
+
+  // Revenue (admin only): today's revenue from completed payments
+  let revenueBlock='';
+  if(isAdminish){
+    const payments=db.payments||[];
+    const todayRevenue=payments.filter(function(p){
+      if(p.status==='voided'||p.status==='failed')return false;
+      const d=(p.createdAt||'').split('T')[0];
+      return d===td;
+    }).reduce(function(s,p){return s+(parseFloat(p.afterDiscount||p.subtotal||0));},0);
+
+    // This week (Sun-Sat) vs last week
+    const dt=new Date();
+    const dow=dt.getDay();
+    const ws=new Date(dt);ws.setDate(dt.getDate()-dow);ws.setHours(0,0,0,0);
+    const lws=new Date(ws);lws.setDate(ws.getDate()-7);
+    const lwe=new Date(ws);lwe.setDate(ws.getDate()-1);
+    const wsStr=ws.toISOString().slice(0,10);
+    const lwsStr=lws.toISOString().slice(0,10);
+    const lweStr=lwe.toISOString().slice(0,10);
+    const tw=payments.filter(function(p){
+      if(p.status==='voided'||p.status==='failed')return false;
+      const d=(p.createdAt||'').split('T')[0];
+      return d>=wsStr;
+    }).reduce(function(s,p){return s+(parseFloat(p.afterDiscount||p.subtotal||0));},0);
+    const lw=payments.filter(function(p){
+      if(p.status==='voided'||p.status==='failed')return false;
+      const d=(p.createdAt||'').split('T')[0];
+      return d>=lwsStr&&d<=lweStr;
+    }).reduce(function(s,p){return s+(parseFloat(p.afterDiscount||p.subtotal||0));},0);
+
+    let trendStr='';
+    if(lw>0){
+      const pct=Math.round(((tw-lw)/lw)*100);
+      const arrow=pct>=0?'\u2197':'\u2198';
+      const color=pct>=0?'#10b981':'#f87171';
+      trendStr='<span style="color:'+color+';font-weight:700">'+arrow+' '+Math.abs(pct)+'%</span> vs last week';
+    } else if(tw>0){
+      trendStr='\u2014 first week with revenue';
+    } else {
+      trendStr='No revenue this week yet';
+    }
+
+    revenueBlock='<div class="dash-hero-block">'
+      +'<div class="dash-hero-label">Revenue Today</div>'
+      +'<div class="dash-hero-val">'+fmt$(todayRevenue)+'</div>'
+      +'<div class="dash-hero-sub">'+trendStr+'</div>'
+      +'</div>';
+  }
+
+  // Open tasks count (scoped)
+  const openTasks=db.tasks.filter(function(t){
+    if(t.status==='done')return false;
+    if(scope==='me' && t.assignedTo && t.assignedTo!==uid)return false;
+    return true;
+  }).length;
+  const tasksBlock='<div class="dash-hero-block">'
+    +'<div class="dash-hero-label">Open Tasks</div>'
+    +'<div class="dash-hero-val">'+openTasks+'</div>'
+    +'<div class="dash-hero-sub">'+(scope==='me'?'assigned to you':'across the team')+'</div>'
+    +'</div>';
+
+  el.className='dash-hero';
+  el.innerHTML=nextBlock+totalBlock+revenueBlock+tasksBlock;
+}
+
+// Quick action buttons for common operations.
+function _renderDashQuickActions(role){
+  const el=document.getElementById('dash-quick-actions');
+  if(!el)return;
+  const actions=[
+    {label:'New Appointment', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/></svg>', click:'openApptModal()'},
+    {label:'New Contact',     icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>', click:'openContactModal()'},
+    {label:'New Task',        icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>', click:'openTaskModal(null,null)'},
+    {label:'New Payment',     icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>', click:'switchPanel(\'payments\')'}
+  ];
+  // Practitioners can't create payments; remove the button.
+  const filtered=role==='practitioner'?actions.filter(function(a){return a.label!=='New Payment';}):actions;
+  el.innerHTML=filtered.map(function(a){
+    return '<button class="dash-qa-btn" onclick="'+a.click+'">'+a.icon+'<span class="dash-qa-btn-label">'+a.label+'</span></button>';
+  }).join('');
+}
+
+// Recent Activity feed: pull recent appointments, contacts, payments, completed
+// tasks. Scoped to user or clinic-wide. Limit to last 24 hours, max 12 items.
+function _renderDashActivity(scope, uid, isAdminish){
+  const el=document.getElementById('dash-activity');
+  if(!el)return;
+  const cutoff=Date.now()-24*60*60*1000;
+  const events=[];
+
+  // New appointments (created in last 24h)
+  (db.appointments||[]).forEach(function(a){
+    const t=a.createdAt?Date.parse(a.createdAt):0;
+    if(!t||t<cutoff)return;
+    if(scope==='me' && a.assignedTo && a.assignedTo!==uid)return;
+    const c=a.contactId?getContact(a.contactId):null;
+    const u=a.assignedTo?getUserById(a.assignedTo):null;
+    events.push({
+      ts:t,
+      type:'appt',
+      text:'New appointment: <strong>'+esc(a.title)+'</strong>'+(c?' for '+esc(c.name):'')+(u&&isAdminish&&scope==='all'?' with '+esc(u.name||u.username):''),
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg>'
+    });
+  });
+
+  // New contacts (created in last 24h)
+  (db.contacts||[]).forEach(function(c){
+    if(c.archived)return;
+    const t=c.createdAt?Date.parse(c.createdAt):0;
+    if(!t||t<cutoff)return;
+    events.push({
+      ts:t,
+      type:'contact',
+      text:'New contact: <strong>'+esc(c.name)+'</strong>'+(c.source?' ('+esc(c.source)+')':''),
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>'
+    });
+  });
+
+  // Recent payments (last 24h, completed only)
+  (db.payments||[]).forEach(function(p){
+    if(p.status!=='completed')return;
+    const t=p.createdAt?Date.parse(p.createdAt):0;
+    if(!t||t<cutoff)return;
+    if(scope==='me' && p.staffId && p.staffId!==uid)return;
+    const c=p.contactId?getContact(p.contactId):null;
+    events.push({
+      ts:t,
+      type:'payment',
+      text:'Payment <strong>'+fmt$(p.total||0)+'</strong>'+(c?' from '+esc(c.name):''),
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>'
+    });
+  });
+
+  // Recently completed tasks (last 24h). Tasks track status changes via
+  // updatedAt; we infer "completed" when status is done and the last update
+  // was within the window.
+  (db.tasks||[]).forEach(function(tsk){
+    if(tsk.status!=='done')return;
+    const t=tsk.completedAt?Date.parse(tsk.completedAt):(tsk.updatedAt?Date.parse(tsk.updatedAt):0);
+    if(!t||t<cutoff)return;
+    if(scope==='me' && tsk.assignedTo && tsk.assignedTo!==uid)return;
+    events.push({
+      ts:t,
+      type:'task',
+      text:'Task completed: <strong>'+esc(tsk.title)+'</strong>',
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+    });
+  });
+
+  events.sort(function(a,b){return b.ts-a.ts;});
+  const top=events.slice(0,12);
+  if(!top.length){
+    el.innerHTML='<div class="dash-empty">No recent activity in the last 24 hours.</div>';
+    return;
+  }
+  el.innerHTML=top.map(function(e){
+    return '<div class="dash-act-row">'
+      +'<div class="dash-act-icon">'+e.icon+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div class="dash-act-text">'+e.text+'</div>'
+      +'<div class="dash-act-when">'+_relTime(e.ts)+'</div>'
+      +'</div>'
+      +'</div>';
   }).join('');
 }
 
