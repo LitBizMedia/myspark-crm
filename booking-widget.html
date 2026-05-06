@@ -237,6 +237,7 @@ let D = null; // widget data from API
 let S = {     // booking state
   step:'service',
   service:null, variation:null, staff:null, appointment_type:null, class_session:null,
+  class_filter:'this_week',     // 'this_week' | 'next_week' | 'this_month' | 'all'
   date:null, time:null, available_staff:[],
   slots:[], slots_loading:false,
   cal_month: new Date().getMonth(), cal_year: new Date().getFullYear(),
@@ -910,23 +911,91 @@ function renderClassesForm(el) {
     </div>`;
   }
 
+  // Filter sessions by date range based on the active chip.
+  // Defaults to 'this_week' on first render so patients see imminent sessions first.
+  // Computed locally in JS to avoid re-fetching from the Lambda.
+  function dateRangeForFilter(filter) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dow = today.getDay();   // 0=Sun..6=Sat
+    // Monday-anchored week (closer to common scheduling). Mon offset:
+    const daysFromMon = (dow + 6) % 7;
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - daysFromMon);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+    if (filter === 'next_week') {
+      const nws = new Date(startOfWeek); nws.setDate(startOfWeek.getDate() + 7);
+      const nwe = new Date(nws); nwe.setDate(nws.getDate() + 6);
+      return { start: nws, end: nwe };
+    }
+    if (filter === 'this_month') {
+      const mStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const mEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      return { start: mStart, end: mEnd };
+    }
+    if (filter === 'all') {
+      return { start: today, end: new Date(2100, 0, 1) };
+    }
+    // default: this_week
+    return { start: today, end: endOfWeek };  // start at today (not Monday in past) for this week
+  }
+
+  const filter = S.class_filter || 'this_week';
+  const range = dateRangeForFilter(filter);
+  const startStr = range.start.toISOString().slice(0, 10);
+  const endStr = range.end.toISOString().slice(0, 10);
+  const filteredSessions = allSessions.filter(s => s.date >= startStr && s.date <= endStr);
+
+  // Count per-chip so we can show "(12)" badges and grey out empty options
+  function countForFilter(f) {
+    const r = dateRangeForFilter(f);
+    const sStr = r.start.toISOString().slice(0, 10);
+    const eStr = r.end.toISOString().slice(0, 10);
+    return allSessions.filter(s => s.date >= sStr && s.date <= eStr).length;
+  }
+
+  const chips = [
+    { id: 'this_week',  label: 'This Week' },
+    { id: 'next_week',  label: 'Next Week' },
+    { id: 'this_month', label: 'This Month' },
+    { id: 'all',        label: 'All' }
+  ];
+  let chipsHtml = '<div class="bw-class-filters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+  chips.forEach(c => {
+    const count = countForFilter(c.id);
+    const active = filter === c.id;
+    const empty = count === 0;
+    const bg = active ? 'var(--brand)' : (empty ? 'transparent' : 'var(--bg-card)');
+    const color = active ? '#fff' : (empty ? 'var(--text-muted)' : 'var(--text)');
+    const border = active ? 'var(--brand)' : 'var(--border)';
+    const cursor = empty && !active ? 'not-allowed' : 'pointer';
+    const opacity = empty && !active ? '0.5' : '1';
+    const onclick = empty && !active ? '' : `onclick="setClassFilter('${c.id}')"`;
+    chipsHtml += `<button type="button" ${onclick} style="padding:6px 12px;border:1.5px solid ${border};background:${bg};color:${color};border-radius:999px;font-size:12px;font-weight:600;cursor:${cursor};opacity:${opacity};transition:all .15s">${c.label} <span style="opacity:0.7;margin-left:2px">(${count})</span></button>`;
+  });
+  chipsHtml += '</div>';
+
   // Session cards (right pane), grouped by date.
   // Each date gets a header; sessions on that date are compact rows underneath.
   // This scales well from a once-a-week class to multi-class daily schedules.
-  let sessionsHtml = '';
+  let sessionsHtml = chipsHtml;
   if (!allSessions.length) {
-    sessionsHtml = '<div class="bw-empty-state" style="padding:32px 16px;text-align:center;color:var(--text-muted);font-size:13px">No upcoming class sessions. Please check back later.</div>';
+    sessionsHtml += '<div class="bw-empty-state" style="padding:32px 16px;text-align:center;color:var(--text-muted);font-size:13px">No upcoming class sessions. Please check back later.</div>';
+  } else if (!filteredSessions.length) {
+    sessionsHtml += '<div class="bw-empty-state" style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:13px">No classes in this date range. Try a different filter.</div>';
   } else {
     // Group by date string (sessions already arrive sorted by date,time from the Lambda)
     const groups = {};
     const dateOrder = [];
-    allSessions.forEach(s => {
+    filteredSessions.forEach(s => {
       const key = s.date;
       if (!groups[key]) { groups[key] = []; dateOrder.push(key); }
       groups[key].push(s);
     });
 
-    sessionsHtml = '<div class="bw-class-list" style="display:flex;flex-direction:column;gap:14px;max-height:560px;overflow-y:auto;padding-right:4px">';
+    sessionsHtml += '<div class="bw-class-list" style="display:flex;flex-direction:column;gap:14px;max-height:560px;overflow-y:auto;padding-right:4px">';
 
     dateOrder.forEach(dateKey => {
       const dayLabel = fmtDate(dateKey);
@@ -1023,6 +1092,13 @@ function selectClassSession(sessionId) {
   const sess = (D.class_sessions || []).find(s => s.id === sessionId);
   if (!sess || sess.spots_remaining <= 0) return;
   S.class_session = sess;
+  render();
+}
+
+function setClassFilter(filter) {
+  S.class_filter = filter;
+  // Selected session stays selected even if it falls outside the visible range -
+  // the summary card on the left shows it. The patient can still register.
   render();
 }
 
