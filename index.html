@@ -14079,7 +14079,13 @@ function renderCoupons(){
       var usageLabel=(cpn.usageCount||0)+(cpn.maxUses?' / '+cpn.maxUses:'')+' use'+(cpn.usageCount!==1?'s':'');
       h+='<div class="prod-card" style="cursor:default">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">'
-        +'<div><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;letter-spacing:.04em;color:var(--main-text);background:var(--main-bg);border:1px dashed var(--main-border);padding:4px 10px;border-radius:6px;display:inline-block">'+esc(cpn.code)+'</div>'
+        +'<div>'
+        +'<div style="display:flex;align-items:center;gap:6px">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;letter-spacing:.04em;color:var(--main-text);background:var(--main-bg);border:1px dashed var(--main-border);padding:4px 10px;border-radius:6px;display:inline-block">'+esc(cpn.code)+'</div>'
+        +'<button class="cpn-copy-btn" onclick="copyCouponCode(\''+esc(cpn.code)+'\',this)" title="Copy code" style="background:transparent;border:none;cursor:pointer;padding:4px;color:var(--main-text-muted);display:flex;align-items:center;border-radius:4px;transition:all .15s" onmouseover="this.style.background=\'var(--main-bg)\';this.style.color=\'var(--main-text)\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--main-text-muted)\'">'
+        +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
+        +'</button>'
+        +'</div>'
         +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">'+esc(cpn.name||'')+'</div></div>'
         +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;background:'+sc.bg+';color:'+sc.color+';white-space:nowrap">'+sc.label+'</span>'
         +'</div>'
@@ -14110,6 +14116,36 @@ function renderCoupons(){
 
 function cpnAppliesToLabel(v){
   return{pos:'POS Only',invoices:'Invoices',subscriptions:'Subscriptions',all:'All Channels'}[v]||v;
+}
+
+// Copy a coupon code to the clipboard. Shows transient checkmark feedback on
+// the button and a toast. Falls back to a textarea trick if clipboard API
+// isn't available (older browsers, insecure contexts).
+function copyCouponCode(code, btn){
+  function showCopied(){
+    if(!btn)return;
+    var orig=btn.innerHTML;
+    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    btn.style.color='#10b981';
+    setTimeout(function(){btn.innerHTML=orig;btn.style.color='';},1500);
+  }
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(code).then(function(){
+        showCopied();
+        toast('Copied: '+code,'success');
+      }).catch(function(){
+        toast('Could not copy. Select and copy manually.','error');
+      });
+    } else {
+      var ta=document.createElement('textarea');
+      ta.value=code;ta.style.position='fixed';ta.style.left='-9999px';
+      document.body.appendChild(ta);ta.select();
+      document.execCommand('copy');document.body.removeChild(ta);
+      showCopied();
+      toast('Copied: '+code,'success');
+    }
+  }catch(e){toast('Could not copy code.','error');}
 }
 
 function toggleCouponStatus(id){if(!canManageCoupons()){toast('Permission denied.','error');return;}
