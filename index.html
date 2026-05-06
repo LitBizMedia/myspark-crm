@@ -2702,6 +2702,13 @@ function renderCal(){
   if(userRole()==='practitioner'&&state.user&&state.user.id){
     state._practitionerFilter=state.user.id;
   }
+  // Keep the view-button pills (Month/Week/Day) in sync with state.calView.
+  // This handles the case where state.calView was set by applyCalPrefs at
+  // startup before the calendar buttons existed in the DOM.
+  ['month','week','day'].forEach(function(x){
+    var b=document.getElementById('vb-'+x);
+    if(b)b.classList.toggle('active',x===state.calView);
+  });
   renderCalLegend();
   if(state.calView==='month')renderMonthCal();
   else if(state.calView==='week')renderWeekCal();
