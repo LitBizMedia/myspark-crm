@@ -1261,7 +1261,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="appt-list-search" type="text" placeholder="Search appointments..." oninput="renderApptList()"></div>
             <select class="filter-sel" id="appt-list-user" onchange="renderApptList()"><option value="">All Staff</option></select>
-            <select class="filter-sel" id="appt-list-status" onchange="renderApptList()"><option value="scheduled">Upcoming</option><option value="">All Status</option><option value="completed">Completed</option><option value="rescheduled">Rescheduled</option><option value="no-show">No-show</option><option value="cancelled">Cancelled</option></select>
+            <select class="filter-sel" id="appt-list-range" onchange="renderApptList()"><option value="2w">Next 2 weeks</option><option value="30d">Next 30 days</option><option value="60d">Next 60 days</option><option value="future">All upcoming</option><option value="past30">Past 30 days</option><option value="past90">Past 90 days</option><option value="all">All time</option></select>
+            <select class="filter-sel" id="appt-list-status" onchange="renderApptList()"><option value="scheduled">Scheduled</option><option value="">All Status</option><option value="completed">Completed</option><option value="rescheduled">Rescheduled</option><option value="no-show">No-show</option><option value="cancelled">Cancelled</option></select>
           </div>
           <div id="appt-list-body"></div>
         </div>
@@ -9311,16 +9312,33 @@ function renderApptList(){
   const el=document.getElementById('appt-list-body');if(!el)return;
   const uSel=document.getElementById('appt-list-user');
   const stSel=document.getElementById('appt-list-status');
+  const rgSel=document.getElementById('appt-list-range');
   const q=(document.getElementById('appt-list-search')&&document.getElementById('appt-list-search').value||'').toLowerCase();
   const uid_f=uSel&&uSel.value||'';
   const st_f=stSel&&stSel.value||'';
+  const rg_f=rgSel&&rgSel.value||'2w';
   if(uSel&&uSel.options.length<=1){
     uSel.innerHTML='<option value="">All Staff</option>'+allUsers().map(u=>'<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>').join('');
   }
   const td=todayStr();
+  // Compute date range bounds based on the selected filter.
+  // 'all' = no date filter; other values bound by start/end inclusive (YYYY-MM-DD strings).
+  function rangeBounds(rg){
+    const today=new Date();today.setHours(0,0,0,0);
+    function shift(days){const d=new Date(today);d.setDate(today.getDate()+days);return d.toISOString().slice(0,10);}
+    if(rg==='2w')     return {start:td, end:shift(14)};
+    if(rg==='30d')    return {start:td, end:shift(30)};
+    if(rg==='60d')    return {start:td, end:shift(60)};
+    if(rg==='future') return {start:td, end:'2100-01-01'};
+    if(rg==='past30') return {start:shift(-30), end:td};
+    if(rg==='past90') return {start:shift(-90), end:td};
+    return {start:'1900-01-01', end:'2100-01-01'};
+  }
+  const bounds=rangeBounds(rg_f);
   let appts=db.appointments.filter(a=>{
     if(st_f&&a.status!==st_f)return false;
     if(uid_f&&a.assignedTo!==uid_f)return false;
+    if(a.date<bounds.start||a.date>bounds.end)return false;
     if(q){const c=a.contactId?getContact(a.contactId):null;
       const txt=(a.title+' '+(c?c.name+' '+( c.company||''):'')+' '+(a.location||'')).toLowerCase();
       if(!txt.includes(q))return false;}
