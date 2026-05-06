@@ -2025,9 +2025,99 @@ function layoutOverlap(events){
     }
     if(!placed)groups.push([ev]);
   });
+  // Cap visible columns at 4 per group. When a group has 5+ events, the first
+  // 3 render normally and the 4th column carries an overflow placeholder for
+  // the rest. This keeps single-column events readable on dense days like a
+  // multi-provider clinic where 6+ staff might book the same hour.
   const out=[];
-  groups.forEach(g=>g.forEach((ev,i)=>out.push({...ev,_col:i,_tc:g.length})));
+  const MAX_VISIBLE = 4;
+  groups.forEach(g => {
+    if (g.length <= MAX_VISIBLE) {
+      g.forEach((ev, i) => out.push({ ...ev, _col: i, _tc: g.length }));
+    } else {
+      // First 3 render in their own columns; column 4 is the overflow pill.
+      const visible = g.slice(0, MAX_VISIBLE - 1);
+      const overflow = g.slice(MAX_VISIBLE - 1);
+      visible.forEach((ev, i) => out.push({ ...ev, _col: i, _tc: MAX_VISIBLE }));
+      // Synthetic pill carries the bounding time range of the hidden events
+      // so it can be positioned + sized over the slot they would have occupied.
+      const minStart = Math.min(...overflow.map(e => t2m(e.time||'00:00')));
+      const maxEnd = Math.max(...overflow.map(e => t2m(e.time||'00:00') + (e.duration||60)));
+      out.push({
+        _isOverflow: true,
+        _col: MAX_VISIBLE - 1,
+        _tc: MAX_VISIBLE,
+        _overflowItems: overflow,
+        time: m2t(minStart),
+        duration: maxEnd - minStart
+      });
+    }
+  });
   return out;
+}
+
+// Helper: convert minutes-since-midnight back to HH:MM
+function m2t(m){
+  var h=Math.floor(m/60), mm=m%60;
+  return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+}
+
+// Show a popover next to the "+N more" overflow pill listing the hidden
+// overlapping appointments. Click any item to open the appointment modal.
+// Click outside closes. One popover at a time.
+function showCalOverflow(anchor, idsCsv){
+  // Remove any existing popover
+  var existing = document.getElementById('cal-overflow-pop');
+  if (existing) existing.remove();
+
+  var ids = (idsCsv||'').split(',').filter(Boolean);
+  if (!ids.length) return;
+  var items = ids.map(function(id){
+    return (db.appointments||[]).find(function(a){return a.id===id;}) ||
+           ((db.classSessions||[]).find(function(s){return s.id===id;}));
+  }).filter(Boolean);
+  if (!items.length) return;
+
+  var rows = items.map(function(a){
+    var u = a.assignedTo ? getUserById(a.assignedTo) : (a.instructor_id ? getUserById(a.instructor_id) : null);
+    var col = u ? (u.color||'#6b21ea') : '#6b21ea';
+    var c = a.contactId ? getContact(a.contactId) : null;
+    var staffName = u ? (u.name||u.username) : '';
+    var clientLine = c ? esc(c.name) : '';
+    return '<div class="cal-overflow-row" onclick="_calEventClick(\''+a.id+'\');document.getElementById(\'cal-overflow-pop\').remove();" style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s" onmouseover="this.style.background=\'var(--bg-hover)\'" onmouseout="this.style.background=\'\'">'
+      +'<div style="width:8px;height:8px;border-radius:50%;background:'+col+';margin-top:5px;flex-shrink:0"></div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(a.time?fmtTime(a.time)+' ':'')+esc(a.title||'')+'</div>'
+      +(staffName?'<div style="font-size:11px;color:var(--text-muted)">'+esc(staffName)+(clientLine?' \u00b7 '+clientLine:'')+'</div>':(clientLine?'<div style="font-size:11px;color:var(--text-muted)">'+clientLine+'</div>':''))
+      +'</div>'
+      +'</div>';
+  }).join('');
+
+  // Position the popover next to the anchor
+  var rect = anchor.getBoundingClientRect();
+  var pop = document.createElement('div');
+  pop.id = 'cal-overflow-pop';
+  pop.style.cssText = 'position:fixed;z-index:1000;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);min-width:240px;max-width:320px;max-height:360px;overflow-y:auto';
+  // Try to place to the right; if no room, place to the left
+  var leftPx = rect.right + 6;
+  if (leftPx + 240 > window.innerWidth) leftPx = Math.max(8, rect.left - 246);
+  var topPx = Math.min(rect.top, window.innerHeight - 380);
+  pop.style.left = leftPx + 'px';
+  pop.style.top = topPx + 'px';
+  pop.innerHTML = '<div style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-bottom:1px solid var(--border)">'+items.length+' overlapping</div>'+rows;
+  document.body.appendChild(pop);
+
+  // Close on outside click. Use a one-shot capture-phase listener to avoid
+  // closing immediately from the same click that opened it.
+  setTimeout(function(){
+    function closer(e){
+      if (!pop.contains(e.target)) {
+        pop.remove();
+        document.removeEventListener('mousedown', closer, true);
+      }
+    }
+    document.addEventListener('mousedown', closer, true);
+  }, 0);
 }
 
 // =====================================================
@@ -2983,14 +3073,21 @@ function buildTimedCol(dateStr,appts,allHours){
     var s=t2m(a.time||'09:00');
     var topPx=(s-minH*60)/60*68,heightPx=Math.max((a.duration||60)/60*68,18);
     if(s/60<allHours[0]||s/60>=(allHours[allHours.length-1]||24)+1)return'';
-    var col=getUserColor(a.assignedTo);
-    var sCol=getServiceColor(a.service_id);
-    var sStripe=sCol?'border-left:4px solid '+sCol+';':'';
     // Width logic: when overlapping (_tc>1), divide column by N. Otherwise span
     // the full column width with left:0;right:0 so a lone event fills the day.
     var wStyle=a._tc>1
       ? 'width:calc('+Math.floor(100/a._tc)+'% - 3px);left:calc('+a._col*(100/a._tc)+'% + 1px);right:auto;'
       : 'left:0;right:0;';
+    // Overflow pill: 5+ overlapping events. The pill represents the hidden ones
+    // and opens a popover listing them when clicked.
+    if(a._isOverflow){
+      var ids=a._overflowItems.map(function(x){return x.id;}).join(',');
+      var n=a._overflowItems.length;
+      return '<div class="timed-ev cal-overflow-pill" style="top:'+topPx+'px;height:'+heightPx+'px;background:rgba(107,33,234,.85);'+wStyle+'border:1px dashed #fff5;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700" onclick="event.stopPropagation();showCalOverflow(this,\''+ids+'\')" title="'+n+' more appointments">+'+n+' more</div>';
+    }
+    var col=getUserColor(a.assignedTo);
+    var sCol=getServiceColor(a.service_id);
+    var sStripe=sCol?'border-left:4px solid '+sCol+';':'';
     var isCancelled=a.status==='cancelled';
     var cA=a.contactId?getContact(a.contactId):null;
     var bufBpx=Math.round((parseInt(a.buffer_before)||0)/60*68);
