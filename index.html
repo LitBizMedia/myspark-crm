@@ -3672,7 +3672,7 @@ function _renderDSoapTab(c){
 
   var notes=c._soapNotes||[];
   var header='<div class="d-sticky-sub" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--main-text)">SOAP Notes ('+notes.length+')</div>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--text)">SOAP Notes ('+notes.length+')</div>'
     +'<button class="btn btn-primary btn-sm" onclick="openSoapNoteModal(\''+c.id+'\',null)">+ New SOAP Note</button>'
     +'</div>';
 
@@ -3681,7 +3681,11 @@ function _renderDSoapTab(c){
   }
 
   var rows=notes.map(function(n){
-    var dateStr=n.visitDate?fmtDate(n.visitDate):(n.createdAt?fmtDate(n.createdAt.split('T')[0]):'');
+    // Postgres DATE/TIMESTAMPTZ columns deserialize as full ISO strings.
+    // fmtDate expects bare YYYY-MM-DD, so strip the time portion.
+    var visitDateStr=n.visitDate?String(n.visitDate).split('T')[0]:null;
+    var createdDateStr=n.createdAt?String(n.createdAt).split('T')[0]:null;
+    var dateStr=visitDateStr?fmtDate(visitDateStr):(createdDateStr?fmtDate(createdDateStr):'');
     var author=n.authorId?getUserById(n.authorId):null;
     var authorName=author?(author.name||author.username):'Unknown';
     var authorColor=author&&author.color?author.color:'var(--text-muted)';
@@ -3745,7 +3749,9 @@ function openSoapNoteModal(contactId,noteId){
     return '<option value="'+k+'"'+(tmplKey===k?' selected':'')+'>'+esc(SOAP_TEMPLATES[k].name)+'</option>';
   }).join('');
 
-  var visitDate=existing&&existing.visitDate||todayStr();
+  // Visit date for the form: existing visitDate may be a full ISO timestamp
+  // from Postgres; HTML date input requires bare YYYY-MM-DD.
+  var visitDate=existing&&existing.visitDate?String(existing.visitDate).split('T')[0]:todayStr();
   var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
   var taS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:13px;outline:none;box-sizing:border-box;min-height:80px;resize:vertical;line-height:1.5';
 
@@ -3847,7 +3853,10 @@ function viewSoapNote(noteId){
 
   var author=n.authorId?getUserById(n.authorId):null;
   var authorName=author?(author.name||author.username):'Unknown';
-  var dateStr=n.visitDate?fmtDate(n.visitDate):(n.createdAt?fmtDate(n.createdAt.split('T')[0]):'');
+  // Same ISO-string defensive split as the list view
+  var visitDateStr=n.visitDate?String(n.visitDate).split('T')[0]:null;
+  var createdDateStr=n.createdAt?String(n.createdAt).split('T')[0]:null;
+  var dateStr=visitDateStr?fmtDate(visitDateStr):(createdDateStr?fmtDate(createdDateStr):'');
   var uid=state.user&&state.user.id;
   var isAdminish=isAdminOrManager();
   var canEdit=!n.locked&&(n.authorId===uid||isAdminish);
