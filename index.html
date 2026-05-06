@@ -2227,13 +2227,14 @@ function _pollTick(){
 
   fetchFromServer().then(function(ok){
     if(!ok)return;
-    // Re-render the view that's currently visible. fetchFromServer mutates db
-    // in place, so we just need to redraw whatever the user is looking at.
+    // Re-render whatever the user is looking at. renderPanel dispatches to the
+    // right render function based on state.panel, so this single call covers
+    // dashboard, contacts, calendar, tasks, payments, products, forms, etc.
+    // Drawer is rendered independently of the panel so we call it separately.
     try{
-      if(state.panel==='calendar')renderCal();
-      if(typeof renderApptList==='function')renderApptList();
-      if(state.panel==='contacts'&&typeof renderContacts==='function')renderContacts();
+      if(typeof renderPanel==='function')renderPanel();
       if(state.drawer&&typeof renderDrawer==='function')renderDrawer();
+      if(typeof updateNotifBadge==='function')updateNotifBadge();
     }catch(e){console.warn('poll redraw error',e);}
   });
 }
