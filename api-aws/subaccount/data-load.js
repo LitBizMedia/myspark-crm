@@ -39,9 +39,7 @@ function appointmentToFrontend(row) {
     buffer_before: row.buffer_before,
     buffer_after: row.buffer_after,
     service_id: row.service_id,
-    // Coalesce variation_id into service_variation_id (variation_id is legacy column,
-    // both are written by different code paths; service_variation_id is canonical).
-    service_variation_id: row.service_variation_id || row.variation_id || null,
+    service_variation_id: row.service_variation_id || null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   };
@@ -109,8 +107,7 @@ function paymentToFrontend(row) {
 // Maps an appointments table row (snake_case) to the camelCase shape the
 // frontend expects. Date column comes back as a JS Date; we normalize to
 // 'YYYY-MM-DD' string to match what the frontend has historically read from
-// blob.appointments. Coalesces variation_id and service_variation_id into one
-// canonical service_variation_id field.
+// blob.appointments.
 function appointmentToFrontend(row) {
   if (!row) return row;
   let dateStr = row.date;
@@ -137,7 +134,7 @@ function appointmentToFrontend(row) {
     buffer_before: row.buffer_before || 0,
     buffer_after: row.buffer_after || 0,
     service_id: row.service_id,
-    service_variation_id: row.service_variation_id || row.variation_id || null,
+    service_variation_id: row.service_variation_id || null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   };

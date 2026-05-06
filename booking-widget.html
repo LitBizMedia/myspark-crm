@@ -230,8 +230,8 @@ if (EMBED) {
   document.documentElement.classList.add('bw-embed');
 }
 
-const STEPS = ['service','variation','staff','appointment_type','date','time','info','payment','confirm'];
-const STEP_LABELS = ['Service','Options','Provider','Type','Date','Time','Your Info','Payment','Done'];
+const STEPS = ['service','variation','staff','date','time','info','book','payment','confirm'];
+const STEP_LABELS = ['Service','Options','Provider','Date','Time','Your Info','Booking','Payment','Done'];
 
 let D = null; // widget data from API
 let S = {     // booking state
@@ -329,7 +329,6 @@ function renderProgress() {
   const cur = vs.indexOf(S.step);
   const labels = {
     service:'Service', variation:'Options', staff:'Provider',
-    appointment_type:'Type',
     date:'Date', time:'Time', info:'Info', payment:'Payment', confirm:'Done',
     book:'Booking'
   };
@@ -355,7 +354,6 @@ function render() {
     case 'service':         renderServices(el); break;
     case 'variation':       renderVariations(el); break;
     case 'staff':           renderStaff(el); break;
-    case 'appointment_type': renderAppointmentTypes(el); break;
     case 'date':            renderDate(el); break;
     case 'time':            renderTime(el); break;
     case 'info':            renderInfo(el); break;
@@ -540,51 +538,6 @@ function renderStaff(el) {
 
 function selectStaff(id) {
   S.staff = id ? (D.staff||[]).find(u => u.id === id) : null;
-  S.date = null; S.time = null;
-  render();
-}
-
-// ── Step: Appointment Type (appointment widgets only) ────────────────────────
-function renderAppointmentTypes(el) {
-  const types = (D.widget && Array.isArray(D.widget.appointment_types))
-    ? D.widget.appointment_types.filter(t => t && t.active !== false)
-    : [];
-
-  if (!types.length) {
-    el.innerHTML = `<div class="bw-section-title">No Appointment Types</div>
-      <div class="bw-section-sub">This widget has no appointment types configured.</div>
-      <div class="bw-nav"><button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button></div>`;
-    return;
-  }
-
-  let html = `<div class="bw-section-title">Appointment Type</div>
-    <div class="bw-section-sub">Pick what you'd like to book</div>
-    <div class="bw-options">`;
-
-  types.forEach(t => {
-    const sel = S.appointment_type?.id === t.id ? 'selected' : '';
-    const dur = parseInt(t.duration) || 30;
-    const price = parseFloat(t.price) || 0;
-    const meta = `${dur} min${price > 0 ? ' · $' + price.toFixed(2) : ''}`;
-    html += `<div class="bw-option ${sel}" onclick="selectAppointmentType('${t.id}')">
-      <div>
-        <div class="bw-option-name">${esc(t.name)}</div>
-        <div class="bw-option-meta">${meta}</div>
-        ${t.description ? `<div class="bw-option-desc" style="font-size:12px;color:var(--text-muted);margin-top:4px">${esc(t.description)}</div>` : ''}
-      </div>
-    </div>`;
-  });
-
-  html += `</div><div class="bw-nav">
-    <button class="bw-btn bw-btn-ghost" onclick="goBack()">&#8249; Back</button>
-    <button class="bw-btn bw-btn-primary" onclick="goNext()" ${!S.appointment_type?'disabled':''}>Continue &rarr;</button>
-  </div>`;
-  el.innerHTML = html;
-}
-
-function selectAppointmentType(id) {
-  const types = (D.widget && Array.isArray(D.widget.appointment_types)) ? D.widget.appointment_types : [];
-  S.appointment_type = id ? types.find(t => t.id === id) : null;
   S.date = null; S.time = null;
   render();
 }
