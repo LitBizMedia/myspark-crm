@@ -897,7 +897,7 @@ function renderClassesForm(el) {
     const sess = S.class_session;
     const svc = svcMap[sess.service_id];
     const instr = staffMap[sess.instructor_id];
-    const datePretty = fmtDateLong(sess.date);
+    const datePretty = fmtDate(sess.date);
     const timePretty = fmtTime(sess.time);
     const priceLine = sess.price > 0 ? `<div class="bw-summary-row"><span>Price</span><span>$${sess.price.toFixed(2)}</span></div>` : '';
     summary = `<div class="bw-summary">
@@ -921,7 +921,7 @@ function renderClassesForm(el) {
       const instr = staffMap[sess.instructor_id];
       const isFull = sess.spots_remaining <= 0;
       const isSelected = S.class_session && S.class_session.id === sess.id;
-      const datePretty = fmtDateLong(sess.date);
+      const datePretty = fmtDate(sess.date);
       const timePretty = fmtTime(sess.time);
       const spotsText = isFull ? 'FULL' : `${sess.spots_remaining} spot${sess.spots_remaining===1?'':'s'} left`;
       const spotsColor = isFull ? '#ef4444' : (sess.spots_remaining <= 2 ? '#f59e0b' : '#10b981');
