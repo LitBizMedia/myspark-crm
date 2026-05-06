@@ -1,7 +1,8 @@
 // api/subaccount/data-load.js (Lambda version)
 // GET /api/subaccount/data-load
 // Loads the bulk subaccount_data JSONB blob plus services, variations, class
-// sessions, users, service_categories, service_widgets, and payments.
+// sessions, users, service_categories, service_widgets, payments,
+// appointments, subscription_plans, and subscriptions.
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
@@ -98,45 +99,81 @@ function paymentToFrontend(row) {
     isSessionPackSale: !!row.is_session_pack_sale,
     isGiftCardSale: !!row.is_gift_card_sale,
     sessionPackId: row.session_pack_id,
+    subscriptionId: row.subscription_id,
     notes: row.notes,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   };
 }
 
-// Maps an appointments table row (snake_case) to the camelCase shape the
-// frontend expects. Date column comes back as a JS Date; we normalize to
-// 'YYYY-MM-DD' string to match what the frontend has historically read from
-// blob.appointments.
-function appointmentToFrontend(row) {
+// Maps a subscription_plans row to the camelCase shape the frontend expects.
+function planToFrontend(row) {
   if (!row) return row;
-  let dateStr = row.date;
-  if (dateStr instanceof Date) {
-    // Format as local YYYY-MM-DD (avoid timezone drift from toISOString)
-    const y = dateStr.getUTCFullYear();
-    const m = String(dateStr.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(dateStr.getUTCDate()).padStart(2, '0');
-    dateStr = `${y}-${m}-${d}`;
-  } else if (typeof dateStr === 'string' && dateStr.length > 10) {
-    dateStr = dateStr.slice(0, 10);
-  }
   return {
     id: row.id,
-    title: row.title,
-    contactId: row.contact_id,
-    assignedTo: row.assigned_to,
-    date: dateStr,
-    time: row.time,
-    duration: row.duration,
-    status: row.status,
-    location: row.location,
-    notes: row.notes,
-    buffer_before: row.buffer_before || 0,
-    buffer_after: row.buffer_after || 0,
-    service_id: row.service_id,
-    service_variation_id: row.service_variation_id || null,
+    name: row.name,
+    description: row.description || '',
+    active: row.active,
+    items: row.items || [],
+    pricing: row.pricing || {},
+    notes: row.notes || '',
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
-    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+    createdBy: row.created_by
+  };
+}
+
+// Maps a subscriptions row to the camelCase shape the frontend expects.
+// Mirrors the shape returned by /api/subaccount/subscriptions-list so the
+// frontend can use the same render code regardless of which endpoint
+// populated db.subscriptions.
+function subscriptionToFrontend(row) {
+  if (!row) return row;
+
+  // Normalize date columns (start_date and next_due_date are DATE type)
+  function dateOnly(d) {
+    if (!d) return null;
+    if (d instanceof Date) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const da = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${da}`;
+    }
+    if (typeof d === 'string' && d.length > 10) return d.slice(0, 10);
+    return d;
+  }
+
+  return {
+    id: row.id,
+    contactId: row.contact_id,
+    planId: row.plan_id,
+    planName: row.plan_name_snapshot,
+    billingCycle: row.billing_cycle,
+    cyclePrice: row.cycle_price != null ? parseFloat(row.cycle_price) : 0,
+    items: row.items || [],
+    status: row.status,
+    startDate: dateOnly(row.start_date),
+    nextDueDate: dateOnly(row.next_due_date),
+    lastChargedAt: row.last_charged_at instanceof Date ? row.last_charged_at.toISOString() : row.last_charged_at,
+    pausedAt: row.paused_at instanceof Date ? row.paused_at.toISOString() : row.paused_at,
+    cancelledAt: row.cancelled_at instanceof Date ? row.cancelled_at.toISOString() : row.cancelled_at,
+    cancellationReason: row.cancellation_reason,
+    cardId: row.card_id,
+    couponId: row.coupon_id,
+    couponCode: row.coupon_code,
+    couponRecurring: !!row.coupon_recurring,
+    manualDiscountType: row.manual_discount_type,
+    manualDiscountValue: row.manual_discount_value != null ? parseFloat(row.manual_discount_value) : null,
+    manualDiscountNote: row.manual_discount_note,
+    manualDiscountRecurring: row.manual_discount_recurring !== false,
+    ownerUserId: row.owner_user_id,
+    failedChargeCount: row.failed_charge_count || 0,
+    lastFailureAt: row.last_failure_at instanceof Date ? row.last_failure_at.toISOString() : row.last_failure_at,
+    lastFailureReason: row.last_failure_reason,
+    notes: row.notes,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+    createdBy: row.created_by
   };
 }
 
@@ -149,7 +186,11 @@ async function handler(req, res) {
   const subaccountId = auth.subaccount_id;
 
   try {
-    const [blobResult, servicesResult, variationsResult, classesResult, usersResult, widgetsResult, paymentsResult, appointmentsResult] = await Promise.all([
+    const [
+      blobResult, servicesResult, variationsResult, classesResult,
+      usersResult, widgetsResult, paymentsResult, appointmentsResult,
+      plansResult, subscriptionsResult
+    ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
         [subaccountId]
@@ -189,6 +230,14 @@ async function handler(req, res) {
       db.query(
         'SELECT * FROM appointments WHERE subaccount_id = $1 ORDER BY date ASC, time ASC',
         [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM subscription_plans WHERE subaccount_id = $1 ORDER BY active DESC, name ASC',
+        [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM subscriptions WHERE subaccount_id = $1 ORDER BY created_at DESC',
+        [subaccountId]
       )
     ]);
 
@@ -201,7 +250,9 @@ async function handler(req, res) {
       serviceCategories: blobResult.rows[0]?.service_categories || [],
       serviceWidgets: widgetsResult.rows,
       payments: paymentsResult.rows.map(paymentToFrontend),
-      appointments: appointmentsResult.rows.map(appointmentToFrontend)
+      appointments: appointmentsResult.rows.map(appointmentToFrontend),
+      subscriptionPlans: plansResult.rows.map(planToFrontend),
+      subscriptions: subscriptionsResult.rows.map(subscriptionToFrontend)
     });
   } catch (e) {
     console.error('data-load error:', e.message);
