@@ -691,7 +691,16 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .pay-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
 
 /* SUBSCRIPTIONS */
-.sub-row{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:13px 16px;display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .18s;margin-bottom:7px;color:var(--text)}
+/* Important: .sub-row sits inside .panel which redefines --text to the dark
+   light-theme value. We use --bg-panel (dark) as the background, so we need
+   to flip the text vars back to the dark-theme light values for children. */
+.sub-row{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:13px 16px;display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .18s;margin-bottom:7px;color:#ede8ff;
+  --text:#ede8ff;
+  --text-muted:#b8aee0;
+  --text-dim:#6b5fa0;
+  --bg-card:#181230;
+  --border:rgba(255,255,255,.08);
+}
 .sub-row:hover{border-color:var(--purple-border)}
 .sub-row.active{border-left:3px solid #34d399}
 .sub-row.paused{border-left:3px solid var(--orange);opacity:.75}
