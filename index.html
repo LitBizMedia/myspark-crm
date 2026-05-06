@@ -2741,6 +2741,65 @@ function setCalView(v){
     // Keep panel state between views
   }
   setTimeout(function(){if(state.calManageOpen)renderCalManage();},50);
+  _saveCalPrefs();
+}
+
+// Calendar view preferences are saved per-logged-in-user in localStorage.
+// Stores: which staff are visible, the drag-ordered staff sequence, and the
+// active view mode (day/week/month). The currently-displayed date is NOT
+// persisted; calendar always opens to "today" on fresh load.
+function _calPrefsKey(){
+  var uid = state && state.user && state.user.id;
+  if (!uid) return null;
+  return 'myspark.cal.prefs.' + uid;
+}
+function _loadCalPrefs(){
+  try {
+    var k = _calPrefsKey(); if (!k) return null;
+    var raw = localStorage.getItem(k);
+    if (!raw) return null;
+    var p = JSON.parse(raw);
+    return p && typeof p === 'object' ? p : null;
+  } catch(e){ return null; }
+}
+function _saveCalPrefs(){
+  try {
+    var k = _calPrefsKey(); if (!k) return;
+    var prefs = {
+      view: state.calView || 'week',
+      visibleStaff: Array.isArray(state.calDayStaff) ? state.calDayStaff : null,
+      staffOrder: Array.isArray(state.calStaffOrder) ? state.calStaffOrder : null
+    };
+    localStorage.setItem(k, JSON.stringify(prefs));
+  } catch(e){}
+}
+// Apply saved prefs to state. Called after login + db load completes.
+// Safe to call before user is loaded (no-ops then).
+function applyCalPrefs(){
+  var p = _loadCalPrefs(); if (!p) return;
+  if (p.view && ['month','week','day'].indexOf(p.view) >= 0) state.calView = p.view;
+  if (Array.isArray(p.visibleStaff)) {
+    // Filter to only IDs that still exist as users
+    var validIds = allUsers().map(function(u){return u.id;});
+    state.calDayStaff = p.visibleStaff.filter(function(id){return validIds.indexOf(id) >= 0;});
+    if (!state.calDayStaff.length) state.calDayStaff = null; // null = show all
+  }
+  if (Array.isArray(p.staffOrder)) {
+    state.calStaffOrder = p.staffOrder;
+  }
+}
+// Returns staff in user-preferred drag order, then any unordered staff (newcomers)
+// in their default allUsers() order at the end.
+function _orderedStaff(){
+  var users = allUsers();
+  var order = state.calStaffOrder || [];
+  var byId = {};
+  users.forEach(function(u){ byId[u.id] = u; });
+  var ordered = [];
+  order.forEach(function(id){ if (byId[id]) { ordered.push(byId[id]); delete byId[id]; } });
+  // Append any unordered users (e.g., newly added staff) at the end
+  users.forEach(function(u){ if (byId[u.id]) ordered.push(u); });
+  return ordered;
 }
 
 function apptStatusDot(status){
@@ -2749,7 +2808,8 @@ function apptStatusDot(status){
 }
 function renderCalLegend(){
   const el=document.getElementById('cal-legend');if(!el)return;
-  var users=state.calDayStaff&&state.calDayStaff.length?allUsers().filter(function(u){return state.calDayStaff.includes(u.id);}):allUsers();
+  var ordered=_orderedStaff();
+  var users=state.calDayStaff&&state.calDayStaff.length?ordered.filter(function(u){return state.calDayStaff.includes(u.id);}):ordered;
   el.innerHTML=users.map(function(u){return'<div class="legend-item"><div class="legend-dot" style="background:'+(u.color||'#6b21ea')+'"></div>'+esc(u.name||u.username)+'</div>';}).join('');
 }
 
@@ -2833,7 +2893,8 @@ function renderMonthCal(){
     // Per-user appointment count summary
     let userSummaryHTML='';
     if(str&&cur&&appts.length>0){
-      var visUsers2=state.calDayStaff?allUsers().filter(function(u){return state.calDayStaff.includes(u.id);}):allUsers();
+      var orderedV2=_orderedStaff();
+      var visUsers2=state.calDayStaff?orderedV2.filter(function(u){return state.calDayStaff.includes(u.id);}):orderedV2;
       var uCounts=visUsers2.map(function(u){var ct=appts.filter(function(a){return a.assignedTo===u.id;}).length;return ct>0?{u,ct}:null;}).filter(Boolean);
       if(uCounts.length){
         userSummaryHTML='<div style="display:flex;flex-wrap:wrap;gap:2px;margin:1px 0">'
@@ -3015,10 +3076,11 @@ function renderWeekCal(){
 }
 
 function getSelectedDayStaff(){
-  var all=allUsers();
-  if(!state.calDayStaff||state.calDayStaff.length===0)return all;
+  // Use the user's drag-saved staff order; fall back to allUsers() order for new staff.
+  var ordered=_orderedStaff();
+  if(!state.calDayStaff||state.calDayStaff.length===0)return ordered;
   var sel=state.calDayStaff;
-  return all.filter(function(u){return sel.includes(u.id);});
+  return ordered.filter(function(u){return sel.includes(u.id);});
 }
 
 function renderDayCal(){
@@ -6200,6 +6262,8 @@ async function fetchFromServer(){
       localStorage.setItem(SK,JSON.stringify(db));
       // Sync state.user from db.users so all UI reads see consistent data
       try{refreshStateUser();}catch(e){}
+      // Load calendar view prefs for this user (drag order, visibility, view mode)
+      try{applyCalPrefs();}catch(e){}
       setSyncSt('synced');return true;
     }
     setSyncSt('synced');
@@ -12550,7 +12614,8 @@ function calToggleManage(){
 
 function renderCalManage(){
   var panel=document.getElementById('cal-manage-panel');if(!panel)return;
-  var users=allUsers();
+  // Render in user's drag-saved order, falling back to allUsers() order for new staff
+  var users=_orderedStaff();
   var sel=state.calDayStaff||users.map(function(u){return u.id;});
   var h='<div class="cal-manage-head">'
     +'<span class="cal-manage-head-title">Manage View</span>'
@@ -12563,9 +12628,12 @@ function renderCalManage(){
     +'<span style="color:var(--text-dim);font-size:11px">/</span>'
     +'<button onclick="calSelectAllStaff(false)" style="font-size:11px;color:var(--text-muted);background:none;border:none;cursor:pointer;font-family:\'DM Sans\',sans-serif;padding:0">None</button>'
     +'</div></div>';
+  h+='<div style="font-size:10px;color:var(--text-dim);padding:2px 16px 6px;letter-spacing:.02em">Drag to reorder</div>';
+  h+='<div id="cal-staff-drag-list">';
   h+=users.map(function(u){
     var chk=sel.includes(u.id);
-    return'<label class="cal-staff-row">'
+    return'<label class="cal-staff-row" draggable="true" data-uid="'+u.id+'" ondragstart="calDragStart(event)" ondragover="calDragOver(event)" ondrop="calDrop(event)" ondragend="calDragEnd(event)" ondragenter="calDragEnter(event)" ondragleave="calDragLeave(event)">'
+      +'<span class="cal-drag-handle" title="Drag to reorder" style="cursor:grab;color:var(--text-dim);display:flex;align-items:center;padding-right:6px;font-size:14px;line-height:1;user-select:none">&#x2630;</span>'
       +'<input class="cal-sf-cb" type="checkbox" data-uid="'+u.id+'" '+(chk?'checked':'')+' onchange="calToggleStaff(this.dataset.uid,this.checked)">'
       +'<span class="cal-sf-dot" style="background:'+(u.color||'#6b21ea')+'"></span>'
       +'<span class="cal-sf-name">'+esc(u.name||u.username)+'</span>'
@@ -12573,10 +12641,63 @@ function renderCalManage(){
       +'</label>';
   }).join('');
   h+='</div>';
+  h+='</div>';
   // View note
   var viewCtx=state.calView==='day'?'In Day view, each person appears as a separate column. ':state.calView==='week'?'In Week view, appointments are filtered to selected staff. ':'In Month view, unselected staff appointments are hidden and per-user counts show in each day. ';
   h+='<div style="padding:12px 16px;font-size:11px;color:var(--text-muted);line-height:1.6">'+viewCtx+'</div>';
   panel.innerHTML=h;
+}
+
+// Drag-and-drop staff reorder. Stores the dragged element id, and on drop
+// rewrites state.calStaffOrder to the new sequence. Re-renders both the
+// manage panel and the calendar so day/week views immediately reflect order.
+var _calDragId=null;
+function calDragStart(e){
+  _calDragId=e.currentTarget.getAttribute('data-uid');
+  e.dataTransfer.effectAllowed='move';
+  e.currentTarget.style.opacity='0.4';
+}
+function calDragEnd(e){
+  e.currentTarget.style.opacity='';
+  // Clear any drop-target highlights
+  var rows=document.querySelectorAll('#cal-staff-drag-list .cal-staff-row');
+  rows.forEach(function(r){r.style.borderTop='';r.style.borderBottom='';});
+}
+function calDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+}
+function calDragEnter(e){
+  if(!_calDragId)return;
+  var row=e.currentTarget;
+  if(row.getAttribute('data-uid')===_calDragId)return;
+  row.style.borderTop='2px solid var(--brand)';
+}
+function calDragLeave(e){
+  e.currentTarget.style.borderTop='';
+  e.currentTarget.style.borderBottom='';
+}
+function calDrop(e){
+  e.preventDefault();
+  e.stopPropagation();
+  if(!_calDragId)return;
+  var targetId=e.currentTarget.getAttribute('data-uid');
+  if(targetId===_calDragId){_calDragId=null;return;}
+  // Build the new order: take current ordered staff, remove dragged, insert before target
+  var users=_orderedStaff();
+  var ids=users.map(function(u){return u.id;});
+  var fromIdx=ids.indexOf(_calDragId);
+  var toIdx=ids.indexOf(targetId);
+  if(fromIdx<0||toIdx<0){_calDragId=null;return;}
+  ids.splice(fromIdx,1);
+  // After removing, target may have shifted by 1
+  var insertAt=ids.indexOf(targetId);
+  ids.splice(insertAt,0,_calDragId);
+  state.calStaffOrder=ids;
+  _calDragId=null;
+  _saveCalPrefs();
+  renderCalManage();
+  renderCal();
 }
 
 function calToggleStaff(uid,checked){
@@ -12590,6 +12711,7 @@ function calToggleStaff(uid,checked){
   }
   renderCalManage();
   renderCal();
+  _saveCalPrefs();
 }
 
 function calSelectAllStaff(show){
@@ -12597,6 +12719,7 @@ function calSelectAllStaff(show){
   if(!show)state.calDayStaff=allUsers().slice(0,1).map(function(u){return u.id;});
   renderCalManage();
   renderCal();
+  _saveCalPrefs();
 }
 
 
