@@ -499,7 +499,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 #drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;
   opacity:0;pointer-events:none;transition:opacity .3s;backdrop-filter:blur(2px)}
 #drawer-overlay.open{opacity:1;pointer-events:all}
-#contact-drawer{position:fixed;top:0;right:-660px;width:660px;height:100vh;
+#contact-drawer{position:fixed;top:0;right:-660px;width:660px;max-width:100vw;height:100vh;height:100dvh;
   background:var(--bg-panel);border-left:1px solid var(--purple-border);z-index:201;
   display:flex;flex-direction:column;transition:right .32s cubic-bezier(.4,0,.2,1);
   box-shadow:-8px 0 50px rgba(0,0,0,.55)}
@@ -509,13 +509,19 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
   justify-content:center;font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:#fff;flex-shrink:0}
 .drawer-name{font-family:'Exo 2',sans-serif;font-size:17px;font-weight:700;color:#ffffff}
 .drawer-sub{font-size:12px;color:rgba(255,255,255,.55);margin-top:2px}
-.drawer-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-panel);padding:0 20px}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-panel);padding:0 20px;overflow-x:auto;scrollbar-width:none}
+.drawer-tabs::-webkit-scrollbar{display:none}
 .drawer-tab{padding:9px 14px;font-size:13px;font-weight:600;color:rgba(255,255,255,.55);
   cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;
-  background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif}
+  background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif;white-space:nowrap;flex-shrink:0}
 .drawer-tab:hover{color:#ffffff}
 .drawer-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
-.drawer-body{flex:1;overflow-y:auto;padding:18px 20px}
+.drawer-body{flex:1;overflow-y:auto;padding:18px 20px;min-height:0;-webkit-overflow-scrolling:touch}
+/* Sticky sub-tab header inside drawer-body. Keeps chips and action button
+   visible while the list scrolls. Negative margins pull the background to
+   the body edges so it cleanly covers padding. */
+.d-sticky-sub{position:sticky;top:-18px;background:var(--bg-panel);z-index:5;
+  margin:-18px -20px 12px;padding:18px 20px 10px}
 .sec-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
   color:var(--text-muted);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border)}
 .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
@@ -525,7 +531,8 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .note-item{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:var(--radius);padding:10px 12px;margin-bottom:7px}
 .note-date{font-size:11px;color:rgba(255,255,255,.5)}.note-text{font-size:13px;line-height:1.55;white-space:pre-wrap;margin-top:4px;color:var(--text)}
 .appt-row-sm{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-left:3px solid var(--orange);
-  border-radius:var(--radius);padding:9px 12px;margin-bottom:6px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  border-radius:var(--radius);padding:9px 12px;margin-bottom:6px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.appt-row-sm > div:first-child{min-width:0;flex:1 1 200px}
 .appt-row-sm.completed{border-left-color:#34d399;opacity:.6}.appt-row-sm.cancelled{border-left-color:var(--text-dim);opacity:.4}
 .appt-sm-title{font-size:13px;font-weight:600;margin-bottom:2px;color:var(--text)}
 .appt-sm-meta{font-size:11px;color:var(--text-muted)}
@@ -3136,24 +3143,30 @@ function switchDTab(t){
     state.dApptShowAll=false;
     state.dPaySubFilter=null;
     state.dPayDateRange=null;
+    state._dDidTabSwitch=true;
   }
   state.dTab=t;
   renderDrawer();
 }
-function setDApptTab(t){state.dApptTab=t;state.dApptShowAll=false;renderDrawer();}
+function setDApptTab(t){state.dApptTab=t;state.dApptShowAll=false;state._dDidTabSwitch=true;renderDrawer();}
 function dApptShowAll(){state.dApptShowAll=true;renderDrawer();}
 function dApptCollapse(){state.dApptShowAll=false;renderDrawer();}
-function setDPayTab(t){state.dPayTab=t;renderDrawer();}
+function setDPayTab(t){state.dPayTab=t;state._dDidTabSwitch=true;renderDrawer();}
 
 function renderDrawer(){
   const c=getContact(state.drawer);if(!c)return;
+  // Preserve drawer-body scroll across re-renders so things like "Show all"
+  // or chip clicks don't jump the view back to the top. Also the viewport
+  // anchor matters most for tabs with long lists (appts, payments).
+  var prevBody=document.querySelector('#contact-drawer .drawer-body');
+  var savedScroll=prevBody?prevBody.scrollTop:0;
   const col=avColor(c.name);
   const cAppts=db.appointments.filter(a=>a.contactId===c.id);
   const cTasks=db.tasks.filter(t=>t.contactId===c.id);
   const cSubs=db.subscriptions.filter(s=>s.contactId===c.id);
   const cPays=db.payments.filter(p=>p.contactId===c.id);
-  const tabs=['info','notes','appointments','tasks','payments','cards'];
-  const labels={info:'Info',notes:'Notes ('+c.notes.length+')',appointments:'Appts ('+cAppts.length+')',tasks:'Tasks ('+cTasks.length+')',payments:'Payments',cards:'Cards'};
+  const tabs=['info','notes','appointments','tasks','payments'];
+  const labels={info:'Info',notes:'Notes ('+c.notes.length+')',appointments:'Appts ('+cAppts.length+')',tasks:'Tasks ('+cTasks.length+')',payments:'Payments'};
   let body='';
   if(state.dTab==='info'){
     const tags=(c.tags||[]).map(tid=>{const t=getTag(tid);return t?'<span class="tag-pill" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'</span>':''}).join('');
@@ -3205,8 +3218,10 @@ function renderDrawer(){
       const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
       return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span>'+payPill+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
     }).join('');
-    // Sub-tab pill row + Book button on the right
-    const subTabs='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">'
+    // Sub-tab pill row + Book button on the right. Sticky so chips stay
+    // visible while the list scrolls (esp. helpful on small screens after
+    // expanding "Show all").
+    const subTabs='<div class="d-sticky-sub" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
       +'<div class="task-chip-row" style="margin-bottom:0">'
       +'<button class="chip'+(state.dApptTab==='upcoming'?' active':'')+'" onclick="setDApptTab(\'upcoming\')">Upcoming ('+up.length+')</button>'
       +'<button class="chip'+(state.dApptTab==='past'?' active':'')+'" onclick="setDApptTab(\'past\')">Past ('+past.length+')</button>'
@@ -3240,8 +3255,6 @@ function renderDrawer(){
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Open ('+open.length+')</div><button class="btn btn-purple btn-sm" onclick="openTaskModal(\''+c.id+'\',null)">+ Add</button></div>'
       +'<div style="margin-top:8px">'+(open.length?tHTML(open):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No open tasks.</div>')+'</div>'
       +(done.length?'<div class="sec-label" style="margin-top:14px">Done ('+done.length+')</div>'+tHTML(done):'');
-  }else if(state.dTab==='cards'){
-    body=renderCardsTab(c);
   }else if(state.dTab==='payments'){
     if(!state.dPayTab)state.dPayTab='overview';
     body=_renderDPaymentsTab(c,cSubs,cPays);
@@ -3250,6 +3263,14 @@ function renderDrawer(){
     '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Archive</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
     +'<div class="drawer-tabs">'+tabs.map(t=>'<button class="drawer-tab'+(state.dTab===t?' active':'')+'" onclick="switchDTab(\''+t+'\')">'+labels[t]+'</button>').join('')+'</div>'
     +'<div class="drawer-body" id="drawer-tab-body">'+body+'</div>';
+  // Restore scroll position. Skip if user changed main tabs (different tab,
+  // start from top makes sense). The savedScroll is from the previous render;
+  // if we're switching tabs, the previous scroll position is meaningless.
+  if(savedScroll>0&&!state._dDidTabSwitch){
+    var newBody=document.querySelector('#contact-drawer .drawer-body');
+    if(newBody)newBody.scrollTop=savedScroll;
+  }
+  state._dDidTabSwitch=false;
 }
 
 // =====================================================
@@ -3260,12 +3281,13 @@ function renderDrawer(){
 // is Overview; switching tabs preserves state.dPayTab between renders.
 function _renderDPaymentsTab(c,cSubs,cPays){
   const tab=state.dPayTab||'overview';
-  const subTabs='<div class="task-chip-row" style="margin-bottom:14px">'
+  const subTabs='<div class="d-sticky-sub task-chip-row" style="margin-bottom:14px;gap:6px">'
     +'<button class="chip'+(tab==='overview'?' active':'')+'" onclick="setDPayTab(\'overview\')">Overview</button>'
     +'<button class="chip'+(tab==='transactions'?' active':'')+'" onclick="setDPayTab(\'transactions\')">Transactions</button>'
     +'<button class="chip'+(tab==='subscriptions'?' active':'')+'" onclick="setDPayTab(\'subscriptions\')">Subscriptions</button>'
     +'<button class="chip'+(tab==='packs'?' active':'')+'" onclick="setDPayTab(\'packs\')">Session Packs</button>'
     +'<button class="chip'+(tab==='giftcards'?' active':'')+'" onclick="setDPayTab(\'giftcards\')">Gift Cards</button>'
+    +'<button class="chip'+(tab==='cards'?' active':'')+'" onclick="setDPayTab(\'cards\')">Saved Cards</button>'
     +'</div>';
   let inner='';
   if(tab==='overview')inner=_dPayOverview(c,cSubs,cPays);
@@ -3273,6 +3295,7 @@ function _renderDPaymentsTab(c,cSubs,cPays){
   else if(tab==='subscriptions')inner=_dPaySubscriptions(c,cSubs);
   else if(tab==='packs')inner=_dPayPacks(c);
   else if(tab==='giftcards')inner=_dPayGiftCards(c);
+  else if(tab==='cards')inner=renderCardsTab(c);
   return subTabs+inner;
 }
 
@@ -13845,9 +13868,8 @@ function confirmRemoveCard(){
   c.squareCards=(c.squareCards||[]).filter(function(x){return x.id!==d.cardId});
   saveData();
   closeModal();
-  if(state.drawer===d.contactId&&state.dTab==='cards'){
-    const body=document.getElementById('drawer-tab-body');
-    if(body)body.innerHTML=renderCardsTab(c);
+  if(state.drawer===d.contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
+    renderDrawer();
   }
   toast('Card removed.','success');
 }
@@ -13920,9 +13942,8 @@ async function submitAddCard(){
     closeModal();
     sqCard=null;
     toast('Card saved successfully.','success');
-    if(state.drawer===contactId&&state.dTab==='cards'){
-      const body=document.getElementById('drawer-tab-body');
-      if(body)body.innerHTML=renderCardsTab(contact);
+    if(state.drawer===contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
+      renderDrawer();
     }
     updatePosCoFTab();
   }catch(e){
