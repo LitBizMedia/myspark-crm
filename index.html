@@ -2617,7 +2617,25 @@ function renderDrawer(){
       +'<div class="info-item"><label>Source</label><span>'+esc(c.source||'–')+'</span></div>'
       +'<div class="info-item"><label>Status</label><span><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span>'+c.status+'</span></div>'
       +'<div class="info-item"><label>Added</label><span>'+fmtDate((c.createdAt||'').split('T')[0])+'</span></div>'
-      +'</div>'+(c.address?'<div class="info-item" style="margin-bottom:12px"><label>Address</label><span>'+esc(c.address)+'</span></div>':'')
+      +'</div>'+(function(){
+        // Address display: prefer the new structured fields. Fall back to the
+        // legacy single-line `address` field for contacts that haven't been
+        // edited since the field split.
+        var hasStruct=c.address_line1||c.address_line2||c.city||c.state||c.postal_code;
+        if(hasStruct){
+          var lines=[];
+          if(c.address_line1)lines.push(esc(c.address_line1));
+          if(c.address_line2)lines.push(esc(c.address_line2));
+          var cityLine=[c.city,c.state].filter(Boolean).join(', ');
+          if(c.postal_code)cityLine=(cityLine?cityLine+' ':'')+c.postal_code;
+          if(cityLine)lines.push(esc(cityLine));
+          return '<div class="info-item" style="margin-bottom:12px"><label>Address</label><span style="white-space:pre-line">'+lines.join('\n')+'</span></div>';
+        }
+        if(c.address){
+          return '<div class="info-item" style="margin-bottom:12px"><label>Address</label><span>'+esc(c.address)+'</span></div>';
+        }
+        return '';
+      })()
       +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
       +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">Book Appointment</button>'
       +cfRenderDrawerSections(c.id);
@@ -3642,7 +3660,10 @@ function openContactModal(id){
     +'<div class="form-row"><div class="form-group"><label>Email</label><input id="cf-email" type="email" value="'+esc(c&&c.email||'')+'"></div><div class="form-group"><label>Phone</label><input id="cf-phone" type="tel" value="'+esc(c&&c.phone||'')+'"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Company</label><input id="cf-company" type="text" value="'+esc(c&&c.company||'')+'"></div><div class="form-group"><label>Title</label><input id="cf-title" type="text" value="'+esc(c&&c.title||'')+'"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Website</label><input id="cf-web" type="url" value="'+esc(c&&c.website||'')+'"></div><div class="form-group"><label>Source</label><input id="cf-source" type="text" value="'+esc(c&&c.source||'')+'"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Address</label><input id="cf-addr" type="text" value="'+esc(c&&c.address||'')+'"></div><div class="form-group"><label>Status</label><select id="cf-status"><option value="active"'+(c&&c.status!=='inactive'?' selected':'')+'">Active</option><option value="inactive"'+(c&&c.status==='inactive'?' selected':'')+'">Inactive</option></select></div></div>'
+    +'<div class="form-group"><label>Street Address</label><input id="cf-addr1" type="text" value="'+esc(c&&c.address_line1||c&&c.address||'')+'" placeholder="123 Main St"></div>'
+    +'<div class="form-group"><label>Apt, Suite, etc. <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-addr2" type="text" value="'+esc(c&&c.address_line2||'')+'" placeholder="Apt 4B"></div>'
+    +'<div class="form-row"><div class="form-group" style="flex:2"><label>City</label><input id="cf-city" type="text" value="'+esc(c&&c.city||'')+'"></div><div class="form-group" style="flex:1"><label>State / Region</label><input id="cf-state" type="text" value="'+esc(c&&c.state||'')+'" maxlength="32"></div><div class="form-group" style="flex:1"><label>ZIP / Postal</label><input id="cf-zip" type="text" value="'+esc(c&&c.postal_code||'')+'" maxlength="20"></div></div>'
+    +'<div class="form-group"><label>Status</label><select id="cf-status"><option value="active"'+(c&&c.status!=='inactive'?' selected':'')+'">Active</option><option value="inactive"'+(c&&c.status==='inactive'?' selected':'')+'">Inactive</option></select></div>'
     +'<div class="form-group"><label>Tags</label><div class="tag-sel-wrap" id="tag-sel-c">'+tagOpts+'</div></div>';
   openModal(c?'Edit Contact':'Add Contact',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveContact,\'contact\')">Save Contact</button>','modal-lg');
 }
@@ -3655,7 +3676,7 @@ async function saveContact(){
   const _ln=(document.getElementById('cf-lastname')||{}).value||'';
   if(_fn||_ln){const _auto=(_fn+' '+_ln).trim();const _nf=document.getElementById('cf-name');if(_nf&&(!_nf.value.trim()||_nf.getAttribute('data-auto')==='1')){_nf.value=_auto;_nf.setAttribute('data-auto','1');}}
   const name=document.getElementById('cf-name').value.trim();if(!name){toast('Name is required.','error');return}
-  const data={name,first_name:_fn.trim(),last_name:_ln.trim(),type:document.getElementById('cf-type').value,email:document.getElementById('cf-email').value.trim(),phone:document.getElementById('cf-phone').value.trim(),company:document.getElementById('cf-company').value.trim(),title:document.getElementById('cf-title').value.trim(),website:document.getElementById('cf-web').value.trim(),source:document.getElementById('cf-source').value.trim(),address:document.getElementById('cf-addr').value.trim(),status:document.getElementById('cf-status').value,tags:getSelTags()};
+  const data={name,first_name:_fn.trim(),last_name:_ln.trim(),type:document.getElementById('cf-type').value,email:document.getElementById('cf-email').value.trim(),phone:document.getElementById('cf-phone').value.trim(),company:document.getElementById('cf-company').value.trim(),title:document.getElementById('cf-title').value.trim(),website:document.getElementById('cf-web').value.trim(),source:document.getElementById('cf-source').value.trim(),address_line1:document.getElementById('cf-addr1').value.trim(),address_line2:document.getElementById('cf-addr2').value.trim(),city:document.getElementById('cf-city').value.trim(),state:document.getElementById('cf-state').value.trim(),postal_code:document.getElementById('cf-zip').value.trim(),status:document.getElementById('cf-status').value,tags:getSelTags()};
   const isNew=!state.modal.id;
   // Capture which fields are changing for the audit (not the values themselves - PHI)
   var _changedFields=[];
@@ -3665,7 +3686,7 @@ async function saveContact(){
       for(var k in data){ if(JSON.stringify(existing[k])!==JSON.stringify(data[k])) _changedFields.push(k); }
     }
   }
-  if(!isNew){const c=getContact(state.modal.id);if(c)Object.assign(c,data,{updatedAt:now_()})}
+  if(!isNew){const c=getContact(state.modal.id);if(c){Object.assign(c,data,{updatedAt:now_()});delete c.address;}}
   else{const nc={id:uid(),...data,notes:[],squareCards:[],createdAt:now_()};db.contacts.push(nc);state._newContactId=nc.id;}
   saveData();closeModal();renderContacts();if(state.drawer)renderDrawer();updateNotifBadge();toast(isNew?'Contact added.':'Contact updated.','success');
   // Audit
@@ -19281,14 +19302,23 @@ var IMPORT_AUTO_MAP = {
   'business name':'company','company':'company','organization':'company',
   'tags':'tags','tag':'tags','created':'createdAt','created at':'createdAt',
   'created date':'createdAt','last activity':'__skip','type':'type',
-  'status':'status','notes':'notes','note':'notes'
+  'status':'status','notes':'notes','note':'notes',
+  // Address fields. GHL exports use 'Address Line 1', 'City', 'State', 'Postal Code'.
+  'address':'address_line1','address line 1':'address_line1','street':'address_line1','street address':'address_line1',
+  'address line 2':'address_line2','apt':'address_line2','suite':'address_line2','unit':'address_line2',
+  'city':'city','town':'city',
+  'state':'state','province':'state','region':'state',
+  'zip':'postal_code','zip code':'postal_code','postal':'postal_code','postal code':'postal_code','zipcode':'postal_code'
 };
 
 var IMPORT_FIELD_LABELS = {
   'first_name':'First Name','last_name':'Last Name','name':'Full Name',
   'phone':'Phone','email':'Email','company':'Company','tags':'Tags',
   'createdAt':'Created Date','type':'Type','status':'Status',
-  'notes':'Notes','__skip':'Skip this column'
+  'notes':'Notes',
+  'address_line1':'Street Address','address_line2':'Apt / Suite',
+  'city':'City','state':'State / Region','postal_code':'ZIP / Postal Code',
+  '__skip':'Skip this column'
 };
 
 function openImportModal(){
@@ -19378,7 +19408,7 @@ function importRenderMapping(){
 }
 
 function importBuildRow(row){
-  var out={first_name:'',last_name:'',name:'',phone:'',email:'',company:'',tags:'',createdAt:'',type:'',status:'',notes:''};
+  var out={first_name:'',last_name:'',name:'',phone:'',email:'',company:'',tags:'',createdAt:'',type:'',status:'',notes:'',address_line1:'',address_line2:'',city:'',state:'',postal_code:''};
   importState.headers.forEach(function(h,i){
     var f=importState.mapping[h];
     if(f&&f!=='__skip')out[f]=(row[i]||'').trim();
@@ -19466,6 +19496,11 @@ function importDoImport(){
       company:m.company||'',
       email:m.email||'',
       phone:m.phone||'',
+      address_line1:m.address_line1||'',
+      address_line2:m.address_line2||'',
+      city:m.city||'',
+      state:m.state||'',
+      postal_code:m.postal_code||'',
       tags:tagIds,
       type:m.type||'lead',
       status:m.status||'active',
