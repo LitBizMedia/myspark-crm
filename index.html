@@ -3170,8 +3170,20 @@ function renderDrawer(){
   const cTasks=db.tasks.filter(t=>t.contactId===c.id);
   const cSubs=db.subscriptions.filter(s=>s.contactId===c.id);
   const cPays=db.payments.filter(p=>p.contactId===c.id);
-  const tabs=['info','notes','appointments','tasks','payments'];
-  const labels={info:'Info',notes:'Notes ('+c.notes.length+')',appointments:'Appts ('+cAppts.length+')',tasks:'Tasks ('+cTasks.length+')',payments:'Payments'};
+  // Tab order: Info, Payments, Appts, Tasks, Notes, SOAP, Documents.
+  // SOAP notes count is loaded async via the API; we cache it on c._soapCount
+  // so re-renders show it without re-fetching. Documents is a placeholder.
+  const soapCount=(typeof c._soapCount==='number')?c._soapCount:'\u2026';
+  const tabs=['info','payments','appointments','tasks','notes','soap','documents'];
+  const labels={
+    info:'Info',
+    payments:'Payments',
+    appointments:'Appts ('+cAppts.length+')',
+    tasks:'Tasks ('+cTasks.length+')',
+    notes:'Notes ('+c.notes.length+')',
+    soap:'SOAP ('+soapCount+')',
+    documents:'Documents'
+  };
   let body='';
   if(state.dTab==='info'){
     const tags=(c.tags||[]).map(tid=>{const t=getTag(tid);return t?'<span class="tag-pill" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'</span>':''}).join('');
@@ -3263,6 +3275,10 @@ function renderDrawer(){
   }else if(state.dTab==='payments'){
     if(!state.dPayTab)state.dPayTab='overview';
     body=_renderDPaymentsTab(c,cSubs,cPays);
+  }else if(state.dTab==='soap'){
+    body=_renderDSoapTab(c);
+  }else if(state.dTab==='documents'){
+    body='<div style="padding:40px 20px;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);margin-bottom:8px">Documents</div><div style="font-size:13px;color:var(--main-text-muted);max-width:300px;margin:0 auto">Patient documents, intake forms, lab results, and uploaded files. Coming soon.</div></div>';
   }
   document.getElementById('drawer-content').innerHTML=
     '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Archive</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
@@ -3514,6 +3530,419 @@ function _dPayGiftCards(c){
       +'</div></div>';
   });
   return h;
+}
+
+// =====================================================
+// CONTACT DRAWER - SOAP NOTES
+// =====================================================
+// SOAP (Subjective, Objective, Assessment, Plan) notes are medical visit
+// records. Stored in RDS soap_notes table with full audit logging. Notes
+// auto-lock 24 hours after creation OR when the provider signs them.
+// Locked notes can only have amendments appended; original SOAP fields
+// stay immutable as a legal record.
+//
+// Permissions:
+//   - Anyone with subaccount access can read
+//   - Author or admin/manager can edit unlocked notes
+//   - Anyone can amend a locked note
+//   - Author can delete unlocked notes; admin can delete any note (heavily audited)
+
+// Pre-built templates for common visit types. The user can pick one to
+// pre-fill the SOAP fields, or start with Blank. Templates are intentionally
+// lightweight - they nudge the user toward structured documentation without
+// being prescriptive.
+const SOAP_TEMPLATES = {
+  blank: {
+    name: 'Blank',
+    subjective: '',
+    objective: '',
+    assessment: '',
+    plan: ''
+  },
+  initial: {
+    name: 'Initial Consultation',
+    subjective: 'Chief complaint:\n\nHistory of present illness:\n\nPast medical history:\n\nMedications:\n\nAllergies:\n\nFamily history:\n\nSocial history:',
+    objective: 'Vital signs:\n\nGeneral appearance:\n\nPhysical exam:',
+    assessment: 'Working diagnosis:\n\nDifferential considerations:',
+    plan: 'Diagnostics:\n\nTreatment:\n\nFollow-up:\n\nPatient education:'
+  },
+  followup: {
+    name: 'Follow-up Visit',
+    subjective: 'Interval history since last visit:\n\nResponse to current treatment:\n\nNew concerns:',
+    objective: 'Vital signs:\n\nFocused exam:',
+    assessment: 'Status update on active problems:',
+    plan: 'Continue/modify current plan:\n\nNext follow-up:'
+  },
+  phone: {
+    name: 'Phone Consultation',
+    subjective: 'Reason for call:\n\nPatient-reported symptoms:',
+    objective: 'No physical exam (phone consult).',
+    assessment: 'Clinical impression based on phone history:',
+    plan: 'Recommendations given:\n\nFollow-up arranged:'
+  },
+  procedure: {
+    name: 'Procedure Note',
+    subjective: 'Indication for procedure:\n\nInformed consent obtained:',
+    objective: 'Procedure performed:\n\nTechnique:\n\nFindings:\n\nComplications:',
+    assessment: 'Procedure tolerated and outcome:',
+    plan: 'Post-procedure care:\n\nFollow-up:'
+  }
+};
+
+// Async load + cache. Calling this twice on the same contact within a render
+// cycle reuses the cached array without re-fetching.
+function loadSoapNotes(contactId, opts){
+  var c=getContact(contactId);
+  if(!c)return Promise.resolve([]);
+  if(!opts||!opts.force){
+    if(Array.isArray(c._soapNotes))return Promise.resolve(c._soapNotes);
+  }
+  return fetch(apiUrl('/api/subaccount/soap-notes-list?contact_id='+encodeURIComponent(contactId)),{
+    credentials:'include'
+  }).then(function(r){
+    if(!r.ok)throw new Error('list failed: '+r.status);
+    return r.json();
+  }).then(function(data){
+    var notes=(data&&data.notes)||[];
+    c._soapNotes=notes;
+    c._soapCount=notes.length;
+    return notes;
+  }).catch(function(e){
+    console.error('loadSoapNotes:',e);
+    c._soapNotes=[];
+    c._soapCount=0;
+    return [];
+  });
+}
+
+function createSoapNoteRemote(note){
+  return fetch(apiUrl('/api/subaccount/soap-notes-create'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(note)
+  }).then(function(r){
+    if(!r.ok)return r.json().then(function(e){throw new Error(e.error||'create failed');});
+    return r.json();
+  });
+}
+
+function updateSoapNoteRemote(note){
+  return fetch(apiUrl('/api/subaccount/soap-notes-update'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(note)
+  }).then(function(r){
+    if(!r.ok)return r.json().then(function(e){throw Object.assign(new Error(e.error||'update failed'),{locked:e.locked});});
+    return r.json();
+  });
+}
+
+function deleteSoapNoteRemote(id){
+  return fetch(apiUrl('/api/subaccount/soap-notes-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id})
+  }).then(function(r){
+    if(!r.ok)return r.json().then(function(e){throw new Error(e.error||'delete failed');});
+    return r.json();
+  });
+}
+
+function amendSoapNoteRemote(noteId,content,reason){
+  return fetch(apiUrl('/api/subaccount/soap-notes-amend'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({note_id:noteId,content:content,reason:reason||''})
+  }).then(function(r){
+    if(!r.ok)return r.json().then(function(e){throw new Error(e.error||'amend failed');});
+    return r.json();
+  });
+}
+
+// Renders the SOAP tab. Triggers async load if cached data isn't present.
+function _renderDSoapTab(c){
+  // Trigger load if not yet cached. The render below will show a loading
+  // state; on completion, renderDrawer() is called again with cached data.
+  if(!Array.isArray(c._soapNotes)){
+    loadSoapNotes(c.id).then(function(){
+      if(state.drawer===c.id&&state.dTab==='soap')renderDrawer();
+    });
+    return '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">Loading SOAP notes\u2026</div>';
+  }
+
+  var notes=c._soapNotes||[];
+  var header='<div class="d-sticky-sub" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--main-text)">SOAP Notes ('+notes.length+')</div>'
+    +'<button class="btn btn-primary btn-sm" onclick="openSoapNoteModal(\''+c.id+'\',null)">+ New SOAP Note</button>'
+    +'</div>';
+
+  if(!notes.length){
+    return header+'<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px">No SOAP notes yet. Click <strong>+ New SOAP Note</strong> to start documenting visits.</div>';
+  }
+
+  var rows=notes.map(function(n){
+    var dateStr=n.visitDate?fmtDate(n.visitDate):(n.createdAt?fmtDate(n.createdAt.split('T')[0]):'');
+    var author=n.authorId?getUserById(n.authorId):null;
+    var authorName=author?(author.name||author.username):'Unknown';
+    var authorColor=author&&author.color?author.color:'var(--text-muted)';
+    var lockBadge=n.locked?'<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;background:rgba(148,163,184,.18);color:#94a3b8;border:1px solid rgba(148,163,184,.4);margin-left:6px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>locked</span>':'';
+    var amdCount=n.amendments&&n.amendments.length||0;
+    var amdBadge=amdCount?'<span style="margin-left:6px;font-size:10px;color:var(--text-muted)">+'+amdCount+' amendment'+(amdCount===1?'':'s')+'</span>':'';
+    var apptBadge=n.appointmentId?'<span style="font-size:10px;color:var(--purple-light);margin-left:6px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:2px"><rect x="3" y="4" width="18" height="18" rx="2"/></svg>linked</span>':'';
+    // Preview: first 80 chars of subjective or assessment, whichever has content
+    var preview=(n.subjective||n.assessment||n.objective||n.plan||'').replace(/\s+/g,' ').trim();
+    if(preview.length>120)preview=preview.slice(0,120)+'\u2026';
+    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid '+(n.locked?'#94a3b8':'var(--orange)')+';border-radius:var(--radius);padding:10px 12px;margin-bottom:8px;cursor:pointer" onclick="viewSoapNote(\''+n.id+'\')">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(dateStr)+lockBadge+amdBadge+apptBadge+'</div>'
+      +'<div style="font-size:11px;color:'+authorColor+';font-weight:600;margin-top:2px">'+esc(authorName)+(n.templateUsed?' \u00b7 '+esc(SOAP_TEMPLATES[n.templateUsed]&&SOAP_TEMPLATES[n.templateUsed].name||n.templateUsed):'')+'</div>'
+      +'</div>'
+      +'</div>'
+      +(preview?'<div style="font-size:12px;color:var(--text-muted);line-height:1.4">'+esc(preview)+'</div>':'')
+      +'</div>';
+  }).join('');
+
+  return header+rows;
+}
+
+// SOAP note state shape for create/edit modal.
+// state.soapModal = { mode:'create'|'edit', contactId, noteId? }
+
+function openSoapNoteModal(contactId,noteId){
+  var c=getContact(contactId);if(!c)return;
+  var existing=null;
+  if(noteId){
+    var notes=c._soapNotes||[];
+    existing=notes.find(function(n){return n.id===noteId;});
+    if(!existing){toast('SOAP note not found.','error');return;}
+    if(existing.locked){
+      // Locked notes go to view, not edit
+      viewSoapNote(noteId);
+      return;
+    }
+    // Permission check: author or admin/manager
+    var uid=state.user&&state.user.id;
+    var isAdminish=isAdminOrManager();
+    if(existing.authorId!==uid&&!isAdminish){
+      toast('Only the author or an admin can edit this note.','error');
+      return;
+    }
+  }
+
+  state.soapModal={mode:noteId?'edit':'create',contactId:contactId,noteId:noteId||null};
+
+  // Build appointment dropdown: scheduled appointments for this contact, recent first
+  var contactAppts=(db.appointments||[]).filter(function(a){return a.contactId===contactId;})
+    .sort(function(a,b){return(b.date||'').localeCompare(a.date||'');});
+  var apptOptions='<option value="">Standalone (not linked)</option>'+contactAppts.map(function(a){
+    var dateStr=a.date?a.date+(a.time?' '+fmtTime(a.time):''):'';
+    return '<option value="'+a.id+'"'+(existing&&existing.appointmentId===a.id?' selected':'')+'>'+esc(a.title)+' \u00b7 '+esc(dateStr)+'</option>';
+  }).join('');
+
+  var tmplKey=existing&&existing.templateUsed||'blank';
+  var tmplOptions=Object.keys(SOAP_TEMPLATES).map(function(k){
+    return '<option value="'+k+'"'+(tmplKey===k?' selected':'')+'>'+esc(SOAP_TEMPLATES[k].name)+'</option>';
+  }).join('');
+
+  var visitDate=existing&&existing.visitDate||todayStr();
+  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var taS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:13px;outline:none;box-sizing:border-box;min-height:80px;resize:vertical;line-height:1.5';
+
+  var body=''
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+    +'<div class="form-group" style="margin-bottom:0"><label>Visit Date</label>'
+    +'<input id="soap-visit-date" type="date" value="'+esc(visitDate)+'" style="'+inpS+'"></div>'
+    +'<div class="form-group" style="margin-bottom:0"><label>Template</label>'
+    +'<select id="soap-template" style="'+inpS+'" '+(noteId?'disabled':'onchange="_soapApplyTemplate()"')+'>'+tmplOptions+'</select></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Linked Appointment <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
+    +'<select id="soap-appointment" style="'+inpS+'">'+apptOptions+'</select></div>'
+    +'<div class="form-group"><label style="display:flex;justify-content:space-between"><span>Subjective <span style="font-weight:400;color:var(--text-muted)">(what the patient reports)</span></span></label>'
+    +'<textarea id="soap-subjective" style="'+taS+'" placeholder="Patient-reported symptoms, concerns, history">'+esc(existing&&existing.subjective||SOAP_TEMPLATES[tmplKey].subjective)+'</textarea></div>'
+    +'<div class="form-group"><label>Objective <span style="font-weight:400;color:var(--text-muted)">(observable / measurable findings)</span></label>'
+    +'<textarea id="soap-objective" style="'+taS+'" placeholder="Vitals, exam findings, measurements">'+esc(existing&&existing.objective||SOAP_TEMPLATES[tmplKey].objective)+'</textarea></div>'
+    +'<div class="form-group"><label>Assessment <span style="font-weight:400;color:var(--text-muted)">(your clinical impression)</span></label>'
+    +'<textarea id="soap-assessment" style="'+taS+'" placeholder="Diagnosis, clinical reasoning">'+esc(existing&&existing.assessment||SOAP_TEMPLATES[tmplKey].assessment)+'</textarea></div>'
+    +'<div class="form-group"><label>Plan <span style="font-weight:400;color:var(--text-muted)">(treatment + next steps)</span></label>'
+    +'<textarea id="soap-plan" style="'+taS+'" placeholder="Treatment plan, follow-up, education">'+esc(existing&&existing.plan||SOAP_TEMPLATES[tmplKey].plan)+'</textarea></div>'
+    +'<div style="background:rgba(255,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--radius);padding:9px 12px;font-size:11px;color:#fbbf24;margin-top:6px">Notes auto-lock 24 hours after creation. Sign & lock now to finalize as a legal record.</div>';
+
+  openModal(noteId?'Edit SOAP Note':'New SOAP Note',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-purple" onclick="saveSoapNote(false)">Save Draft</button>'
+    +'<button class="btn btn-primary" onclick="saveSoapNote(true)">Save & Sign</button>',
+    'modal-xl');
+}
+
+// Apply template starter text. Only runs in create mode (disabled on edit
+// to avoid clobbering existing content).
+function _soapApplyTemplate(){
+  var key=document.getElementById('soap-template').value;
+  var t=SOAP_TEMPLATES[key];if(!t)return;
+  // Only overwrite if all 4 fields are empty (avoid clobbering user's typing)
+  var s=document.getElementById('soap-subjective');
+  var o=document.getElementById('soap-objective');
+  var a=document.getElementById('soap-assessment');
+  var p=document.getElementById('soap-plan');
+  var allEmpty=!s.value.trim()&&!o.value.trim()&&!a.value.trim()&&!p.value.trim();
+  if(allEmpty||confirm('Replace current content with this template?')){
+    s.value=t.subjective;
+    o.value=t.objective;
+    a.value=t.assessment;
+    p.value=t.plan;
+  }
+}
+
+function saveSoapNote(sign){
+  var m=state.soapModal;if(!m)return;
+  var subjective=document.getElementById('soap-subjective').value;
+  var objective=document.getElementById('soap-objective').value;
+  var assessment=document.getElementById('soap-assessment').value;
+  var plan=document.getElementById('soap-plan').value;
+  var visitDate=document.getElementById('soap-visit-date').value||null;
+  var appointmentId=document.getElementById('soap-appointment').value||null;
+  var templateUsed=document.getElementById('soap-template').value||null;
+
+  if(!subjective.trim()&&!objective.trim()&&!assessment.trim()&&!plan.trim()){
+    toast('At least one SOAP section must have content.','error');
+    return;
+  }
+  if(sign&&!confirm('Sign and lock this note? Once locked, only amendments can be added.'))return;
+
+  var note={
+    id:m.noteId||'soap-'+uid(),
+    contactId:m.contactId,
+    appointmentId:appointmentId,
+    subjective:subjective,
+    objective:objective,
+    assessment:assessment,
+    plan:plan,
+    visitDate:visitDate,
+    templateUsed:templateUsed,
+    signed:!!sign
+  };
+
+  var promise=m.mode==='create'?createSoapNoteRemote(note):updateSoapNoteRemote(note);
+  promise.then(function(){
+    closeModal();
+    toast(sign?'SOAP note saved and signed.':'SOAP note saved.','success');
+    // Reload notes for this contact to get fresh server state
+    return loadSoapNotes(m.contactId,{force:true});
+  }).then(function(){
+    if(state.drawer===m.contactId&&state.dTab==='soap')renderDrawer();
+  }).catch(function(e){
+    console.error('saveSoapNote:',e);
+    toast(e.message||'Save failed.','error');
+  });
+}
+
+// Opens a SOAP note for viewing. Locked notes are read-only with an
+// "Add Amendment" button. Unlocked notes show "Edit" and "Delete" buttons.
+function viewSoapNote(noteId){
+  var c=getContact(state.drawer);if(!c)return;
+  var notes=c._soapNotes||[];
+  var n=notes.find(function(x){return x.id===noteId;});
+  if(!n){toast('SOAP note not found.','error');return;}
+
+  var author=n.authorId?getUserById(n.authorId):null;
+  var authorName=author?(author.name||author.username):'Unknown';
+  var dateStr=n.visitDate?fmtDate(n.visitDate):(n.createdAt?fmtDate(n.createdAt.split('T')[0]):'');
+  var uid=state.user&&state.user.id;
+  var isAdminish=isAdminOrManager();
+  var canEdit=!n.locked&&(n.authorId===uid||isAdminish);
+  var canDelete=(n.authorId===uid||isAdminish)&&(!n.locked||isAdminish);
+
+  var sectionStyle='background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px';
+  var labelStyle='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:4px';
+  var contentStyle='font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.5';
+
+  function section(label,content){
+    return '<div style="'+sectionStyle+'"><div style="'+labelStyle+'">'+label+'</div><div style="'+contentStyle+'">'+(content?esc(content):'<span style="color:var(--text-dim);font-style:italic">(empty)</span>')+'</div></div>';
+  }
+
+  var lockedBanner=n.locked?'<div style="background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.3);border-radius:var(--radius);padding:9px 12px;margin-bottom:14px;font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>This note is locked'+(n.signedAt?' (signed '+fmtDate(n.signedAt.split('T')[0])+')':' (auto-locked after 24 hours)')+'. Original content cannot be edited; use amendments to add information.</span></div>':'';
+
+  var meta='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">'
+    +'<strong style="color:var(--text)">'+esc(dateStr)+'</strong> \u00b7 '+esc(authorName)
+    +(n.templateUsed?' \u00b7 '+esc(SOAP_TEMPLATES[n.templateUsed]&&SOAP_TEMPLATES[n.templateUsed].name||n.templateUsed):'')
+    +(n.appointmentId?' \u00b7 Linked to appointment':'')
+    +'</div>';
+
+  var amdHTML='';
+  if(n.amendments&&n.amendments.length){
+    amdHTML='<div style="margin-top:14px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--main-text);margin-bottom:8px">Amendments ('+n.amendments.length+')</div>';
+    n.amendments.forEach(function(a){
+      var aDate=a.createdAt?new Date(a.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      var aAuthor=a.authorId?getUserById(a.authorId):null;
+      var aAuthorName=aAuthor?(aAuthor.name||aAuthor.username):(a.authorName||'Unknown');
+      amdHTML+='<div style="background:rgba(107,33,234,.08);border:1px solid var(--purple-border);border-radius:var(--radius);padding:9px 12px;margin-bottom:6px">'
+        +'<div style="font-size:11px;color:var(--purple-light);font-weight:700;margin-bottom:4px">'+esc(aAuthorName)+' \u00b7 '+esc(aDate)+'</div>'
+        +(a.reason?'<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;font-style:italic">Reason: '+esc(a.reason)+'</div>':'')
+        +'<div style="font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.5">'+esc(a.content)+'</div>'
+        +'</div>';
+    });
+    amdHTML+='</div>';
+  }
+
+  var body=lockedBanner+meta
+    +section('Subjective',n.subjective)
+    +section('Objective',n.objective)
+    +section('Assessment',n.assessment)
+    +section('Plan',n.plan)
+    +amdHTML;
+
+  var foot='<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  if(canDelete)foot+='<button class="btn btn-danger" onclick="confirmDeleteSoapNote(\''+n.id+'\')">Delete</button>';
+  if(n.locked)foot+='<button class="btn btn-purple" onclick="openSoapAmendModal(\''+n.id+'\')">+ Amendment</button>';
+  if(canEdit)foot+='<button class="btn btn-primary" onclick="closeModal();openSoapNoteModal(\''+state.drawer+'\',\''+n.id+'\')">Edit</button>';
+
+  openModal('SOAP Note',body,foot,'modal-xl');
+}
+
+function openSoapAmendModal(noteId){
+  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  var taS=inpS+';min-height:120px;resize:vertical;line-height:1.5;font-size:13px';
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Amendments are appended to the locked note. The original record is preserved unchanged.</div>'
+    +'<div class="form-group"><label>Amendment Content</label>'
+    +'<textarea id="soap-amend-content" style="'+taS+'" placeholder="What you\'re adding or correcting"></textarea></div>'
+    +'<div class="form-group"><label>Reason for Amendment <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
+    +'<input id="soap-amend-reason" type="text" style="'+inpS+'" placeholder="e.g. Additional findings, correction of typo"></div>';
+  openModal('Add Amendment',body,
+    '<button class="btn btn-ghost" onclick="viewSoapNote(\''+noteId+'\')">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveSoapAmendment(\''+noteId+'\')">Add Amendment</button>');
+}
+
+function saveSoapAmendment(noteId){
+  var content=document.getElementById('soap-amend-content').value.trim();
+  var reason=document.getElementById('soap-amend-reason').value.trim();
+  if(!content){toast('Amendment content is required.','error');return;}
+  amendSoapNoteRemote(noteId,content,reason).then(function(){
+    closeModal();
+    toast('Amendment added.','success');
+    var contactId=state.drawer;
+    return loadSoapNotes(contactId,{force:true}).then(function(){
+      if(state.drawer===contactId&&state.dTab==='soap')renderDrawer();
+    });
+  }).catch(function(e){
+    console.error('saveSoapAmendment:',e);
+    toast(e.message||'Amendment failed.','error');
+  });
+}
+
+function confirmDeleteSoapNote(noteId){
+  if(!confirm('Delete this SOAP note? This action is heavily audit-logged. Medical records normally should not be deleted.'))return;
+  deleteSoapNoteRemote(noteId).then(function(){
+    closeModal();
+    toast('SOAP note deleted.','success');
+    var contactId=state.drawer;
+    return loadSoapNotes(contactId,{force:true}).then(function(){
+      if(state.drawer===contactId&&state.dTab==='soap')renderDrawer();
+    });
+  }).catch(function(e){
+    console.error('confirmDeleteSoapNote:',e);
+    toast(e.message||'Delete failed.','error');
+  });
 }
 
 // =====================================================
