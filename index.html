@@ -5885,6 +5885,8 @@ function saveAppt(){
     sendApptConfirmation(data);
   }
   var apptForSync = state.modal.id ? getAppt(state.modal.id) : db.appointments[db.appointments.length-1];
+  // Capture editing id before closeModal mutates state.modal
+  var editingIdForRecovery = state.modal && state.modal.id || null;
   // Override flag: user already overrode in the local conflict UI (apptOverride),
   // tell the server to skip its own race check.
   syncAppointment(apptForSync, false, !!apptOverride).then(function(res){
@@ -5913,10 +5915,17 @@ function saveAppt(){
       }catch(e){}
       var msg='Scheduling conflict: '+staffName+' was just booked for "'+esc(c.title||'an appointment')+'" at '+(c.time?fmtTime(c.time):'this time')+'. Refresh and try a different time, or override to schedule anyway.';
       // Reopen the modal with a warning + override button
-      _showApptConflictRecovery(msg, data, isNewAppt, state.modal&&state.modal.id);
+      _showApptConflictRecovery(msg, data, isNewAppt, editingIdForRecovery);
       return;
     }
-    toast('Could not save appointment. Check your connection.','error');
+    // Other errors: rollback the optimistic local save and warn the user.
+    // Without rollback, the user sees a "saved" appointment that doesn't
+    // exist on the server - which is what bit us before.
+    _rollbackAppt(rollback);
+    saveData();
+    if(state.panel==='calendar')renderCal();
+    typeof renderApptList==='function'&&renderApptList();
+    toast('Could not save appointment. Check your connection and try again.','error');
   });
   saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();updateNotifBadge();
   toast(isNewAppt?'Appointment saved.':'Appointment updated.','success');

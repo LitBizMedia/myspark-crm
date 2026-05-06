@@ -64,39 +64,53 @@ async function handler(req, res) {
     // they pass `override: true` in the body and we skip this check.
     //
     // Only checks scheduled status; cancelled/no-show appointments don't block.
+    //
+    // Time column may be stored as TEXT in this schema, so we cast explicitly
+    // to time on both sides of every comparison. We also wrap the entire check
+    // in a try/catch so any unexpected error degrades to "skip the check" rather
+    // than blocking a legitimate save.
     if (a.assignedTo && a.date && a.time && !req.body.override) {
-      const dur = parseInt(a.duration) || 60;
-      const conflict = await db.query(`
-        SELECT id, title, time, duration FROM appointments
-        WHERE subaccount_id = $1
-          AND assigned_to = $2
-          AND date = $3
-          AND status = 'scheduled'
-          AND id != $4
-          AND (
-            -- New appt starts during existing one
-            ($5::time >= time AND $5::time < (time + (duration || ' minutes')::interval))
-            OR
-            -- New appt ends during existing one
-            (($5::time + ($6 || ' minutes')::interval) > time AND $5::time < time)
-            OR
-            -- New appt fully contains existing one
-            ($5::time <= time AND ($5::time + ($6 || ' minutes')::interval) >= (time + (duration || ' minutes')::interval))
-          )
-        LIMIT 1
-      `, [subaccountId, a.assignedTo, a.date, a.id, a.time, String(dur)]);
+      try {
+        const dur = parseInt(a.duration) || 60;
+        const conflict = await db.query(`
+          SELECT id, title, time, duration FROM appointments
+          WHERE subaccount_id = $1
+            AND assigned_to = $2
+            AND date = $3
+            AND status = 'scheduled'
+            AND id != $4
+            AND time IS NOT NULL
+            AND (
+              -- New appt starts during existing one
+              ($5::time >= time::time AND $5::time < (time::time + (duration || ' minutes')::interval))
+              OR
+              -- New appt ends during existing one
+              (($5::time + ($6 || ' minutes')::interval) > time::time AND $5::time < time::time)
+              OR
+              -- New appt fully contains existing one
+              ($5::time <= time::time AND ($5::time + ($6 || ' minutes')::interval) >= (time::time + (duration || ' minutes')::interval))
+            )
+          LIMIT 1
+        `, [subaccountId, a.assignedTo, a.date, a.id, a.time, String(dur)]);
 
-      if (conflict.rows.length > 0) {
-        const c = conflict.rows[0];
-        return res.status(409).json({
-          error: 'conflict',
-          conflict: {
-            id: c.id,
-            title: c.title,
-            time: typeof c.time === 'string' ? c.time : (c.time && c.time.toString().slice(0,5)),
-            duration: c.duration
-          }
-        });
+        if (conflict.rows.length > 0) {
+          const c = conflict.rows[0];
+          return res.status(409).json({
+            error: 'conflict',
+            conflict: {
+              id: c.id,
+              title: c.title,
+              time: typeof c.time === 'string' ? c.time : (c.time && c.time.toString().slice(0,5)),
+              duration: c.duration
+            }
+          });
+        }
+      } catch (conflictErr) {
+        // If the conflict check fails (bad time format on existing rows, schema
+        // surprise, etc.) we LOG and SKIP the check rather than blocking the
+        // save. Frontend already has its own conflict UI; missing the server
+        // check is a soft failure, not a hard one.
+        console.warn('appointments-upsert: conflict check skipped due to error:', conflictErr.message);
       }
     }
 
