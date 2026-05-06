@@ -204,7 +204,9 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
   padding:14px 16px;border-top:2px solid var(--purple);box-shadow:0 2px 12px rgba(107,33,234,.07)}
 .stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;margin-bottom:4px}
 .stat-val{font-family:'Exo 2',sans-serif;font-size:24px;font-weight:800;color:var(--main-text)}
-.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.dash-grid{display:grid;grid-template-columns:3fr 2fr;gap:16px}
+.dash-grid-left{display:flex;flex-direction:column;gap:16px;min-width:0}
+@media (max-width:900px){.dash-grid{grid-template-columns:1fr}}
 .dash-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;box-shadow:0 2px 12px rgba(107,33,234,.07)}
 .dash-card-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
 .dash-card-title-row .dash-card-title{margin-bottom:0}
@@ -898,7 +900,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .data-table tbody tr:hover{background:var(--main-card-hover)}
 .rpt-total-row td{font-weight:700;background:var(--main-bg);color:var(--main-text)}
 /* WEEK SCHEDULE DASHBOARD */
-.dash-week{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;margin-top:16px;box-shadow:0 2px 12px rgba(107,33,234,.07);grid-column:1 / -1}
+.dash-week{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px;box-shadow:0 2px 12px rgba(107,33,234,.07)}
 .dash-week-title{font-family:'Exo 2',sans-serif;font-size:13px;font-weight:700;color:var(--main-text);margin-bottom:14px;display:flex;align-items:center;gap:7px}
 .week-day-col{margin-bottom:12px}
 .week-day-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:5px}
@@ -1198,15 +1200,16 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="dash-greeting"><h2 id="dash-greet"></h2><div class="dash-datetime" id="dash-time"></div></div>
         <div id="dash-hero"></div>
         <div id="dash-quick-actions" class="dash-quick-actions"></div>
+        <div class="dash-week" id="dash-week"></div>
         <div class="dash-grid">
-          <div class="dash-card">
-            <div class="dash-card-title-row">
-              <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Today's Appointments</div>
-              <div id="dash-appt-toggle"></div>
+          <div class="dash-grid-left">
+            <div class="dash-card">
+              <div class="dash-card-title-row">
+                <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Today's Appointments</div>
+                <div id="dash-appt-toggle"></div>
+              </div>
+              <div id="dash-appts" class="dash-scroll-list"></div>
             </div>
-            <div id="dash-appts" class="dash-scroll-list"></div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
             <div class="dash-card">
               <div class="dash-card-title-row">
                 <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Tasks Due Soon</div>
@@ -1214,12 +1217,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
               <div id="dash-tasks" class="dash-scroll-list"></div>
             </div>
-            <div class="dash-card">
-              <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Recent Activity</div>
-              <div id="dash-activity" class="dash-scroll-list"></div>
-            </div>
           </div>
-          <div class="dash-week" id="dash-week"></div>
+          <div class="dash-card">
+            <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Recent Activity</div>
+            <div id="dash-activity" class="dash-scroll-list"></div>
+          </div>
         </div>
       </div>
 
@@ -2691,15 +2693,17 @@ function handleNotifClick(kind,id){
 // DASHBOARD
 // =====================================================
 // Dashboard scope: 'me' shows only the logged-in user's items; 'all' shows
-// clinic-wide. Practitioners are forced to 'me'. Admins/managers default to
-// 'all' but can toggle. Persisted in state, not localStorage (resets per session).
+// clinic-wide. Only admins/managers can see clinic-wide; everyone else is
+// locked to 'me'. Persisted in state, not localStorage (resets per session).
 function _dashScope(){
-  if (userRole() === 'practitioner') return 'me';
+  var role = userRole();
+  if (role !== 'admin' && role !== 'manager') return 'me';
   if (!state._dashScope) state._dashScope = 'all';
   return state._dashScope;
 }
 function setDashScope(s){
-  if (userRole() === 'practitioner') return;
+  var role = userRole();
+  if (role !== 'admin' && role !== 'manager') return;
   state._dashScope = s;
   renderDash();
 }
@@ -2866,7 +2870,10 @@ function _renderDashHero(td, uid, scope, isAdminish){
     +'<div class="dash-hero-sub">'+(todayAppts.length===1?'appointment':'appointments')+(scope==='me'?' (yours)':'')+'</div>'
     +'</div>';
 
-  // Revenue (admin only): today's revenue from completed payments
+  // Revenue (admin only): today's revenue from completed payments. Trend
+  // compares today's revenue to the SAME WEEKDAY last week (apples to apples)
+  // rather than this-week vs last-week, which mixed periods and produced
+  // confusing percentages.
   let revenueBlock='';
   if(isAdminish){
     const payments=db.payments||[];
@@ -2876,36 +2883,30 @@ function _renderDashHero(td, uid, scope, isAdminish){
       return d===td;
     }).reduce(function(s,p){return s+(parseFloat(p.afterDiscount||p.subtotal||0));},0);
 
-    // This week (Sun-Sat) vs last week
-    const dt=new Date();
-    const dow=dt.getDay();
-    const ws=new Date(dt);ws.setDate(dt.getDate()-dow);ws.setHours(0,0,0,0);
-    const lws=new Date(ws);lws.setDate(ws.getDate()-7);
-    const lwe=new Date(ws);lwe.setDate(ws.getDate()-1);
-    const wsStr=ws.toISOString().slice(0,10);
-    const lwsStr=lws.toISOString().slice(0,10);
-    const lweStr=lwe.toISOString().slice(0,10);
-    const tw=payments.filter(function(p){
+    // Same weekday last week
+    const lastWeekDate=new Date();
+    lastWeekDate.setDate(lastWeekDate.getDate()-7);
+    const lwd=lastWeekDate.getFullYear()+'-'+String(lastWeekDate.getMonth()+1).padStart(2,'0')+'-'+String(lastWeekDate.getDate()).padStart(2,'0');
+    const lastWeekRevenue=payments.filter(function(p){
       if(p.status==='voided'||p.status==='failed')return false;
       const d=(p.createdAt||'').split('T')[0];
-      return d>=wsStr;
-    }).reduce(function(s,p){return s+(parseFloat(p.afterDiscount||p.subtotal||0));},0);
-    const lw=payments.filter(function(p){
-      if(p.status==='voided'||p.status==='failed')return false;
-      const d=(p.createdAt||'').split('T')[0];
-      return d>=lwsStr&&d<=lweStr;
+      return d===lwd;
     }).reduce(function(s,p){return s+(parseFloat(p.afterDiscount||p.subtotal||0));},0);
 
+    // Trend: only compute when both periods have meaningful data. A jump from
+    // $0 to anything isn't really a percentage; show absolute terms instead.
     let trendStr='';
-    if(lw>0){
-      const pct=Math.round(((tw-lw)/lw)*100);
+    if(todayRevenue===0 && lastWeekRevenue===0){
+      trendStr='No revenue today or this day last week';
+    } else if(lastWeekRevenue===0 && todayRevenue>0){
+      trendStr='<span style="color:#10b981;font-weight:700">'+fmt$(todayRevenue)+'</span> vs nothing same day last week';
+    } else if(todayRevenue===0 && lastWeekRevenue>0){
+      trendStr='<span style="color:#f87171;font-weight:700">$0</span> vs '+fmt$(lastWeekRevenue)+' same day last week';
+    } else {
+      const pct=Math.round(((todayRevenue-lastWeekRevenue)/lastWeekRevenue)*100);
       const arrow=pct>=0?'\u2197':'\u2198';
       const color=pct>=0?'#10b981':'#f87171';
-      trendStr='<span style="color:'+color+';font-weight:700">'+arrow+' '+Math.abs(pct)+'%</span> vs last week';
-    } else if(tw>0){
-      trendStr='\u2014 first week with revenue';
-    } else {
-      trendStr='No revenue this week yet';
+      trendStr='<span style="color:'+color+';font-weight:700">'+arrow+' '+Math.abs(pct)+'%</span> vs same day last week';
     }
 
     revenueBlock='<div class="dash-hero-block">'
