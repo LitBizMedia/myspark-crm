@@ -258,6 +258,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .type-client{background:rgba(107,33,234,.2);color:#a855f7}
 .type-partner{background:rgba(16,185,129,.15);color:#34d399}
 .type-employee{background:rgba(245,158,11,.15);color:#fbbf24}
+.type-lapsed{background:rgba(156,163,175,.18);color:#9ca3af}
 .status-dot{width:7px;height:7px;border-radius:50%;background:#34d399;display:inline-block;margin-right:4px}
 .status-dot.inactive{background:var(--text-dim)}
 
@@ -1202,7 +1203,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         </div>
         <div class="toolbar">
           <div class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="c-search" type="text" placeholder="Search contacts..." oninput="onCSearch(this.value)"></div>
-          <select class="filter-sel" id="c-type" onchange="onCFilter()"><option value="">All Types</option><option value="lead">Lead</option><option value="client">Client</option><option value="partner">Partner</option><option value="employee">Employee</option></select>
+          <select class="filter-sel" id="c-type" onchange="onCFilter()"><option value="">All Types</option><option value="lead">Lead</option><option value="client">Client</option><option value="partner">Partner</option><option value="employee">Employee</option><option value="lapsed">Lapsed</option></select>
           <select class="filter-sel" id="c-status" onchange="onCFilter()"><option value="">All Status</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
           <select class="filter-sel" id="c-tag" onchange="onCFilter()"><option value="">All Tags</option></select>
         </div>
@@ -2616,6 +2617,7 @@ function renderDrawer(){
       +'<div class="info-item"><label>Website</label><span>'+(c.website?'<a href="'+esc(c.website)+'" target="_blank">'+esc(c.website)+'</a>':'–')+'</span></div>'
       +'<div class="info-item"><label>Source</label><span>'+esc(c.source||'–')+'</span></div>'
       +'<div class="info-item"><label>Status</label><span><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span>'+c.status+'</span></div>'
+      +(c.timezone?'<div class="info-item"><label>Timezone</label><span>'+esc(_contactTzLabel(c.timezone))+'</span></div>':'')
       +'<div class="info-item"><label>Added</label><span>'+fmtDate((c.createdAt||'').split('T')[0])+'</span></div>'
       +'</div>'+(function(){
         // Address display: prefer the new structured fields. Fall back to the
@@ -3651,19 +3653,51 @@ function ssSelect(inputId,hiddenId,ddId,id,name){
   document.getElementById(ddId).classList.add('hidden');
 }
 
+// Common US/world timezones for contact records. Same list as workspace tz
+// settings so the dropdowns match. Friendly labels keep it staff-readable.
+const CONTACT_TZ_LIST = [
+  ['America/New_York','Eastern Time (ET)'],
+  ['America/Chicago','Central Time (CT)'],
+  ['America/Denver','Mountain Time (MT)'],
+  ['America/Phoenix','Mountain Time - Arizona'],
+  ['America/Los_Angeles','Pacific Time (PT)'],
+  ['America/Anchorage','Alaska Time'],
+  ['Pacific/Honolulu','Hawaii Time'],
+  ['America/Toronto','Toronto (ET)'],
+  ['America/Vancouver','Vancouver (PT)'],
+  ['Europe/London','London (GMT/BST)'],
+  ['Europe/Paris','Paris (CET)'],
+  ['Asia/Tokyo','Tokyo (JST)'],
+  ['Asia/Kolkata','India (IST)'],
+  ['Asia/Dubai','Dubai (GST)'],
+  ['Australia/Sydney','Sydney (AEST)']
+];
+function _contactTzOpts(selected){
+  var opts='<option value="">— Not set —</option>';
+  CONTACT_TZ_LIST.forEach(function(p){
+    opts+='<option value="'+p[0]+'"'+(selected===p[0]?' selected':'')+'>'+p[1]+'</option>';
+  });
+  return opts;
+}
+function _contactTzLabel(iana){
+  if(!iana)return '';
+  var found=CONTACT_TZ_LIST.find(function(p){return p[0]===iana;});
+  return found?found[1]:iana;
+}
+
 // CONTACT MODAL
 function openContactModal(id){
   const c=id?getContact(id):null;state.modal={type:'contact',id:id||null};
   const tagOpts=db.tags.map(t=>'<button type="button" class="tag-opt'+(c&&(c.tags||[]).includes(t.id)?' selected':'')+'" data-tag="'+t.id+'" onclick="toggleTagOpt(this)" style="'+(c&&(c.tags||[]).includes(t.id)?'background:'+t.color+'20;color:'+t.color+';border-color:'+t.color+'40':'')+'">'+esc(t.name)+'</button>').join('');
   const b='<div class="form-row"><div class="form-group"><label>First Name</label><input id="cf-firstname" type="text" value="'+esc(c&&c.first_name||'')+'" placeholder="First" oninput="cfUpdateName()"></div><div class="form-group"><label>Last Name</label><input id="cf-lastname" type="text" value="'+esc(c&&c.last_name||'')+'" placeholder="Last" oninput="cfUpdateName()"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Full Name *</label><input id="cf-name" type="text" value="'+esc(c&&c.name||'')+'" placeholder="Auto-filled or enter manually"></div><div class="form-group"><label>Type</label><select id="cf-type">'+['lead','client','partner','employee'].map(x=>'<option value="'+x+'"'+(c&&c.type===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Full Name *</label><input id="cf-name" type="text" value="'+esc(c&&c.name||'')+'" placeholder="Auto-filled or enter manually"></div><div class="form-group"><label>Type</label><select id="cf-type">'+['lead','client','partner','employee','lapsed'].map(x=>'<option value="'+x+'"'+(c&&c.type===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Email</label><input id="cf-email" type="email" value="'+esc(c&&c.email||'')+'"></div><div class="form-group"><label>Phone</label><input id="cf-phone" type="tel" value="'+esc(c&&c.phone||'')+'"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Company</label><input id="cf-company" type="text" value="'+esc(c&&c.company||'')+'"></div><div class="form-group"><label>Title</label><input id="cf-title" type="text" value="'+esc(c&&c.title||'')+'"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Website</label><input id="cf-web" type="url" value="'+esc(c&&c.website||'')+'"></div><div class="form-group"><label>Source</label><input id="cf-source" type="text" value="'+esc(c&&c.source||'')+'"></div></div>'
     +'<div class="form-group"><label>Street Address</label><input id="cf-addr1" type="text" value="'+esc(c&&c.address_line1||c&&c.address||'')+'" placeholder="123 Main St"></div>'
     +'<div class="form-group"><label>Apt, Suite, etc. <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-addr2" type="text" value="'+esc(c&&c.address_line2||'')+'" placeholder="Apt 4B"></div>'
     +'<div class="form-row"><div class="form-group" style="flex:2"><label>City</label><input id="cf-city" type="text" value="'+esc(c&&c.city||'')+'"></div><div class="form-group" style="flex:1"><label>State / Region</label><input id="cf-state" type="text" value="'+esc(c&&c.state||'')+'" maxlength="32"></div><div class="form-group" style="flex:1"><label>ZIP / Postal</label><input id="cf-zip" type="text" value="'+esc(c&&c.postal_code||'')+'" maxlength="20"></div></div>'
-    +'<div class="form-group"><label>Status</label><select id="cf-status"><option value="active"'+(c&&c.status!=='inactive'?' selected':'')+'">Active</option><option value="inactive"'+(c&&c.status==='inactive'?' selected':'')+'">Inactive</option></select></div>'
+    +'<div class="form-row"><div class="form-group"><label>Status</label><select id="cf-status"><option value="active"'+(c&&c.status!=='inactive'?' selected':'')+'">Active</option><option value="inactive"'+(c&&c.status==='inactive'?' selected':'')+'">Inactive</option></select></div><div class="form-group"><label>Timezone <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><select id="cf-tz">'+_contactTzOpts(c&&c.timezone||'')+'</select></div></div>'
     +'<div class="form-group"><label>Tags</label><div class="tag-sel-wrap" id="tag-sel-c">'+tagOpts+'</div></div>';
   openModal(c?'Edit Contact':'Add Contact',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveContact,\'contact\')">Save Contact</button>','modal-lg');
 }
@@ -3676,7 +3710,7 @@ async function saveContact(){
   const _ln=(document.getElementById('cf-lastname')||{}).value||'';
   if(_fn||_ln){const _auto=(_fn+' '+_ln).trim();const _nf=document.getElementById('cf-name');if(_nf&&(!_nf.value.trim()||_nf.getAttribute('data-auto')==='1')){_nf.value=_auto;_nf.setAttribute('data-auto','1');}}
   const name=document.getElementById('cf-name').value.trim();if(!name){toast('Name is required.','error');return}
-  const data={name,first_name:_fn.trim(),last_name:_ln.trim(),type:document.getElementById('cf-type').value,email:document.getElementById('cf-email').value.trim(),phone:document.getElementById('cf-phone').value.trim(),company:document.getElementById('cf-company').value.trim(),title:document.getElementById('cf-title').value.trim(),website:document.getElementById('cf-web').value.trim(),source:document.getElementById('cf-source').value.trim(),address_line1:document.getElementById('cf-addr1').value.trim(),address_line2:document.getElementById('cf-addr2').value.trim(),city:document.getElementById('cf-city').value.trim(),state:document.getElementById('cf-state').value.trim(),postal_code:document.getElementById('cf-zip').value.trim(),status:document.getElementById('cf-status').value,tags:getSelTags()};
+  const data={name,first_name:_fn.trim(),last_name:_ln.trim(),type:document.getElementById('cf-type').value,email:document.getElementById('cf-email').value.trim(),phone:document.getElementById('cf-phone').value.trim(),company:document.getElementById('cf-company').value.trim(),title:document.getElementById('cf-title').value.trim(),website:document.getElementById('cf-web').value.trim(),source:document.getElementById('cf-source').value.trim(),address_line1:document.getElementById('cf-addr1').value.trim(),address_line2:document.getElementById('cf-addr2').value.trim(),city:document.getElementById('cf-city').value.trim(),state:document.getElementById('cf-state').value.trim(),postal_code:document.getElementById('cf-zip').value.trim(),timezone:document.getElementById('cf-tz').value,status:document.getElementById('cf-status').value,tags:getSelTags()};
   const isNew=!state.modal.id;
   // Capture which fields are changing for the audit (not the values themselves - PHI)
   var _changedFields=[];
@@ -13142,7 +13176,7 @@ function openBulkTypeModal(){
   document.getElementById('modal-title').textContent='Change Type for '+n+' Contact'+(n===1?'':'s');
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML=
-    '<div class="form-group"><label>New Type</label><select id="bulk-type-sel" class="filter-sel" style="width:100%;height:38px"><option value="lead">Lead</option><option value="client">Client</option><option value="partner">Partner</option><option value="employee">Employee</option></select></div>';
+    '<div class="form-group"><label>New Type</label><select id="bulk-type-sel" class="filter-sel" style="width:100%;height:38px"><option value="lead">Lead</option><option value="client">Client</option><option value="partner">Partner</option><option value="employee">Employee</option><option value="lapsed">Lapsed</option></select></div>';
   document.getElementById('modal-foot').innerHTML=
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+
     '<button class="btn btn-purple" onclick="bulkChangeType(document.getElementById(\'bulk-type-sel\').value)">Apply</button>';

@@ -785,7 +785,9 @@ function renderInlineTimeSlots() {
   if (!S.slots.length) {
     return '<div style="margin-top:14px;font-size:13px;color:var(--text-muted)">No available times on this date. Choose another date.</div>';
   }
-  let html = '<div style="margin-top:14px;font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Available times</div>';
+  const tz = D.settings && D.settings.timezone;
+  const tzNote = tz ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;font-weight:400;text-transform:none;letter-spacing:0">All times shown in ${tzLabel(tz)}</div>` : '';
+  let html = '<div style="margin-top:14px;font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Available times' + tzNote + '</div>';
   html += '<div class="bw-slots">';
   S.slots.forEach(s => {
     const sel = S.time === s.time ? 'selected' : '';
@@ -900,12 +902,13 @@ function renderClassesForm(el) {
     const instr = staffMap[sess.instructor_id];
     const datePretty = fmtDate(sess.date);
     const timePretty = fmtTime(sess.time);
+    const tzSuffix = (D.settings && D.settings.timezone) ? ' ' + tzLabel(D.settings.timezone) : '';
     const priceLine = sess.price > 0 ? `<div class="bw-summary-row"><span>Price</span><span>$${sess.price.toFixed(2)}</span></div>` : '';
     summary = `<div class="bw-summary">
       <div class="bw-summary-title">Selected Class</div>
       <div class="bw-summary-row"><span>Class</span><span>${esc(svc ? svc.name : sess.title)}</span></div>
       <div class="bw-summary-row"><span>Date</span><span>${datePretty}</span></div>
-      <div class="bw-summary-row"><span>Time</span><span>${timePretty}</span></div>
+      <div class="bw-summary-row"><span>Time</span><span>${timePretty}${tzSuffix}</span></div>
       ${instr ? `<div class="bw-summary-row"><span>Instructor</span><span>${esc(instr.name)}</span></div>` : ''}
       ${priceLine}
     </div>`;
@@ -976,6 +979,12 @@ function renderClassesForm(el) {
     chipsHtml += `<button type="button" ${onclick} style="padding:6px 12px;border:1.5px solid ${border};background:${bg};color:${color};border-radius:999px;font-size:12px;font-weight:600;cursor:${cursor};opacity:${opacity};transition:all .15s">${c.label} <span style="opacity:0.7;margin-left:2px">(${count})</span></button>`;
   });
   chipsHtml += '</div>';
+
+  // Timezone disambiguation note for class times
+  const tzC = D.settings && D.settings.timezone;
+  if (tzC) {
+    chipsHtml += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">All times shown in ${tzLabel(tzC)}</div>`;
+  }
 
   // Session cards (right pane), grouped by date.
   // Each date gets a header; sessions on that date are compact rows underneath.
@@ -1597,7 +1606,7 @@ function renderConfirm(el) {
     <div class="bw-confirm-card">
       <div class="bw-confirm-row"><strong>${itemLabel}</strong><span>${esc(itemName)}</span></div>
       <div class="bw-confirm-row"><strong>Date</strong><span>${fmtDate(displayDate)}</span></div>
-      <div class="bw-confirm-row"><strong>Time</strong><span>${fmtTime(displayTime)}</span></div>
+      <div class="bw-confirm-row"><strong>Time</strong><span>${fmtTime(displayTime)}${D.settings && D.settings.timezone ? ' ' + tzLabel(D.settings.timezone) : ''}</span></div>
       ${staffUser?`<div class="bw-confirm-row"><strong>${providerLabel}</strong><span>${esc(staffUser.name)}</span></div>`:''}
     </div>
     ${receiptHtml}
@@ -1676,6 +1685,24 @@ function fmtTime(t) {
   const [h,m] = t.split(':').map(Number);
   const ampm = h>=12?'PM':'AM';
   return `${h%12||12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+// Friendly timezone label from an IANA name. Falls back to the IANA string
+// if not in the map. Used to disambiguate times in the widget so a patient
+// in a different zone knows which clock the times refer to.
+const TZ_LABELS = {
+  'America/New_York':'Eastern Time','America/Chicago':'Central Time',
+  'America/Denver':'Mountain Time','America/Phoenix':'Mountain Time (Arizona)',
+  'America/Los_Angeles':'Pacific Time','America/Anchorage':'Alaska Time',
+  'Pacific/Honolulu':'Hawaii Time','America/Toronto':'Eastern Time',
+  'America/Vancouver':'Pacific Time','Europe/London':'London Time',
+  'Europe/Paris':'Central European Time','Europe/Berlin':'Central European Time',
+  'Asia/Tokyo':'Japan Time','Asia/Shanghai':'China Time','Asia/Kolkata':'India Time',
+  'Asia/Dubai':'Gulf Time','Australia/Sydney':'Sydney Time','Pacific/Auckland':'New Zealand Time'
+};
+function tzLabel(iana){
+  if(!iana)return '';
+  return TZ_LABELS[iana] || iana.split('/').pop().replace(/_/g,' ');
 }
 
 function fmtDate(d) {

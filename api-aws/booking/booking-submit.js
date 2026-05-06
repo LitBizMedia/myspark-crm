@@ -36,6 +36,22 @@ function fmtTime(t) {
   return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
 }
 
+// Friendly timezone label, mirrors the booking-widget tzLabel helper.
+const TZ_LABELS = {
+  'America/New_York':'Eastern Time','America/Chicago':'Central Time',
+  'America/Denver':'Mountain Time','America/Phoenix':'Mountain Time (Arizona)',
+  'America/Los_Angeles':'Pacific Time','America/Anchorage':'Alaska Time',
+  'Pacific/Honolulu':'Hawaii Time','America/Toronto':'Eastern Time',
+  'America/Vancouver':'Pacific Time','Europe/London':'London Time',
+  'Europe/Paris':'Central European Time','Europe/Berlin':'Central European Time',
+  'Asia/Tokyo':'Japan Time','Asia/Shanghai':'China Time','Asia/Kolkata':'India Time',
+  'Asia/Dubai':'Gulf Time','Australia/Sydney':'Sydney Time','Pacific/Auckland':'New Zealand Time'
+};
+function tzLabel(iana){
+  if(!iana)return '';
+  return TZ_LABELS[iana] || iana.split('/').pop().replace(/_/g,' ');
+}
+
 function r2(n) {
   return Math.round((parseFloat(n) || 0) * 100) / 100;
 }
@@ -746,7 +762,7 @@ async function handler(req, res) {
           <div style="background:#f9f7ff;border-radius:8px;padding:20px;margin:20px 0">
             <div style="margin-bottom:8px"><strong>${classSession ? 'Class' : 'Service'}:</strong> ${title}</div>
             <div style="margin-bottom:8px"><strong>Date:</strong> ${bookingDate}</div>
-            <div style="margin-bottom:8px"><strong>Time:</strong> ${fmtTime(bookingTime)}</div>
+            <div style="margin-bottom:8px"><strong>Time:</strong> ${fmtTime(bookingTime)}${settings.timezone ? ' ' + tzLabel(settings.timezone) : ''}</div>
             <div style="margin-bottom:8px"><strong>${staffLabel}:</strong> ${staffName}</div>
             ${chargeOccurred ? `
               <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e0ff">
