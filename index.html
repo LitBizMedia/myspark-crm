@@ -2986,7 +2986,11 @@ function buildTimedCol(dateStr,appts,allHours){
     var col=getUserColor(a.assignedTo);
     var sCol=getServiceColor(a.service_id);
     var sStripe=sCol?'border-left:4px solid '+sCol+';':'';
-    var wStyle=a._tc>1?'width:calc('+Math.floor(100/a._tc)+'% - 3px);left:calc('+a._col*(100/a._tc)+'% + 1px);right:auto;':'';
+    // Width logic: when overlapping (_tc>1), divide column by N. Otherwise span
+    // the full column width with left:0;right:0 so a lone event fills the day.
+    var wStyle=a._tc>1
+      ? 'width:calc('+Math.floor(100/a._tc)+'% - 3px);left:calc('+a._col*(100/a._tc)+'% + 1px);right:auto;'
+      : 'left:0;right:0;';
     var isCancelled=a.status==='cancelled';
     var cA=a.contactId?getContact(a.contactId):null;
     var bufBpx=Math.round((parseInt(a.buffer_before)||0)/60*68);
