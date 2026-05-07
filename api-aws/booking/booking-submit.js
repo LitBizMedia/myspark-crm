@@ -729,15 +729,17 @@ async function handler(req, res) {
       ]);
     }
 
-    // 13. Create payment record (always, even if total=0 with no Square charge - records the booking)
-    // Per Payment Policy: every booking through the widget creates a payment record.
-    // If no charge occurred (e.g. pay-at-visit), method='none' and total may be 0 or service price.
+    // 13. Create payment record - only when actual money changed hands.
+    // Bookings with payment_mode='none' or free services don't create payment
+    // records: no money in/out means nothing for the payments ledger to track.
+    // The appointment row alone records the booking; staff takes payment via
+    // the dashboard if and when collected.
     //
     // For payment_mode='deposit': the record reflects ONLY the deposit transaction
     // (subtotal/total = chargeAmount, tax=0). The remaining balance is collected
     // at the visit and creates a SECOND payment record at that time.
-    if (chargeOccurred || requirePayment) {
-      const isDeposit = chargeOccurred && paymentMode === 'deposit' && chargeAmount < total;
+    if (chargeOccurred) {
+      const isDeposit = paymentMode === 'deposit' && chargeAmount < total;
 
       const pmtSubtotal       = isDeposit ? chargeAmount : subtotal;
       const pmtAfterDiscount  = isDeposit ? chargeAmount : afterDiscount;

@@ -6128,11 +6128,13 @@ function _getApptPrice(appt){
 // because we compare against service.price which is also gross. Coupons
 // and manual discounts are credits against the bill: when a customer pays
 // the discounted amount, the bill is settled.
+// Excludes payment_method='none' records: those represent bookings where
+// no money was collected (e.g. pay-at-visit), recorded for traceability only.
 // Falls back to total when subtotal isn't set (legacy payments).
 function _getApptPaidAmount(apptId){
   var paid=0;
   (db.payments||[]).forEach(function(p){
-    if(p.appointmentId===apptId && p.status==='completed'){
+    if(p.appointmentId===apptId && p.status==='completed' && p.paymentMethod!=='none'){
       var contribution=p.subtotal!=null?parseFloat(p.subtotal):parseFloat(p.total||0);
       paid+=contribution;
     }
@@ -6168,10 +6170,11 @@ function _getClassPrice(session){
 function _getClassParticipantPaidAmount(sessionId, contactId){
   var paid=0;
   (db.payments||[]).forEach(function(p){
-    if(p.classSessionId===sessionId && p.participantContactId===contactId && p.status==='completed'){
+    if(p.classSessionId===sessionId && p.participantContactId===contactId && p.status==='completed' && p.paymentMethod!=='none'){
       // Use subtotal (gross) to compare against gross class price.
       // Coupons reduce what the customer owes; full payment of the discounted
       // amount settles the bill.
+      // Excludes payment_method='none' (no-money bookings recorded for traceability).
       var contribution=p.subtotal!=null?parseFloat(p.subtotal):parseFloat(p.total||0);
       paid+=contribution;
     }
@@ -6483,9 +6486,11 @@ function _renderPaymentForm(ctx){
       +'</div>';
   }
 
-  // Payment history - filter by linkage
+  // Payment history - filter by linkage. Skip payment_method='none' records:
+  // those are booking traces (no charge happened), not real payments.
   var history='';
   var related=(db.payments||[]).filter(function(p){
+    if(p.paymentMethod==='none')return false;
     if(ctx.type==='appt')return p.appointmentId===ctx.linkage.appointmentId;
     if(ctx.type==='class')return p.classSessionId===ctx.linkage.classSessionId && p.participantContactId===ctx.linkage.participantContactId;
     return false;
