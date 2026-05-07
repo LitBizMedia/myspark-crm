@@ -3,68 +3,48 @@
 // POST /api/booking/cancel-appointment
 //
 // Cancels an appointment via a signed token from the confirmation email.
-// Token is validated, appointment is set to status='cancelled', token is marked used.
-//
-// Request: { "token": "..." }
-// Response: { "success": true, "appointment_id": "...", "title": "...", "date": "...", "time": "..." }
-//           or { "error": "..." } with 4xx status
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
 async function handler(req, res) {
-  const cors = {
-    'Access-Control-Allow-Origin':'*',
-    'Access-Control-Allow-Methods':'POST, OPTIONS',
-    'Access-Control-Allow-Headers':'Content-Type'
-  };
-  if (req.method === 'OPTIONS') return res.status(204).set(cors).send('');
-  if (req.method !== 'POST') return res.status(405).set(cors).json({ error: 'Method not allowed' });
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = req.body || {};
   const token = (body.token || '').toString().trim();
-  if (!token) return res.status(400).set(cors).json({ error: 'Missing token' });
+  if (!token) return res.status(400).json({ error: 'Missing token' });
 
   try {
-    // Look up the token
     const tokRes = await db.query(
       `SELECT token, appointment_id, subaccount_id, action, expires_at, used_at
-         FROM booking_action_tokens
-        WHERE token = $1`,
+         FROM booking_action_tokens WHERE token = $1`,
       [token]
     );
-    if (tokRes.rows.length === 0) {
-      return res.status(404).set(cors).json({ error: 'Invalid or expired link.' });
-    }
+    if (tokRes.rows.length === 0) return res.status(404).json({ error: 'Invalid or expired link.' });
     const tok = tokRes.rows[0];
 
-    if (tok.action !== 'cancel') {
-      return res.status(400).set(cors).json({ error: 'This link is not for cancellation.' });
-    }
-    if (tok.used_at) {
-      return res.status(400).set(cors).json({ error: 'This cancellation link was already used.' });
-    }
-    if (new Date(tok.expires_at) < new Date()) {
-      return res.status(400).set(cors).json({ error: 'This cancellation link has expired.' });
-    }
+    if (tok.action !== 'cancel') return res.status(400).json({ error: 'This link is not for cancellation.' });
+    if (tok.used_at) return res.status(400).json({ error: 'This cancellation link was already used.' });
+    if (new Date(tok.expires_at) < new Date()) return res.status(400).json({ error: 'This cancellation link has expired.' });
 
-    // Look up the appointment
     const apptRes = await db.query(
       `SELECT id, title, date, time, status, contact_id
-         FROM appointments
-        WHERE id = $1 AND subaccount_id = $2`,
+         FROM appointments WHERE id = $1 AND subaccount_id = $2`,
       [tok.appointment_id, tok.subaccount_id]
     );
-    if (apptRes.rows.length === 0) {
-      return res.status(404).set(cors).json({ error: 'Appointment not found.' });
-    }
+    if (apptRes.rows.length === 0) return res.status(404).json({ error: 'Appointment not found.' });
     const appt = apptRes.rows[0];
-    if (appt.status === 'cancelled') {
-      return res.status(400).set(cors).json({ error: 'This appointment is already cancelled.' });
-    }
+    if (appt.status === 'cancelled') return res.status(400).json({ error: 'This appointment is already cancelled.' });
 
-    // Perform cancellation
     await db.query(
       `UPDATE appointments SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
       [appt.id]
@@ -74,7 +54,6 @@ async function handler(req, res) {
       [token]
     );
 
-    // Audit
     try {
       await logAudit({
         subaccountId: tok.subaccount_id,
@@ -85,9 +64,9 @@ async function handler(req, res) {
         targetId: appt.id,
         metadata: { via: 'self_serve_link' }
       });
-    } catch (e) { /* don't fail on audit */ }
+    } catch (e) { /* swallow */ }
 
-    return res.status(200).set(cors).json({
+    return res.status(200).json({
       success: true,
       appointment_id: appt.id,
       title: appt.title,
@@ -96,7 +75,7 @@ async function handler(req, res) {
     });
   } catch (e) {
     console.error('booking-cancel error:', e);
-    return res.status(500).set(cors).json({ error: 'Server error. Please try again or contact us.' });
+    return res.status(500).json({ error: 'Server error. Please try again or contact us.' });
   }
 }
 

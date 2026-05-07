@@ -1,21 +1,17 @@
 // PUBLIC - no auth required, validates via opaque token
 //
-// Two endpoints in one Lambda:
-//   GET /api/booking/reschedule-info?token=X
-//     Returns appointment context for the reschedule UI.
-//   POST /api/booking/reschedule-confirm
-//     Body: { token, date, time }
-//     Updates the appointment to the new date/time, marks token used.
+// GET  /api/booking/reschedule-info?token=X    -> appointment context
+// POST /api/booking/reschedule-confirm         -> { token, date, time }
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 
-const cors = {
-  'Access-Control-Allow-Origin':'*',
-  'Access-Control-Allow-Methods':'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers':'Content-Type'
-};
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
 async function loadToken(token) {
   if (!token) return { error: { status: 400, msg: 'Missing token' } };
@@ -36,8 +32,7 @@ async function loadAppt(tok) {
   const apptRes = await db.query(
     `SELECT id, title, date, time, status, contact_id, assigned_to,
             duration, service_id, service_variation_id, widget_id
-       FROM appointments
-      WHERE id = $1 AND subaccount_id = $2`,
+       FROM appointments WHERE id = $1 AND subaccount_id = $2`,
     [tok.appointment_id, tok.subaccount_id]
   );
   if (apptRes.rows.length === 0) return null;
@@ -45,99 +40,94 @@ async function loadAppt(tok) {
 }
 
 async function handler(req, res) {
-  if (req.method === 'OPTIONS') return res.status(204).set(cors).send('');
-
-  if (req.method === 'GET') {
-    // Return info for the reschedule page to render
-    const token = (req.query && req.query.token) || '';
-    const { tok, error } = await loadToken(token);
-    if (error) return res.status(error.status).set(cors).json({ error: error.msg });
-    const appt = await loadAppt(tok);
-    if (!appt) return res.status(404).set(cors).json({ error: 'Appointment not found.' });
-    if (appt.status === 'cancelled') return res.status(400).set(cors).json({ error: 'This appointment is cancelled.' });
-
-    // Lookup subaccount slug for the reschedule UI
-    const subRes = await db.query(`SELECT slug FROM subaccounts WHERE id = $1`, [tok.subaccount_id]);
-    const slug = subRes.rows[0] ? subRes.rows[0].slug : null;
-
-    return res.status(200).set(cors).json({
-      success: true,
-      slug,
-      widget_id: appt.widget_id,
-      appointment: {
-        id: appt.id,
-        title: appt.title,
-        date: appt.date instanceof Date ? appt.date.toISOString().slice(0,10) : appt.date,
-        time: appt.time,
-        duration: appt.duration,
-        assigned_to: appt.assigned_to,
-        service_id: appt.service_id,
-        service_variation_id: appt.service_variation_id
-      }
-    });
-  }
-
-  if (req.method !== 'POST') return res.status(405).set(cors).json({ error: 'Method not allowed' });
-
-  const body = req.body || {};
-  const token = (body.token || '').toString().trim();
-  const newDate = (body.date || '').toString().trim();
-  const newTime = (body.time || '').toString().trim();
-  if (!newDate || !newTime) return res.status(400).set(cors).json({ error: 'New date and time are required.' });
-
-  const { tok, error } = await loadToken(token);
-  if (error) return res.status(error.status).set(cors).json({ error: error.msg });
-  const appt = await loadAppt(tok);
-  if (!appt) return res.status(404).set(cors).json({ error: 'Appointment not found.' });
-  if (appt.status === 'cancelled') return res.status(400).set(cors).json({ error: 'This appointment is cancelled.' });
-
-  // Race check at the new slot for the same staff member
-  if (appt.assigned_to) {
-    const conflict = await db.query(
-      `SELECT id FROM appointments
-        WHERE subaccount_id = $1
-          AND assigned_to = $2
-          AND date = $3 AND time = $4
-          AND status != 'cancelled'
-          AND id != $5
-        LIMIT 1`,
-      [tok.subaccount_id, appt.assigned_to, newDate, newTime, appt.id]
-    );
-    if (conflict.rows.length > 0) {
-      return res.status(409).set(cors).json({ error: 'That time is no longer available. Please choose another.' });
-    }
-  }
-
-  // Perform the update
-  await db.query(
-    `UPDATE appointments
-        SET date = $1, time = $2, updated_at = NOW()
-      WHERE id = $3`,
-    [newDate, newTime, appt.id]
-  );
-  await db.query(
-    `UPDATE booking_action_tokens SET used_at = NOW() WHERE token = $1`,
-    [token]
-  );
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
 
   try {
-    await logAudit({
-      subaccountId: tok.subaccount_id,
-      action: 'booking.appointment.reschedule',
-      actorType: 'public',
-      actorId: appt.contact_id || null,
-      targetType: 'appointment',
-      targetId: appt.id,
-      metadata: { via: 'self_serve_link', from: { date: appt.date, time: appt.time }, to: { date: newDate, time: newTime } }
-    });
-  } catch (e) { /* swallow */ }
+    if (req.method === 'GET') {
+      const token = (req.query && req.query.token) || '';
+      const { tok, error } = await loadToken(token);
+      if (error) return res.status(error.status).json({ error: error.msg });
+      const appt = await loadAppt(tok);
+      if (!appt) return res.status(404).json({ error: 'Appointment not found.' });
+      if (appt.status === 'cancelled') return res.status(400).json({ error: 'This appointment is cancelled.' });
 
-  return res.status(200).set(cors).json({
-    success: true,
-    appointment_id: appt.id,
-    date: newDate,
-    time: newTime
-  });
+      const subRes = await db.query(`SELECT slug FROM subaccounts WHERE id = $1`, [tok.subaccount_id]);
+      const slug = subRes.rows[0] ? subRes.rows[0].slug : null;
+
+      return res.status(200).json({
+        success: true,
+        slug,
+        widget_id: appt.widget_id,
+        appointment: {
+          id: appt.id,
+          title: appt.title,
+          date: appt.date instanceof Date ? appt.date.toISOString().slice(0,10) : appt.date,
+          time: appt.time,
+          duration: appt.duration,
+          assigned_to: appt.assigned_to,
+          service_id: appt.service_id,
+          service_variation_id: appt.service_variation_id
+        }
+      });
+    }
+
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+    const body = req.body || {};
+    const token = (body.token || '').toString().trim();
+    const newDate = (body.date || '').toString().trim();
+    const newTime = (body.time || '').toString().trim();
+    if (!newDate || !newTime) return res.status(400).json({ error: 'New date and time are required.' });
+
+    const { tok, error } = await loadToken(token);
+    if (error) return res.status(error.status).json({ error: error.msg });
+    const appt = await loadAppt(tok);
+    if (!appt) return res.status(404).json({ error: 'Appointment not found.' });
+    if (appt.status === 'cancelled') return res.status(400).json({ error: 'This appointment is cancelled.' });
+
+    if (appt.assigned_to) {
+      const conflict = await db.query(
+        `SELECT id FROM appointments
+          WHERE subaccount_id = $1 AND assigned_to = $2
+            AND date = $3 AND time = $4 AND status != 'cancelled' AND id != $5
+          LIMIT 1`,
+        [tok.subaccount_id, appt.assigned_to, newDate, newTime, appt.id]
+      );
+      if (conflict.rows.length > 0) return res.status(409).json({ error: 'That time is no longer available. Please choose another.' });
+    }
+
+    await db.query(
+      `UPDATE appointments SET date = $1, time = $2, updated_at = NOW() WHERE id = $3`,
+      [newDate, newTime, appt.id]
+    );
+    await db.query(
+      `UPDATE booking_action_tokens SET used_at = NOW() WHERE token = $1`,
+      [token]
+    );
+
+    try {
+      await logAudit({
+        subaccountId: tok.subaccount_id,
+        action: 'booking.appointment.reschedule',
+        actorType: 'public',
+        actorId: appt.contact_id || null,
+        targetType: 'appointment',
+        targetId: appt.id,
+        metadata: { via: 'self_serve_link', from: { date: appt.date, time: appt.time }, to: { date: newDate, time: newTime } }
+      });
+    } catch (e) { /* swallow */ }
+
+    return res.status(200).json({
+      success: true,
+      appointment_id: appt.id,
+      date: newDate,
+      time: newTime
+    });
+  } catch (e) {
+    console.error('booking-reschedule error:', e);
+    return res.status(500).json({ error: 'Server error. Please try again or contact us.' });
+  }
 }
 
 exports.handler = wrap(handler);
