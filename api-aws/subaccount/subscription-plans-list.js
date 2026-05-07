@@ -19,7 +19,6 @@ function rowToPlan(row) {
     taxable: row.taxable !== false,
     items: row.items || [],
     pricing: row.pricing || {},
-    notes: row.notes || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by

@@ -1,7 +1,7 @@
 // api/subaccount/subscription-plans-update.js (Lambda)
 // POST /api/subaccount/subscription-plans-update
 // Updates an existing subscription plan. Admin-only.
-// Body: { id, name?, description?, active?, items?, pricing?, notes? }
+// Body: { id, name?, description?, active?, items?, pricing?, taxable?, categoryId? }
 //
 // IMPORTANT: Editing a plan does NOT affect existing subscribers. Their
 // plan_name_snapshot, cycle_price, and items were locked at subscription
@@ -77,9 +77,6 @@ async function handler(req, res) {
     }
     if (typeof body.description === 'string') {
       updates.push(`description = $${i++}`); params.push(body.description.trim());
-    }
-    if (typeof body.notes === 'string') {
-      updates.push(`notes = $${i++}`); params.push(body.notes.trim());
     }
     if (typeof body.active === 'boolean') {
       updates.push(`active = $${i++}`); params.push(body.active);

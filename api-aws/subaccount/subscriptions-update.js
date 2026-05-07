@@ -1,68 +1,80 @@
 // api/subaccount/subscriptions-update.js (Lambda)
 // POST /api/subaccount/subscriptions-update
-// Single endpoint for all subscription mutations except hard delete.
-// Body: { id, action, ...action-specific fields }
+// Stage 3.5: per-item operations replace sub-level coupon and discount actions.
 //
-// Actions (admin or manager unless otherwise noted):
-//   edit                  - update items, notes, owner, card_id (NOT cycle/plan/price)
-//   pause                 - admin pause; status -> paused, paused_at = NOW
-//   resume                - resume from paused; status -> active
-//   cancel                - cancel; status -> cancelled, cancellation_reason recorded
-//   change_card           - swap card_id
-//   apply_coupon          - apply coupon to sub (one-time or recurring)
-//   remove_coupon         - clear coupon fields
-//   apply_discount        - apply manual discount (flat or pct)
-//   remove_discount       - clear manual discount fields
-//   change_owner          - reassign owner_user_id
-//   charge_now            - reserved for future stage; rejected here for now
+// Body: { id, action, ...action-specific args }
 //
-// Note on charge_now: this stage doesn't have the charge engine yet. The action
-// returns 501 Not Implemented to make the boundary explicit. Stage 4 wires it up.
+// Actions:
+//   - edit: { notes?, ownerUserId? }                Generic small edits
+//   - pause: { reason? }                            Status -> paused
+//   - resume: {}                                    Status -> active
+//   - cancel: { reason }                            Status -> cancelled (terminal)
+//   - change_card: { cardId }                       Update card on file
+//   - change_owner: { ownerUserId }                 Update owner
+//   - add_item: { item }                            Append item to items[]
+//   - remove_item: { itemId }                       Remove item from items[]
+//   - update_item: { itemId, changes }              Update one item
+//
+// Stage 4 will add proration on add_item and billingEndsAt on remove_item.
+// In Stage 3.5 those actions just modify the array immediately.
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 
-// Maps action -> minimum role required.
-// Practitioners are always blocked; staff (user) can never modify.
-const ACTION_ROLES = {
-  edit:           ['admin', 'manager'],
-  pause:          ['admin', 'manager'],
-  resume:         ['admin', 'manager'],
-  cancel:         ['admin', 'manager'],
-  change_card:    ['admin', 'manager'],
-  apply_coupon:   ['admin', 'manager'],
-  remove_coupon:  ['admin', 'manager'],
-  apply_discount: ['admin', 'manager'],
-  remove_discount:['admin', 'manager'],
-  change_owner:   ['admin', 'manager'],
-  charge_now:     ['admin', 'manager']  // gated by Stage 4 implementation
-};
+// Validate and normalize one item being added (catalog or custom)
+async function buildItem(rawItem, billingCycle, subaccountId, addedAt) {
+  if (!rawItem || typeof rawItem !== 'object') throw new Error('item must be an object');
+  const qty = Math.max(1, parseInt(rawItem.qty, 10) || 1);
+  const discountType = rawItem.discountType || null;
+  const discountValue = rawItem.discountValue != null ? parseFloat(rawItem.discountValue) : null;
+  const discountNote = String(rawItem.discountNote || '').trim();
+  const discountRecurring = rawItem.discountRecurring !== false;
 
-function normalizeItems(items) {
-  if (!Array.isArray(items)) return [];
-  return items.map((it, idx) => ({
-    id: it.id || `si-${Date.now()}-${idx}`,
-    name: String(it.name || '').trim(),
-    description: String(it.description || '').trim(),
-    taxable: it.taxable !== false,
-    qty: it.qty != null ? Math.max(1, parseInt(it.qty, 10) || 1) : 1
-  })).filter(it => it.name.length > 0);
+  if (discountType && !['flat', 'pct'].includes(discountType)) throw new Error('discountType must be flat or pct');
+  if (discountType && (discountValue == null || isNaN(discountValue) || discountValue < 0)) {
+    throw new Error('discountValue required and >= 0 when discountType is set');
+  }
+  if (discountType === 'pct' && discountValue > 100) throw new Error('percent discount cannot exceed 100');
+
+  let id, planId, name, description, taxable, price;
+  if (rawItem.planId) {
+    const pRes = await db.query(
+      `SELECT * FROM subscription_plans WHERE id = $1 AND subaccount_id = $2`,
+      [rawItem.planId, subaccountId]
+    );
+    if (!pRes.rows.length) throw new Error('plan not found');
+    const plan = pRes.rows[0];
+    if (!plan.active) throw new Error(`plan "${plan.name}" is deactivated`);
+    const cfg = (plan.pricing || {})[billingCycle];
+    if (!cfg || !cfg.enabled) throw new Error(`plan "${plan.name}" does not offer ${billingCycle} billing`);
+    planId = plan.id;
+    name = plan.name;
+    description = plan.description || '';
+    taxable = plan.taxable !== false;
+    price = parseFloat(cfg.price);
+    id = rawItem.id || `si-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-p`;
+  } else {
+    name = String(rawItem.name || '').trim();
+    if (!name) throw new Error('custom item requires name');
+    price = parseFloat(rawItem.price);
+    if (isNaN(price) || price <= 0) throw new Error('custom item requires price > 0');
+    description = String(rawItem.description || '').trim();
+    taxable = rawItem.taxable !== false;
+    planId = null;
+    id = rawItem.id || `si-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-c`;
+  }
+  return {
+    id, planId, name, description, taxable, price, qty,
+    discountType, discountValue, discountNote, discountRecurring,
+    addedAt: addedAt || new Date().toISOString(),
+    billingEndsAt: null
+  };
 }
 
-// Helper: insert a subscription_event row
-async function logSubEvent(subaccountId, subscriptionId, eventType, actorUserId, metadata, paymentId) {
-  await db.query(
-    `INSERT INTO subscription_events (
-      id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, metadata, payment_id, created_at
-    ) VALUES ($1, $2, $3, $4, $5, 'user', $6::jsonb, $7, NOW())`,
-    [
-      `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      subscriptionId, subaccountId, eventType, actorUserId,
-      JSON.stringify(metadata || {}), paymentId || null
-    ]
-  );
+function recomputeCyclePrice(items) {
+  return (items || []).reduce((sum, it) => sum + (parseFloat(it.price) || 0) * (it.qty || 1), 0);
 }
 
 async function handler(req, res) {
@@ -71,199 +83,212 @@ async function handler(req, res) {
   const auth = await requireSubaccountAuth(req, res);
   if (!auth) return;
 
-  if (auth.role === 'practitioner') {
-    return res.status(403).json({ error: 'Practitioners cannot modify subscriptions' });
+  const isAdmin = auth.role === 'admin' || auth.role === 'super_admin';
+  const isManager = auth.role === 'manager';
+  if (!isAdmin && !isManager) {
+    return res.status(403).json({ error: 'Only admins and managers can update subscriptions' });
   }
 
   const b = req.body || {};
   const id = b.id;
   const action = b.action;
-
   if (!id) return res.status(400).json({ error: 'id is required' });
-  if (!action || !ACTION_ROLES[action]) return res.status(400).json({ error: 'Invalid or missing action' });
-
-  // Normalize role for permission check (super_admin has admin powers)
-  const effectiveRole = auth.role === 'super_admin' ? 'admin' : auth.role;
-  if (!ACTION_ROLES[action].includes(effectiveRole)) {
-    return res.status(403).json({ error: `Action "${action}" requires one of: ${ACTION_ROLES[action].join(', ')}` });
-  }
+  if (!action) return res.status(400).json({ error: 'action is required' });
 
   const subaccountId = auth.subaccount_id;
 
   try {
-    const existing = await db.query(
+    const sRes = await db.query(
       `SELECT * FROM subscriptions WHERE id = $1 AND subaccount_id = $2`,
       [id, subaccountId]
     );
-    if (!existing.rows.length) return res.status(404).json({ error: 'Subscription not found' });
-    const sub = existing.rows[0];
+    if (!sRes.rows.length) return res.status(404).json({ error: 'Subscription not found' });
+    const sub = sRes.rows[0];
 
-    // Cancelled subs cannot be modified except by hard delete
-    if (sub.status === 'cancelled' && action !== 'cancel') {
-      // Allow viewing but not modifying. Cancel is a no-op if already cancelled.
-      return res.status(409).json({ error: 'Cannot modify a cancelled subscription' });
+    if (sub.status === 'cancelled') {
+      return res.status(409).json({ error: 'Cannot modify cancelled subscription' });
     }
 
-    let updates = [];
-    let params = [];
-    let i = 1;
-    let eventType = action;
+    let eventType = null;
     let eventMeta = {};
+    let updates = []; // { sql: 'col = $N', value }
 
     switch (action) {
       case 'edit': {
-        // Allowed fields: items, notes, owner_user_id, card_id, ownerUserId
-        // FORBIDDEN: cycle, plan_id, cycle_price (price-locked at creation)
-        if (Array.isArray(b.items)) {
-          const items = normalizeItems(b.items);
-          if (items.length === 0) return res.status(400).json({ error: 'At least one item required' });
-          updates.push(`items = $${i++}::jsonb`);
-          params.push(JSON.stringify(items));
-          eventMeta.items_changed = true;
-          eventType = 'item_changed';
-        }
-        if (typeof b.notes === 'string') {
-          updates.push(`notes = $${i++}`);
-          params.push(b.notes);
-          eventMeta.notes_changed = true;
+        if (b.notes !== undefined) {
+          updates.push({ sql: 'notes = ?', value: String(b.notes || '') });
         }
         if (b.ownerUserId !== undefined) {
-          updates.push(`owner_user_id = $${i++}`);
-          params.push(b.ownerUserId || null);
-          eventMeta.owner_changed = true;
-          eventType = 'owner_changed';
+          updates.push({ sql: 'owner_user_id = ?', value: b.ownerUserId || null });
         }
-        if (b.cardId !== undefined) {
-          updates.push(`card_id = $${i++}`);
-          params.push(b.cardId || null);
-          eventMeta.card_changed = true;
-          eventType = 'card_changed';
-        }
-        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+        if (!updates.length) return res.status(400).json({ error: 'No fields provided to edit' });
+        eventType = 'edited';
+        eventMeta = { fields: Object.keys(b).filter(k => k !== 'id' && k !== 'action') };
         break;
       }
-
-      case 'pause':
-        if (sub.status === 'paused') return res.status(409).json({ error: 'Already paused' });
-        updates.push(`status = 'paused'`, `paused_at = NOW()`);
-        // Clear suspension fields if pausing from suspended state
-        if (sub.status === 'suspended') {
-          updates.push(`failed_charge_count = 0`, `last_failure_at = NULL`, `last_failure_reason = NULL`);
-          eventMeta.cleared_suspension = true;
+      case 'pause': {
+        if (sub.status !== 'active' && sub.status !== 'suspended') {
+          return res.status(409).json({ error: `Cannot pause from status "${sub.status}"` });
         }
-        if (b.reason) eventMeta.reason = b.reason;
+        updates.push({ sql: "status = 'paused'", value: null, raw: true });
+        updates.push({ sql: 'paused_at = NOW()', value: null, raw: true });
+        eventType = 'paused';
+        eventMeta = b.reason ? { reason: String(b.reason) } : {};
         break;
-
-      case 'resume':
+      }
+      case 'resume': {
         if (sub.status !== 'paused' && sub.status !== 'suspended') {
-          return res.status(409).json({ error: 'Subscription is not paused or suspended' });
+          return res.status(409).json({ error: `Cannot resume from status "${sub.status}"` });
         }
-        updates.push(`status = 'active'`, `paused_at = NULL`);
-        // Resuming from suspension clears failure tracking; charge engine will retry on next due date.
-        if (sub.status === 'suspended') {
-          updates.push(`failed_charge_count = 0`, `last_failure_at = NULL`, `last_failure_reason = NULL`);
-          eventMeta.cleared_suspension = true;
+        const wasSuspended = sub.status === 'suspended';
+        updates.push({ sql: "status = 'active'", value: null, raw: true });
+        updates.push({ sql: 'paused_at = NULL', value: null, raw: true });
+        if (wasSuspended) {
+          updates.push({ sql: 'failed_charge_count = 0', value: null, raw: true });
+          updates.push({ sql: 'last_failure_at = NULL', value: null, raw: true });
+          updates.push({ sql: 'last_failure_reason = NULL', value: null, raw: true });
           eventType = 'resumed_from_suspension';
+        } else {
+          eventType = 'resumed';
         }
         break;
-
-      case 'cancel':
-        if (sub.status === 'cancelled') return res.status(409).json({ error: 'Already cancelled' });
-        updates.push(`status = 'cancelled'`, `cancelled_at = NOW()`);
-        if (b.reason) {
-          updates.push(`cancellation_reason = $${i++}`);
-          params.push(b.reason);
-          eventMeta.reason = b.reason;
+      }
+      case 'cancel': {
+        if (!b.reason) return res.status(400).json({ error: 'reason is required to cancel' });
+        updates.push({ sql: "status = 'cancelled'", value: null, raw: true });
+        updates.push({ sql: 'cancelled_at = NOW()', value: null, raw: true });
+        updates.push({ sql: 'cancellation_reason = ?', value: String(b.reason) });
+        eventType = 'cancelled';
+        eventMeta = { reason: String(b.reason) };
+        break;
+      }
+      case 'change_card': {
+        updates.push({ sql: 'card_id = ?', value: b.cardId || null });
+        eventType = 'card_changed';
+        eventMeta = { card_id: b.cardId || null };
+        break;
+      }
+      case 'change_owner': {
+        updates.push({ sql: 'owner_user_id = ?', value: b.ownerUserId || null });
+        eventType = 'owner_changed';
+        eventMeta = { owner_user_id: b.ownerUserId || null };
+        break;
+      }
+      case 'add_item': {
+        if (!b.item) return res.status(400).json({ error: 'item is required' });
+        let newItem;
+        try {
+          newItem = await buildItem(b.item, sub.billing_cycle, subaccountId, new Date().toISOString());
+        } catch (e) {
+          return res.status(400).json({ error: e.message });
         }
-        break;
-
-      case 'change_card':
-        if (!('cardId' in b)) return res.status(400).json({ error: 'cardId is required' });
-        updates.push(`card_id = $${i++}`);
-        params.push(b.cardId || null);
-        eventMeta.new_card_id = b.cardId;
-        break;
-
-      case 'apply_coupon': {
-        const code = b.couponCode || null;
-        const cid = b.couponId || null;
-        if (!code && !cid) return res.status(400).json({ error: 'couponId or couponCode required' });
-        updates.push(
-          `coupon_id = $${i++}`, `coupon_code = $${i++}`, `coupon_recurring = $${i++}`
-        );
-        params.push(cid, code, !!b.recurring);
-        eventMeta = { coupon_code: code, recurring: !!b.recurring };
-        eventType = 'coupon_applied';
+        const items = [...(sub.items || []), newItem];
+        const newCyclePrice = recomputeCyclePrice(items);
+        updates.push({ sql: 'items = ?::jsonb', value: JSON.stringify(items) });
+        updates.push({ sql: 'cycle_price = ?', value: newCyclePrice });
+        eventType = 'item_added';
+        eventMeta = { item_id: newItem.id, name: newItem.name, price: newItem.price, qty: newItem.qty };
         break;
       }
-
-      case 'remove_coupon':
-        if (!sub.coupon_id && !sub.coupon_code) return res.status(409).json({ error: 'No coupon applied' });
-        updates.push(
-          `coupon_id = NULL`, `coupon_code = NULL`, `coupon_recurring = FALSE`
-        );
-        eventMeta = { previous_coupon: sub.coupon_code };
-        eventType = 'coupon_removed';
-        break;
-
-      case 'apply_discount': {
-        const dt = b.discountType;
-        const dv = parseFloat(b.discountValue);
-        const dn = b.discountNote || '';
-        const recurring = b.recurring !== false; // default true
-        if (!['flat', 'pct'].includes(dt)) return res.status(400).json({ error: 'discountType must be flat or pct' });
-        if (isNaN(dv) || dv < 0) return res.status(400).json({ error: 'discountValue must be >= 0' });
-        if (dt === 'pct' && dv > 100) return res.status(400).json({ error: 'discountValue cannot exceed 100 for pct' });
-        updates.push(
-          `manual_discount_type = $${i++}`,
-          `manual_discount_value = $${i++}`,
-          `manual_discount_note = $${i++}`,
-          `manual_discount_recurring = $${i++}`
-        );
-        params.push(dt, dv, dn, recurring);
-        eventMeta = { type: dt, value: dv, recurring };
-        eventType = 'discount_applied';
+      case 'remove_item': {
+        const itemId = b.itemId;
+        if (!itemId) return res.status(400).json({ error: 'itemId is required' });
+        const items = (sub.items || []).filter(it => it.id !== itemId);
+        if (items.length === (sub.items || []).length) return res.status(404).json({ error: 'Item not found on this subscription' });
+        if (items.length === 0) return res.status(409).json({ error: 'Cannot remove the last item; cancel the subscription instead' });
+        const newCyclePrice = recomputeCyclePrice(items);
+        updates.push({ sql: 'items = ?::jsonb', value: JSON.stringify(items) });
+        updates.push({ sql: 'cycle_price = ?', value: newCyclePrice });
+        eventType = 'item_removed';
+        const removed = (sub.items || []).find(it => it.id === itemId);
+        eventMeta = { item_id: itemId, name: removed?.name, price: removed?.price };
         break;
       }
+      case 'update_item': {
+        const itemId = b.itemId;
+        const changes = b.changes || {};
+        if (!itemId) return res.status(400).json({ error: 'itemId is required' });
+        const items = (sub.items || []).map(it => it && (typeof it === 'object') ? { ...it } : it);
+        const idx = items.findIndex(it => it.id === itemId);
+        if (idx === -1) return res.status(404).json({ error: 'Item not found' });
+        const item = items[idx];
 
-      case 'remove_discount':
-        if (!sub.manual_discount_type) return res.status(409).json({ error: 'No manual discount applied' });
-        updates.push(
-          `manual_discount_type = NULL`,
-          `manual_discount_value = NULL`,
-          `manual_discount_note = NULL`,
-          `manual_discount_recurring = TRUE`
-        );
-        eventMeta = { previous_type: sub.manual_discount_type, previous_value: parseFloat(sub.manual_discount_value || 0) };
-        eventType = 'discount_removed';
+        // Whitelisted fields
+        const allowed = ['qty', 'taxable', 'discountType', 'discountValue', 'discountNote', 'discountRecurring', 'description'];
+        const changedKeys = [];
+        for (const k of Object.keys(changes)) {
+          if (!allowed.includes(k)) continue;
+          if (k === 'qty') {
+            const q = parseInt(changes[k], 10);
+            if (!Number.isFinite(q) || q < 1) return res.status(400).json({ error: 'qty must be >= 1' });
+            item[k] = q;
+          } else if (k === 'discountType') {
+            const v = changes[k];
+            if (v && !['flat', 'pct'].includes(v)) return res.status(400).json({ error: 'discountType must be flat or pct' });
+            item[k] = v || null;
+          } else if (k === 'discountValue') {
+            const v = changes[k];
+            if (v != null) {
+              const n = parseFloat(v);
+              if (isNaN(n) || n < 0) return res.status(400).json({ error: 'discountValue must be >= 0' });
+              item[k] = n;
+            } else {
+              item[k] = null;
+            }
+          } else {
+            item[k] = changes[k];
+          }
+          changedKeys.push(k);
+        }
+        // Validate combined discount state
+        if (item.discountType === 'pct' && item.discountValue > 100) {
+          return res.status(400).json({ error: 'percent discount cannot exceed 100' });
+        }
+        if (item.discountType && (item.discountValue == null || isNaN(item.discountValue))) {
+          return res.status(400).json({ error: 'discountValue required when discountType is set' });
+        }
+
+        const newCyclePrice = recomputeCyclePrice(items);
+        updates.push({ sql: 'items = ?::jsonb', value: JSON.stringify(items) });
+        updates.push({ sql: 'cycle_price = ?', value: newCyclePrice });
+        eventType = 'item_updated';
+        eventMeta = { item_id: itemId, name: item.name, fields: changedKeys };
         break;
-
-      case 'change_owner':
-        updates.push(`owner_user_id = $${i++}`);
-        params.push(b.ownerUserId || null);
-        eventMeta = { new_owner: b.ownerUserId || null, previous_owner: sub.owner_user_id };
-        break;
-
-      case 'charge_now':
-        // Reserved for Stage 4 (charge engine). Reject explicitly so it's clear.
-        return res.status(501).json({ error: 'charge_now is not yet implemented' });
-
+      }
       default:
-        return res.status(400).json({ error: 'Unknown action' });
+        return res.status(400).json({ error: `Unknown action: ${action}` });
     }
 
-    updates.push(`updated_at = NOW()`);
-    params.push(id, subaccountId);
-    const sql = `UPDATE subscriptions SET ${updates.join(', ')} WHERE id = $${i++} AND subaccount_id = $${i++}`;
+    // Build the UPDATE SQL with positional params
+    const setClauses = [];
+    const params = [];
+    let p = 1;
+    for (const u of updates) {
+      if (u.raw) {
+        setClauses.push(u.sql);
+      } else {
+        setClauses.push(u.sql.replace('?', `$${p}`));
+        params.push(u.value);
+        p++;
+      }
+    }
+    setClauses.push('updated_at = NOW()');
 
-    await db.query('BEGIN');
-    try {
-      await db.query(sql, params);
-      await logSubEvent(subaccountId, id, eventType, auth.user_id, eventMeta);
-      await db.query('COMMIT');
-    } catch (txErr) {
-      await db.query('ROLLBACK');
-      throw txErr;
+    const sql = `UPDATE subscriptions SET ${setClauses.join(', ')} WHERE id = $${p++} AND subaccount_id = $${p}`;
+    params.push(id, subaccountId);
+    await db.query(sql, params);
+
+    // Log lifecycle event
+    if (eventType) {
+      await db.query(
+        `INSERT INTO subscription_events (
+          id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, metadata, created_at
+        ) VALUES ($1, $2, $3, $4, $5, 'user', $6::jsonb, NOW())`,
+        [
+          `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          id, subaccountId, eventType, auth.user_id, JSON.stringify(eventMeta)
+        ]
+      );
     }
 
     await logAudit({
@@ -276,7 +301,7 @@ async function handler(req, res) {
       targetType: 'subscription',
       targetId: id,
       targetSubaccountId: subaccountId,
-      metadata: { action, ...eventMeta }
+      metadata: eventMeta
     });
 
     const verify = await db.query('SELECT * FROM subscriptions WHERE id = $1', [id]);

@@ -58,11 +58,10 @@ async function handler(req, res) {
   const id = body.id || `splan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const name = String(body.name || '').trim();
   const description = String(body.description || '').trim();
-  const notes = String(body.notes || '').trim();
-  const items = normalizeItems(body.items);  // optional now, may be empty
+  const items = normalizeItems(body.items);  // optional; may be empty
   const pricing = body.pricing || {};
   const categoryId = body.categoryId || null;
-  const taxable = body.taxable !== false;  // default TRUE
+  const taxable = body.taxable !== false;
 
   if (!name) return res.status(400).json({ error: 'Plan name is required' });
 
@@ -91,14 +90,14 @@ async function handler(req, res) {
 
     await db.query(
       `INSERT INTO subscription_plans (
-        id, subaccount_id, name, description, active, items, pricing, notes,
+        id, subaccount_id, name, description, active, items, pricing,
         category_id, taxable,
         created_at, updated_at, created_by
-      ) VALUES ($1, $2, $3, $4, TRUE, $5::jsonb, $6::jsonb, $7,
-                $8, $9,
-                NOW(), NOW(), $10)`,
+      ) VALUES ($1, $2, $3, $4, TRUE, $5::jsonb, $6::jsonb,
+                $7, $8,
+                NOW(), NOW(), $9)`,
       [id, auth.subaccount_id, name, description, JSON.stringify(items),
-       JSON.stringify(cleanPricing), notes, categoryId, taxable, auth.user_id]
+       JSON.stringify(cleanPricing), categoryId, taxable, auth.user_id]
     );
 
     await logAudit({

@@ -9734,52 +9734,61 @@ function getSub(id){return (db.subscriptions||[]).find(s=>s.id===id)}
 function getPlan(id){return (db.subscriptionPlans||[]).find(p=>p.id===id)}
 
 // Returns the actual amount the customer will be charged on the next cycle,
-// after coupon and manual discount. Does NOT include tax (tax is computed at
-// charge time by the cron Lambda based on subaccount tax settings).
+// after per-item manual discounts. Does NOT include tax (computed at charge
+// time by the cron Lambda based on subaccount tax settings).
 //
-// Discount applicability rules:
-//   - Recurring discounts apply every cycle.
-//   - First-cycle-only discounts apply only when the sub has not been charged
-//     yet (last_charged_at is null).
+// Per-item discount rules:
+//   - Recurring discount: applies every cycle.
+//   - First-cycle-only: applies only when sub.lastChargedAt is null.
 //
-// Order matches Payment Policy: subtotal -> coupon -> manual discount.
+// Coupons are no longer used on subscriptions (Stage 3.5 decision).
 function calcSubNextCharge(s){
   if(!s)return 0;
-  let amt=parseFloat(s.cyclePrice||0)||0;
   const isFirstCycle=!s.lastChargedAt;
-
-  // Coupon (if applies to this cycle)
-  if(s.couponCode&&(s.couponRecurring||isFirstCycle)){
-    const cpn=(db.coupons||[]).find(function(c){return c.code===s.couponCode||c.id===s.couponId;});
-    if(cpn){
-      if(cpn.discountType==='pct'){
-        amt-=amt*(parseFloat(cpn.discountVal)||0)/100;
-      }else{
-        amt-=parseFloat(cpn.discountVal)||0;
-      }
+  let total=0;
+  (s.items||[]).forEach(function(it){
+    const lineSticker=(parseFloat(it.price)||0)*(it.qty||1);
+    let line=lineSticker;
+    if(it.discountType&&(it.discountRecurring!==false||isFirstCycle)){
+      const dv=parseFloat(it.discountValue)||0;
+      if(it.discountType==='pct')line-=line*dv/100;
+      else line-=dv;
     }
-  }
-
-  // Manual discount (if applies to this cycle)
-  if(s.manualDiscountType&&(s.manualDiscountRecurring!==false||isFirstCycle)){
-    const dv=parseFloat(s.manualDiscountValue)||0;
-    if(s.manualDiscountType==='pct'){
-      amt-=amt*dv/100;
-    }else{
-      amt-=dv;
-    }
-  }
-
-  return Math.max(0,Math.round(amt*100)/100);
+    total+=Math.max(0,line);
+  });
+  return Math.round(total*100)/100;
 }
 
-// True if any discount is currently in effect for the next cycle
+// Per-cycle sticker price (sum of items, no discounts)
+function calcSubSticker(s){
+  if(!s)return 0;
+  return (s.items||[]).reduce(function(t,it){
+    return t+(parseFloat(it.price)||0)*(it.qty||1);
+  },0);
+}
+
+// True if any item has an active discount applying to the next cycle
 function hasActiveDiscount(s){
   if(!s)return false;
   const isFirstCycle=!s.lastChargedAt;
-  if(s.couponCode&&(s.couponRecurring||isFirstCycle))return true;
-  if(s.manualDiscountType&&(s.manualDiscountRecurring!==false||isFirstCycle))return true;
-  return false;
+  return (s.items||[]).some(function(it){
+    return it.discountType&&(it.discountRecurring!==false||isFirstCycle);
+  });
+}
+
+// Per-item: returns {sticker, effective, discounted:boolean}
+function calcItemNextCharge(it,isFirstCycle){
+  const sticker=(parseFloat(it.price)||0)*(it.qty||1);
+  let effective=sticker;
+  let discounted=false;
+  if(it.discountType&&(it.discountRecurring!==false||isFirstCycle)){
+    const dv=parseFloat(it.discountValue)||0;
+    if(it.discountType==='pct')effective-=effective*dv/100;
+    else effective-=dv;
+    effective=Math.max(0,effective);
+    discounted=effective!==sticker;
+  }
+  return {sticker:Math.round(sticker*100)/100,effective:Math.round(effective*100)/100,discounted:discounted};
 }
 
 // =====================================================
@@ -10053,11 +10062,22 @@ function _renderSubDetailDetails(s,c){
     +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Card on File</div><div style="font-size:12px">'+(card?(esc(card.brand||'Card')+' \u00b7\u00b7\u00b7\u00b7 '+esc(card.last4||'')):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Owner</div><div style="font-size:12px">'+(owner?esc(owner.name||owner.username):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
-    +(s.couponCode?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Coupon</div><div style="font-size:12px;color:#34d399">'+esc(s.couponCode)+(s.couponRecurring?' (recurring)':' (first cycle)')+'</div></div>':'')
-    +(s.manualDiscountType?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Manual Discount</div><div style="font-size:12px;color:#34d399">'+(s.manualDiscountType==='pct'?(s.manualDiscountValue+'%'):fmt$(s.manualDiscountValue))+(s.manualDiscountRecurring?' (recurring)':' (first cycle)')+'</div></div>':'')
     +'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px">Items</div>'
-    +(s.items&&s.items.length?s.items.map(function(i){return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)"><span>'+esc(i.name)+(i.qty>1?' \u00d7 '+i.qty:'')+'</span>'+(i.taxable===false?'<span style="font-size:10px;color:var(--text-muted)">non-taxable</span>':'')+'</div>';}).join(''):'<div style="font-size:13px;color:var(--text-muted)">No items.</div>')
+    +(s.items&&s.items.length?s.items.map(function(i){
+      const ic=calcItemNextCharge(i,!s.lastChargedAt);
+      const lineSticker=ic.sticker;
+      const lineEffective=ic.effective;
+      const lineDiscounted=ic.discounted;
+      const discountTag=i.discountType?'<div style="font-size:10px;color:#34d399;margin-top:2px">'+(i.discountType==='pct'?(i.discountValue+'% off'):fmt$(i.discountValue)+' off')+(i.discountRecurring===false?' (first cycle only)':'')+(i.discountNote?' \u00b7 '+esc(i.discountNote):'')+'</div>':'';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border);gap:10px">'
+        +'<div style="flex:1;min-width:0"><div>'+esc(i.name)+(i.qty>1?' \u00d7 '+i.qty:'')+'</div>'+discountTag+(i.taxable===false?'<div style="font-size:10px;color:var(--text-muted);margin-top:2px">non-taxable</div>':'')+'</div>'
+        +'<div style="text-align:right">'
+        +(lineDiscounted?'<div style="font-size:11px;color:var(--text-muted);text-decoration:line-through">'+fmt$(lineSticker)+'</div>':'')
+        +'<div style="font-weight:600'+(lineDiscounted?';color:#34d399':'')+'">'+fmt$(lineEffective)+'</div>'
+        +'</div>'
+        +'</div>';
+    }).join(''):'<div style="font-size:13px;color:var(--text-muted)">No items.</div>')
     +'</div>'
     +(s.notes?'<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(s.notes)+'</div></div>':'')
     +'</div>';
@@ -10074,10 +10094,8 @@ function _renderSubDetailHistory(s){
     cancelled:'Cancelled',resumed_from_suspension:'Resumed from suspension',
     charge_succeeded:'Charge succeeded',charge_failed:'Charge failed',
     charge_retried:'Charge retried',auto_suspended:'Auto-suspended',
-    coupon_applied:'Coupon applied',coupon_removed:'Coupon removed',
-    item_changed:'Items changed',owner_changed:'Owner changed',
-    card_changed:'Card changed',discount_applied:'Discount applied',
-    discount_removed:'Discount removed'
+    item_added:'Item added',item_removed:'Item removed',item_updated:'Item updated',
+    owner_changed:'Owner changed',card_changed:'Card changed'
   };
   const eventColor={
     created:'#34d399',edited:'var(--text-muted)',paused:'var(--orange)',
@@ -10085,10 +10103,8 @@ function _renderSubDetailHistory(s){
     resumed_from_suspension:'#34d399',
     charge_succeeded:'#34d399',charge_failed:'#f87171',
     charge_retried:'#fbbf24',auto_suspended:'#f87171',
-    coupon_applied:'#34d399',coupon_removed:'var(--text-muted)',
-    item_changed:'var(--purple-light)',owner_changed:'var(--purple-light)',
-    card_changed:'var(--purple-light)',discount_applied:'#34d399',
-    discount_removed:'var(--text-muted)'
+    item_added:'#34d399',item_removed:'var(--orange)',item_updated:'var(--purple-light)',
+    owner_changed:'var(--purple-light)',card_changed:'var(--purple-light)'
   };
   let html='';
   events.forEach(function(e){
@@ -10115,42 +10131,114 @@ function _renderSubDetailHistory(s){
   return html;
 }
 
+
 // =====================================================
-// Subscription create/edit modal
+// Subscription create/edit modal (Stage 3.5: multi-item)
 // =====================================================
-let _subEditMode='catalog';   // 'catalog' or 'custom'
-let _subEditItems=[];          // for custom mode
-let _subEditPlanId='';         // catalog mode: selected plan ID (survives re-renders)
-let _subEditContactId='';      // tracked contact ID for dynamic card picker refresh
-let _subContactWatcher=null;   // interval id watching sf-cv for changes
+// State:
+//   _subEditItems: array of items being built. Each item has:
+//     _editMode: 'catalog' | 'custom'  (UI-only, stripped before submit)
+//     id, planId, name, description, taxable, price, qty,
+//     discountType, discountValue, discountNote, discountRecurring,
+//     addedAt, billingEndsAt
+//   _subEditOriginalItems: snapshot at modal open, used for diff on save
+//   _subEditContactId, _subEditCycle, _subEditCardId: live form state that
+//     survives re-renders
+let _subEditItems=[];
+let _subEditOriginalItems=[];
+let _subEditContactId='';
+let _subEditCycle='monthly';
+let _subEditCardId='';
+let _subContactWatcher=null;
 
 function openSubModal(id,preContactId){
   if(!canManageSubscriptions()){toast('You do not have permission to manage subscriptions.','error');return;}
   const s=id?getSub(id):null;
-  // Edit existing: preserve mode that was used at creation
-  _subEditMode=s?(s.planId?'catalog':'custom'):'catalog';
-  _subEditItems=s?JSON.parse(JSON.stringify(s.items||[])):[];
-  _subEditPlanId=s?(s.planId||''):'';
-  _subEditContactId=s?(s.contactId||''):(preContactId||'');
+  if(s){
+    _subEditItems=(s.items||[]).map(function(it){
+      return Object.assign({_editMode:it.planId?'catalog':'custom'},JSON.parse(JSON.stringify(it)));
+    });
+    _subEditOriginalItems=JSON.parse(JSON.stringify(s.items||[]));
+    _subEditContactId=s.contactId||'';
+    _subEditCycle=s.billingCycle||'monthly';
+    _subEditCardId=s.cardId||'';
+  }else{
+    _subEditItems=[];
+    _subEditOriginalItems=[];
+    _subEditContactId=preContactId||'';
+    _subEditCycle='monthly';
+    _subEditCardId='';
+  }
   state.modal={type:'sub',id:id||null,extra:preContactId||null};
   _renderSubModalBody(s);
   _startContactWatcher();
 }
 
-function _switchSubEditMode(mode){
-  _subEditMode=mode;
-  // Read current selections from DOM before re-render so they survive
-  const planEl=document.getElementById('sf-plan');
-  if(planEl)_subEditPlanId=planEl.value||'';
-  const cidEl=document.getElementById('sf-cv');
-  if(cidEl)_subEditContactId=cidEl.value||'';
-  const s=state.modal&&state.modal.id?getSub(state.modal.id):null;
-  _renderSubModalBody(s);
+// Auto-link contact to Square (creates customerId if missing) and open the
+// shared add-card modal. After save, re-open the sub modal with state restored.
+async function _addCardFromSubModal(){
+  const cid=_subEditContactId;
+  if(!cid){toast('Select a contact first.','error');return;}
+  const c=getContact(cid);
+  if(!c){toast('Contact not found.','error');return;}
+  // _captureSubModalState before opening the card modal
+  _captureSubModalFormState();
+  const subId=state.modal&&state.modal.id;
+  const preCt=state.modal&&state.modal.extra;
+  // Set callback so when card add succeeds, we re-open sub modal with state preserved
+  window._postCardAddCallback=function(){
+    toast('Card added.','success');
+    // Re-open sub modal with the contact still set
+    openSubModal(subId,preCt||cid);
+    // Force the contact ID since openSubModal might reset to s.contactId from db
+    _subEditContactId=cid;
+    // Refresh card picker to surface the newly added card; pick it by default
+    setTimeout(function(){
+      const cFresh=getContact(cid);
+      const cards=(cFresh&&cFresh.squareCards)||[];
+      if(cards.length){_subEditCardId=cards[cards.length-1].id;}
+      _refreshCardPickerSection();
+    },100);
+  };
+  // Ensure the contact has a Square customerId before opening the card form
+  if(!c.squareCustomerId){
+    try{await linkContactToSquare(cid);}catch(e){}
+  }
+  if(!c.squareCustomerId&&!getContact(cid).squareCustomerId){
+    toast('Could not link contact to Square. Check Square settings.','error');
+    window._postCardAddCallback=null;
+    return;
+  }
+  await openAddCardModal(cid);
 }
 
-// Watch the contact picker's hidden input for changes. ssSelect doesn't fire
-// any event, so we poll. Cheap (~250ms cycle, only one input check).
-// Re-renders the card section when the contact changes.
+// Capture current form state into module variables so re-renders preserve it
+function _captureSubModalFormState(){
+  const cidEl=document.getElementById('sf-cv');
+  if(cidEl)_subEditContactId=cidEl.value||'';
+  const cycEl=document.getElementById('sf-cycle');
+  if(cycEl)_subEditCycle=cycEl.value||'monthly';
+  const cardEl=document.getElementById('sf-card');
+  if(cardEl)_subEditCardId=cardEl.value||'';
+  _captureItemsState();
+}
+
+// Read all item form fields into _subEditItems
+function _captureItemsState(){
+  _subEditItems.forEach(function(it,i){
+    if(it._editMode==='custom'){
+      const n=document.getElementById('itm-name-'+i);if(n)it.name=n.value.trim();
+      const p=document.getElementById('itm-price-'+i);if(p)it.price=parseFloat(p.value)||0;
+    }
+    const q=document.getElementById('itm-qty-'+i);if(q)it.qty=Math.max(1,parseInt(q.value,10)||1);
+    const t=document.getElementById('itm-tax-'+i);if(t)it.taxable=t.checked;
+    const dt=document.getElementById('itm-dtype-'+i);if(dt)it.discountType=dt.value||null;
+    const dv=document.getElementById('itm-dval-'+i);if(dv)it.discountValue=dv.value!==''?parseFloat(dv.value):null;
+    const dn=document.getElementById('itm-dnote-'+i);if(dn)it.discountNote=dn.value.trim();
+    const dr=document.getElementById('itm-drec-'+i);if(dr)it.discountRecurring=dr.value==='true';
+  });
+}
+
 function _startContactWatcher(){
   _stopContactWatcher();
   _subContactWatcher=setInterval(function(){
@@ -10171,274 +10259,379 @@ function _refreshCardPickerSection(){
   const wrap=document.getElementById('sf-card-wrap');
   if(!wrap)return;
   const c=_subEditContactId?getContact(_subEditContactId):null;
-  const s=state.modal&&state.modal.id?getSub(state.modal.id):null;
-  const currentSelected=document.getElementById('sf-card');
-  const currentVal=currentSelected?currentSelected.value:(s&&s.cardId||'');
-  wrap.innerHTML=_renderCardPickerInner(c,s,currentVal);
+  wrap.innerHTML=_renderCardPickerInner(c);
 }
 
-function _renderCardPickerInner(c,s,selectedCardId){
-  const cards=(c&&c.squareCards)||[];
+function _renderCardPickerInner(c){
   if(!c){
     return '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Select a contact first.</div>';
   }
+  const cards=c.squareCards||[];
+  const sel=_subEditCardId||'';
+  const addBtn='<button type="button" class="btn btn-ghost btn-sm" onclick="_addCardFromSubModal()" style="margin-left:6px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add card</button>';
   if(!cards.length){
-    return '<div style="font-size:12px;color:var(--text-muted);padding:8px 10px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius)">No card on file. Add one from the contact\'s Saved Cards tab before billing can occur.</div>';
+    return '<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;font-size:12px;color:var(--text-muted);padding:8px 10px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius)">No card on file. Add one to enable billing.</div>'+addBtn+'</div>';
   }
-  const sel=selectedCardId||(s&&s.cardId)||'';
   const cardOpts='<option value="">No card (manual processing)</option>'+cards.map(function(cd){
     return '<option value="'+cd.id+'"'+(sel===cd.id?' selected':'')+'>'+esc(cd.brand||'Card')+' ending in '+esc(cd.last4||'****')+(cd.expMonth?' ('+cd.expMonth+'/'+cd.expYear+')':'')+'</option>';
   }).join('');
-  return '<select id="sf-card">'+cardOpts+'</select>';
+  return '<div style="display:flex;align-items:center;gap:6px"><select id="sf-card" style="flex:1" onchange="_subEditCardId=this.value">'+cardOpts+'</select>'+addBtn+'</div>';
 }
 
 function _renderSubModalBody(s){
-  // Use the persistent _subEditContactId rather than reading from DOM, so it
-  // survives mode toggles and other re-renders that destroy form state.
   const cid=_subEditContactId||'';
   const c=cid?getContact(cid):null;
   const isEdit=!!s;
 
-  // Mode toggle (only on create; edit is locked to original mode)
-  const modeToggle=isEdit?'':'<div style="display:flex;gap:8px;margin-bottom:14px">'
-    +'<button type="button" onclick="_switchSubEditMode(\'catalog\')" style="flex:1;padding:9px 14px;border-radius:var(--radius);border:1px solid '+(_subEditMode==='catalog'?'var(--orange)':'var(--border)')+';background:'+(_subEditMode==='catalog'?'rgba(255,107,53,.1)':'transparent')+';color:'+(_subEditMode==='catalog'?'var(--orange)':'var(--text)')+';font-weight:600;font-size:13px;cursor:pointer">From Catalog</button>'
-    +'<button type="button" onclick="_switchSubEditMode(\'custom\')" style="flex:1;padding:9px 14px;border-radius:var(--radius);border:1px solid '+(_subEditMode==='custom'?'var(--orange)':'var(--border)')+';background:'+(_subEditMode==='custom'?'rgba(255,107,53,.1)':'transparent')+';color:'+(_subEditMode==='custom'?'var(--orange)':'var(--text)')+';font-weight:600;font-size:13px;cursor:pointer">Custom</button>'
-    +'</div>';
+  const cycleOpts=SUB_CYCLES.map(function(cy){
+    const sel=cy===_subEditCycle?' selected':'';
+    return '<option value="'+cy+'"'+sel+'>'+(cy[0].toUpperCase()+cy.slice(1))+'</option>';
+  }).join('');
 
-  // Cycle options. Use _subEditPlanId (persistent) rather than reading from DOM.
-  let cycleOpts;
-  if(_subEditMode==='catalog'){
-    const planId=isEdit?s.planId:_subEditPlanId;
-    const plan=planId?getPlan(planId):null;
-    cycleOpts=SUB_CYCLES.map(function(cy){
-      const enabled=plan&&plan.pricing&&plan.pricing[cy]&&plan.pricing[cy].enabled;
-      const sel=s&&s.billingCycle===cy?' selected':(!s&&cy==='monthly'&&(!plan||enabled)?' selected':'');
-      const disabled=plan?(!enabled?' disabled':''):'';
-      return '<option value="'+cy+'"'+sel+disabled+'>'+(cy[0].toUpperCase()+cy.slice(1))+(plan&&enabled?' \u2014 '+fmt$(plan.pricing[cy].price):'')+'</option>';
-    }).join('');
-  }else{
-    cycleOpts=SUB_CYCLES.map(function(cy){
-      const sel=s&&s.billingCycle===cy?' selected':(!s&&cy==='monthly'?' selected':'');
-      return '<option value="'+cy+'"'+sel+'>'+(cy[0].toUpperCase()+cy.slice(1))+'</option>';
-    }).join('');
-  }
-
-  // Catalog mode body: plan picker, then cycle (filtered)
-  let modeBody='';
-  if(_subEditMode==='catalog'){
-    const activePlans=(db.subscriptionPlans||[]).filter(function(p){return p.active||(s&&s.planId===p.id);});
-    if(!activePlans.length){
-      modeBody='<div style="padding:14px;background:rgba(255,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:var(--radius);font-size:13px;color:#fbbf24;margin-bottom:12px">No active plans. <a onclick="closeModal();openSubPlansModal()" style="color:#fbbf24;text-decoration:underline;cursor:pointer">Create a plan</a> or switch to Custom mode.</div>';
-    }else{
-      const seedPlanId=isEdit?s.planId:_subEditPlanId;
-      const planOpts='<option value="">Select a plan...</option>'+activePlans.map(function(p){
-        return '<option value="'+p.id+'"'+(seedPlanId===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
-      }).join('');
-      modeBody='<div class="form-row">'
-        +'<div class="form-group"><label>Plan *</label><select id="sf-plan"'+(isEdit?' disabled':'')+' onchange="_onSubPlanChange()">'+planOpts+'</select></div>'
-        +'<div class="form-group"><label>Billing Cycle *</label><select id="sf-cycle"'+(isEdit?' disabled':'')+'>'+cycleOpts+'</select></div>'
-        +'</div>';
-      if(isEdit){
-        modeBody+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;padding:8px 10px;background:rgba(107,33,234,.08);border-radius:var(--radius)">Plan and cycle are locked at creation. Cancel and create a new subscription to change.</div>';
-      }
-    }
-  }else{
-    // Custom mode: name, cycle, price, items
-    modeBody='<div class="form-row">'
-      +'<div class="form-group"><label>Plan Name *</label><input id="sf-custom-name" type="text" value="'+esc(s&&s.planName||'')+'"'+(isEdit?' disabled':'')+' placeholder="e.g. Custom Retainer"></div>'
-      +'<div class="form-group"><label>Billing Cycle *</label><select id="sf-cycle"'+(isEdit?' disabled':'')+'>'+cycleOpts+'</select></div>'
-      +'</div>'
-      +'<div class="form-group"><label>Price per Cycle *</label><input id="sf-custom-price" type="number" min="0.01" step="0.01" value="'+(s&&s.cyclePrice||'')+'"'+(isEdit?' disabled':'')+' placeholder="99.00"></div>'
-      +'<div class="form-group"><label style="display:flex;justify-content:space-between;align-items:center"><span>Items *</span>'+(isEdit?'':'<button type="button" class="btn btn-purple btn-sm" onclick="_addSubCustomItem()">+ Add Item</button>')+'</label>'
-      +'<div id="sf-custom-items">'+_renderSubCustomItems(isEdit)+'</div>'
-      +'</div>';
-  }
-
-  // Owner picker (staff users)
+  // Owner picker
   const staffUsers=(db.users||[]).filter(function(u){return u.active!==false;});
   const ownerOpts='<option value="">No owner</option>'+staffUsers.map(function(u){
     return '<option value="'+u.id+'"'+(s&&s.ownerUserId===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>';
   }).join('');
 
-  // Coupon section
-  const couponSection='<div class="form-row">'
-    +'<div class="form-group"><label>Coupon Code</label><input id="sf-coupon" type="text" value="'+esc(s&&s.couponCode||'')+'" placeholder="Leave blank for none"></div>'
-    +'<div class="form-group"><label>Coupon Applies</label><select id="sf-coupon-recurring"><option value="false"'+(s&&!s.couponRecurring?' selected':!s?' selected':'')+'>First cycle only</option><option value="true"'+(s&&s.couponRecurring?' selected':'')+'>Every cycle</option></select></div>'
-    +'</div>';
+  // Cycle change handler: when cycle changes, recompute catalog item prices
+  // (the same plan can have different prices per cycle).
+  const cycleChange=isEdit?'':' onchange="_subEditCycle=this.value;_recomputeCatalogPrices();_rerenderItemsAndSummary()"';
 
-  // Manual discount section
-  const md=s&&s.manualDiscountType?s:null;
-  const discountSection='<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px">'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Manual Discount (optional)</div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Type</label><select id="sf-discount-type"><option value="">None</option><option value="flat"'+(md&&md.manualDiscountType==='flat'?' selected':'')+'>Flat $</option><option value="pct"'+(md&&md.manualDiscountType==='pct'?' selected':'')+'>Percent %</option></select></div>'
-    +'<div class="form-group"><label>Value</label><input id="sf-discount-value" type="number" min="0" step="0.01" value="'+(md?md.manualDiscountValue:'')+'" placeholder="e.g. 10"></div>'
-    +'<div class="form-group"><label>Applies</label><select id="sf-discount-recurring"><option value="true"'+(md?md.manualDiscountRecurring!==false?' selected':'':' selected')+'>Every cycle</option><option value="false"'+(md&&md.manualDiscountRecurring===false?' selected':'')+'>First cycle only</option></select></div>'
-    +'</div>'
-    +'<div class="form-group" style="margin-bottom:0"><label>Note (optional)</label><input id="sf-discount-note" type="text" value="'+esc(md&&md.manualDiscountNote||'')+'" placeholder="Reason for the discount"></div>'
-    +'</div>';
-
-  // Other fields. Card picker is wrapped in #sf-card-wrap which we refresh
-  // on contact change via _refreshCardPickerSection().
-  const otherFields='<div class="form-group"><label>Contact *</label>'+ssHTML('sf-cw','sf-ci','sf-cv','sf-cd','Search contact...',cid)+'</div>'
+  const headerSection='<div class="form-group"><label>Contact *</label>'+ssHTML('sf-cw','sf-ci','sf-cv','sf-cd','Search contact...',cid)+'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Start Date *</label><input id="sf-start" type="date" value="'+(s&&s.startDate||todayStr())+'"'+(isEdit?' disabled':'')+'></div>'
+    +'<div class="form-group"><label>Billing Cycle *</label><select id="sf-cycle"'+cycleChange+(isEdit?' disabled':'')+'>'+cycleOpts+'</select></div>'
     +'<div class="form-group"><label>Owner</label><select id="sf-owner">'+ownerOpts+'</select></div>'
     +'</div>'
-    +'<div class="form-group"><label>Card on File</label><div id="sf-card-wrap">'+_renderCardPickerInner(c,s,s&&s.cardId)+'</div></div>'
-    +couponSection
-    +discountSection
-    +'<div class="form-group"><label>Notes</label><textarea id="sf-notes" rows="2">'+esc(s&&s.notes||'')+'</textarea></div>';
+    +'<div class="form-group"><label>Card on File</label><div id="sf-card-wrap">'+_renderCardPickerInner(c)+'</div></div>'
+    +(isEdit?'<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;padding:8px 10px;background:rgba(107,33,234,.08);border-radius:var(--radius)">Cycle and start date are locked at creation. Cancel and create a new subscription to change those.</div>':'');
 
-  const body=modeToggle+modeBody+otherFields;
+  const itemsHeader='<div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-muted)">Items</div><div style="display:flex;gap:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="_addItemRow(\'catalog\')">+ From Catalog</button><button type="button" class="btn btn-ghost btn-sm" onclick="_addItemRow(\'custom\')">+ Custom</button></div></div>';
+
+  const body=headerSection
+    +itemsHeader
+    +'<div id="sf-items">'+_renderItemsList()+'</div>'
+    +'<div id="sf-summary">'+_renderItemsSummary()+'</div>'
+    +'<div class="form-group" style="margin-top:14px"><label>Notes</label><textarea id="sf-notes" rows="2">'+esc(s&&s.notes||'')+'</textarea></div>';
+
   openModal(isEdit?'Edit Subscription':'New Subscription',body,
     '<button class="btn btn-ghost" onclick="_closeSubModal()">Cancel</button><button class="btn btn-primary" onclick="saveSub()">Save</button>',
     'modal-xl');
 }
 
-function _closeSubModal(){_stopContactWatcher();closeModal();}
+function _closeSubModal(){_stopContactWatcher();window._postCardAddCallback=null;closeModal();}
 
-function _onSubPlanChange(){
-  // Persist the new selection, then re-render so cycle options reflect this plan
-  const planEl=document.getElementById('sf-plan');
-  if(planEl)_subEditPlanId=planEl.value||'';
-  const s=state.modal&&state.modal.id?getSub(state.modal.id):null;
-  _renderSubModalBody(s);
-}
-
-function _renderSubCustomItems(disabled){
+function _renderItemsList(){
   if(!_subEditItems.length){
-    return '<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No items yet. Click Add Item.</div>';
+    return '<div style="font-size:13px;color:var(--text-muted);padding:18px;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No items yet. Add one from the catalog or build a custom item.</div>';
   }
-  return _subEditItems.map(function(it,i){
-    const inputDisable=disabled?' disabled':'';
-    return '<div style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px">'
-      +'<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Name</div>'
-      +'<input type="text" id="ci-name-'+i+'" value="'+esc(it.name||'')+'"'+inputDisable+' onchange="_syncSubItem('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none">'
-      +'</div>'
-      +'<div style="width:70px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Qty</div>'
-      +'<input type="number" id="ci-qty-'+i+'" value="'+(it.qty||1)+'" min="1" step="1"'+inputDisable+' onchange="_syncSubItem('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none">'
-      +'</div>'
-      +'<div style="display:flex;align-items:center;padding-top:18px;gap:5px"><input type="checkbox" id="ci-tax-'+i+'"'+(it.taxable!==false?' checked':'')+inputDisable+' onchange="_syncSubItem('+i+')"><label for="ci-tax-'+i+'" style="font-size:11px;color:var(--text-muted);margin:0">Taxable</label></div>'
-      +(disabled?'':'<div style="padding-top:18px"><button class="icon-btn-xs" onclick="_rmSubCustomItem('+i+')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>')
-      +'</div>';
-  }).join('');
+  return _subEditItems.map(_renderItemRow).join('');
 }
 
-function _addSubCustomItem(){
-  _subEditItems.push({id:'si-'+uid(),name:'',qty:1,taxable:true});
-  const el=document.getElementById('sf-custom-items');if(el)el.innerHTML=_renderSubCustomItems(false);
-}
-function _rmSubCustomItem(i){
-  _subEditItems.splice(i,1);
-  const el=document.getElementById('sf-custom-items');if(el)el.innerHTML=_renderSubCustomItems(false);
-}
-function _syncSubItem(i){
-  const it=_subEditItems[i];if(!it)return;
-  const n=document.getElementById('ci-name-'+i);if(n)it.name=n.value.trim();
-  const q=document.getElementById('ci-qty-'+i);if(q)it.qty=parseInt(q.value,10)||1;
-  const t=document.getElementById('ci-tax-'+i);if(t)it.taxable=t.checked;
+function _renderItemRow(it,idx){
+  const inpStyle='background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none;width:100%';
+  const isCatalog=it._editMode==='catalog';
+
+  // Plan picker (catalog only)
+  let planSection='';
+  if(isCatalog){
+    const activePlans=(db.subscriptionPlans||[]).filter(function(p){
+      return p.active||p.id===it.planId;
+    });
+    const planOpts='<option value="">Select a plan...</option>'+activePlans.map(function(p){
+      const cfg=p.pricing&&p.pricing[_subEditCycle];
+      const offered=cfg&&cfg.enabled;
+      return '<option value="'+p.id+'"'+(it.planId===p.id?' selected':'')+(offered||p.id===it.planId?'':' disabled')+'>'+esc(p.name)+(offered?' \u2014 '+fmt$(cfg.price):' (no '+_subEditCycle+' pricing)')+'</option>';
+    }).join('');
+    planSection='<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Plan</div>'
+      +'<select id="itm-plan-'+idx+'" onchange="_setItemPlan('+idx+',this.value)" style="'+inpStyle+'">'+planOpts+'</select></div>';
+  }else{
+    planSection='<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Item Name</div>'
+      +'<input type="text" id="itm-name-'+idx+'" value="'+esc(it.name||'')+'" placeholder="e.g. Custom service" style="'+inpStyle+'" oninput="_subEditItems['+idx+'].name=this.value;_rerenderSummary()"></div>';
+  }
+
+  // Price field
+  let priceSection;
+  if(isCatalog){
+    priceSection='<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price</div>'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange);padding:7px 0">'+(it.price?fmt$(it.price):'-')+'</div></div>';
+  }else{
+    priceSection='<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price</div>'
+      +'<input type="number" id="itm-price-'+idx+'" min="0.01" step="0.01" value="'+(it.price||'')+'" placeholder="0.00" style="'+inpStyle+'" oninput="_subEditItems['+idx+'].price=parseFloat(this.value)||0;_rerenderSummary()"></div>';
+  }
+
+  // Qty + taxable
+  const qtySection='<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Qty</div>'
+    +'<input type="number" id="itm-qty-'+idx+'" min="1" step="1" value="'+(it.qty||1)+'" style="'+inpStyle+'" oninput="_subEditItems['+idx+'].qty=Math.max(1,parseInt(this.value,10)||1);_rerenderSummary()"></div>';
+
+  const taxSection=isCatalog
+    ? '<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Taxable</div><div style="font-size:13px;padding:7px 0">'+(it.taxable===false?'No':'Yes')+'</div></div>'
+    : '<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Taxable</div><div style="padding:9px 0"><input type="checkbox" id="itm-tax-'+idx+'"'+(it.taxable!==false?' checked':'')+' onchange="_subEditItems['+idx+'].taxable=this.checked;_rerenderSummary()" style="width:16px;height:16px"></div></div>';
+
+  // Discount section (collapsible-ish: always visible but indented)
+  const dt=it.discountType||'';
+  const discountSection='<div style="margin-top:8px;padding:10px;background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius)">'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+    +'<div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Discount Type</div>'
+    +'<select id="itm-dtype-'+idx+'" onchange="_subEditItems['+idx+'].discountType=this.value||null;_rerenderItemsAndSummary()" style="'+inpStyle+'">'
+    +'<option value="">None</option>'
+    +'<option value="flat"'+(dt==='flat'?' selected':'')+'>Flat $</option>'
+    +'<option value="pct"'+(dt==='pct'?' selected':'')+'>Percent %</option>'
+    +'</select></div>'
+    +(dt?'<div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Value</div>'
+       +'<input type="number" id="itm-dval-'+idx+'" min="0" step="0.01" value="'+(it.discountValue!=null?it.discountValue:'')+'" style="'+inpStyle+'" oninput="_subEditItems['+idx+'].discountValue=this.value!==\'\'?parseFloat(this.value):null;_rerenderSummary()"></div>'
+       +'<div style="flex:1;min-width:130px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Applies</div>'
+       +'<select id="itm-drec-'+idx+'" onchange="_subEditItems['+idx+'].discountRecurring=this.value===\'true\';_rerenderSummary()" style="'+inpStyle+'">'
+       +'<option value="true"'+(it.discountRecurring!==false?' selected':'')+'>Every cycle</option>'
+       +'<option value="false"'+(it.discountRecurring===false?' selected':'')+'>First cycle only</option>'
+       +'</select></div>'
+       +'<div style="flex:2;min-width:160px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Note</div>'
+       +'<input type="text" id="itm-dnote-'+idx+'" value="'+esc(it.discountNote||'')+'" placeholder="Reason" style="'+inpStyle+'" oninput="_subEditItems['+idx+'].discountNote=this.value"></div>'
+       :'')
+    +'</div></div>';
+
+  return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid '+(isCatalog?'var(--purple-light)':'var(--orange)')+';border-radius:var(--radius);padding:12px;margin-bottom:10px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:'+(isCatalog?'var(--purple-light)':'var(--orange)')+'">'+(isCatalog?'Catalog Item':'Custom Item')+'</div>'
+    +'<button type="button" class="icon-btn-xs" onclick="_removeItemRow('+idx+')" title="Remove item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+    +'</div>'
+    +'<div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">'
+    +planSection+priceSection+qtySection+taxSection
+    +'</div>'
+    +discountSection
+    +'</div>';
 }
 
+function _renderItemsSummary(){
+  if(!_subEditItems.length)return '';
+  // Use a fake sub-shape so we can reuse calcSubNextCharge / calcSubSticker
+  const fakeSub={items:_subEditItems,lastChargedAt:null};
+  const sticker=calcSubSticker(fakeSub);
+  const effective=calcSubNextCharge(fakeSub);
+  const discount=sticker-effective;
+  return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:6px;font-size:13px">'
+    +'<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text-muted)">Subtotal</span><span>'+fmt$(sticker)+'</span></div>'
+    +(discount>0?'<div style="display:flex;justify-content:space-between;padding:3px 0;color:#34d399"><span>Discount</span><span>-'+fmt$(discount)+'</span></div>':'')
+    +'<div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border);font-weight:700"><span>Total per cycle</span><span style="font-family:Exo 2,sans-serif;font-size:15px;color:var(--orange)">'+fmt$(effective)+'</span></div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Tax added at charge time based on subaccount tax settings.</div>'
+    +'</div>';
+}
+
+function _addItemRow(mode){
+  // For Stage 4: items added to existing subs need addedAt for proration logic.
+  // For now, just append.
+  _captureItemsState();
+  const newItem=mode==='catalog'?{
+    _editMode:'catalog',
+    id:'si-'+uid(),
+    planId:'',name:'',description:'',taxable:true,price:0,qty:1,
+    discountType:null,discountValue:null,discountNote:'',discountRecurring:true,
+    addedAt:new Date().toISOString(),billingEndsAt:null
+  }:{
+    _editMode:'custom',
+    id:'si-'+uid(),
+    planId:null,name:'',description:'',taxable:true,price:0,qty:1,
+    discountType:null,discountValue:null,discountNote:'',discountRecurring:true,
+    addedAt:new Date().toISOString(),billingEndsAt:null
+  };
+  _subEditItems.push(newItem);
+  _rerenderItemsAndSummary();
+}
+
+function _removeItemRow(idx){
+  _captureItemsState();
+  _subEditItems.splice(idx,1);
+  _rerenderItemsAndSummary();
+}
+
+function _setItemPlan(idx,planId){
+  _captureItemsState();
+  const it=_subEditItems[idx];if(!it)return;
+  it.planId=planId||'';
+  if(planId){
+    const p=getPlan(planId);
+    if(p){
+      const cfg=p.pricing&&p.pricing[_subEditCycle];
+      if(cfg&&cfg.enabled){
+        it.name=p.name;
+        it.description=p.description||'';
+        it.taxable=p.taxable!==false;
+        it.price=parseFloat(cfg.price)||0;
+      }else{
+        it.price=0;
+      }
+    }
+  }else{
+    it.name='';it.price=0;
+  }
+  _rerenderItemsAndSummary();
+}
+
+function _recomputeCatalogPrices(){
+  _subEditItems.forEach(function(it){
+    if(it._editMode==='catalog'&&it.planId){
+      const p=getPlan(it.planId);
+      if(p){
+        const cfg=p.pricing&&p.pricing[_subEditCycle];
+        it.price=cfg&&cfg.enabled?(parseFloat(cfg.price)||0):0;
+      }
+    }
+  });
+}
+
+function _rerenderItemsAndSummary(){
+  const il=document.getElementById('sf-items');if(il)il.innerHTML=_renderItemsList();
+  _rerenderSummary();
+}
+function _rerenderSummary(){
+  const sm=document.getElementById('sf-summary');if(sm)sm.innerHTML=_renderItemsSummary();
+}
+
+// Save: create OR diff-and-apply for edit
 async function saveSub(){
   if(!canManageSubscriptions()){toast('Permission denied.','error');return;}
+  _captureSubModalFormState();
+
   const isEdit=!!(state.modal&&state.modal.id);
   const contactId=document.getElementById('sf-cv').value||null;
-  if(!contactId){toast('Contact is required.','error');return;}
-
-  // Collect common fields
-  const ownerUserId=document.getElementById('sf-owner').value||null;
+  const ownerEl=document.getElementById('sf-owner');
+  const ownerUserId=ownerEl?(ownerEl.value||null):null;
   const cardEl=document.getElementById('sf-card');
-  const cardId=cardEl?(cardEl.value||null):null;
-  const couponCode=(document.getElementById('sf-coupon').value||'').trim();
-  const couponRecurring=document.getElementById('sf-coupon-recurring').value==='true';
-  const dt=document.getElementById('sf-discount-type').value||null;
-  const dv=parseFloat(document.getElementById('sf-discount-value').value);
-  const dr=document.getElementById('sf-discount-recurring').value==='true';
-  const dn=(document.getElementById('sf-discount-note').value||'').trim();
+  const cardId=cardEl?(cardEl.value||null):_subEditCardId||null;
   const notes=(document.getElementById('sf-notes').value||'').trim();
 
-  if(dt&&(isNaN(dv)||dv<0)){toast('Discount value must be a non-negative number.','error');return;}
-  if(dt==='pct'&&dv>100){toast('Percent discount cannot exceed 100.','error');return;}
+  if(!contactId){toast('Contact is required.','error');return;}
+  if(!_subEditItems.length){toast('At least one item is required.','error');return;}
 
-  if(isEdit){
-    // Edit mode: only owner, card, coupon, discount, notes, items can change.
-    // Cycle, plan, price are locked at creation per Payment Policy.
-    const sub=getSub(state.modal.id);if(!sub)return;
-    try{
-      // Owner change
-      if((sub.ownerUserId||null)!==(ownerUserId||null)){
-        await apiSubAction(sub.id,'edit',{ownerUserId:ownerUserId});
-      }
-      // Card change
-      if((sub.cardId||null)!==(cardId||null)){
-        await apiSubAction(sub.id,'change_card',{cardId:cardId});
-      }
-      // Coupon change
-      const oldCoupon=sub.couponCode||'';
-      if(couponCode&&couponCode!==oldCoupon){
-        await apiSubAction(sub.id,'apply_coupon',{couponCode:couponCode,recurring:couponRecurring});
-      }else if(!couponCode&&oldCoupon){
-        await apiSubAction(sub.id,'remove_coupon',{});
-      }else if(couponCode&&sub.couponRecurring!==couponRecurring){
-        await apiSubAction(sub.id,'apply_coupon',{couponCode:couponCode,recurring:couponRecurring});
-      }
-      // Discount change
-      const oldType=sub.manualDiscountType||null;
-      if(dt&&(dt!==oldType||dv!==parseFloat(sub.manualDiscountValue||0)||dn!==(sub.manualDiscountNote||'')||dr!==(sub.manualDiscountRecurring!==false))){
-        await apiSubAction(sub.id,'apply_discount',{discountType:dt,discountValue:dv,discountNote:dn,recurring:dr});
-      }else if(!dt&&oldType){
-        await apiSubAction(sub.id,'remove_discount',{});
-      }
-      // Notes
-      if((sub.notes||'')!==notes){
-        await apiSubAction(sub.id,'edit',{notes:notes});
-      }
-      toast('Subscription updated.','success');
-    }catch(e){toast(e.message,'error');return;}
-  }else{
-    // Create mode
+  // Validate every item
+  for(let i=0;i<_subEditItems.length;i++){
+    const it=_subEditItems[i];
+    if(it._editMode==='catalog'){
+      if(!it.planId){toast('Item '+(i+1)+': pick a plan or remove it.','error');return;}
+      if(!(it.price>0)){toast('Item '+(i+1)+': plan has no price for this cycle.','error');return;}
+    }else{
+      if(!it.name){toast('Item '+(i+1)+': enter a name.','error');return;}
+      if(!(it.price>0)){toast('Item '+(i+1)+': enter a price > 0.','error');return;}
+    }
+    if(it.qty<1){toast('Item '+(i+1)+': qty must be >= 1.','error');return;}
+    if(it.discountType){
+      if(it.discountValue==null||it.discountValue<0){toast('Item '+(i+1)+': discount value required.','error');return;}
+      if(it.discountType==='pct'&&it.discountValue>100){toast('Item '+(i+1)+': percent discount cannot exceed 100.','error');return;}
+    }
+  }
+
+  // Strip _editMode and prepare payload items
+  function stripItem(it){
+    return {
+      id:it.id,
+      planId:it.planId||null,
+      name:it.name,
+      description:it.description||'',
+      taxable:it.taxable!==false,
+      price:it.price,
+      qty:it.qty||1,
+      discountType:it.discountType||null,
+      discountValue:it.discountType?it.discountValue:null,
+      discountNote:it.discountNote||'',
+      discountRecurring:it.discountRecurring!==false
+    };
+  }
+
+  if(!isEdit){
+    // CREATE: single API call
     const startDate=document.getElementById('sf-start').value;
     const billingCycle=document.getElementById('sf-cycle').value;
     if(!startDate){toast('Start date is required.','error');return;}
-    if(!billingCycle){toast('Billing cycle is required.','error');return;}
 
-    let payload={
-      contactId:contactId,billingCycle:billingCycle,startDate:startDate,
-      ownerUserId:ownerUserId,cardId:cardId,notes:notes,
-      manualDiscountType:dt,manualDiscountValue:dt?dv:null,
-      manualDiscountNote:dn,manualDiscountRecurring:dr
+    const payload={
+      contactId:contactId,
+      billingCycle:billingCycle,
+      startDate:startDate,
+      ownerUserId:ownerUserId,
+      cardId:cardId,
+      notes:notes,
+      items:_subEditItems.map(stripItem)
     };
-    if(couponCode){
-      payload.couponCode=couponCode;
-      payload.couponRecurring=couponRecurring;
-    }
 
-    if(_subEditMode==='catalog'){
-      const planEl=document.getElementById('sf-plan');
-      if(!planEl||!planEl.value){toast('Plan is required.','error');return;}
-      payload.planId=planEl.value;
-    }else{
-      // Custom mode
-      const customName=(document.getElementById('sf-custom-name').value||'').trim();
-      const customPrice=parseFloat(document.getElementById('sf-custom-price').value);
-      // Sync items from DOM before submit
-      _subEditItems.forEach(function(_,i){_syncSubItem(i);});
-      if(!customName){toast('Plan name is required.','error');return;}
-      if(isNaN(customPrice)||customPrice<=0){toast('Price must be greater than 0.','error');return;}
-      const items=_subEditItems.filter(function(it){return it.name&&it.name.trim();});
-      if(!items.length){toast('At least one item is required.','error');return;}
-      payload.customPlanName=customName;
-      payload.customCyclePrice=customPrice;
-      payload.items=items;
-    }
-
-    try{await apiSubCreate(payload);toast('Subscription created.','success');}
+    try{await apiSubCreate(payload);}
     catch(e){toast(e.message,'error');return;}
+    toast('Subscription created.','success');
+  }else{
+    // EDIT: diff items and call appropriate actions
+    const sub=getSub(state.modal.id);if(!sub){toast('Subscription not found.','error');return;}
+
+    // Diff items: original vs current
+    const origById={};(_subEditOriginalItems||[]).forEach(function(it){origById[it.id]=it;});
+    const currById={};_subEditItems.forEach(function(it){currById[it.id]=it;});
+
+    const removed=Object.keys(origById).filter(function(id){return !currById[id];});
+    const added=Object.keys(currById).filter(function(id){return !origById[id];});
+    const updated=Object.keys(currById).filter(function(id){
+      if(!origById[id])return false;
+      const o=origById[id],n=currById[id];
+      // Compare mutable fields only
+      return (o.qty||1)!==(n.qty||1)
+        || (o.taxable!==false)!==(n.taxable!==false)
+        || (o.discountType||null)!==(n.discountType||null)
+        || (o.discountValue==null?null:parseFloat(o.discountValue))!==(n.discountValue==null?null:parseFloat(n.discountValue))
+        || (o.discountNote||'')!==(n.discountNote||'')
+        || (o.discountRecurring!==false)!==(n.discountRecurring!==false)
+        || (o.description||'')!==(n.description||'');
+    });
+
+    const errors=[];
+    // Removals first
+    for(const id of removed){
+      try{await apiSubAction(sub.id,'remove_item',{itemId:id});}
+      catch(e){errors.push('Remove "'+(origById[id].name||id)+'": '+e.message);}
+    }
+    // Then additions
+    for(const id of added){
+      try{await apiSubAction(sub.id,'add_item',{item:stripItem(currById[id])});}
+      catch(e){errors.push('Add "'+(currById[id].name||id)+'": '+e.message);}
+    }
+    // Then updates
+    for(const id of updated){
+      const it=currById[id];
+      const changes={
+        qty:it.qty,
+        taxable:it.taxable!==false,
+        discountType:it.discountType||null,
+        discountValue:it.discountType?it.discountValue:null,
+        discountNote:it.discountNote||'',
+        discountRecurring:it.discountRecurring!==false,
+        description:it.description||''
+      };
+      try{await apiSubAction(sub.id,'update_item',{itemId:id,changes:changes});}
+      catch(e){errors.push('Update "'+(it.name||id)+'": '+e.message);}
+    }
+
+    // Owner / card / notes changes
+    if((sub.ownerUserId||null)!==(ownerUserId||null)){
+      try{await apiSubAction(sub.id,'change_owner',{ownerUserId:ownerUserId});}
+      catch(e){errors.push('Change owner: '+e.message);}
+    }
+    if((sub.cardId||null)!==(cardId||null)){
+      try{await apiSubAction(sub.id,'change_card',{cardId:cardId});}
+      catch(e){errors.push('Change card: '+e.message);}
+    }
+    if((sub.notes||'')!==notes){
+      try{await apiSubAction(sub.id,'edit',{notes:notes});}
+      catch(e){errors.push('Update notes: '+e.message);}
+    }
+
+    if(errors.length){
+      toast(errors.length+' error'+(errors.length===1?'':'s')+': '+errors[0],'error');
+      console.error('Sub edit errors:',errors);
+    }else{
+      toast('Subscription updated.','success');
+    }
   }
 
   closeModal();
   _stopContactWatcher();
+  window._postCardAddCallback=null;
   await fetchFromServer();
   renderSubscriptions();
   if(state.drawer)renderDrawer();
@@ -10656,8 +10849,7 @@ function _renderPlanEditModalBody(p){
     +'</div>'
     +'<div class="form-group"><label>Pricing per Cycle * <span style="font-weight:400;color:var(--text-muted)">(at least one required)</span></label>'
     +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px">'+pricingRows+'</div>'
-    +'</div>'
-    +'<div class="form-group"><label>Internal Notes</label><textarea id="pe-notes" rows="2">'+esc(p&&p.notes||'')+'</textarea></div>';
+    +'</div>';
 
   openModal(isEdit?'Edit Plan':'New Plan',body,
     '<button class="btn btn-ghost" onclick="_backToSubPlansModal()">Back</button><button class="btn btn-primary" onclick="savePlan()">'+(isEdit?'Save Changes':'Create Plan')+'</button>',
@@ -10683,7 +10875,6 @@ async function savePlan(){
   const isEdit=!!(state.modal&&state.modal.id);
   const name=(document.getElementById('pe-name').value||'').trim();
   const description=(document.getElementById('pe-desc').value||'').trim();
-  const notes=(document.getElementById('pe-notes').value||'').trim();
   const active=document.getElementById('pe-active').checked;
   const taxable=document.getElementById('pe-taxable').checked;
   const categoryId=document.getElementById('pe-cat').value||null;
@@ -10695,7 +10886,7 @@ async function savePlan(){
   const enabledCount=SUB_CYCLES.filter(function(cy){return _planEditPricing[cy].enabled&&_planEditPricing[cy].price>0;}).length;
   if(!enabledCount){toast('Enable at least one cycle with a price > 0.','error');return;}
 
-  const payload={name:name,description:description,notes:notes,active:active,taxable:taxable,categoryId:categoryId,pricing:_planEditPricing};
+  const payload={name:name,description:description,active:active,taxable:taxable,categoryId:categoryId,pricing:_planEditPricing};
 
   try{
     if(isEdit){
@@ -15754,6 +15945,14 @@ async function submitAddCard(){
     saveData();
     closeModal();
     sqCard=null;
+    // If a caller registered a post-save callback (e.g. the subscription modal
+    // opened the card flow inline), run it instead of the default toast/refresh.
+    if(window._postCardAddCallback){
+      const cb=window._postCardAddCallback;
+      window._postCardAddCallback=null;
+      setTimeout(cb,50);
+      return;
+    }
     toast('Card saved successfully.','success');
     if(state.drawer===contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
       renderDrawer();
