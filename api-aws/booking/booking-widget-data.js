@@ -55,6 +55,18 @@ async function handler(req, res) {
         return res.status(404).json({ error: 'Widget not found or inactive' });
       }
       widget = wResult.rows[0];
+
+      // Increment total_views counter. Best effort, swallow errors so analytics
+      // bookkeeping can never break a public page load. Refreshes count; bots
+      // may inflate. Deduplication and IP rate limiting are future work.
+      try {
+        await db.query(
+          'UPDATE service_widgets SET total_views = total_views + 1 WHERE id = $1 AND subaccount_id = $2',
+          [widget_id, subaccountId]
+        );
+      } catch (e) {
+        console.error('total_views increment failed:', e.message);
+      }
     } else {
       const wResult = await db.query(
         `SELECT id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,

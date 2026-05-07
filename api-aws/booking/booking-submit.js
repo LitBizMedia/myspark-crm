@@ -573,7 +573,8 @@ async function handler(req, res) {
         contact_id: contactId,
         status: 'enrolled',
         enrolled_at: now_(),
-        source: 'booking_widget'
+        source: 'booking_widget',
+        widget_id: widget_id || null
       };
       // Conditional UPDATE: only succeeds if session is scheduled AND capacity available.
       // The WHERE clause counts current 'enrolled' participants and compares to capacity
@@ -619,13 +620,15 @@ async function handler(req, res) {
         INSERT INTO appointments (
           id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
           status, location, notes, service_id, service_variation_id, buffer_before, buffer_after,
+          booked_via, widget_id,
           created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,NOW(),NOW())
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,$15,$16,NOW(),NOW())
       `, [
         apptId, subaccountId, title, contactId, assignedStaffId,
         bookingDate, bookingTime, duration,
         apptLocation, client_info.notes || null,
-        apptServiceId, apptVariationId, bufBefore, bufAfter
+        apptServiceId, apptVariationId, bufBefore, bufAfter,
+        'widget', widget_id || null
       ]);
     }
 
@@ -719,7 +722,19 @@ async function handler(req, res) {
       }
     }
 
-    // 15. Audit log
+    // 15. Increment widget analytics counter (best effort, don't fail booking).
+    if (widget_id) {
+      try {
+        await db.query(
+          'UPDATE service_widgets SET total_bookings = total_bookings + 1, updated_at = NOW() WHERE id = $1 AND subaccount_id = $2',
+          [widget_id, subaccountId]
+        );
+      } catch (e) {
+        console.error('total_bookings increment failed:', e.message);
+      }
+    }
+
+    // 16. Audit log
     await logAudit({
       req,
       actorType: 'public',
