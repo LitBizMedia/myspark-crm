@@ -573,6 +573,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
   box-shadow:var(--shadow),var(--shadow-p);transform:scale(.96);transition:transform .2s}
 #modal-overlay.open .modal{transform:scale(1)}
 .modal-lg{max-width:640px}.modal-xl{max-width:760px}
+.modal-wide{max-width:min(1280px,calc(100vw - 80px))}
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .modal-title{font-family:'Exo 2',sans-serif;font-size:16px;font-weight:700;color:#ffffff}
@@ -10481,23 +10482,21 @@ function _renderSubPlansModalBody(){
   if(_planFilterCat==='__none__')visible=visible.filter(function(p){return !p.categoryId;});
   else if(_planFilterCat)visible=visible.filter(function(p){return p.categoryId===_planFilterCat;});
 
-  function planRow(p){
-    const cycleSummary=SUB_CYCLES.filter(function(cy){return p.pricing&&p.pricing[cy]&&p.pricing[cy].enabled;}).map(function(cy){return cy[0].toUpperCase()+cy.slice(1)+' '+fmt$(p.pricing[cy].price);}).join(' \u00b7 ');
+  function planCard(p){
+    const cycleSummary=SUB_CYCLES.filter(function(cy){return p.pricing&&p.pricing[cy]&&p.pricing[cy].enabled;}).map(function(cy){return cy[0].toUpperCase()+cy.slice(1)+' '+fmt$(p.pricing[cy].price);});
     const cat=p.categoryId?cats.find(function(c){return c.id===p.categoryId;}):null;
-    const catBadge=cat?'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--purple-dim);color:var(--purple-light);margin-right:6px">'+esc(cat.name)+'</span>':'';
-    const taxBadge=p.taxable===false?'<span style="font-size:10px;color:var(--text-muted);margin-left:6px">non-taxable</span>':'';
-    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid '+(p.active?'#34d399':'var(--text-dim)')+';border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px">'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700">'+catBadge+esc(p.name)+(p.active?'':' <span style="font-size:10px;color:var(--text-muted);font-weight:400">(inactive)</span>')+taxBadge+'</div>'
-      +(p.description?'<div style="font-size:12px;color:var(--text-muted);margin-top:4px">'+esc(p.description)+'</div>':'')
-      +(cycleSummary?'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">'+cycleSummary+'</div>':'')
-      +'</div>'
-      +'<div style="display:flex;gap:5px;flex-shrink:0">'
-      +'<button class="btn btn-ghost btn-sm" onclick="openPlanEditModal(\''+p.id+'\')">Edit</button>'
-      +'<button class="btn btn-sm" style="background:'+(p.active?'var(--orange-dim)':'rgba(52,211,153,.15)')+';color:'+(p.active?'var(--orange)':'#34d399')+';border:1px solid '+(p.active?'var(--orange-border)':'rgba(52,211,153,.3)')+'" onclick="togglePlanActive(\''+p.id+'\','+(!p.active)+')">'+(p.active?'Deactivate':'Activate')+'</button>'
+    const catBadge=cat?'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--purple-dim);color:var(--purple-light)">'+esc(cat.name)+'</span>':'<span style="font-size:10px;color:var(--text-dim)">Uncategorized</span>';
+    const taxBadge=p.taxable===false?'<span style="font-size:10px;color:var(--text-muted);padding:2px 6px;border:1px solid var(--border);border-radius:4px">non-taxable</span>':'';
+    const statusDot=p.active?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#34d399"></span>':'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-dim)"></span>';
+    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid '+(p.active?'#34d399':'var(--text-dim)')+';border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px;'+(p.active?'':'opacity:.7')+'">'
+      +'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+catBadge+taxBadge+'<span style="margin-left:auto">'+statusDot+'</span></div>'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;line-height:1.3">'+esc(p.name)+'</div>'
+      +(p.description?'<div style="font-size:12px;color:var(--text-muted);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+esc(p.description)+'</div>':'<div style="font-size:12px;color:var(--text-dim);font-style:italic">No description</div>')
+      +(cycleSummary.length?'<div style="font-size:11px;color:var(--text-muted);line-height:1.5">'+cycleSummary.map(function(s){return '<div>'+esc(s)+'</div>';}).join('')+'</div>':'')
+      +'<div style="display:flex;gap:5px;margin-top:auto;padding-top:6px;border-top:1px solid var(--border)">'
+      +'<button class="btn btn-ghost btn-sm" style="flex:1" onclick="openPlanEditModal(\''+p.id+'\')">Edit</button>'
+      +'<button class="btn btn-sm" style="flex:1;background:'+(p.active?'var(--orange-dim)':'rgba(52,211,153,.15)')+';color:'+(p.active?'var(--orange)':'#34d399')+';border:1px solid '+(p.active?'var(--orange-border)':'rgba(52,211,153,.3)')+'" onclick="togglePlanActive(\''+p.id+'\','+(!p.active)+')">'+(p.active?'Deactivate':'Activate')+'</button>'
       +'<button class="btn btn-danger btn-sm" onclick="deletePlan(\''+p.id+'\')">Delete</button>'
-      +'</div>'
       +'</div></div>';
   }
 
@@ -10534,12 +10533,12 @@ function _renderSubPlansModalBody(){
   }else if(!visible.length){
     body+='<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px">No plans match the current filters. <a onclick="_setPlanCatFilter(\'\');_setPlanStatusFilter(\'all\')" style="color:var(--orange);cursor:pointer;text-decoration:underline">Clear filters</a></div>';
   }else{
-    body+=visible.map(planRow).join('');
+    body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">'+visible.map(planCard).join('')+'</div>';
   }
   body+='</div>';
 
   state.modal={type:'subPlans'};
-  openModal('Subscription Plans',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>','modal-xl');
+  openModal('Subscription Plans',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>','modal-wide');
 }
 
 let _planEditPricing={weekly:{enabled:false,price:0},monthly:{enabled:true,price:0},quarterly:{enabled:false,price:0},annual:{enabled:false,price:0}};
