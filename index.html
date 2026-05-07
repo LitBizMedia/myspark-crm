@@ -18517,11 +18517,9 @@ function switchGcTab(tab){
   renderGiftCards();
 }
 
-// CSS scope wrapper: when content built for the light Payments panel is dropped
-// into a dark modal, swap --main-text/--main-text-muted to readable values.
-function _modalLightContent(html){
-  return '<div style="--main-text:var(--text);--main-text-muted:var(--text-muted)">'+html+'</div>';
-}
+// CSS scope wrapper retained as a no-op for any callers. The render functions
+// below now use --text/--text-muted directly where the modal bg is dark.
+function _modalLightContent(html){ return html; }
 
 // Modal: shows the Gift Card Products grid (designs) for management.
 function openGcDesignsModal(){
@@ -18562,9 +18560,12 @@ function openGcSellModal(){
 // ── Products Tab ──
 function gcRenderProducts(){
   var prods=db.giftCardProducts||[];
+  // Now rendered inside a dark modal. Use --text/--text-muted on the OUTER
+  // header (modal bg). Inside prod-card, --main-text/--main-card stay correct
+  // because the card has a light background.
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Gift Card Products</div>'
-    +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">'+prods.filter(function(p){return p.status==='active';}).length+' active designs</div></div>'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--text)">Gift Card Products</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+prods.filter(function(p){return p.status==='active';}).length+' active designs</div></div>'
     +(canManageGiftCards()?'<button class="btn btn-primary" onclick="openGcProductModal(null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Gift Card</button>':'')+'</div>';
   if(!prods.length){
     h+='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>'
@@ -18595,7 +18596,6 @@ function gcRenderProducts(){
       +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:10px">'+denomLabel+' &bull; '+issuedCount+' issued</div>'
       +'<div style="display:flex;gap:6px;border-top:1px solid var(--main-border);padding-top:9px;flex-wrap:wrap">'
       +(canManageGiftCards()?'<button class="btn btn-ghost btn-sm" onclick="openGcProductModal(\''+prod.id+'\')">Edit</button>':'')
-      +'<button class="btn btn-ghost btn-sm" onclick="gcShowEmbed(\''+prod.id+'\')">Embed</button>'
       +(canManageGiftCards()?(isActive?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#fbbf24;border:1px solid rgba(245,158,11,.3)" onclick="gcToggleProduct(\''+prod.id+'\')">Deactivate</button>'
         :'<button class="btn btn-purple btn-sm" onclick="gcToggleProduct(\''+prod.id+'\')">Activate</button>'):'')
       +(canManageGiftCards()?'<button class="btn btn-danger btn-sm" onclick="gcDeleteProduct(\''+prod.id+'\')">Delete</button>':'')
@@ -19070,9 +19070,11 @@ function gcConfirmAddBalance(id){
 // ── Send / Issue Tab ──
 function gcRenderSend(){
   var prods=(db.giftCardProducts||[]).filter(function(p){return p.status==='active';});
+  // Rendered inside a dark modal; entire form sits on modal bg with no nested
+  // light cards. Use --text/--text-muted directly for readability.
   var h='<div style="max-width:540px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);margin-bottom:5px">Issue a Gift Card</div>'
-    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:18px">Issue a prepaid gift card to a customer without requiring a payment. For rewards, make-goods, or VIP perks.</div>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--text);margin-bottom:5px">Issue a Gift Card</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Issue a prepaid gift card to a customer without requiring a payment. For rewards, make-goods, or VIP perks.</div>'
     +'<div class="form-group"><label>Gift Card Product</label>'
     +'<select id="gc-issue-prod" class="filter-sel" style="width:100%;height:38px" onchange="gcUpdateIssueDenoms()">'
     +(prods.length?prods.map(function(p){return'<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join(''):'<option value="">No active gift cards - create one first</option>')
@@ -19397,9 +19399,11 @@ function openSpSellModal(){
 
 function spRenderTemplates(){
   var tmpls=(db.sessionPackTemplates||[]).sort(function(a,b){return(a.name||'').localeCompare(b.name||'');});
+  // Rendered inside dark modal. Outer header uses --text/--text-muted; the
+  // table inside has its own bg styling that should remain readable.
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Pack Templates</div>'
-    +'<div style="font-size:13px;color:var(--main-text-muted);margin-top:2px">Define reusable session pack products.</div></div>'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--text)">Pack Templates</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-top:2px">Define reusable session pack products.</div></div>'
     +(isAdminOrManager()?'<button class="btn btn-primary" onclick="openPackTemplateModal(null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Template</button>':'')
     +'</div>';
   if(!tmpls.length){
@@ -19585,10 +19589,12 @@ function spRenderClientPacksTable(){
 
 function spRenderSell(){
   var tmpls=(db.sessionPackTemplates||[]).filter(function(t){return t.status!=='inactive';});
-  var inpS='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
+  // Rendered inside dark modal; use --text variants and --bg-input/--border
+  // for inputs to match rest of modal-bound forms.
+  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
   var h='<div style="max-width:540px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);margin-bottom:5px">Sell a Session Pack</div>'
-    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:18px">Select a client, choose a pack template, collect payment, and issue the pack in one step.</div>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--text);margin-bottom:5px">Sell a Session Pack</div>'
+    +'<div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Select a client, choose a pack template, collect payment, and issue the pack in one step.</div>'
     +'<div class="form-group"><label>Client</label>'
     +'<div class="ss-wrap"><input class="ss-inp" id="sp-sell-c-inp" type="text" placeholder="Search contacts..." oninput="spSellCSearch(this.value)" onclick="spSellCSearch(this.value)" autocomplete="off"><input type="hidden" id="sp-sell-c-id"><div class="ss-drop hidden" id="sp-sell-c-drop"></div></div></div>'
     +'<div class="form-group"><label>Pack Template</label>'
