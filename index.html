@@ -14535,6 +14535,224 @@ function _renderSvcWidgetsTab(){
   return h;
 }
 
+// =============================================================
+// SHARED WIDGET BOOKING POLICIES SECTION
+// Renders fields common to all 3 widget types (service, class, appointment):
+// payment_mode/deposit, allow_coupons/tip, patient form toggles, cancellation,
+// email/sms reminders, booking window, custom domain.
+//
+// Used by openServiceWidgetEditor, openClassWidgetEditor, openAppointmentWidgetModal.
+// Save functions call _swgPolicyToPayload() to harvest the values.
+// _swgTogglePolicy() handles show/hide of conditional sub-sections.
+// =============================================================
+function _swgPolicySection(w, opts){
+  opts = opts || {};
+  var includeBuffers = opts.includeBuffers !== false;
+
+  var paymentMode      = (w && w.payment_mode) || 'full';
+  var depositType      = (w && w.deposit_type) || 'flat';
+  var depositValue     = (w && w.deposit_value != null) ? w.deposit_value : '';
+  var allowCoupons     = !w || w.allow_coupons !== false;
+  var allowTip         = !!(w && w.allow_tip);
+  var tipPcts          = (w && Array.isArray(w.tip_percentages)) ? w.tip_percentages.join(',') : '10,15,20';
+  var collectPhone     = !w || w.collect_phone !== false;
+  var collectNotes     = !w || w.collect_notes !== false;
+  var requireExisting  = !!(w && w.require_existing_patient);
+  var allowCancel      = !w || w.allow_self_cancel !== false;
+  var cancelWindow     = (w && w.cancel_window_hours != null) ? w.cancel_window_hours : 24;
+  var sendConfEmail    = !w || w.send_confirmation_email !== false;
+  var sendReminderEmail= !w || w.send_reminder_email !== false;
+  var reminderHours    = (w && w.reminder_hours_before != null) ? w.reminder_hours_before : 24;
+  var sendReminderSms  = !!(w && w.send_reminder_sms);
+  var leadHours        = (w && w.booking_lead_time_hours != null) ? w.booking_lead_time_hours : '';
+  var advanceDays      = (w && w.booking_advance_days != null) ? w.booking_advance_days : '';
+  var bufBefore        = (w && w.buffer_before_override != null) ? w.buffer_before_override : '';
+  var bufAfter         = (w && w.buffer_after_override != null) ? w.buffer_after_override : '';
+  var customDomain     = (w && w.custom_domain) || '';
+  var requirePayment   = !!(w && w.require_payment);
+
+  function cbRow(id, label, checked, hint, onchangeAttr){
+    return '<div style="background:var(--bg-card);border-radius:6px;padding:10px;margin-bottom:8px">'
+      +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\''+id+'\');c.checked=!c.checked;if(c.onchange)c.onchange()">'
+      +'<input id="'+id+'" type="checkbox"'+(checked?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"'+(onchangeAttr?' onchange="'+onchangeAttr+'"':'')+'>'
+      +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">'+label+'</div>'
+      +'</div>'
+      +(hint?'<div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:26px;text-transform:none;font-weight:400">'+hint+'</div>':'')
+      +'</div>';
+  }
+  function sectionLabel(text){
+    return '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;color:var(--text-muted);margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--main-border)">'+text+'</div>';
+  }
+
+  var html = ''
+    +'<div style="margin-top:24px;padding-top:18px;border-top:2px solid var(--main-border)">'
+    +'<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Booking Policies</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Per-widget settings for payment, patient form, cancellation, reminders, and booking window.</div>'
+
+    // PAYMENT
+    +sectionLabel('Payment')
+    +'<div class="form-group" id="swg-pol-pay-wrap" style="'+(requirePayment?'':'opacity:0.5;pointer-events:none')+'">'
+    +'<label>Payment mode <span style="color:var(--text-muted);font-weight:400">(only used when "Require payment" is on)</span></label>'
+    +'<select id="swg-payment-mode" onchange="_swgTogglePolicy()">'
+    +'<option value="full"'+(paymentMode==='full'?' selected':'')+'>Charge full amount</option>'
+    +'<option value="deposit"'+(paymentMode==='deposit'?' selected':'')+'>Charge a deposit</option>'
+    +'<option value="none"'+(paymentMode==='none'?' selected':'')+'>No charge (record only)</option>'
+    +'</select>'
+    +'</div>'
+    +'<div id="swg-deposit-wrap" class="form-row" style="'+(paymentMode==='deposit'?'':'display:none')+'">'
+    +'<div class="form-group"><label>Deposit type</label>'
+    +'<select id="swg-deposit-type">'
+    +'<option value="flat"'+(depositType==='flat'?' selected':'')+'>Flat amount</option>'
+    +'<option value="percent"'+(depositType==='percent'?' selected':'')+'>Percent of total</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Deposit value</label><input id="swg-deposit-value" type="number" min="0" step="0.01" placeholder="0.00" value="'+esc(depositValue)+'"></div>'
+    +'</div>'
+    +cbRow('swg-allow-coupons','Allow coupon codes',allowCoupons,'When off, the coupon field is hidden on the booking page.','')
+    +cbRow('swg-allow-tip','Allow tip',allowTip,'Show tip selection on the payment screen.','_swgTogglePolicy()')
+    +'<div class="form-group" id="swg-tip-wrap" style="'+(allowTip?'':'display:none')+'">'
+    +'<label>Tip percentages <span style="color:var(--text-muted);font-weight:400">(comma separated)</span></label>'
+    +'<input id="swg-tip-pcts" type="text" placeholder="10,15,20" value="'+esc(tipPcts)+'">'
+    +'</div>'
+
+    // PATIENT FORM
+    +sectionLabel('Patient form')
+    +cbRow('swg-collect-phone','Require phone number',collectPhone,'When off, the phone field is hidden on the booking page.','')
+    +cbRow('swg-collect-notes','Show notes/message field',collectNotes,'Optional free text on the booking form.','')
+    +cbRow('swg-require-existing','Existing patients only',requireExisting,'Reject bookings whose email is not already in your contacts.','')
+
+    // CANCELLATION
+    +sectionLabel('Patient self-cancellation')
+    +cbRow('swg-allow-cancel','Allow patients to cancel via email link',allowCancel,'They get a one-click cancel link in their confirmation email.','_swgTogglePolicy()')
+    +'<div class="form-group" id="swg-cancel-wrap" style="'+(allowCancel?'':'display:none')+'">'
+    +'<label>Cancel cutoff (hours before appointment)</label>'
+    +'<input id="swg-cancel-window" type="number" min="0" max="720" value="'+esc(cancelWindow)+'">'
+    +'</div>'
+
+    // EMAIL & SMS
+    +sectionLabel('Notifications')
+    +cbRow('swg-send-confirm-email','Send confirmation email',sendConfEmail,'Sent immediately after booking.','')
+    +cbRow('swg-send-reminder-email','Send reminder email',sendReminderEmail,'Sent X hours before the appointment.','_swgTogglePolicy()')
+    +'<div class="form-group" id="swg-reminder-wrap" style="'+(sendReminderEmail?'':'display:none')+'">'
+    +'<label>Reminder lead time (hours)</label>'
+    +'<input id="swg-reminder-hours" type="number" min="1" max="168" value="'+esc(reminderHours)+'">'
+    +'</div>'
+    +cbRow('swg-send-reminder-sms','Send reminder SMS',sendReminderSms,'Requires Twilio campaign approval.','')
+
+    // BOOKING WINDOW
+    +sectionLabel('Booking window')
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Lead time <span style="color:var(--text-muted);font-weight:400">(hours)</span></label><input id="swg-lead-hours" type="number" min="0" max="720" placeholder="no minimum" value="'+esc(leadHours)+'"></div>'
+    +'<div class="form-group"><label>Advance window <span style="color:var(--text-muted);font-weight:400">(days)</span></label><input id="swg-advance-days" type="number" min="0" max="365" placeholder="no maximum" value="'+esc(advanceDays)+'"></div>'
+    +'</div>';
+
+  if (includeBuffers) {
+    html += ''
+      +'<div class="form-row">'
+      +'<div class="form-group"><label>Buffer before <span style="color:var(--text-muted);font-weight:400">(minutes, override)</span></label><input id="swg-buf-before" type="number" min="0" max="240" placeholder="use service default" value="'+esc(bufBefore)+'"></div>'
+      +'<div class="form-group"><label>Buffer after <span style="color:var(--text-muted);font-weight:400">(minutes, override)</span></label><input id="swg-buf-after" type="number" min="0" max="240" placeholder="use service default" value="'+esc(bufAfter)+'"></div>'
+      +'</div>';
+  }
+
+  // ADVANCED
+  html += ''
+    +sectionLabel('Advanced')
+    +'<div class="form-group"><label>Custom domain <span style="color:var(--text-muted);font-weight:400">(coming soon)</span></label><input id="swg-custom-domain" type="text" placeholder="book.yourbiz.com" value="'+esc(customDomain)+'"></div>'
+    +'</div>';
+
+  return html;
+}
+
+function _swgTogglePolicy(){
+  // Wire up the require_payment master toggle once (idempotent).
+  var rp = document.getElementById('swg-req-pay');
+  if (rp && !rp._swgWired) {
+    rp.addEventListener('change', _swgTogglePolicy);
+    rp._swgWired = true;
+  }
+
+  // Payment mode wrapper: dimmed when require_payment is off
+  var pwrap = document.getElementById('swg-pol-pay-wrap');
+  if (pwrap && rp) {
+    pwrap.style.opacity = rp.checked ? '1' : '0.5';
+    pwrap.style.pointerEvents = rp.checked ? 'auto' : 'none';
+  }
+
+  // Deposit details only when payment_mode = deposit
+  var pmEl = document.getElementById('swg-payment-mode');
+  var dw = document.getElementById('swg-deposit-wrap');
+  if (pmEl && dw) dw.style.display = (pmEl.value === 'deposit') ? '' : 'none';
+
+  // Tip percentages only when allow_tip
+  var tipEl = document.getElementById('swg-allow-tip');
+  var tw = document.getElementById('swg-tip-wrap');
+  if (tipEl && tw) tw.style.display = tipEl.checked ? '' : 'none';
+
+  // Cancel window only when allow_self_cancel
+  var cancelEl = document.getElementById('swg-allow-cancel');
+  var cw = document.getElementById('swg-cancel-wrap');
+  if (cancelEl && cw) cw.style.display = cancelEl.checked ? '' : 'none';
+
+  // Reminder hours only when send_reminder_email
+  var remEl = document.getElementById('swg-send-reminder-email');
+  var rw = document.getElementById('swg-reminder-wrap');
+  if (remEl && rw) rw.style.display = remEl.checked ? '' : 'none';
+}
+
+function _swgPolicyToPayload(){
+  function nullableInt(id){
+    var el = document.getElementById(id);
+    if (!el || el.value === '' || el.value == null) return null;
+    var n = parseInt(el.value, 10);
+    return isNaN(n) ? null : n;
+  }
+  function nullableFloat(id){
+    var el = document.getElementById(id);
+    if (!el || el.value === '' || el.value == null) return null;
+    var n = parseFloat(el.value);
+    return isNaN(n) ? null : n;
+  }
+  function getCheckbox(id, def){
+    var el = document.getElementById(id);
+    return el ? !!el.checked : def;
+  }
+  function getValue(id, def){
+    var el = document.getElementById(id);
+    return el ? el.value : def;
+  }
+
+  var tipPctsRaw = getValue('swg-tip-pcts','10,15,20');
+  var tipPcts = String(tipPctsRaw||'').split(',').map(function(s){
+    var n = parseFloat(s.trim());
+    return isNaN(n) ? null : n;
+  }).filter(function(n){ return n !== null && n >= 0 && n <= 100; });
+  if (!tipPcts.length) tipPcts = [10, 15, 20];
+
+  var dtVal = getValue('swg-deposit-type','');
+
+  return {
+    payment_mode: getValue('swg-payment-mode','full'),
+    deposit_type: dtVal || null,
+    deposit_value: nullableFloat('swg-deposit-value'),
+    allow_coupons: getCheckbox('swg-allow-coupons', true),
+    allow_tip: getCheckbox('swg-allow-tip', false),
+    tip_percentages: tipPcts,
+    collect_phone: getCheckbox('swg-collect-phone', true),
+    collect_notes: getCheckbox('swg-collect-notes', true),
+    require_existing_patient: getCheckbox('swg-require-existing', false),
+    allow_self_cancel: getCheckbox('swg-allow-cancel', true),
+    cancel_window_hours: parseInt(getValue('swg-cancel-window','24'),10) || 24,
+    send_confirmation_email: getCheckbox('swg-send-confirm-email', true),
+    send_reminder_email: getCheckbox('swg-send-reminder-email', true),
+    reminder_hours_before: parseInt(getValue('swg-reminder-hours','24'),10) || 24,
+    send_reminder_sms: getCheckbox('swg-send-reminder-sms', false),
+    booking_lead_time_hours: nullableInt('swg-lead-hours'),
+    booking_advance_days: nullableInt('swg-advance-days'),
+    buffer_before_override: nullableInt('swg-buf-before'),
+    buffer_after_override: nullableInt('swg-buf-after'),
+    custom_domain: (getValue('swg-custom-domain','').trim() || null)
+  };
+}
+
 function openServiceWidgetModal(id){
   var w=id?(db.serviceWidgets||[]).find(function(x){return x.id===id;}):null;
   // widget_type defaults to 'service'. New widgets pick a type; existing are locked.
@@ -14689,6 +14907,8 @@ function openServiceWidgetEditor(w,isNew){
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after booking)</span></label>'
     +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thank you! Your booking is confirmed. We will see you soon.">'+esc(confirmMsg)+'</textarea></div>'
 
+    +_swgPolicySection(w, {includeBuffers:true})
+
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
   var existing=w&&w.id;
@@ -14789,6 +15009,8 @@ function openClassWidgetEditor(w,isNew){
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after registration)</span></label>'
     +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thanks for registering! See you in class.">'+esc(confirmMsg)+'</textarea></div>'
 
+    +_swgPolicySection(w, {includeBuffers:false})
+
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
   var existing=w&&w.id;
@@ -14820,6 +15042,7 @@ function saveClassWidget(id){
     intake_form_id:null,
     confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
   };
+  Object.assign(w, _swgPolicyToPayload());
   fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
@@ -14983,6 +15206,8 @@ function openAppointmentWidgetModal(w,isNew){
 
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after booking)</span></label>'
     +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thank you! Your appointment is confirmed.">'+esc(confirmMsg)+'</textarea></div>'
+
+    +_swgPolicySection(w, {includeBuffers:true})
 
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
@@ -15162,6 +15387,7 @@ function saveAppointmentWidget(id){
     intake_form_id:null,
     confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
   };
+  Object.assign(w, _swgPolicyToPayload());
   fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
@@ -15335,6 +15561,7 @@ function saveServiceWidget(id){
     intake_form_id:null,
     confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
   };
+  Object.assign(w, _swgPolicyToPayload());
   fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
