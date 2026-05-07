@@ -155,6 +155,7 @@ async function handler(req, res) {
     }
 
     const interval = intervalForCycle(billingCycle);
+    void interval; // reserved for future use; not needed now that next_due_date = start_date
 
     await db.query('BEGIN');
     try {
@@ -166,7 +167,7 @@ async function handler(req, res) {
           created_at, updated_at, created_by
         ) VALUES (
           $1, $2, $3, $4, $5,
-          $6, $7, $8::jsonb, 'active', $9::date, ($9::date + INTERVAL '${interval}'),
+          $6, $7, $8::jsonb, 'active', $9::date, $9::date,
           $10, $11, $12,
           NOW(), NOW(), $13
         )`,

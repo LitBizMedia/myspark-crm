@@ -195,7 +195,8 @@ async function handler(req, res) {
     const [
       blobResult, servicesResult, variationsResult, classesResult,
       usersResult, widgetsResult, paymentsResult, appointmentsResult,
-      plansResult, subscriptionsResult, planCategoriesResult
+      plansResult, subscriptionsResult, planCategoriesResult,
+      subscriptionEventsResult
     ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
@@ -248,8 +249,36 @@ async function handler(req, res) {
       db.query(
         'SELECT * FROM subscription_plan_categories WHERE subaccount_id = $1 ORDER BY sort_order ASC, name ASC',
         [subaccountId]
+      ),
+      db.query(
+        `SELECT id, subscription_id, event_type, actor_user_id, actor_type, payment_id, metadata, created_at
+         FROM subscription_events
+         WHERE subaccount_id = $1
+         ORDER BY created_at ASC`,
+        [subaccountId]
       )
     ]);
+
+    // Group events by subscription_id and attach to each sub
+    const eventsBySubId = {};
+    for (const row of subscriptionEventsResult.rows) {
+      if (!eventsBySubId[row.subscription_id]) eventsBySubId[row.subscription_id] = [];
+      eventsBySubId[row.subscription_id].push({
+        id: row.id,
+        subscriptionId: row.subscription_id,
+        eventType: row.event_type,
+        actorUserId: row.actor_user_id,
+        actorType: row.actor_type,
+        paymentId: row.payment_id,
+        metadata: row.metadata || {},
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at
+      });
+    }
+    const subscriptionsWithEvents = subscriptionsResult.rows.map(row => {
+      const sub = subscriptionToFrontend(row);
+      sub.events = eventsBySubId[sub.id] || [];
+      return sub;
+    });
 
     return res.status(200).json({
       data: blobResult.rows[0]?.data || null,
@@ -262,7 +291,7 @@ async function handler(req, res) {
       payments: paymentsResult.rows.map(paymentToFrontend),
       appointments: appointmentsResult.rows.map(appointmentToFrontend),
       subscriptionPlans: plansResult.rows.map(planToFrontend),
-      subscriptions: subscriptionsResult.rows.map(subscriptionToFrontend),
+      subscriptions: subscriptionsWithEvents,
       subscriptionPlanCategories: planCategoriesResult.rows.map(planCategoryToFrontend)
     });
   } catch (e) {
