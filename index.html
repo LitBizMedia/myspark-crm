@@ -1730,6 +1730,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </button>
             </div>
           </div>
+          <div id="subs-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="subs-search" type="text" placeholder="Search subscriptions..." oninput="renderSubscriptions()"></div>
             <select class="filter-sel" id="subs-status-filter" onchange="renderSubscriptions()"><option value="">All Status</option><option value="trialing">Trial</option><option value="active">Active</option><option value="paused">Paused</option><option value="suspended">Suspended</option><option value="cancelled">Cancelled</option></select>
@@ -10402,12 +10403,53 @@ function filteredSubs(){
   });
 }
 
+// Normalize a recurring price to a monthly equivalent for MRR calculation.
+// Weekly: assume 52 weeks per year. Quarterly: divide by 3. Annual: divide by 12.
+function _normalizeToMonthlyMRR(amount, cycle){
+  if(cycle==='weekly')return amount*52/12;
+  if(cycle==='quarterly')return amount/3;
+  if(cycle==='yearly'||cycle==='annual')return amount/12;
+  return amount;
+}
+
+function _renderSubsStats(){
+  var el=document.getElementById('subs-stats');
+  if(!el)return;
+  var subs=db.subscriptions||[];
+  var mrr=0,active=0,trialing=0,suspended=0;
+  subs.forEach(function(s){
+    if(s.status==='active'){
+      active++;
+      var bd=calcSubTaxBreakdown(s);
+      mrr+=_normalizeToMonthlyMRR(bd.afterDiscount||0, s.billingCycle||'monthly');
+    }else if(s.status==='trialing'){
+      trialing++;
+    }else if(s.status==='suspended'){
+      suspended++;
+    }
+  });
+  function card(label,val,accent,sub){
+    var border=accent?'border-top:2px solid '+accent:'';
+    return '<div class="stat-card" style="'+border+'">'
+      +'<div class="stat-label">'+label+'</div>'
+      +'<div class="stat-val">'+val+'</div>'
+      +(sub?'<div style="font-size:11px;color:var(--main-text-muted);margin-top:3px">'+sub+'</div>':'')
+      +'</div>';
+  }
+  el.innerHTML=card('Monthly Recurring Revenue',fmt$(mrr),'#34d399','from active subscriptions')
+    +card('Active',String(active),'#34d399',active===1?'subscriber':'subscribers')
+    +card('In Trial',String(trialing),'#fbbf24',trialing===1?'subscriber':'subscribers')
+    +card('Needs Attention',String(suspended),suspended>0?'#f87171':null,'failed charges');
+}
+
 function renderSubscriptions(){
   // Hide management buttons for staff; show for admin/manager
   const newBtn=document.getElementById('subs-new-btn');
   const planBtn=document.getElementById('subs-manage-plans-btn');
   if(newBtn)newBtn.style.display=canManageSubscriptions()?'':'none';
   if(planBtn)planBtn.style.display=canManagePlans()?'':'none';
+
+  _renderSubsStats();
 
   const all=filteredSubs();
   const pages=Math.ceil(all.length/SUBS_PER_PAGE)||1;
