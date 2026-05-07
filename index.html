@@ -62,12 +62,14 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 /* Radio and checkbox inputs should NOT inherit the full-width style above */
 .form-group input[type="radio"],.form-group input[type="checkbox"]{width:auto;padding:0}
 /* Date/time pickers: invert the native calendar icon so it's visible on dark input backgrounds */
-.form-group input[type="date"]::-webkit-calendar-picker-indicator,
-.form-group input[type="time"]::-webkit-calendar-picker-indicator,
-.form-group input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-.form-group input[type="month"]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.7;cursor:pointer}
-.form-group input[type="date"]::-webkit-calendar-picker-indicator:hover,
-.form-group input[type="time"]::-webkit-calendar-picker-indicator:hover{opacity:1}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(2);opacity:.85;cursor:pointer}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+input[type="month"]::-webkit-calendar-picker-indicator:hover{opacity:1}
 
 /* Globally fix native time/date input contrast in dark theme. The internal
    ::-webkit-datetime-edit shadow elements don't inherit color: from the
@@ -131,12 +133,12 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .sb-logo-text{font-family:'Exo 2',sans-serif;font-size:16px;font-weight:800;color:#ffffff}
 .sb-logo-text span{color:var(--orange)}
 .sb-nav{flex:1;overflow-y:auto;padding:10px 8px}
-.sb-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);
-  font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;transition:all .18s;
-  background:none;border:none;width:100%;text-align:left;font-family:Lato,sans-serif;margin-bottom:2px}
+.sb-item{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:var(--radius);
+  font-size:14px;font-weight:500;color:var(--text-muted);cursor:pointer;transition:all .18s;
+  background:none;border:none;width:100%;text-align:left;font-family:Lato,sans-serif;margin-bottom:3px}
 .sb-item:hover{background:var(--bg-card);color:var(--text)}
 .sb-item.active{background:var(--purple-dim);color:var(--purple-light);font-weight:600}
-.sb-item svg{width:16px;height:16px;flex-shrink:0;color:rgba(255,255,255,.5);transition:color .18s}
+.sb-item svg{width:18px;height:18px;flex-shrink:0;color:rgba(255,255,255,.55);transition:color .18s}
 .sb-item:hover svg,.sb-item.active svg{color:var(--purple-light)}
 .sb-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
   color:var(--text-dim);padding:12px 12px 5px;margin-top:4px}
@@ -441,6 +443,8 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .pay-tab{flex:1;padding:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--main-text-muted);
   background:transparent;border:none;color:var(--text-muted);font-family:Lato,sans-serif;transition:all .18s}
 .pay-tab.active{background:var(--purple);color:#fff}
+.pay-tab.disabled,.pay-tab[disabled]{opacity:.4;cursor:not-allowed}
+.pay-tab.disabled:hover,.pay-tab[disabled]:hover{background:transparent}
 
 /* SETTINGS */
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -1175,6 +1179,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <button class="sb-item" id="sb-contacts" data-panel="contacts" onclick="switchPanel('contacts')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Contacts
       </button>
+      <button class="sb-item" id="sb-conversations" data-panel="conversations" onclick="switchPanel('conversations')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Conversations
+      </button>
       <button class="sb-item" data-panel="calendar" onclick="switchPanel('calendar')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Calendar
       </button>
@@ -1193,7 +1200,10 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <button class="sb-item" id="sb-staff" data-panel="staff" onclick="switchPanel('staff')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Staff
       </button>
-      <div class="sb-section-label">Admin</div>
+      <button class="sb-item" id="sb-help" data-panel="help" onclick="switchPanel('help')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Help
+      </button>
+      <div class="sb-section-label" id="sb-admin-label">Admin</div>
       <button class="sb-item" id="sb-settings" data-panel="settings" onclick="switchPanel('settings')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M21 12h-2M19.07 19.07l-1.41-1.41M12 21v-2M4.93 19.07l1.41-1.41M3 12h2M4.93 4.93l1.41 1.41M12 3v2"/></svg>Settings
       </button>
@@ -1471,6 +1481,24 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
       <!-- PRODUCTS -->
       <div id="panel-products" class="panel hidden"><!-- Products UI now rendered in modal via openProductsModal() --></div>
+
+      <div id="panel-conversations" class="panel hidden">
+        <div class="coming-soon-wrap">
+          <span class="coming-soon-badge">Coming Soon</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <h3>Conversations</h3>
+          <p>Unified inbox for SMS, email, and chat threads with your contacts. Reply, schedule sends, and tag conversations to follow up later.</p>
+        </div>
+      </div>
+
+      <div id="panel-help" class="panel hidden">
+        <div class="coming-soon-wrap">
+          <span class="coming-soon-badge">Coming Soon</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <h3>Help &amp; Support</h3>
+          <p>Documentation, quick how-to guides, and contact support. We're putting the help center together.</p>
+        </div>
+      </div>
 
       <!-- PAYMENTS -->
       <div id="panel-payments" class="panel hidden">
@@ -2802,9 +2830,9 @@ function handleLogout(){
 // =====================================================
 // initApp defined below (server-aware version at line ~3180)
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',media:'Media Library',staff:'Staff',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings'};
 function renderPanel(){
-  const fns={dashboard:renderDash,contacts:renderContacts,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,staff:renderStaff,settings:renderSettings,products:renderProducts,media:renderMedia};
+  const fns={dashboard:renderDash,contacts:renderContacts,conversations:renderConversations,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,staff:renderStaff,settings:renderSettings,products:renderProducts,media:renderMedia,help:renderHelp};
   if(fns[state.panel])fns[state.panel]();
 }
 
@@ -2823,9 +2851,12 @@ function switchPanel(name){
   document.querySelectorAll('.sb-item').forEach(i=>i.classList.toggle('active',i.dataset.panel===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('hidden',p.id!=='panel-'+name));
   document.getElementById('top-bar-title').textContent=PANEL_TITLES[name]||name;
-  // Hide Products sidebar for non-admin
-  const sbProd=document.getElementById('panel-products')&&document.querySelector('[data-panel="products"]');
-  if(sbProd)sbProd.style.display=(state.user&&state.user.role==='admin')?'':'none';
+  // Admin section: hide label + Settings button entirely for non-admins.
+  const isAdmin=(state.user&&state.user.role==='admin');
+  const sbAdminLabel=document.getElementById('sb-admin-label');
+  if(sbAdminLabel)sbAdminLabel.style.display=isAdmin?'':'none';
+  const sbSettings=document.getElementById('sb-settings');
+  if(sbSettings)sbSettings.style.display=isAdmin?'':'none';
   // Media Library is visible to all authenticated users.
   // Read access is open; upload/delete are restricted in the UI by isAdminOrManager().
   const sbMedia=document.querySelector('[data-panel="media"]');
@@ -13145,6 +13176,15 @@ function renderApptList(){
 // =====================================================
 // FORMS PANEL
 // =====================================================
+function renderConversations(){
+  // Placeholder - panel HTML is static for now. Future: load threads list,
+  // render thread view, send/receive SMS/email here.
+}
+
+function renderHelp(){
+  // Placeholder - help center pending content.
+}
+
 function renderForms(){
   var role=userRole();
   var defaultTab=role==='admin'?'forms':'contracts';
@@ -15250,7 +15290,11 @@ function openNewWidgetOfType(type){
 
 function openServiceWidgetEditor(w,isNew){
   var _selSvcs=(w&&w.service_ids)||[];
-  var svcMsOpts=(db.services||[]).map(function(s){
+  // Service widgets can only book individual services. Class services belong
+  // to class widgets (Stage 3 widget type). Filter them out here so users
+  // can't accidentally include them.
+  var availableSvcs=(db.services||[]).filter(function(s){return s.type!=='class';});
+  var svcMsOpts=availableSvcs.map(function(s){
     var col=s.color||'#6b21ea';
     return'<div class="svc-ms-opt" onclick="swgMsToggle(\''+s.id+'\')">'
       +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
@@ -18763,10 +18807,14 @@ function gcOpenSell(prodId){
     +'<button class="pay-tab active" id="gc-pm-card" onclick="gcSellSetPM(\'card\')">Card</button>'
     +'<button class="pay-tab" id="gc-pm-cash" onclick="gcSellSetPM(\'cash\')">Cash</button>'
     +'<button class="pay-tab" id="gc-pm-other" onclick="gcSellSetPM(\'other\')">Other</button>'
+    +'<button class="pay-tab disabled" id="gc-pm-cof" onclick="gcSellSetPM(\'cof\')" title="Pick a contact with a card on file">Card on File</button>'
     +'</div>'
     +'<div id="gc-pm-card-fields">'+(sqIsConnected()?'<div id="gc-sq-card-container" class="sq-card-form" style="min-height:44px"></div><div id="gc-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>':'<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.</div>')+'</div>'
     +'<div id="gc-pm-cash-fields" class="hidden"><div style="font-size:12px;color:var(--text-muted);padding:4px 0">Cash payment will be recorded.</div></div>'
     +'<div id="gc-pm-other-fields" class="hidden"><input id="gc-sell-ref" type="text" placeholder="Reference # (Venmo, check, etc.)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:13px;outline:none"></div>'
+    +'<div id="gc-pm-cof-fields" class="hidden">'
+    +'<div id="gc-cof-display" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px"></div>'
+    +'</div>'
     +'</div>'
     +'<div class="form-group"><label>Staff</label>'
     +'<select id="gc-sell-staff" class="filter-sel" style="width:100%;height:38px">'
@@ -18794,8 +18842,11 @@ function gcSellClearDenoms(){
 }
 
 function gcSellSetPM(m){
+  // Refuse to switch to disabled tab (CoF when no contact with card on file)
+  var clicked=document.getElementById('gc-pm-'+m);
+  if(clicked&&clicked.classList.contains('disabled'))return;
   state.gcSellPM=m;
-  ['card','cash','other'].forEach(function(x){
+  ['card','cash','other','cof'].forEach(function(x){
     var btn=document.getElementById('gc-pm-'+x);
     if(btn)btn.classList.toggle('active',x===m);
     var f=document.getElementById('gc-pm-'+x+'-fields');
@@ -18818,6 +18869,47 @@ function gcSellSelC(id,name){
   var ni=document.getElementById('gc-sell-c-inp');if(ni)ni.value=name;
   var dd=document.getElementById('gc-sell-c-drop');if(dd)dd.classList.add('hidden');
   var ri=document.getElementById('gc-sell-recip');if(ri&&!ri.value)ri.value=name;
+  state.gcSellCOFIndex=0;
+  setTimeout(updateGcCofTab,30);
+}
+
+// Toggle the CoF tab on/off based on whether the selected contact has any
+// cards on file. Mirrors the SP and appointment CoF patterns.
+function updateGcCofTab(){
+  var contactId=document.getElementById('gc-sell-c-id')&&document.getElementById('gc-sell-c-id').value;
+  var contact=contactId?(db.contacts||[]).find(function(x){return x.id===contactId;}):null;
+  var cards=(contact&&contact.squareCards)||[];
+  var tab=document.getElementById('gc-pm-cof');
+  if(!tab)return;
+  if(cards.length>0&&sqIsConnected()){
+    tab.classList.remove('disabled');
+    tab.removeAttribute('disabled');
+    tab.title='';
+    var display=document.getElementById('gc-cof-display');
+    if(display){
+      display.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Select Card</div>'+
+        cards.map(function(card,i){
+          var label=(card.brand||'Card')+(card.last4?' ending in '+card.last4:' on file');
+          var exp=card.expMonth&&card.expYear?card.expMonth+'/'+card.expYear:'';
+          return'<div class="card-on-file" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.gcSellCOFIndex===i?'var(--purple)':'var(--border)')+'" onclick="gcSelectCofCard('+i+')">'
+            +'<div class="card-brand-icon">'+esc((card.brand||'Card').slice(0,4).toUpperCase())+'</div>'
+            +'<div class="card-details"><div class="card-number">'+esc(label)+'</div>'+(exp?'<div class="card-exp">Expires '+esc(exp)+'</div>':'')+'</div>'
+            +'<div style="width:16px;height:16px;border-radius:50%;border:2px solid '+(state.gcSellCOFIndex===i?'var(--purple)':'var(--border)')+';background:'+(state.gcSellCOFIndex===i?'var(--purple)':'transparent')+';flex-shrink:0"></div>'
+            +'</div>';
+        }).join('');
+    }
+    if(state.gcSellCOFIndex===undefined)state.gcSellCOFIndex=0;
+  }else{
+    tab.classList.add('disabled');
+    tab.setAttribute('disabled','disabled');
+    tab.title=!sqIsConnected()?'Square not connected':contact?'No card on file for this contact':'Pick a contact with a card on file';
+    if(state.gcSellPM==='cof')gcSellSetPM('card');
+  }
+}
+
+function gcSelectCofCard(idx){
+  state.gcSellCOFIndex=idx;
+  updateGcCofTab();
 }
 
 let gcSellCard=null;
@@ -18895,6 +18987,50 @@ async function gcProcessSale(){
   }
 
   // Cash or Other - just record
+  if(pm==='cash'||pm==='other'){
+    gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,'');
+    return;
+  }
+
+  // Card on File path
+  if(pm==='cof'){
+    if(!contactId){toast('Pick a contact first.','error');return;}
+    var contact=(db.contacts||[]).find(function(x){return x.id===contactId;});
+    var cards=(contact&&contact.squareCards)||[];
+    var idx=state.gcSellCOFIndex||0;
+    if(!cards[idx]||!contact.squareCustomerId){toast('No card on file selected.','error');return;}
+    if(btn){btn.disabled=true;btn.textContent='Processing...';}
+    try{
+      var chargeRes2=await fetch(apiUrl('/api/square/charge'),{credentials:'include',
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          slug:state.subaccountSlug,
+          sourceId:cards[idx].id,
+          customerId:contact.squareCustomerId,
+          amountCents:Math.round(amt*100),
+          idempotencyKey:'gc-cof-'+uid(),
+          note:'Gift Card: '+prod.name,
+          contactId:contactId,
+          staffId:staffId
+        })
+      });
+      var chargeData2=await chargeRes2.json();
+      if(!chargeData2.success&&chargeData2.error){
+        if(btn){btn.disabled=false;btn.textContent='Process & Issue Card';}
+        toast('Charge failed: '+chargeData2.error,'error');
+        return;
+      }
+      gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,'card_on_file','',chargeData2.payment&&chargeData2.payment.id||'');
+    }catch(e){
+      console.error('GC CoF charge error:',e);
+      if(btn){btn.disabled=false;btn.textContent='Process & Issue Card';}
+      toast('Error: '+e.message,'error');
+    }
+    return;
+  }
+
+  // Card path without Square connected: just record without charge
   gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,'');
 }
 
@@ -19272,7 +19408,7 @@ function renderSessionPacks(){
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Session Packs</div>'
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+packs.length+' issued</div></div>'
     +(manage?'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-      +'<button class="btn btn-ghost" onclick="openSpTemplatesModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Templates</button>'
+      +'<button class="btn btn-ghost" onclick="openSpTemplatesModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Packages</button>'
       +'<button class="btn btn-primary" onclick="openSpSellModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Sell Pack</button>'
       +'</div>':'')
     +'</div>'
@@ -19556,7 +19692,7 @@ function spRenderSell(){
     +'<button class="pay-tab active" id="sp-pm-card" onclick="spSellSetPM(\'card\')">Card</button>'
     +'<button class="pay-tab" id="sp-pm-cash" onclick="spSellSetPM(\'cash\')">Cash</button>'
     +'<button class="pay-tab" id="sp-pm-other" onclick="spSellSetPM(\'other\')">Other</button>'
-    +'<button class="pay-tab hidden" id="sp-pm-cof" onclick="spSellSetPM(\'cof\')">Card on File</button>'
+    +'<button class="pay-tab disabled" id="sp-pm-cof" onclick="spSellSetPM(\'cof\')" title="Pick a contact with a card on file">Card on File</button>'
     +'<button class="pay-tab" id="sp-pm-gc" onclick="spSellSetPM(\'gc\')">Gift Card</button>'
     +'</div>'
     +'<div id="sp-pm-card-fields">'+(sqIsConnected()?'<div id="sp-sq-card-container" class="sq-card-form" style="min-height:44px"></div><div id="sp-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>':'<div style="font-size:12px;color:var(--main-text-muted);padding:4px 0">Card payment will be recorded. <a onclick="switchPanel(\'settings\')" style="color:var(--purple-light);cursor:pointer">Connect Square</a> to process live charges.</div>')+'</div>'
@@ -19637,6 +19773,9 @@ function spSellUpdatePrice(){
 }
 
 function spSellSetPM(m){
+  // Refuse to switch to a disabled tab (e.g. CoF when no contact has card on file)
+  var clicked=document.getElementById('sp-pm-'+m);
+  if(clicked&&clicked.classList.contains('disabled'))return;
   state.spSellPM=m;
   ['card','cash','other','cof','gc'].forEach(function(x){
     var btn=document.getElementById('sp-pm-'+x);if(btn)btn.classList.toggle('active',x===m);
@@ -19692,8 +19831,10 @@ function updateSpCofTab(){
   var remBtn=document.getElementById('sp-gc-rem-cof');
   if(!tab)return;
   if(cards.length>0){
-    tab.classList.remove('hidden');
-    if(remBtn)remBtn.classList.remove('hidden');
+    tab.classList.remove('disabled');
+    tab.removeAttribute('disabled');
+    tab.title='';
+    if(remBtn){remBtn.classList.remove('disabled');remBtn.removeAttribute('disabled');remBtn.title='';}
     var display=document.getElementById('sp-cof-display');
     if(display){
       display.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Select Card</div>'+
@@ -19709,8 +19850,10 @@ function updateSpCofTab(){
     }
     if(state.spSellCOFIndex===undefined)state.spSellCOFIndex=0;
   }else{
-    tab.classList.add('hidden');
-    if(remBtn)remBtn.classList.add('hidden');
+    tab.classList.add('disabled');
+    tab.setAttribute('disabled','disabled');
+    tab.title=contact?'No card on file for this contact':'Pick a contact with a card on file';
+    if(remBtn){remBtn.classList.add('disabled');remBtn.setAttribute('disabled','disabled');remBtn.title=tab.title;}
     if(state.spSellPM==='cof')spSellSetPM('card');
   }
 }
