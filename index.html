@@ -573,7 +573,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
   box-shadow:var(--shadow),var(--shadow-p);transform:scale(.96);transition:transform .2s}
 #modal-overlay.open .modal{transform:scale(1)}
 .modal-lg{max-width:640px}.modal-xl{max-width:760px}
-.modal-wide{max-width:min(1280px,calc(100vw - 80px))}
+.modal-wide{max-width:min(1280px,calc(100vw - 80px));min-height:min(70vh,640px)}
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .modal-title{font-family:'Exo 2',sans-serif;font-size:16px;font-weight:700;color:#ffffff}
@@ -3465,13 +3465,17 @@ function _dPaySubscriptions(c,cSubs){
   }
   list.forEach(function(s){
     const cycle=s.billingCycle||'monthly';
-    // cyclePrice is canonical; fall back to items sum for legacy rows that lack it
-    const total=parseFloat(s.cyclePrice||0)||((s.items||[]).reduce(function(t,i){return t+((parseFloat(i.price)||0)*(i.qty||1));},0));
+    const sticker=parseFloat(s.cyclePrice||0)||((s.items||[]).reduce(function(t,i){return t+((parseFloat(i.price)||0)*(i.qty||1));},0));
+    const effective=calcSubNextCharge(s);
+    const discounted=hasActiveDiscount(s)&&effective!==sticker;
     const borderColor=filter==='active'?'#34d399':filter==='paused'?'#fbbf24':filter==='suspended'?'#f87171':'#94a3b8';
     const failBadge=(s.status==='suspended'&&s.failedChargeCount)?' <span style="font-size:10px;color:#f87171;font-weight:700">'+s.failedChargeCount+' failed</span>':'';
+    const priceText=discounted
+      ? '<span style="text-decoration:line-through;color:var(--text-muted);margin-right:4px">'+fmt$(sticker)+'</span><span style="color:#34d399">'+fmt$(effective)+'</span>'
+      : fmt$(sticker);
     h+='<div class="appt-row-sm" style="cursor:pointer;border-left-color:'+borderColor+'" onclick="openSubDetail(\''+s.id+'\')">'
       +'<div style="flex:1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+failBadge+'</div>'
-      +'<div class="appt-sm-meta">'+fmtDate(s.startDate)+' \u00b7 '+fmt$(total)+'/'+cycle+'</div>'
+      +'<div class="appt-sm-meta">'+fmtDate(s.startDate)+' \u00b7 '+priceText+'/'+cycle+'</div>'
       +'<span class="sub-cycle-badge">'+cycle+'</span></div>'
       +'</div>';
   });
@@ -9729,6 +9733,55 @@ function calcNextDueDate(startDate,cycle){
 function getSub(id){return (db.subscriptions||[]).find(s=>s.id===id)}
 function getPlan(id){return (db.subscriptionPlans||[]).find(p=>p.id===id)}
 
+// Returns the actual amount the customer will be charged on the next cycle,
+// after coupon and manual discount. Does NOT include tax (tax is computed at
+// charge time by the cron Lambda based on subaccount tax settings).
+//
+// Discount applicability rules:
+//   - Recurring discounts apply every cycle.
+//   - First-cycle-only discounts apply only when the sub has not been charged
+//     yet (last_charged_at is null).
+//
+// Order matches Payment Policy: subtotal -> coupon -> manual discount.
+function calcSubNextCharge(s){
+  if(!s)return 0;
+  let amt=parseFloat(s.cyclePrice||0)||0;
+  const isFirstCycle=!s.lastChargedAt;
+
+  // Coupon (if applies to this cycle)
+  if(s.couponCode&&(s.couponRecurring||isFirstCycle)){
+    const cpn=(db.coupons||[]).find(function(c){return c.code===s.couponCode||c.id===s.couponId;});
+    if(cpn){
+      if(cpn.discountType==='pct'){
+        amt-=amt*(parseFloat(cpn.discountVal)||0)/100;
+      }else{
+        amt-=parseFloat(cpn.discountVal)||0;
+      }
+    }
+  }
+
+  // Manual discount (if applies to this cycle)
+  if(s.manualDiscountType&&(s.manualDiscountRecurring!==false||isFirstCycle)){
+    const dv=parseFloat(s.manualDiscountValue)||0;
+    if(s.manualDiscountType==='pct'){
+      amt-=amt*dv/100;
+    }else{
+      amt-=dv;
+    }
+  }
+
+  return Math.max(0,Math.round(amt*100)/100);
+}
+
+// True if any discount is currently in effect for the next cycle
+function hasActiveDiscount(s){
+  if(!s)return false;
+  const isFirstCycle=!s.lastChargedAt;
+  if(s.couponCode&&(s.couponRecurring||isFirstCycle))return true;
+  if(s.manualDiscountType&&(s.manualDiscountRecurring!==false||isFirstCycle))return true;
+  return false;
+}
+
 // =====================================================
 // API helpers (subscriptions)
 // =====================================================
@@ -9881,17 +9934,25 @@ function renderSubscriptions(){
     groups[st].forEach(s=>{
       const c=s.contactId?getContact(s.contactId):null;
       const cycle=s.billingCycle||'monthly';
-      // cyclePrice is the canonical price; items are display-only line breakdown
-      const total=parseFloat(s.cyclePrice||0);
+      const sticker=parseFloat(s.cyclePrice||0);
+      const effective=calcSubNextCharge(s);
+      const discounted=hasActiveDiscount(s)&&effective!==sticker;
       const nd=s.nextDueDate||calcNextDueDate(s.startDate,cycle);
       const failBadge=(s.status==='suspended'&&s.failedChargeCount)?'<span style="font-size:10px;font-weight:700;color:#f87171;margin-left:6px">'+s.failedChargeCount+' failed charge'+(s.failedChargeCount===1?'':'s')+'</span>':'';
+      // Price cell: when discounted, show sticker struck through above the effective amount
+      const priceCell=discounted
+        ? '<div style="font-size:11px;color:var(--text-muted);text-decoration:line-through;line-height:1">'+fmt$(sticker)+'</div>'
+          +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange);line-height:1.2">'+fmt$(effective)+'</div>'
+          +'<div style="font-size:10px;color:#34d399;text-transform:uppercase">/'+cycle+' after discount</div>'
+        : '<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(sticker)+'</div>'
+          +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase">/'+cycle+'</div>';
       html+='<div class="sub-row '+s.status+'" onclick="openSubDetail(\''+s.id+'\')">'
         +'<div><div class="sub-name">'+(c?esc(c.name):esc(s.planName||'Unnamed'))+'</div>'
         +(c&&c.company?'<div class="sub-biz">'+esc(c.company)+'</div>':'')
         +'<span class="sub-cycle-badge">'+cycle+'</span>'+failBadge+'</div>'
         +'<div class="sub-date-cell"><strong>'+fmtDate(s.startDate)+'</strong>Started</div>'
         +'<div class="sub-date-cell"><strong>'+(nd?fmtDate(nd):'TBD')+'</strong>Next Due</div>'
-        +'<div><div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(total)+'</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase">/'+cycle+'</div></div>'
+        +'<div>'+priceCell+'</div>'
         +'<div class="sub-actions" onclick="event.stopPropagation()">'
         +(canManageSubscriptions()?'<button class="btn btn-ghost btn-sm" onclick="openSubModal(\''+s.id+'\')">Edit</button>':'')
         +(canManageSubscriptions()&&s.status==='active'?'<button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border)" onclick="pauseSub(\''+s.id+'\')">Pause</button>':'')
@@ -9946,7 +10007,9 @@ function _renderSubDetailModal(s){
 
 function _renderSubDetailDetails(s,c){
   const nd=s.nextDueDate||calcNextDueDate(s.startDate,s.billingCycle||'monthly');
-  const total=parseFloat(s.cyclePrice||0);
+  const sticker=parseFloat(s.cyclePrice||0);
+  const effective=calcSubNextCharge(s);
+  const discounted=hasActiveDiscount(s)&&effective!==sticker;
   const owner=s.ownerUserId?getUserById(s.ownerUserId):null;
   const card=c&&c.squareCards?(c.squareCards.find(function(cd){return cd.id===s.cardId;})):null;
 
@@ -9979,7 +10042,13 @@ function _renderSubDetailDetails(s,c){
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Cycle</div><div style="font-size:13px;font-weight:600">'+(s.billingCycle||'monthly')+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Started</div><div style="font-size:13px;font-weight:600">'+fmtDate(s.startDate)+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Next Due</div><div style="font-size:13px;font-weight:600">'+(s.status==='active'?(nd?fmtDate(nd):'TBD'):'\u2014')+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Per Cycle</div><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange)">'+fmt$(total)+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Per Cycle</div>'
+    +(discounted
+      ? '<div style="font-size:11px;color:var(--text-muted);text-decoration:line-through;line-height:1">'+fmt$(sticker)+'</div>'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange);line-height:1.2">'+fmt$(effective)+'</div>'
+        +'<div style="font-size:10px;color:#34d399">after discount</div>'
+      : '<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange)">'+fmt$(sticker)+'</div>')
+    +'</div>'
     +'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Card on File</div><div style="font-size:12px">'+(card?(esc(card.brand||'Card')+' \u00b7\u00b7\u00b7\u00b7 '+esc(card.last4||'')):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
@@ -10643,12 +10712,29 @@ async function savePlan(){
   toast('Plan '+(isEdit?'updated':'created')+'.','success');
 }
 
-async function togglePlanActive(id,newActive){
+function togglePlanActive(id,newActive){
   if(!canManagePlans()){toast('Permission denied.','error');return;}
+  const p=getPlan(id);if(!p)return;
+  if(newActive){
+    // Activation is harmless: one-click, no prompt
+    return _doTogglePlanActive(id,true);
+  }
+  // Deactivation prompts to prevent accidents. Existing subscribers keep
+  // billing; only NEW subscriptions can no longer pick this plan.
+  const subsCount=(db.subscriptions||[]).filter(function(s){return s.planId===id&&(s.status==='active'||s.status==='paused'||s.status==='suspended');}).length;
+  const subsNote=subsCount?'<p style="font-size:12px;color:var(--text-muted);margin-top:8px">'+subsCount+' active or paused subscription'+(subsCount===1?'':'s')+' will continue billing on this plan. Only new subscriptions are blocked.</p>':'<p style="font-size:12px;color:var(--text-muted);margin-top:8px">No active subscriptions reference this plan.</p>';
+  openModal('Deactivate Plan',
+    '<p>Deactivate plan <strong style="color:var(--text)">'+esc(p.name)+'</strong>?</p>'+subsNote,
+    '<button class="btn btn-ghost" onclick="closeModal();setTimeout(openSubPlansModal,50)">Nevermind</button>'
+    +'<button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border);padding:9px 16px;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer" onclick="_doTogglePlanActive(\''+id+'\',false)">Deactivate</button>');
+}
+
+async function _doTogglePlanActive(id,newActive){
   try{await apiPlanUpdate({id:id,active:newActive});}
   catch(e){toast(e.message,'error');return;}
   await fetchFromServer();
-  _renderSubPlansModalBody();
+  closeModal();
+  setTimeout(openSubPlansModal,50);
   toast('Plan '+(newActive?'activated':'deactivated')+'.','success');
 }
 
