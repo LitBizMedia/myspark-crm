@@ -7483,6 +7483,24 @@ function checkApptConflict(){
       return;
     }
   }
+  // Per-staff daily booking cap (schedule.maxBookingsPerDay set in Edit Schedule).
+  if(userId && date && !apptOverride){
+    var userCap=getUserById(userId);
+    var cap=userCap && userCap.schedule && parseInt(userCap.schedule.maxBookingsPerDay);
+    if(cap && cap>0){
+      var thisApptId=state.modal && state.modal.id;
+      var existing=db.appointments.filter(function(a){
+        return a.date===date && a.assignedTo===userId && a.status!=='cancelled' && a.id!==thisApptId;
+      }).length;
+      if(existing>=cap){
+        var wbCap=document.getElementById('appt-warn');
+        var btnCap=document.getElementById('appt-save-btn');
+        if(wbCap){wbCap.classList.remove('hidden');wbCap.innerHTML='<strong>Daily limit reached:</strong> '+esc(userCap.name||userCap.username)+' is at the daily cap of '+cap+' booking'+(cap!==1?'s':'')+' on this date.<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
+        if(btnCap){btnCap.disabled=true;btnCap.style.opacity='.4';}
+        return;
+      }
+    }
+  }
   // Schedule availability check
   if(userId&&date){
     const schHrs=getCalHours(date,userId);
@@ -8655,10 +8673,8 @@ function openEditUserModal(userId){
     +'<input id="eu-pass" type="password" autocomplete="new-password" placeholder=""></div>'+roleField+'</div>'
     +'<div class="form-group"><label>Confirm New Password</label>'
     +'<input id="eu-pass2" type="password" autocomplete="new-password" placeholder=""></div>'
-    +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
-    +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Working Schedule</div>'
-    +buildSchedSection(false);
-  openModal('Edit: '+(u.name||u.username),b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEditUser()">Save Changes</button>','modal-xl');
+    +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>';
+  openModal('Edit: '+(u.name||u.username),b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEditUser()">Save Changes</button>','modal-lg');
 }
 
 async function saveEditUser(){
@@ -8666,11 +8682,11 @@ async function saveEditUser(){
   const name=document.getElementById('eu-name').value.trim();
   const pass=document.getElementById('eu-pass').value;
   const role=!isAdmin&&document.getElementById('eu-role')?document.getElementById('eu-role').value:null;
-  const sched=JSON.parse(JSON.stringify(editSched));
-  DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
+  // Schedule + date overrides are managed in the dedicated Edit Schedule modal
+  // (calendar icon on the user card). They are not in this form.
   const euEmail=(document.getElementById('eu-email')&&document.getElementById('eu-email').value||'').trim().toLowerCase();
   const pass2=document.getElementById('eu-pass2')&&document.getElementById('eu-pass2').value||'';
-  const updates={name,color:state.selUserColor,schedule:sched,dateOverrides:[...userOvs]};
+  const updates={name,color:state.selUserColor};
   if(euEmail)updates.email=euEmail;
   if(role)updates.role=role;
   if(pass){
@@ -8718,8 +8734,6 @@ async function saveEditUser(){
         if(euEmail)syncBody.email=euEmail;
         if(updates.passwordHash&&pass)syncBody.newPassword=pass;
         if(updates.color)syncBody.color=updates.color;
-        if(updates.schedule)syncBody.schedule=updates.schedule;
-        if(updates.dateOverrides)syncBody.dateOverrides=updates.dateOverrides;
         var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
           method:'POST',
           credentials:'include',
