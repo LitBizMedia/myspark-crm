@@ -15,6 +15,8 @@ function rowToPlan(row) {
     name: row.name,
     description: row.description || '',
     active: row.active,
+    categoryId: row.category_id || null,
+    taxable: row.taxable !== false,
     items: row.items || [],
     pricing: row.pricing || {},
     notes: row.notes || '',

@@ -114,9 +114,23 @@ function planToFrontend(row) {
     name: row.name,
     description: row.description || '',
     active: row.active,
+    categoryId: row.category_id || null,
+    taxable: row.taxable !== false,
     items: row.items || [],
     pricing: row.pricing || {},
     notes: row.notes || '',
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+    createdBy: row.created_by
+  };
+}
+
+function planCategoryToFrontend(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    name: row.name,
+    sortOrder: row.sort_order || 0,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     createdBy: row.created_by
@@ -189,7 +203,7 @@ async function handler(req, res) {
     const [
       blobResult, servicesResult, variationsResult, classesResult,
       usersResult, widgetsResult, paymentsResult, appointmentsResult,
-      plansResult, subscriptionsResult
+      plansResult, subscriptionsResult, planCategoriesResult
     ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
@@ -238,6 +252,10 @@ async function handler(req, res) {
       db.query(
         'SELECT * FROM subscriptions WHERE subaccount_id = $1 ORDER BY created_at DESC',
         [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM subscription_plan_categories WHERE subaccount_id = $1 ORDER BY sort_order ASC, name ASC',
+        [subaccountId]
       )
     ]);
 
@@ -252,7 +270,8 @@ async function handler(req, res) {
       payments: paymentsResult.rows.map(paymentToFrontend),
       appointments: appointmentsResult.rows.map(appointmentToFrontend),
       subscriptionPlans: plansResult.rows.map(planToFrontend),
-      subscriptions: subscriptionsResult.rows.map(subscriptionToFrontend)
+      subscriptions: subscriptionsResult.rows.map(subscriptionToFrontend),
+      subscriptionPlanCategories: planCategoriesResult.rows.map(planCategoryToFrontend)
     });
   } catch (e) {
     console.error('data-load error:', e.message);

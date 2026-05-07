@@ -59,11 +59,12 @@ async function handler(req, res) {
   const name = String(body.name || '').trim();
   const description = String(body.description || '').trim();
   const notes = String(body.notes || '').trim();
-  const items = normalizeItems(body.items);
+  const items = normalizeItems(body.items);  // optional now, may be empty
   const pricing = body.pricing || {};
+  const categoryId = body.categoryId || null;
+  const taxable = body.taxable !== false;  // default TRUE
 
   if (!name) return res.status(400).json({ error: 'Plan name is required' });
-  if (items.length === 0) return res.status(400).json({ error: 'Plan must have at least one item' });
 
   const pricingError = validatePricing(pricing);
   if (pricingError) return res.status(400).json({ error: pricingError });
@@ -79,13 +80,25 @@ async function handler(req, res) {
   }
 
   try {
+    // Verify category if provided
+    if (categoryId) {
+      const c = await db.query(
+        'SELECT id FROM subscription_plan_categories WHERE id = $1 AND subaccount_id = $2',
+        [categoryId, auth.subaccount_id]
+      );
+      if (!c.rows.length) return res.status(404).json({ error: 'Category not found' });
+    }
+
     await db.query(
       `INSERT INTO subscription_plans (
         id, subaccount_id, name, description, active, items, pricing, notes,
+        category_id, taxable,
         created_at, updated_at, created_by
-      ) VALUES ($1, $2, $3, $4, TRUE, $5::jsonb, $6::jsonb, $7, NOW(), NOW(), $8)`,
+      ) VALUES ($1, $2, $3, $4, TRUE, $5::jsonb, $6::jsonb, $7,
+                $8, $9,
+                NOW(), NOW(), $10)`,
       [id, auth.subaccount_id, name, description, JSON.stringify(items),
-       JSON.stringify(cleanPricing), notes, auth.user_id]
+       JSON.stringify(cleanPricing), notes, categoryId, taxable, auth.user_id]
     );
 
     await logAudit({
@@ -98,7 +111,7 @@ async function handler(req, res) {
       targetType: 'subscription_plan',
       targetId: id,
       targetSubaccountId: auth.subaccount_id,
-      metadata: { name, item_count: items.length }
+      metadata: { name, category_id: categoryId, taxable, item_count: items.length }
     });
 
     const verify = await db.query('SELECT * FROM subscription_plans WHERE id = $1', [id]);

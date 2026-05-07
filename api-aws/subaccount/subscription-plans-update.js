@@ -86,8 +86,22 @@ async function handler(req, res) {
     }
     if (Array.isArray(body.items)) {
       const items = normalizeItems(body.items);
-      if (items.length === 0) return res.status(400).json({ error: 'Plan must have at least one item' });
+      // Items are optional now (plans don't require them); empty allowed
       updates.push(`items = $${i++}::jsonb`); params.push(JSON.stringify(items));
+    }
+    if (body.categoryId !== undefined) {
+      // null clears the category; non-null must be valid
+      if (body.categoryId) {
+        const c = await db.query(
+          'SELECT id FROM subscription_plan_categories WHERE id = $1 AND subaccount_id = $2',
+          [body.categoryId, auth.subaccount_id]
+        );
+        if (!c.rows.length) return res.status(404).json({ error: 'Category not found' });
+      }
+      updates.push(`category_id = $${i++}`); params.push(body.categoryId || null);
+    }
+    if (typeof body.taxable === 'boolean') {
+      updates.push(`taxable = $${i++}`); params.push(body.taxable);
     }
     if (body.pricing) {
       const err = validatePricing(body.pricing);

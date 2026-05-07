@@ -1987,6 +1987,7 @@ let db={
   users:[],
   subscriptions:[],
   subscriptionPlans:[],
+  subscriptionPlanCategories:[],
   forms:[],
   formSubmissions:[],
   customFieldCategories:[],
@@ -8058,6 +8059,7 @@ async function fetchFromServer(){
       // The blob fields are stripped server-side on save; these are now the source of truth.
       if(Array.isArray(result.subscriptionPlans))db.subscriptionPlans=result.subscriptionPlans;
       if(Array.isArray(result.subscriptions))db.subscriptions=result.subscriptions;
+      if(Array.isArray(result.subscriptionPlanCategories))db.subscriptionPlanCategories=result.subscriptionPlanCategories;
       // Users from subaccount_users table (UUIDs), not from blob.
       if(result.users){
         db.users=result.users.map(function(u){
@@ -9793,6 +9795,36 @@ async function apiPlanDelete(id){
   }
   return j;
 }
+async function apiCategoryCreate(payload){
+  const r=await fetch(apiUrl('/api/subaccount/subscription-plan-categories-create'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok)throw new Error(j.error||'Failed to create category');
+  return j;
+}
+async function apiCategoryUpdate(payload){
+  const r=await fetch(apiUrl('/api/subaccount/subscription-plan-categories-update'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok)throw new Error(j.error||'Failed to update category');
+  return j;
+}
+async function apiCategoryDelete(id){
+  const r=await fetch(apiUrl('/api/subaccount/subscription-plan-categories-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id})
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok)throw new Error(j.error||'Delete failed');
+  return j;
+}
 
 // =====================================================
 // List view
@@ -10377,24 +10409,39 @@ async function _doDeleteSub(id){
 // =====================================================
 // Plans catalog modal
 // =====================================================
+let _planFilterCat='';   // '' means all; '__none__' means uncategorized
+let _planFilterStatus='active'; // 'active' | 'inactive' | 'all'
+
 function openSubPlansModal(){
   if(!canManagePlans()){toast('Only admins can manage plans.','error');return;}
   _renderSubPlansModalBody();
 }
 
+function _setPlanCatFilter(cat){_planFilterCat=cat;_renderSubPlansModalBody();}
+function _setPlanStatusFilter(s){_planFilterStatus=s;_renderSubPlansModalBody();}
+
 function _renderSubPlansModalBody(){
   const plans=db.subscriptionPlans||[];
-  const active=plans.filter(function(p){return p.active;});
-  const inactive=plans.filter(function(p){return !p.active;});
+  const cats=db.subscriptionPlanCategories||[];
+
+  // Filter
+  let visible=plans.slice();
+  if(_planFilterStatus==='active')visible=visible.filter(function(p){return p.active;});
+  else if(_planFilterStatus==='inactive')visible=visible.filter(function(p){return !p.active;});
+  if(_planFilterCat==='__none__')visible=visible.filter(function(p){return !p.categoryId;});
+  else if(_planFilterCat)visible=visible.filter(function(p){return p.categoryId===_planFilterCat;});
 
   function planRow(p){
     const cycleSummary=SUB_CYCLES.filter(function(cy){return p.pricing&&p.pricing[cy]&&p.pricing[cy].enabled;}).map(function(cy){return cy[0].toUpperCase()+cy.slice(1)+' '+fmt$(p.pricing[cy].price);}).join(' \u00b7 ');
+    const cat=p.categoryId?cats.find(function(c){return c.id===p.categoryId;}):null;
+    const catBadge=cat?'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--purple-dim);color:var(--purple-light);margin-right:6px">'+esc(cat.name)+'</span>':'';
+    const taxBadge=p.taxable===false?'<span style="font-size:10px;color:var(--text-muted);margin-left:6px">non-taxable</span>':'';
     return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid '+(p.active?'#34d399':'var(--text-dim)')+';border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px">'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700">'+esc(p.name)+(p.active?'':' <span style="font-size:10px;color:var(--text-muted);font-weight:400">(inactive)</span>')+'</div>'
-      +(p.description?'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+esc(p.description)+'</div>':'')
-      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">'+(p.items||[]).length+' item'+((p.items||[]).length===1?'':'s')+(cycleSummary?' \u00b7 '+cycleSummary:'')+'</div>'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700">'+catBadge+esc(p.name)+(p.active?'':' <span style="font-size:10px;color:var(--text-muted);font-weight:400">(inactive)</span>')+taxBadge+'</div>'
+      +(p.description?'<div style="font-size:12px;color:var(--text-muted);margin-top:4px">'+esc(p.description)+'</div>':'')
+      +(cycleSummary?'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">'+cycleSummary+'</div>':'')
       +'</div>'
       +'<div style="display:flex;gap:5px;flex-shrink:0">'
       +'<button class="btn btn-ghost btn-sm" onclick="openPlanEditModal(\''+p.id+'\')">Edit</button>'
@@ -10404,30 +10451,52 @@ function _renderSubPlansModalBody(){
       +'</div></div>';
   }
 
-  let body='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:13px;color:var(--text-muted)">'+plans.length+' plan'+(plans.length===1?'':'s')+'</div><button class="btn btn-primary btn-sm" onclick="openPlanEditModal(null)">+ New Plan</button></div>';
+  // Status filter chips
+  const statusChips='<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +['active','inactive','all'].map(function(s){
+      const lbl=s==='active'?'Active':s==='inactive'?'Inactive':'All';
+      const isAct=_planFilterStatus===s;
+      return '<button class="chip'+(isAct?' active':'')+'" onclick="_setPlanStatusFilter(\''+s+'\')">'+lbl+'</button>';
+    }).join('')+'</div>';
+
+  // Category filter chips
+  const usedCats=cats.filter(function(c){return plans.some(function(p){return p.categoryId===c.id;});});
+  const hasUncat=plans.some(function(p){return !p.categoryId;});
+  const catChips='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'
+    +'<button class="chip'+(_planFilterCat===''?' active':'')+'" onclick="_setPlanCatFilter(\'\')">All Categories</button>'
+    +usedCats.map(function(c){
+      return '<button class="chip'+(_planFilterCat===c.id?' active':'')+'" onclick="_setPlanCatFilter(\''+c.id+'\')">'+esc(c.name)+'</button>';
+    }).join('')
+    +(hasUncat?'<button class="chip'+(_planFilterCat==='__none__'?' active':'')+'" onclick="_setPlanCatFilter(\'__none__\')">Uncategorized</button>':'')
+    +'</div>';
+
+  let body='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">'
+    +'<div style="font-size:13px;color:var(--text-muted)">'+plans.length+' total plan'+(plans.length===1?'':'s')+'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="openPlanCategoriesModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Manage Categories</button>'
+    +'<button class="btn btn-primary btn-sm" onclick="openPlanEditModal(null)">+ New Plan</button></div>'
+    +'</div>'
+    +statusChips
+    +(cats.length||hasUncat?catChips:'')
+    +'<div style="margin-top:14px">';
+
   if(!plans.length){
     body+='<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px">No plans yet. Click <strong>+ New Plan</strong> to create your first one.</div>';
+  }else if(!visible.length){
+    body+='<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px">No plans match the current filters. <a onclick="_setPlanCatFilter(\'\');_setPlanStatusFilter(\'all\')" style="color:var(--orange);cursor:pointer;text-decoration:underline">Clear filters</a></div>';
   }else{
-    if(active.length){
-      body+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#34d399;margin:14px 0 6px">Active <span style="font-size:10px;color:var(--text-muted);font-weight:400">('+active.length+')</span></div>';
-      body+=active.map(planRow).join('');
-    }
-    if(inactive.length){
-      body+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin:14px 0 6px">Inactive <span style="font-size:10px;font-weight:400">('+inactive.length+')</span></div>';
-      body+=inactive.map(planRow).join('');
-    }
+    body+=visible.map(planRow).join('');
   }
+  body+='</div>';
+
   state.modal={type:'subPlans'};
-  openModal('Subscription Plans',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>','modal-lg');
+  openModal('Subscription Plans',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>','modal-xl');
 }
 
-let _planEditItems=[];
 let _planEditPricing={weekly:{enabled:false,price:0},monthly:{enabled:true,price:0},quarterly:{enabled:false,price:0},annual:{enabled:false,price:0}};
 
 function openPlanEditModal(id){
   if(!canManagePlans()){toast('Permission denied.','error');return;}
   const p=id?getPlan(id):null;
-  _planEditItems=p?JSON.parse(JSON.stringify(p.items||[])):[];
   if(p&&p.pricing){
     _planEditPricing={};
     SUB_CYCLES.forEach(function(cy){
@@ -10443,6 +10512,8 @@ function openPlanEditModal(id){
 
 function _renderPlanEditModalBody(p){
   const isEdit=!!p;
+  const cats=db.subscriptionPlanCategories||[];
+
   const pricingRows=SUB_CYCLES.map(function(cy){
     const cfg=_planEditPricing[cy]||{enabled:false,price:0};
     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
@@ -10452,13 +10523,18 @@ function _renderPlanEditModalBody(p){
       +'</div>';
   }).join('');
 
+  const catOpts='<option value="">Uncategorized</option>'+cats.map(function(c){
+    return '<option value="'+c.id+'"'+(p&&p.categoryId===c.id?' selected':'')+'>'+esc(c.name)+'</option>';
+  }).join('');
+
   const body='<div class="form-row">'
     +'<div class="form-group"><label>Plan Name *</label><input id="pe-name" type="text" value="'+esc(p&&p.name||'')+'" placeholder="e.g. SEO Retainer"></div>'
-    +'<div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:18px"><input type="checkbox" id="pe-active" '+(p&&!p.active?'':'checked')+' style="width:16px;height:16px"><label for="pe-active" style="font-size:13px;cursor:pointer">Active (selectable for new subscriptions)</label></div>'
+    +'<div class="form-group"><label>Category</label><div style="display:flex;gap:6px"><select id="pe-cat" style="flex:1">'+catOpts+'</select>'+(canManagePlans()?'<button type="button" class="btn btn-ghost btn-sm" onclick="openPlanCategoriesModal(true)" title="Manage categories">+</button>':'')+'</div></div>'
     +'</div>'
-    +'<div class="form-group"><label>Description</label><textarea id="pe-desc" rows="2" placeholder="What does this plan include?">'+esc(p&&p.description||'')+'</textarea></div>'
-    +'<div class="form-group"><label style="display:flex;justify-content:space-between;align-items:center"><span>Items *</span><button type="button" class="btn btn-purple btn-sm" onclick="_addPlanItem()">+ Add Item</button></label>'
-    +'<div id="pe-items">'+_renderPlanItems()+'</div>'
+    +'<div class="form-group"><label>Description</label><textarea id="pe-desc" rows="3" placeholder="What does this plan include? Free text shown to staff and on receipts.">'+esc(p&&p.description||'')+'</textarea></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:18px"><input type="checkbox" id="pe-active" '+(p&&!p.active?'':'checked')+' style="width:16px;height:16px"><label for="pe-active" style="font-size:13px;cursor:pointer">Active (selectable for new subscriptions)</label></div>'
+    +'<div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:18px"><input type="checkbox" id="pe-taxable" '+(p&&p.taxable===false?'':'checked')+' style="width:16px;height:16px"><label for="pe-taxable" style="font-size:13px;cursor:pointer">Taxable (each charge cycle adds tax per subaccount tax settings)</label></div>'
     +'</div>'
     +'<div class="form-group"><label>Pricing per Cycle * <span style="font-weight:400;color:var(--text-muted)">(at least one required)</span></label>'
     +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px">'+pricingRows+'</div>'
@@ -10467,41 +10543,9 @@ function _renderPlanEditModalBody(p){
 
   openModal(isEdit?'Edit Plan':'New Plan',body,
     '<button class="btn btn-ghost" onclick="_backToSubPlansModal()">Back</button><button class="btn btn-primary" onclick="savePlan()">'+(isEdit?'Save Changes':'Create Plan')+'</button>',
-    'modal-lg');
+    'modal-xl');
 }
 
-function _renderPlanItems(){
-  if(!_planEditItems.length){
-    return '<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No items yet.</div>';
-  }
-  return _planEditItems.map(function(it,i){
-    return '<div style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px">'
-      +'<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Name</div>'
-      +'<input type="text" id="pi-name-'+i+'" value="'+esc(it.name||'')+'" onchange="_syncPlanItem('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none">'
-      +'</div>'
-      +'<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Description</div>'
-      +'<input type="text" id="pi-desc-'+i+'" value="'+esc(it.description||'')+'" onchange="_syncPlanItem('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none">'
-      +'</div>'
-      +'<div style="display:flex;align-items:center;padding-top:18px;gap:5px"><input type="checkbox" id="pi-tax-'+i+'"'+(it.taxable!==false?' checked':'')+' onchange="_syncPlanItem('+i+')"><label for="pi-tax-'+i+'" style="font-size:11px;color:var(--text-muted);margin:0">Taxable</label></div>'
-      +'<div style="padding-top:18px"><button class="icon-btn-xs" onclick="_rmPlanItem('+i+')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
-      +'</div>';
-  }).join('');
-}
-
-function _addPlanItem(){
-  _planEditItems.push({id:'pi-'+uid(),name:'',description:'',taxable:true});
-  const el=document.getElementById('pe-items');if(el)el.innerHTML=_renderPlanItems();
-}
-function _rmPlanItem(i){
-  _planEditItems.splice(i,1);
-  const el=document.getElementById('pe-items');if(el)el.innerHTML=_renderPlanItems();
-}
-function _syncPlanItem(i){
-  const it=_planEditItems[i];if(!it)return;
-  const n=document.getElementById('pi-name-'+i);if(n)it.name=n.value.trim();
-  const d=document.getElementById('pi-desc-'+i);if(d)it.description=d.value.trim();
-  const t=document.getElementById('pi-tax-'+i);if(t)it.taxable=t.checked;
-}
 function _togglePlanCycle(cy){
   const en=document.getElementById('pp-en-'+cy);if(!en)return;
   _planEditPricing[cy].enabled=en.checked;
@@ -10512,7 +10556,6 @@ function _updatePlanPrice(cy){
   _planEditPricing[cy].price=parseFloat(pr.value)||0;
 }
 function _backToSubPlansModal(){
-  // Close edit modal and re-open list
   closeModal();
   setTimeout(openSubPlansModal,50);
 }
@@ -10524,22 +10567,17 @@ async function savePlan(){
   const description=(document.getElementById('pe-desc').value||'').trim();
   const notes=(document.getElementById('pe-notes').value||'').trim();
   const active=document.getElementById('pe-active').checked;
+  const taxable=document.getElementById('pe-taxable').checked;
+  const categoryId=document.getElementById('pe-cat').value||null;
 
   if(!name){toast('Plan name is required.','error');return;}
 
-  // Sync items from DOM
-  _planEditItems.forEach(function(_,i){_syncPlanItem(i);});
-  const items=_planEditItems.filter(function(it){return it.name&&it.name.trim();});
-  if(!items.length){toast('At least one item is required.','error');return;}
-
   // Sync pricing from DOM
-  SUB_CYCLES.forEach(function(cy){
-    _updatePlanPrice(cy);
-  });
+  SUB_CYCLES.forEach(function(cy){_updatePlanPrice(cy);});
   const enabledCount=SUB_CYCLES.filter(function(cy){return _planEditPricing[cy].enabled&&_planEditPricing[cy].price>0;}).length;
   if(!enabledCount){toast('Enable at least one cycle with a price > 0.','error');return;}
 
-  const payload={name:name,description:description,notes:notes,active:active,items:items,pricing:_planEditPricing};
+  const payload={name:name,description:description,notes:notes,active:active,taxable:taxable,categoryId:categoryId,pricing:_planEditPricing};
 
   try{
     if(isEdit){
@@ -10587,6 +10625,105 @@ async function _doDeletePlan(id){
   closeModal();
   setTimeout(openSubPlansModal,50);
   toast('Plan deleted.','success');
+}
+
+// =====================================================
+// Categories management modal
+// =====================================================
+// Opens a list of plan categories with inline rename + delete.
+// fromPlanEdit=true means we came from the plan edit modal; clicking Done
+// returns there instead of to the plans list.
+function openPlanCategoriesModal(fromPlanEdit){
+  if(!canManagePlans()){toast('Only admins can manage categories.','error');return;}
+  state.modal={type:'planCategories',from:fromPlanEdit?'planEdit':'plansList',planEditId:state.modal&&state.modal.id};
+  _renderPlanCategoriesModal();
+}
+
+function _renderPlanCategoriesModal(){
+  const cats=db.subscriptionPlanCategories||[];
+  const plans=db.subscriptionPlans||[];
+
+  const inpStyle='background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none';
+
+  // Add row
+  let body='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:14px">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Add Category</div>'
+    +'<div style="display:flex;gap:8px"><input id="cat-new-name" type="text" placeholder="e.g. Marketing" style="'+inpStyle+';flex:1" onkeydown="if(event.key===\'Enter\')_doAddCategory()">'
+    +'<button class="btn btn-primary btn-sm" onclick="_doAddCategory()">Add</button></div>'
+    +'</div>';
+
+  if(!cats.length){
+    body+='<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">No categories yet. Add your first one above.</div>';
+  }else{
+    body+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Categories ('+cats.length+')</div>';
+    body+=cats.map(function(c){
+      const planCount=plans.filter(function(p){return p.categoryId===c.id;}).length;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px">'
+        +'<input type="text" id="cat-name-'+c.id+'" value="'+esc(c.name)+'" style="'+inpStyle+';flex:1" onblur="_doRenameCategory(\''+c.id+'\')" onkeydown="if(event.key===\'Enter\')this.blur()">'
+        +'<span style="font-size:11px;color:var(--text-muted);min-width:80px;text-align:right">'+planCount+' plan'+(planCount===1?'':'s')+'</span>'
+        +'<button class="btn btn-danger btn-sm" onclick="_doDeleteCategory(\''+c.id+'\','+planCount+')">Delete</button>'
+        +'</div>';
+    }).join('');
+  }
+
+  const back=state.modal&&state.modal.from==='planEdit'
+    ? '<button class="btn btn-primary" onclick="_returnToPlanEdit()">Done</button>'
+    : '<button class="btn btn-primary" onclick="_returnToSubPlans()">Done</button>';
+
+  openModal('Manage Categories',body,back,'modal-lg');
+}
+
+async function _doAddCategory(){
+  const inp=document.getElementById('cat-new-name');
+  if(!inp)return;
+  const name=(inp.value||'').trim();
+  if(!name){toast('Enter a category name.','error');return;}
+  try{await apiCategoryCreate({name:name});}
+  catch(e){toast(e.message,'error');return;}
+  inp.value='';
+  await fetchFromServer();
+  _renderPlanCategoriesModal();
+  toast('Category added.','success');
+}
+
+async function _doRenameCategory(id){
+  const inp=document.getElementById('cat-name-'+id);
+  if(!inp)return;
+  const cat=(db.subscriptionPlanCategories||[]).find(function(c){return c.id===id;});
+  if(!cat)return;
+  const newName=(inp.value||'').trim();
+  if(!newName){
+    inp.value=cat.name;
+    return;
+  }
+  if(newName===cat.name)return;
+  try{await apiCategoryUpdate({id:id,name:newName});}
+  catch(e){toast(e.message,'error');inp.value=cat.name;return;}
+  await fetchFromServer();
+  toast('Category renamed.','success');
+}
+
+function _doDeleteCategory(id,planCount){
+  const cat=(db.subscriptionPlanCategories||[]).find(function(c){return c.id===id;});
+  if(!cat)return;
+  const msg=planCount>0
+    ? 'Delete category "'+cat.name+'"? '+planCount+' plan'+(planCount===1?'':'s')+' currently use this category and will become uncategorized.'
+    : 'Delete category "'+cat.name+'"?';
+  if(!confirm(msg))return;
+  apiCategoryDelete(id).then(function(){
+    return fetchFromServer();
+  }).then(function(){
+    _renderPlanCategoriesModal();
+    toast('Category deleted.','success');
+  }).catch(function(e){toast(e.message,'error');});
+}
+
+function _returnToSubPlans(){closeModal();setTimeout(openSubPlansModal,50);}
+function _returnToPlanEdit(){
+  // If we came from the plan edit modal, re-open it
+  const planId=state.modal&&state.modal.planEditId;
+  closeModal();
+  setTimeout(function(){openPlanEditModal(planId);},50);
 }
 
 
@@ -21951,7 +22088,7 @@ function applyRolePermissions(){
   hide('ppt-transactions', !am);
   var bk=document.getElementById('cpt-booking');if(bk)bk.classList.toggle('hidden',!adm);
   var svc=document.getElementById('cpt-service');if(svc)svc.classList.toggle('hidden',prac||r==='user');
-  hide('ppt-subs',      !am);
+  hide('ppt-subs',      prac);
   hide('ppt-invoices',  !am);
   hide('ppt-orders',    !am);
   // Hide View Archive from users/practitioners

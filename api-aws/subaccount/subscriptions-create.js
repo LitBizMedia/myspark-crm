@@ -101,7 +101,16 @@ async function handler(req, res) {
       }
       planNameSnapshot = plan.name;
       cyclePrice = parseFloat(cycleConfig.price);
-      items = plan.items || [];
+      // Plans no longer have items. Synthesize a single line item from the plan
+      // so the payment record on each charge cycle has a valid items array.
+      // The plan-level taxable flag drives the item's taxability.
+      items = [{
+        id: `si-${Date.now()}-plan`,
+        name: plan.name,
+        description: plan.description || '',
+        taxable: plan.taxable !== false,
+        qty: 1
+      }];
     } else {
       // Custom mode: take name and price from body
       planNameSnapshot = String(b.customPlanName || '').trim();
