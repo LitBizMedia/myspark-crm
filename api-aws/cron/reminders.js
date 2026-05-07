@@ -5,12 +5,18 @@
 // AWS schedule: EventBridge → cron(0 * * * ? *)
 //
 // CREDENTIALS: CRON_SECRET (HTTP testing path) from Secrets Manager.
+//
+// CHANGED 2026-05-07: TZ-aware. The 24-hour-out window is computed against
+// each appointment's actual wall-clock time in the subaccount's timezone.
+// Previously the cron compared against UTC noon as a proxy for appt time,
+// which made reminders fire at the wrong hour for any non-UTC business.
 
 const db = require('./lib/db');
 const secrets = require('./lib/secrets');
 const { sendEmail } = require('./lib/resend');
 const { sendSms } = require('./lib/twilio');
 const { wrap } = require('./lib/lambda-adapter');
+const { apptTimestampInTz } = require('./lib/timezone');
 
 async function getCronSecret() {
   return secrets.getKey('myspark/cron/secret', 'CRON_SECRET');
@@ -96,10 +102,11 @@ async function reminderAlreadySent(subaccountId, appointmentId) {
 
 async function runReminders() {
   const now = new Date();
-  const windowStart = new Date(now.getTime() + 22 * 3600000);
-  const windowEnd = new Date(now.getTime() + 26 * 3600000);
-  const startDate = windowStart.toISOString().split('T')[0];
-  const endDate = windowEnd.toISOString().split('T')[0];
+
+  // Cast a wide UTC date net first to limit DB scan, then filter precisely
+  // against each appointment's actual TZ-aware timestamp.
+  const startDate = new Date(now.getTime() + 12 * 3600000).toISOString().slice(0, 10);
+  const endDate   = new Date(now.getTime() + 36 * 3600000).toISOString().slice(0, 10);
 
   const apptsResult = await db.query(
     `SELECT * FROM appointments
@@ -112,19 +119,36 @@ async function runReminders() {
   let smsSent = 0;
   let skipped = 0;
 
+  // Cache subaccount data per-tenant since multiple appts share a subaccount
+  const subDataCache = new Map();
+  async function getCachedSubData(subaccountId) {
+    if (subDataCache.has(subaccountId)) return subDataCache.get(subaccountId);
+    const d = await getSubaccountData(subaccountId);
+    subDataCache.set(subaccountId, d);
+    return d;
+  }
+
   for (const appt of appointments) {
-    const apptDate = new Date(appt.date + 'T12:00:00Z');
+    const data = await getCachedSubData(appt.subaccount_id);
+    if (!data) { skipped++; continue; }
+
+    // Compute the actual appointment timestamp in the subaccount's TZ.
+    // This is the appointment's wall-clock time, converted to absolute UTC.
+    const subTz = (data.settings && data.settings.timezone) || 'America/Chicago';
+    const apptDate = apptTimestampInTz(appt.date, appt.time || '00:00', subTz);
+    if (!apptDate) { skipped++; continue; }
+
     const hoursUntilDate = (apptDate - now) / 3600000;
-    if (hoursUntilDate < 12 || hoursUntilDate > 36) {
+
+    // Window: 22-26 hours away from now (centered on 24h reminder).
+    // Cron runs hourly so this catches every appointment exactly once.
+    if (hoursUntilDate < 22 || hoursUntilDate > 26) {
       skipped++;
       continue;
     }
 
     const alreadySent = await reminderAlreadySent(appt.subaccount_id, appt.id);
     if (alreadySent) { skipped++; continue; }
-
-    const data = await getSubaccountData(appt.subaccount_id);
-    if (!data) { skipped++; continue; }
 
     const contact = appt.contact_id
       ? (data.contacts || []).find(c => c.id === appt.contact_id)
@@ -234,7 +258,7 @@ const httpWrapped = wrap(httpHandler);
 
 exports.handler = async function (event, context) {
   const isScheduledEvent = event && (event['detail-type'] === 'Scheduled Event' || event.source === 'aws.scheduler');
-  
+
   if (isScheduledEvent) {
     try {
       return await runReminders();
@@ -243,6 +267,6 @@ exports.handler = async function (event, context) {
       return { success: false, error: e.message };
     }
   }
-  
+
   return httpWrapped(event, context);
 };

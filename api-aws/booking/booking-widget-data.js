@@ -6,9 +6,13 @@
 // CHANGED 2026-05-05: widget config now read from service_widgets RDS table,
 // not from blob.serviceWidgets. Includes new fields: staff_mode, staff_ids,
 // require_payment, intake_form_id, confirm_message.
+//
+// CHANGED 2026-05-07: TZ-aware. Class session 30-day horizon now computed in
+// the subaccount's timezone, not UTC.
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
+const { todayInTz, dateInTzPlusDays } = require('./lib/timezone');
 
 async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -52,7 +56,6 @@ async function handler(req, res) {
       }
       widget = wResult.rows[0];
     } else {
-      // Fallback: pick first active widget (legacy support; new flows always pass widget_id)
       const wResult = await db.query(
         `SELECT id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,
                 staff_mode, staff_ids, round_robin_config, appointment_types, widget_availability, require_payment,
@@ -66,23 +69,21 @@ async function handler(req, res) {
       widget = wResult.rows[0] || null;
     }
 
-    // 3. Get blob for non-widget settings (workspace settings, not widget-specific)
+    // 3. Get blob for non-widget settings
     const blobResult = await db.query(
       'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
       [subaccountId]
     );
     const blob = blobResult.rows[0]?.data || {};
+    const subTz = (blob.settings && blob.settings.timezone) || 'America/Chicago';
 
-    // 4. Get active services. If widget restricts services, filter them.
-    // Appointment widgets don't use services at all, return empty array.
-    // Class widgets filter to type='class' services AND only the ones in service_ids.
+    // 4. Get active services
     const widgetType = (widget && widget.widget_type) || 'service';
     const widgetServiceIds = widget && Array.isArray(widget.service_ids) ? widget.service_ids : [];
     let svcQuery, svcArgs, skipServiceQuery = false;
     if (widgetType === 'appointment') {
       skipServiceQuery = true;
     } else if (widgetType === 'class') {
-      // Class widget: only return services with type='class', filtered to service_ids if set
       if (widgetServiceIds.length) {
         svcQuery = `SELECT * FROM services
                     WHERE subaccount_id = $1 AND active = true
@@ -125,35 +126,19 @@ async function handler(req, res) {
           )
     ]);
 
-    // 5. Staff: read from subaccount_users (single source of truth).
-    //
-    // For service widgets, staff is INHERITED from the services included in the widget.
-    // The widget exposes only staff who can perform at least one of its services.
-    // widget.staff_ids and widget.staff_mode are IGNORED for service widgets.
-    //
-    // For appointment widgets (Stage 3), staff comes from widget.staff_ids directly,
-    // since there's no service to inherit from.
-    //
-    // For class widgets (Stage 3), staff comes from class session instructors,
-    // not from widget config.
-    // widgetType already declared above.
-
-    let eligibleStaffIds = null; // null = no filter (load all), array = filter to these IDs
+    // 5. Staff
+    let eligibleStaffIds = null;
     if (widgetType === 'service') {
-      // Compute the union of assigned_staff across all services in this widget
       const staffSet = new Set();
       for (const svc of svcResult.rows) {
         const assigned = Array.isArray(svc.assigned_staff) ? svc.assigned_staff : [];
         for (const sid of assigned) staffSet.add(sid);
       }
-      // If no services have assigned_staff, fall through to load all (rare; usually a misconfig)
       eligibleStaffIds = staffSet.size > 0 ? Array.from(staffSet) : null;
     } else if (widgetType === 'appointment') {
-      // Appointment widget uses widget.staff_ids directly
       const widgetStaffIds = widget && Array.isArray(widget.staff_ids) ? widget.staff_ids : [];
       eligibleStaffIds = widgetStaffIds.length > 0 ? widgetStaffIds : null;
     }
-    // Class widgets: leave eligibleStaffIds = null; per-session instructor handled elsewhere
 
     let staffQuery, staffArgs;
     if (eligibleStaffIds && eligibleStaffIds.length) {
@@ -179,17 +164,15 @@ async function handler(req, res) {
       dateOverrides: u.date_overrides || []
     }));
 
-    // 5b. Class widgets: fetch upcoming sessions (next 30 days, scheduled status)
-    // for the services in this widget. Each session is enriched with current
-    // enrolled count so the public page shows availability.
+    // 5b. Class widgets: fetch upcoming sessions in the next 30 days.
+    // BOTH today and the horizon are computed in the subaccount's TZ so
+    // customers in the early hours of the day (UTC-wise) don't lose a day.
     let classSessions = [];
     if (widgetType === 'class') {
       const classServiceIds = svcResult.rows.map(s => s.id);
       if (classServiceIds.length) {
-        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-        const horizon = new Date();
-        horizon.setDate(horizon.getDate() + 30);
-        const horizonStr = horizon.toISOString().slice(0, 10);
+        const today = todayInTz(subTz);
+        const horizonStr = dateInTzPlusDays(30, subTz);
 
         const sessionsResult = await db.query(
           `SELECT id, service_id, instructor_id, title, date, time, duration,
@@ -203,8 +186,6 @@ async function handler(req, res) {
           [subaccountId, classServiceIds, today, horizonStr]
         );
 
-        // Enrich each session with enrolled count and spots remaining.
-        // Filter out cancelled participants. participants is JSONB array.
         classSessions = sessionsResult.rows.map(s => {
           const parts = Array.isArray(s.participants) ? s.participants : [];
           const enrolled = parts.filter(p => p && p.status === 'enrolled').length;
@@ -223,24 +204,22 @@ async function handler(req, res) {
             location: s.location,
             price: parseFloat(s.price) || 0
           };
-          // NOTE: do NOT include the full participants array. PHI exposure risk.
         });
       }
     }
 
-    // 6. Public-safe settings (workspace level, plus widget-level overrides)
+    // 6. Public-safe settings
     const settings = blob.settings || {};
     const bs = settings.bookingSettings || {};
     const taxSettings = bs.tax || (settings.paySettings && settings.paySettings.tax) || {};
     const publicSettings = {
-      timezone:                settings.timezone || 'America/Chicago',
+      timezone:                subTz,
       businessHours:           settings.businessHours || {},
       businessName:            settings.businessName || slug,
       cancellation_policy_text: bs.cancellation_policy_text || '',
       tip_enabled:             bs.tip_enabled || false,
       tip_percentages:         bs.tip_percentages || [10, 15, 20],
       tip_allow_custom:        bs.tip_allow_custom !== false,
-      // Widget-level payment requirement overrides workspace default
       require_payment:         widget ? !!widget.require_payment : (bs.default_payment_mode === 'full'),
       default_payment_mode:    bs.default_payment_mode || 'none',
       tax: {
@@ -261,7 +240,7 @@ async function handler(req, res) {
     return res.status(200).json({
       subaccount_id: subaccountId,
       slug,
-      widget,                    // full widget row (includes new fields)
+      widget,
       services: svcResult.rows,
       variations: varResult.rows,
       class_sessions: classSessions,

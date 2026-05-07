@@ -3,11 +3,12 @@
 // PUBLIC - no auth required
 // Validates a coupon code for a public booking widget. Returns the discount amount.
 //
-// This endpoint does NOT log usage (only booking-submit does, on successful charge).
-// It only validates and returns the discount info so the patient sees it in the summary.
+// CHANGED 2026-05-07: TZ-aware. Coupon expiry is checked against today in the
+// subaccount's timezone, not UTC.
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
+const { todayInTz } = require('./lib/timezone');
 
 function r2(n) { return Math.round((parseFloat(n) || 0) * 100) / 100; }
 
@@ -31,14 +32,12 @@ async function handler(req, res) {
   }
 
   try {
-    // Lookup subaccount
     const saResult = await db.query(
       'SELECT id FROM subaccounts WHERE slug = $1 LIMIT 1', [slug]
     );
     if (!saResult.rows.length) return res.status(404).json({ valid: false, error: 'Not found' });
     const subaccountId = saResult.rows[0].id;
 
-    // If widget_id provided, validate widget allows coupons (Stage 5 will check widget.allow_coupons; for now assume yes)
     if (widget_id) {
       if (!/^[a-z0-9-]{1,64}$/i.test(widget_id)) {
         return res.status(400).json({ valid: false, error: 'Invalid widget id' });
@@ -53,12 +52,12 @@ async function handler(req, res) {
       }
     }
 
-    // Read coupons from blob
     const blobResult = await db.query(
       'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1', [subaccountId]
     );
     const blob = blobResult.rows[0]?.data || {};
     const couponList = blob.coupons || [];
+    const subTz = (blob.settings && blob.settings.timezone) || 'America/Chicago';
 
     const coupon = couponList.find(c =>
       c && c.code && String(c.code).toUpperCase() === cleanCode && c.active !== false
@@ -68,18 +67,18 @@ async function handler(req, res) {
       return res.status(200).json({ valid: false, error: 'Coupon code is not valid' });
     }
 
-    // Check expiration (compare to booking date if provided, else today)
-    const checkDate = date || new Date().toISOString().slice(0, 10);
+    // Check expiration. Compare to either the booking date (passed in) or
+    // today in the subaccount's timezone (NOT UTC; that's a 5-hour error in
+    // Eastern that can falsely flag a still-valid coupon as expired).
+    const checkDate = date || todayInTz(subTz);
     if (coupon.expiresAt && coupon.expiresAt < checkDate) {
       return res.status(200).json({ valid: false, error: 'Coupon has expired' });
     }
 
-    // Check usage limit
     if (coupon.usageLimit && (coupon.usageCount || 0) >= coupon.usageLimit) {
       return res.status(200).json({ valid: false, error: 'Coupon usage limit reached' });
     }
 
-    // Compute discount
     const subtotalNum = parseFloat(subtotal) || 0;
     if (subtotalNum <= 0) {
       return res.status(200).json({ valid: false, error: 'Coupon does not apply to free services' });

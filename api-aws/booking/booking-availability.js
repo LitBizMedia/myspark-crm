@@ -2,9 +2,15 @@
 // GET /api/booking/availability?slug=SLUG&service_id=SID&staff_id=UID|any&date=YYYY-MM-DD
 // PUBLIC - no auth required
 // Returns available time slots for a given service/staff/date
+//
+// CHANGED 2026-05-07: TZ-aware lead time cutoff. The "is this date today, and
+// if so, what's the earliest bookable time" check now uses the subaccount's
+// timezone, not server UTC. Without this, customers in Eastern at 8pm could
+// see slots for the next day filtered by UTC's "today is tomorrow already".
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
+const { todayInTz, nowMinutesInTz } = require('./lib/timezone');
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
@@ -17,29 +23,23 @@ function minsToTime(m) {
   return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 }
 
-function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailability, strictAvailability) {
+function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailability, strictAvailability, tz) {
   const dayKey = DAY_KEYS[new Date(date + 'T12:00:00').getDay()];
   const schedule = staff.schedule || {};
   const daySchedule = schedule[dayKey];
   if (!daySchedule || !daySchedule.on) return [];
 
-  // Check date overrides
   const override = (staff.dateOverrides || []).find(o => o.date === date);
   if (override && override.type === 'off') return [];
 
   let workStart = timeToMins(daySchedule.start || '08:00');
   let workEnd   = timeToMins(daySchedule.end   || '17:00');
 
-  // Intersect with service/widget availability window if defined.
-  // strictAvailability=true means: any day not explicitly 'on' is treated as off.
-  // strictAvailability=false (default) means: missing days fall through to staff schedule.
   const hasAnyAvail = serviceAvailability && Object.keys(serviceAvailability).length > 0;
   if (hasAnyAvail) {
     const sAvail = serviceAvailability[dayKey];
     if (!sAvail || !sAvail.on) {
       if (strictAvailability) return [];
-      // non-strict: missing or off day, but we still allow staff schedule below
-      // (this preserves the old service.availability behavior)
     } else {
       workStart = Math.max(workStart, timeToMins(sAvail.start || '08:00'));
       workEnd   = Math.min(workEnd,   timeToMins(sAvail.end   || '17:00'));
@@ -48,18 +48,18 @@ function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, lea
 
   if (workStart >= workEnd) return [];
 
-  // Lead time cutoff in clinic local minutes (rough - no tz conversion yet)
-  const now = new Date();
-  const todayUtc = now.toISOString().split('T')[0];
-  const cutoffMins = (date === todayUtc)
-    ? now.getHours() * 60 + now.getMinutes() + leadTimeHours * 60
-    : 0;
+  // Lead time cutoff: if the requested date is "today" in the subaccount's
+  // timezone, the earliest bookable slot is now + leadTime. Otherwise no cutoff.
+  const tzToday = todayInTz(tz);
+  let cutoffMins = 0;
+  if (date === tzToday) {
+    cutoffMins = nowMinutesInTz(tz) + leadTimeHours * 60;
+  }
 
   const slots = [];
   for (let t = workStart; t + duration <= workEnd; t += 15) {
     if (t < cutoffMins) continue;
 
-    // Calendar block for this slot: [t - bufBefore, t + duration + bufAfter]
     const slotCalStart = t - bufBefore;
     const slotCalEnd   = t + duration + bufAfter;
 
@@ -95,16 +95,12 @@ async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid date format' });
 
   try {
-    // 1. Subaccount
     const saResult = await db.query(
       'SELECT id FROM subaccounts WHERE slug = $1 LIMIT 1', [slug]
     );
     if (!saResult.rows.length) return res.status(404).json({ error: 'Not found' });
     const subaccountId = saResult.rows[0].id;
 
-    // 2. Look up the bookable item: service OR appointment type from widget JSONB.
-    // Both branches produce the same downstream values: duration, buffers, and
-    // the staff pool to filter against.
     let service = null;
     let widget = null;
     let duration = 60;
@@ -114,7 +110,6 @@ async function handler(req, res) {
     let serviceAvailabilityWindow = {};
 
     if (appointment_type_id) {
-      // Appointment widget path: pull duration/buffers from widget.appointment_types
       const wRes = await db.query(
         `SELECT id, widget_type, staff_ids, appointment_types, widget_availability
          FROM service_widgets
@@ -135,16 +130,11 @@ async function handler(req, res) {
       duration = parseInt(aType.duration) || 30;
       bufBefore = parseInt(aType.buffer_before) || 0;
       bufAfter = parseInt(aType.buffer_after) || 0;
-      // booking_lead_time_hours column may not exist on service_widgets yet.
-      // Default to 0 (no lead time) for now. Future enhancement: add column.
       leadTimeHours = 0;
-      // Appointment widgets use widget_availability as the booking window.
-      // Treated the same as service.availability: {sun:{on,start,end},mon:{...},...}
       serviceAvailabilityWindow = (widget.widget_availability && typeof widget.widget_availability === 'object')
         ? widget.widget_availability
         : {};
     } else {
-      // Service widget path
       const svcResult = await db.query(
         'SELECT * FROM services WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1',
         [service_id, subaccountId]
@@ -158,7 +148,6 @@ async function handler(req, res) {
       leadTimeHours = service.booking_lead_time_hours || 0;
       serviceAvailabilityWindow = (service.availability && typeof service.availability === 'object') ? service.availability : {};
 
-      // Variation overrides
       if (variation_id) {
         const varResult = await db.query(
           'SELECT * FROM service_variations WHERE id = $1 AND service_id = $2 LIMIT 1',
@@ -173,17 +162,13 @@ async function handler(req, res) {
       }
     }
 
-    // 4. Blob for users + settings
     const blobResult = await db.query(
       'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1', [subaccountId]
     );
     const blob     = blobResult.rows[0]?.data || {};
     const settings = blob.settings || {};
-    const bs       = settings.bookingSettings || {};
-    // leadTimeHours and serviceAvailabilityWindow already set in the lookup branch above
+    const subTz = settings.timezone || 'America/Chicago';
 
-    // 5. Staff pool: from subaccount_users (single source of truth).
-    // Service widgets filter by service.assigned_staff; appointment widgets by widget.staff_ids.
     let allowedStaffIds = [];
     if (service) {
       allowedStaffIds = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
@@ -209,7 +194,6 @@ async function handler(req, res) {
     }
     if (!staffPool.length) return res.status(200).json({ slots: [], duration, date });
 
-    // 6. Existing appointments for those staff on this date
     const staffIds = staffPool.map(u => u.id);
     const apptResult = await db.query(
       `SELECT assigned_to, time, duration, buffer_before, buffer_after, status
@@ -223,15 +207,11 @@ async function handler(req, res) {
       apptsByStaff[a.assigned_to].push(a);
     }
 
-    // 7. Compute available slots
-    // strictAvailability: when true, days not explicitly enabled in the
-    // availability map are treated as off. We use strict for widget_availability
-    // (appointment widgets) and lax for service.availability (service widgets).
     const strictAvailability = !!appointment_type_id;
     const slotMap = {};
     for (const staff of staffPool) {
       const appts = apptsByStaff[staff.id] || [];
-      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailabilityWindow, strictAvailability);
+      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailabilityWindow, strictAvailability, subTz);
       for (const s of staffSlots) {
         if (!slotMap[s.time]) slotMap[s.time] = [];
         slotMap[s.time].push(staff.id);

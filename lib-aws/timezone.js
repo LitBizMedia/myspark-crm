@@ -58,10 +58,79 @@ function isPastOrTodayInTz(dateStr, tz) {
   return String(dateStr).slice(0, 10) <= today;
 }
 
+// Current minute-of-day (0-1439) in the given TZ.
+// Use for "is this time slot still bookable today" checks where we need
+// minutes since midnight in the user's local time.
+function nowMinutesInTz(tz) {
+  const zone = tz || DEFAULT_TZ;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: false, timeZone: zone
+    }).formatToParts(new Date());
+    const hh = parseInt(parts.find(p => p.type === 'hour').value, 10) || 0;
+    const mm = parseInt(parts.find(p => p.type === 'minute').value, 10) || 0;
+    return (hh % 24) * 60 + mm;
+  } catch (_) {
+    const d = new Date();
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  }
+}
+
+// Today + N days as YYYY-MM-DD in the given TZ. Avoids DST edge cases by
+// doing the arithmetic on the date string itself.
+function dateInTzPlusDays(days, tz) {
+  const today = todayInTz(tz);
+  const [y, m, d] = today.split('-').map(Number);
+  const future = new Date(Date.UTC(y, m - 1, d + days));
+  return future.toISOString().slice(0, 10);
+}
+
+// Given a date string + time string + IANA TZ, returns the absolute Date
+// representing that wall-clock moment in that TZ.
+//
+// Example: apptTimestampInTz('2026-05-08', '09:00', 'America/New_York')
+// returns the Date object for May 8 9am Eastern (whatever UTC that maps to,
+// accounting for DST automatically).
+function apptTimestampInTz(dateStr, timeStr, tz) {
+  if (!dateStr) return null;
+  const zone = tz || DEFAULT_TZ;
+  const [y, mo, d] = String(dateStr).slice(0, 10).split('-').map(Number);
+  const [h, m] = String(timeStr || '00:00').split(':').map(Number);
+
+  // Step 1: pretend the wall time is UTC, get a guess timestamp
+  const guessUtc = Date.UTC(y, mo - 1, d, h, m, 0);
+
+  // Step 2: see what that UTC moment looks like when displayed in tz
+  let observedMs;
+  try {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    const parts = {};
+    for (const p of dtf.formatToParts(new Date(guessUtc))) {
+      if (p.type !== 'literal') parts[p.type] = parseInt(p.value, 10);
+    }
+    observedMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  } catch (_) {
+    return new Date(guessUtc);
+  }
+
+  // The diff is how many ms the tz is offset from UTC at that moment.
+  // Add it back to guessUtc to get the actual UTC time when the wall clock
+  // in tz reads "y-mo-d h:m".
+  const offsetMs = guessUtc - observedMs;
+  return new Date(guessUtc + offsetMs);
+}
+
 module.exports = {
   DEFAULT_TZ,
   getSubTimezone,
   todayInTz,
   nowInTz,
-  isPastOrTodayInTz
+  isPastOrTodayInTz,
+  nowMinutesInTz,
+  dateInTzPlusDays,
+  apptTimestampInTz
 };
