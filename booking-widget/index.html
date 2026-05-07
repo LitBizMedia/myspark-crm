@@ -1480,12 +1480,60 @@ function renderPayment(el) {
 function setTip(amt) {
   S.tip = parseFloat(amt) || 0;
   S.tip_custom = '';
-  render();
+  const inp = document.getElementById('tip-custom');
+  if (inp) inp.value = '';
+  _refreshTipUI();
 }
 
 function setCustomTip(val) {
   S.tip_custom = val;
   S.tip = parseFloat(val) || 0;
+  // Custom always wins: deselect all preset buttons.
+  document.querySelectorAll('.bw-tip-btn').forEach(b => b.classList.remove('active'));
+  _refreshTotalsUI();
+}
+
+// Update preset highlight + summary + pay button after a tip change.
+// Does NOT trigger a full render; keeps the Square iframe alive.
+function _refreshTipUI() {
+  // Toggle active class on preset buttons based on S.tip
+  const btns = document.querySelectorAll('.bw-tip-btn');
+  btns.forEach(b => {
+    const onclick = b.getAttribute('onclick') || '';
+    const m = onclick.match(/setTip\(([\d.]+)\)/);
+    const v = m ? parseFloat(m[1]) : NaN;
+    if (!isNaN(v) && Math.abs((S.tip || 0) - v) < 0.005) b.classList.add('active');
+    else b.classList.remove('active');
+  });
+  _refreshTotalsUI();
+}
+
+// Update the summary section + pay button label to reflect current S.tip / coupon / etc.
+function _refreshTotalsUI() {
+  const summaryEl = document.querySelector('.bw-step-content .bw-summary');
+  if (summaryEl) {
+    // Re-render the summary HTML in place. It's self-contained so this is safe.
+    summaryEl.outerHTML = bookingSummaryHtml(true);
+  }
+  // Update pay button label
+  const btn = document.getElementById('bw-submit-btn');
+  if (btn && !S.loading) {
+    const t = computeTotal();
+    const requirePayment = !!D.settings.require_payment;
+    const paymentMode = D.settings.payment_mode || 'full';
+    let chargeAmount = t.total;
+    if (requirePayment && paymentMode === 'deposit' && D.settings.deposit_value != null) {
+      const dv = parseFloat(D.settings.deposit_value) || 0;
+      if (D.settings.deposit_type === 'percent') {
+        chargeAmount = Math.round((t.total * dv / 100) * 100) / 100;
+      } else if (D.settings.deposit_type === 'flat') {
+        chargeAmount = Math.min(Math.round(dv * 100) / 100, t.total);
+      }
+      if (chargeAmount <= 0) chargeAmount = t.total;
+    }
+    const willCharge = requirePayment && paymentMode !== 'none' && chargeAmount > 0;
+    btn.textContent = willCharge ? `Pay $${chargeAmount.toFixed(2)} and Book` : 'Confirm Booking';
+  }
 }
 
 async function initSquare() {
