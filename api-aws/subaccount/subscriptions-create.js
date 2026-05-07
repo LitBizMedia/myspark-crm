@@ -15,6 +15,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const { processSub } = require('./lib/sub-charge');
+const { todayInTz, DEFAULT_TZ } = require('./lib/timezone');
 
 const VALID_CYCLES = ['weekly', 'monthly', 'quarterly', 'annual'];
 
@@ -243,15 +244,10 @@ async function handler(req, res) {
     } catch (_) {
       blob = { data: {} };
     }
-    const tz = (blob.data.settings && blob.data.settings.timezone) || 'America/New_York';
-    let todayInTz;
-    try {
-      todayInTz = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
-    } catch (_) {
-      todayInTz = new Date().toISOString().slice(0, 10); // fallback to UTC
-    }
+    const tz = (blob.data.settings && blob.data.settings.timezone) || DEFAULT_TZ;
+    const todayInZone = todayInTz(tz);
 
-    if (String(startDate).slice(0, 10) <= todayInTz) {
+    if (String(startDate).slice(0, 10) <= todayInZone) {
       try {
         immediateChargeResult = await processSub(verify.rows[0], blob, { dry_run: false });
       } catch (chargeErr) {

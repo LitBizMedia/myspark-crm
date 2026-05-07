@@ -15,6 +15,7 @@
 
 const db = require('./db');
 const { getSquareCreds, squareHost, squareHeaders } = require('./square');
+const { todayInTz, DEFAULT_TZ } = require('./timezone');
 
 const SUSPEND_AFTER = 3;
 const SUSPEND_WINDOW_DAYS = 7;
@@ -30,17 +31,17 @@ function intervalForCycle(cycle) {
 }
 
 // MUST match frontend calcSubTaxBreakdown() so UI and actual charge align.
-function computeCharge(sub, paySettings) {
+function computeCharge(sub, paySettings, tz) {
   const tax = paySettings && paySettings.tax;
   const taxEnabled = !!(tax && tax.enabled && parseFloat(tax.rate) > 0);
   const taxRate = taxEnabled ? parseFloat(tax.rate) : 0;
   const taxLabel = (tax && tax.label) || 'Sales Tax';
 
   const isFirstCycle = !sub.last_charged_at;
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const today = todayInTz(tz || DEFAULT_TZ);
   const itemsForCharge = (sub.items || []).filter(it => {
     if (!it.billingEndsAt) return true;
-    return String(it.billingEndsAt).slice(0, 10) > todayIso;
+    return String(it.billingEndsAt).slice(0, 10) > today;
   });
 
   let subtotal = 0;
@@ -167,12 +168,12 @@ async function writePaymentRecord(sub, contact, card, breakdown, squarePayment, 
   return paymentId;
 }
 
-async function advanceSubAfterCharge(sub) {
+async function advanceSubAfterCharge(sub, tz) {
   const interval = intervalForCycle(sub.billing_cycle);
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const today = todayInTz(tz || DEFAULT_TZ);
   const remainingItems = (sub.items || []).filter(it => {
     if (!it.billingEndsAt) return true;
-    return String(it.billingEndsAt).slice(0, 10) > todayIso;
+    return String(it.billingEndsAt).slice(0, 10) > today;
   });
   const newCyclePrice = remainingItems.reduce((sum, it) => sum + (parseFloat(it.price) || 0) * (it.qty || 1), 0);
 
@@ -256,8 +257,9 @@ async function processSub(sub, blob, options) {
   try {
     const data = blob.data || {};
     const paySettings = data.paySettings || {};
+    const tz = (data.settings && data.settings.timezone) || DEFAULT_TZ;
 
-    const breakdown = computeCharge(sub, paySettings);
+    const breakdown = computeCharge(sub, paySettings, tz);
     result.breakdown = breakdown;
     result.cents = breakdown.cents;
 
@@ -265,7 +267,7 @@ async function processSub(sub, blob, options) {
       result.skipped = true;
       result.reason = 'Total is zero, nothing to charge';
       if (!options.dry_run) {
-        await advanceSubAfterCharge(sub);
+        await advanceSubAfterCharge(sub, tz);
         await logEvent(sub, 'charge_skipped', { reason: 'zero_total', breakdown });
       }
       return result;
@@ -319,7 +321,7 @@ async function processSub(sub, blob, options) {
     }
 
     const paymentId = await writePaymentRecord(sub, contact, card, breakdown, charge.payment, ownerName);
-    await advanceSubAfterCharge(sub);
+    await advanceSubAfterCharge(sub, tz);
     await logEvent(sub, 'charge_succeeded', {
       payment_id: paymentId,
       square_payment_id: charge.payment.id,

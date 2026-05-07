@@ -2024,14 +2024,100 @@ const DEFAULT_ADMIN={
 // =====================================================
 // UTILS
 // =====================================================
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
+// =====================================================
+// TIMEZONE HELPERS
+// =====================================================
+// Source of truth: db.settings.timezone (IANA format e.g. 'America/New_York').
+// Falls back to America/New_York if not set. All "today" / "now" / display
+// formatting goes through these helpers so the user always sees their
+// subaccount's timezone, not the browser's.
+
+function getTz(){
+  return (typeof db!=='undefined'&&db&&db.settings&&db.settings.timezone)||'America/New_York';
+}
+
+// Today's calendar date as YYYY-MM-DD in the subaccount timezone.
+// Replaces the previous UTC-based implementation. en-CA locale gives ISO format.
+function todayStr(){
+  try{return new Date().toLocaleDateString('en-CA',{timeZone:getTz()});}
+  catch(_){return new Date().toISOString().split('T')[0];}
+}
+
+// Now timestamp as ISO-ish string for storage. Stays in UTC for storage; only
+// display uses the TZ. (Server stores UTC; we display TZ-aware.)
 const now_=()=>new Date().toISOString();
-const todayStr=()=>new Date().toISOString().split('T')[0];
+
+// Format a timestamp (Date object or ISO string) for human display.
+// Uses subaccount TZ unless overridden.
+function fmtDateTime(d, opts){
+  if(!d)return '';
+  try{
+    return new Date(d).toLocaleString('en-US',Object.assign({
+      month:'short',day:'numeric',year:'numeric',
+      hour:'numeric',minute:'2-digit',
+      timeZone:getTz()
+    },opts||{}));
+  }catch(_){
+    return fmtDateTime(d);
+  }
+}
+
+// Date-only display in subaccount TZ. Accepts a Date object, ISO string, or
+// any value that new Date() can parse. Returns formatted "May 7, 2026" style.
+function fmtDateOnly(d, opts){
+  if(!d)return '';
+  try{
+    return new Date(d).toLocaleDateString('en-US',Object.assign({
+      month:'short',day:'numeric',year:'numeric',
+      timeZone:getTz()
+    },opts||{}));
+  }catch(_){
+    return new Date(d).toLocaleDateString();
+  }
+}
+
+// Time-only display in subaccount TZ.
+function fmtTimeOnly(d, opts){
+  if(!d)return '';
+  try{
+    return new Date(d).toLocaleTimeString('en-US',Object.assign({
+      hour:'numeric',minute:'2-digit',
+      timeZone:getTz()
+    },opts||{}));
+  }catch(_){
+    return new Date(d).toLocaleTimeString();
+  }
+}
+
+// Date-only display from a YYYY-MM-DD string. Already TZ-safe (uses noon parse
+// hack to avoid day-boundary issues), but we keep it for backwards compat.
+const fmtDate=d=>d?fmtDateOnly(d+'T12:00:00'):'';
+function fmtTime(t){if(!t)return'';const[h,m]=t.split(':').map(Number);return`${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`}
+
+// Returns hours+minutes for "now" in subaccount TZ as {h, m, totalMinutes}.
+// Used for the calendar now-line so it appears at the right vertical position
+// regardless of where the browser is.
+function nowHM(){
+  try{
+    const parts=new Intl.DateTimeFormat('en-US',{
+      hour:'numeric',minute:'2-digit',hour12:false,timeZone:getTz()
+    }).formatToParts(new Date());
+    const h=parseInt(parts.find(p=>p.type==='hour').value,10)||0;
+    const m=parseInt(parts.find(p=>p.type==='minute').value,10)||0;
+    return {h:h%24,m:m,totalMinutes:(h%24)*60+m};
+  }catch(_){
+    const d=new Date();
+    return {h:d.getHours(),m:d.getMinutes(),totalMinutes:d.getHours()*60+d.getMinutes()};
+  }
+}
+
+// =====================================================
+// OTHER UTILS
+// =====================================================
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const initials=n=>(n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 function avColor(n){let h=0;for(let i=0;i<(n||'').length;i++)h=(h<<5)-h+n.charCodeAt(i);return AV_COLORS[Math.abs(h)%AV_COLORS.length]}
-const fmtDate=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
-function fmtTime(t){if(!t)return'';const[h,m]=t.split(':').map(Number);return`${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`}
 
 // Picks readable text color (white or near-black) based on background luminance.
 // Use for any chip/badge that uses a user-customizable color as background.
@@ -2757,12 +2843,14 @@ function setDashScope(s){
 
 function renderDash(){
   renderDashWeek&&setTimeout(renderDashWeek,0);
-  const h=new Date().getHours();
+  const h=nowHM().h;
   const greet=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
   const name=state.user&&(state.user.name||state.user.username)||'';
   document.getElementById('dash-greet').innerHTML=greet+', <span>'+esc(name)+'!</span>';
-  const now2=new Date();
-  document.getElementById('dash-time').textContent=now2.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+' \u00b7 '+now2.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'});
+  document.getElementById('dash-time').textContent=
+    fmtDateOnly(new Date(),{weekday:'long',year:'numeric',month:'long',day:'numeric'})
+    +' \u00b7 '
+    +fmtTimeOnly(new Date(),{hour:'numeric',minute:'2-digit',second:'2-digit'});
 
   const td=todayStr();
   const uid=state.user&&state.user.id;
@@ -2868,8 +2956,7 @@ function _renderDashHero(td, uid, scope, isAdminish){
     return true;
   }).sort(function(a,b){return t2m(a.time||'00:00')-t2m(b.time||'00:00');});
 
-  const now=new Date();
-  const nowMin=now.getHours()*60+now.getMinutes();
+  const nowMin=nowHM().totalMinutes;
   const upcoming=todayAppts.filter(function(a){return t2m(a.time||'00:00')>=nowMin;});
   const next=upcoming[0]||null;
   let nextBlock='';
@@ -3244,7 +3331,7 @@ function renderDrawer(){
   }else if(state.dTab==='notes'){
     const notes=[...c.notes].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Notes ('+notes.length+')</div><button class="btn btn-purple btn-sm" onclick="openNoteModal(\''+c.id+'\',null)">+ Add</button></div>'
-      +(notes.length?notes.map(n=>'<div class="note-item"><div style="display:flex;justify-content:space-between;align-items:center"><span class="note-date">'+new Date(n.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})+'</span><div style="display:flex;gap:3px"><button class="icon-btn-xs" onclick="openNoteModal(\''+c.id+'\',\''+n.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delNote(\''+c.id+'\',\''+n.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div><div class="note-text">'+esc(n.text)+'</div></div>').join('')
+      +(notes.length?notes.map(n=>'<div class="note-item"><div style="display:flex;justify-content:space-between;align-items:center"><span class="note-date">'+fmtDateTime(n.createdAt)+'</span><div style="display:flex;gap:3px"><button class="icon-btn-xs" onclick="openNoteModal(\''+c.id+'\',\''+n.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delNote(\''+c.id+'\',\''+n.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div><div class="note-text">'+esc(n.text)+'</div></div>').join('')
       :'<div style="color:var(--text-muted);font-size:13px;padding-top:8px">No notes yet.</div>');
   }else if(state.dTab==='appointments'){
     // Default to upcoming view; reset 'show all' flag when switching tabs
@@ -3354,7 +3441,7 @@ function _dPayOverview(c,cSubs,cPays){
   },0);
   const sortedPays=[...cPays].sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');});
   const lastPay=sortedPays[0];
-  const lastPayDate=lastPay&&lastPay.createdAt?new Date(lastPay.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'No payments yet';
+  const lastPayDate=lastPay&&lastPay.createdAt?fmtDateOnly(lastPay.createdAt):'No payments yet';
   const activeSubs=cSubs.filter(function(s){return s.status==='active';}).length;
 
   // Credits card uses the existing visual; add quick-add/deduct affordance
@@ -3422,7 +3509,7 @@ function _dPayTransactions(c,cPays){
     const isFailed=p.status==='failed';
     const isRefunded=p.status==='refunded'||p.status==='partial_refund';
     const desc=p.items&&p.items.length?p.items[0].desc+(p.items.length>1?' + '+(p.items.length-1)+' more':''):'Payment';
-    const dateStr=p.createdAt?new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    const dateStr=p.createdAt?fmtDateOnly(p.createdAt):'';
     let statusPill='';
     if(isVoided)statusPill='<span class="sb-sm canc" style="margin-left:6px">voided</span>';
     else if(isFailed)statusPill='<span class="sb-sm canc" style="margin-left:6px">failed</span>';
@@ -4099,7 +4186,7 @@ function viewSoapNote(noteId){
   if(n.amendments&&n.amendments.length){
     amdHTML='<div style="margin-top:14px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">Amendments ('+n.amendments.length+')</div>';
     n.amendments.forEach(function(a){
-      var aDate=a.createdAt?new Date(a.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      var aDate=a.createdAt?fmtDateTime(a.createdAt):'';
       var aAuthor=a.authorId?getUserById(a.authorId):null;
       var aAuthorName=aAuthor?(aAuthor.name||aAuthor.username):(a.authorName||'Unknown');
       amdHTML+='<div style="background:rgba(107,33,234,.08);border:1px solid var(--purple-border);border-radius:var(--radius);padding:9px 12px;margin-bottom:6px">'
@@ -4255,7 +4342,7 @@ function printSoapNote(noteId){
   if(n.amendments&&n.amendments.length){
     amdHTML='<h2>Amendments</h2>';
     n.amendments.forEach(function(a){
-      var aDate=a.createdAt?new Date(a.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      var aDate=a.createdAt?fmtDateTime(a.createdAt):'';
       var aAuthor=a.authorId?getUserById(a.authorId):null;
       var aAuthorName=aAuthor?(aAuthor.name||aAuthor.username):(a.authorName||'Unknown');
       amdHTML+='<div class="amendment">'
@@ -4278,7 +4365,7 @@ function printSoapNote(noteId){
     statusLine='Status: Draft (unsigned)';
   }
 
-  var generatedAt=new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+  var generatedAt=fmtDateTime(new Date());
 
   // Self-contained HTML document. Inline CSS keeps it portable - the user
   // can save the page itself if they want, not just the print output.
@@ -4403,7 +4490,7 @@ function startNowLineTimer(){
   },60000);
 }
 function positionNowLine(){
-  var nowM=new Date().getHours()*60+new Date().getMinutes();
+  var nowM=nowHM().totalMinutes;
   document.querySelectorAll('.cal-now-line').forEach(function(el){
     var parent=el.closest('[data-minh]');
     var minH=parent?parseInt(parent.getAttribute('data-minh'),10):8;
@@ -4689,7 +4776,7 @@ function buildTimedCol(dateStr,appts,allHours){
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
       +'</div>';
   }).join('');
-  var nowLine2='';if(dateStr===todayStr()){var nM=new Date().getHours()*60+new Date().getMinutes();var nTop=Math.round((nM-(allHours[0]||8)*60)/60*68);nowLine2='<div class="cal-now-line" style="top:'+nTop+'px"><div class="cal-now-dot"></div></div>';}
+  var nowLine2='';if(dateStr===todayStr()){var nM=nowHM().totalMinutes;var nTop=Math.round((nM-(allHours[0]||8)*60)/60*68);nowLine2='<div class="cal-now-line" style="top:'+nTop+'px"><div class="cal-now-dot"></div></div>';}
   return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'">'+allHours.map(function(h){return'<div class="tgrid-row'+(hours.includes(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';}).join('')+offHTML+eventsHTML+nowLine2+'</div>';
 }
 
@@ -4729,7 +4816,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
       +'</div>';
   }).join('');
-  var nowLineU='';if(dateStr===todayStr()){var nMU=new Date().getHours()*60+new Date().getMinutes();var nTopU=Math.round((nMU-(allHours[0]||8)*60)/60*68);nowLineU='<div class="cal-now-line" style="top:'+nTopU+'px"><div class="cal-now-dot"></div></div>';}
+  var nowLineU='';if(dateStr===todayStr()){var nMU=nowHM().totalMinutes;var nTopU=Math.round((nMU-(allHours[0]||8)*60)/60*68);nowLineU='<div class="cal-now-line" style="top:'+nTopU+'px"><div class="cal-now-dot"></div></div>';}
   return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'">'+allHours.map(function(h){
     return'<div class="tgrid-row'+(hours.includes(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\',\''+uid+'\')"></div>';
   }).join('')+offHTML+eventsHTML+nowLineU+'</div>';
@@ -6400,7 +6487,7 @@ function _renderPaymentForm(ctx){
     history='<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Payment History</div>'
       +'<div style="display:flex;flex-direction:column;gap:6px">';
     related.sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');}).forEach(function(p){
-      var dateStr=p.createdAt?new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+      var dateStr=p.createdAt?fmtDateOnly(p.createdAt):'';
       var methodLbl=(p.paymentMethod||'').replace(/_/g,' ');
       var statusLbl=p.status==='completed'?'':' · '+p.status;
       history+='<div class="light-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px">'
@@ -10093,12 +10180,12 @@ function _renderSubDetailDetails(s,c){
   }
   // Paused banner
   if(s.status==='paused'){
-    const pd=s.pausedAt?new Date(s.pausedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    const pd=s.pausedAt?fmtDateOnly(s.pausedAt):'';
     html+='<div style="background:rgba(255,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:#fbbf24"><strong>Paused</strong>'+(pd?' on '+esc(pd):'')+'. Click Resume to restart billing.</div>';
   }
   // Cancelled banner
   if(s.status==='cancelled'){
-    const cd=s.cancelledAt?new Date(s.cancelledAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    const cd=s.cancelledAt?fmtDateOnly(s.cancelledAt):'';
     html+='<div style="background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.3);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:#94a3b8"><strong>Cancelled</strong>'+(cd?' on '+esc(cd):'')+(s.cancellationReason?' \u00b7 Reason: '+esc(s.cancellationReason):'')+'</div>';
   }
 
@@ -10172,7 +10259,7 @@ function _renderSubDetailHistory(s){
   };
   let html='';
   events.forEach(function(e){
-    const dt=e.createdAt?new Date(e.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
+    const dt=e.createdAt?fmtDateTime(e.createdAt):'';
     const actor=e.actorUserId?getUserById(e.actorUserId):null;
     const actorName=actor?(actor.name||actor.username):(e.actorType==='cron'?'System (auto)':e.actorType==='system'?'System':'Unknown');
     const label=eventLabel[e.eventType]||e.eventType;
@@ -13350,7 +13437,7 @@ function fbOpenSubs(id){
   }else{
     subs.forEach(sub=>{
       const c=sub.contactId?getContact(sub.contactId):null;
-      const ts=new Date(sub.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+      const ts=fmtDateTime(sub.createdAt);
       h+='<div class="fb-sub-row" onclick="fbViewSub(\''+sub.id+'\')"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:2px">'+(c?esc(c.name):esc(sub.data&&sub.data.email||sub.data&&sub.data.name||'Anonymous'))+'</div><div style="font-size:11px;color:var(--text-muted)">'+ts+(c?' \u00b7 Linked to contact':'')+'</div></div><div style="font-size:12px;color:var(--text-muted)">'+(fields.slice(0,2).map(fd=>{const v=sub.data&&sub.data[fd.id];return v?esc(String(v).slice(0,30)):''}).filter(Boolean).join(' \u00b7 '))+'</div></div>';
     });
   }
@@ -13361,7 +13448,7 @@ function fbViewSub(id){
   const sub=(db.formSubmissions||[]).find(s=>s.id===id);if(!sub)return;
   const f=(db.forms||[]).find(x=>x.id===sub.formId);if(!f)return;
   const fields=f.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]).filter(fd=>fd.type!=='hidden'&&fd.type!=='captcha');
-  const ts=new Date(sub.createdAt).toLocaleString('en-US',{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+  const ts=fmtDateTime(sub.createdAt, {month:'long'});
   let body='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Submitted '+ts+'</div>';
   body+='<div style="display:flex;flex-direction:column;gap:10px">';
   fields.forEach(fd=>{
@@ -20016,7 +20103,7 @@ function renderInvoicesTable(){
     +'<th style="padding:11px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Action</th>'
     +'</tr></thead><tbody>';
   rows.forEach(function(r){
-    var when=new Date(r.created_at).toLocaleString();
+    var when=fmtDateTime(r.created_at);
     var sub=r.subaccounts||{};
     var subName=sub.name||r.subaccount_id;
     var amt='$'+((r.amount_cents||0)/100).toFixed(2);
@@ -21493,7 +21580,7 @@ function renderAuditLogTable(){
     return;
   }
   var rows = entries.map(function(e){
-    var when = new Date(e.created_at).toLocaleString();
+    var when = fmtDateTime(e.created_at);
     var actor = '';
     if(e.actor_type === 'agency')        actor = (e.actor_username || e.actor_id || 'agency') + ' (agency)';
     else if(e.actor_type === 'cron')     actor = 'cron job';
@@ -22110,7 +22197,7 @@ function renderMediaFiles() {
         '<td><div style="display:flex;align-items:center;gap:10px">' + thumb + '<span>' + esc(f.name) + '</span></div></td>' +
         '<td>' + esc(f.folder) + '</td>' +
         '<td>' + mediaFmtSize(f.size) + '</td>' +
-        '<td>' + new Date(f.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + '</td>' +
+        '<td>' + fmtDateOnly(f.createdAt) + '</td>' +
         '<td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openMediaPreview(\'' + esc(f.id) + '\')">View</button>' + deleteBtn + '</td>' +
         '</tr>';
     }).join('');
@@ -22145,7 +22232,7 @@ function openMediaPreview(fileId) {
   var body = preview +
     '<div style="margin-top:14px;font-size:13px;color:var(--main-text-muted)">' +
     '<div><strong style="color:var(--main-text)">' + esc(file.name) + '</strong></div>' +
-    '<div style="margin-top:4px">Folder: ' + esc(file.folder) + ' · ' + mediaFmtSize(file.size) + ' · ' + new Date(file.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + '</div>' +
+    '<div style="margin-top:4px">Folder: ' + esc(file.folder) + ' · ' + mediaFmtSize(file.size) + ' · ' + fmtDateOnly(file.createdAt) + '</div>' +
     '</div>';
   var deleteFooter = canMediaWrite()
     ? '<button class="btn btn-danger" onclick="confirmDeleteMedia(\'' + esc(file.id) + '\')">Delete</button>'
