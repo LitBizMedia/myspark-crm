@@ -111,7 +111,9 @@ async function handler(req, res) {
 
     if (appointment_type_id) {
       const wRes = await db.query(
-        `SELECT id, widget_type, staff_ids, appointment_types, widget_availability
+        `SELECT id, widget_type, staff_ids, appointment_types, widget_availability,
+                booking_lead_time_hours, booking_advance_days,
+                buffer_before_override, buffer_after_override
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1`,
         [widget_id, subaccountId]
@@ -158,6 +160,43 @@ async function handler(req, res) {
           duration  = v.duration             || duration;
           bufBefore = v.buffer_before != null ? v.buffer_before : bufBefore;
           bufAfter  = v.buffer_after  != null ? v.buffer_after  : bufAfter;
+        }
+      }
+
+      // Service-path widget config: load widget for lead/advance/buffer overrides.
+      // (For appointment-type path, widget was already loaded above.)
+      if (widget_id) {
+        const wExtraRes = await db.query(
+          `SELECT booking_lead_time_hours, booking_advance_days,
+                  buffer_before_override, buffer_after_override
+           FROM service_widgets
+           WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1`,
+          [widget_id, subaccountId]
+        );
+        if (wExtraRes.rows.length) widget = Object.assign(widget || {}, wExtraRes.rows[0]);
+      }
+    }
+
+    // Apply per-widget overrides (set after both branches resolved their defaults).
+    if (widget) {
+      if (widget.buffer_before_override != null) bufBefore = parseInt(widget.buffer_before_override) || 0;
+      if (widget.buffer_after_override  != null) bufAfter  = parseInt(widget.buffer_after_override)  || 0;
+      if (widget.booking_lead_time_hours != null) {
+        leadTimeHours = parseInt(widget.booking_lead_time_hours) || 0;
+      }
+    }
+
+    // Advance-days enforcement: if the requested date is past the window,
+    // return empty slots rather than erroring (cleaner UX in the calendar).
+    if (widget && widget.booking_advance_days != null) {
+      const maxDays = parseInt(widget.booking_advance_days) || 0;
+      if (maxDays > 0) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const today = new Date(todayStr + 'T00:00:00Z');
+        const requested = new Date(date + 'T00:00:00Z');
+        const daysAhead = (requested - today) / 86400000;
+        if (daysAhead > maxDays) {
+          return res.status(200).json({ slots: [], duration, date });
         }
       }
     }

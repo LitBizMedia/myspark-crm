@@ -45,7 +45,15 @@ async function handler(req, res) {
       const wResult = await db.query(
         `SELECT id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,
                 staff_mode, staff_ids, round_robin_config, appointment_types, widget_availability, require_payment,
-                intake_form_id, confirm_message
+                intake_form_id, confirm_message,
+                payment_mode, deposit_type, deposit_value,
+                allow_coupons, allow_tip, tip_percentages,
+                collect_phone, collect_notes, require_existing_patient,
+                allow_self_cancel, cancel_window_hours,
+                send_confirmation_email, send_reminder_email, reminder_hours_before, send_reminder_sms,
+                booking_lead_time_hours, booking_advance_days,
+                buffer_before_override, buffer_after_override,
+                total_views, total_bookings, custom_domain
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE
          LIMIT 1`,
@@ -71,7 +79,15 @@ async function handler(req, res) {
       const wResult = await db.query(
         `SELECT id, name, widget_type, service_ids, primary_color, logo_url, tagline, active,
                 staff_mode, staff_ids, round_robin_config, appointment_types, widget_availability, require_payment,
-                intake_form_id, confirm_message
+                intake_form_id, confirm_message,
+                payment_mode, deposit_type, deposit_value,
+                allow_coupons, allow_tip, tip_percentages,
+                collect_phone, collect_notes, require_existing_patient,
+                allow_self_cancel, cancel_window_hours,
+                send_confirmation_email, send_reminder_email, reminder_hours_before, send_reminder_sms,
+                booking_lead_time_hours, booking_advance_days,
+                buffer_before_override, buffer_after_override,
+                total_views, total_bookings, custom_domain
          FROM service_widgets
          WHERE subaccount_id = $1 AND active = TRUE
          ORDER BY created_at ASC

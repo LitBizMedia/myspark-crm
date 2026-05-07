@@ -147,7 +147,13 @@ async function handler(req, res) {
     if (widget_id) {
       const wResult = await db.query(
         `SELECT id, name, widget_type, service_ids, staff_mode, staff_ids,
-                appointment_types, round_robin_config, require_payment, confirm_message
+                appointment_types, round_robin_config, require_payment, confirm_message,
+                payment_mode, deposit_type, deposit_value,
+                allow_coupons, allow_tip, tip_percentages,
+                collect_phone, collect_notes, require_existing_patient,
+                send_confirmation_email,
+                booking_lead_time_hours, booking_advance_days,
+                buffer_before_override, buffer_after_override
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE LIMIT 1`,
         [widget_id, subaccountId]
@@ -173,6 +179,12 @@ async function handler(req, res) {
           Array.isArray(widget.service_ids) && widget.service_ids.length &&
           !widget.service_ids.includes(service_id)) {
         return res.status(400).json({ error: 'Service not available on this widget' });
+      }
+
+      // 2a. Per-widget patient form validations.
+      // collect_phone: if true (default), phone is required.
+      if (widget.collect_phone !== false && !(client_info && client_info.phone && String(client_info.phone).trim())) {
+        return res.status(400).json({ error: 'Phone number is required' });
       }
     }
 
@@ -272,6 +284,13 @@ async function handler(req, res) {
       title = service.name + (varName ? ` - ${varName}` : '');
     }
 
+    // Per-widget buffer overrides take precedence when set.
+    // NULL on the column means "use the default from service/variation/appt-type".
+    if (widget) {
+      if (widget.buffer_before_override != null) bufBefore = parseInt(widget.buffer_before_override) || 0;
+      if (widget.buffer_after_override  != null) bufAfter  = parseInt(widget.buffer_after_override)  || 0;
+    }
+
     // 5. Read settings (for tax, square, confirmation email)
     const blobResult = await db.query(
       'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1', [subaccountId]
@@ -320,6 +339,36 @@ async function handler(req, res) {
       // Service and appointment widgets: resolve staff per widget config.
       bookingDate = date;
       bookingTime = time;
+
+      // Per-widget booking window enforcement.
+      // Lead time: reject bookings closer than X hours from now (in the sub's TZ).
+      // Advance days: reject bookings further than Y days from today (in the sub's TZ).
+      // Both NULL = no constraint.
+      if (widget && (widget.booking_lead_time_hours != null || widget.booking_advance_days != null)) {
+        const tz = require('./lib/timezone');
+        const subTz = (blob && blob.settings && blob.settings.timezone) || 'America/New_York';
+        const slotMs = tz.apptTimestampInTz(bookingDate, bookingTime, subTz);
+        const nowMs  = Date.now();
+        const diffHours = (slotMs - nowMs) / 3600000;
+
+        if (widget.booking_lead_time_hours != null) {
+          const minHours = parseInt(widget.booking_lead_time_hours) || 0;
+          if (minHours > 0 && diffHours < minHours) {
+            return res.status(400).json({
+              error: `Bookings must be made at least ${minHours} hours in advance.`
+            });
+          }
+        }
+
+        if (widget.booking_advance_days != null) {
+          const maxDays = parseInt(widget.booking_advance_days) || 0;
+          if (maxDays > 0 && diffHours / 24 > maxDays) {
+            return res.status(400).json({
+              error: `Bookings can only be made up to ${maxDays} days in advance.`
+            });
+          }
+        }
+      }
 
       const assignedStaff = service && Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
 
@@ -428,7 +477,11 @@ async function handler(req, res) {
     let couponCode = '';
     let couponId = '';
     let couponObj = null;
-    if (coupon_code && coupon_code.trim()) {
+    // allow_coupons: when explicitly false on the widget, ignore any submitted coupon code.
+    // (Don't error - just silently drop it. The dashboard UI shouldn't show the field
+    // when allow_coupons is false, so a coupon arriving here means a determined attempt.)
+    const couponsAllowed = !widget || widget.allow_coupons !== false;
+    if (couponsAllowed && coupon_code && coupon_code.trim()) {
       const cleanCode = coupon_code.trim().toUpperCase();
       const couponList = blob.coupons || [];
       couponObj = couponList.find(c =>
@@ -456,6 +509,21 @@ async function handler(req, res) {
       couponId = couponObj.id;
     }
 
+    // 8a. require_existing_patient: when true, the email must match an existing contact.
+    // Match by lowercased email against contacts blob (matches the Path D contact lookup logic).
+    if (widget && widget.require_existing_patient === true) {
+      const cleanEmailCheck = (client_info.email || '').toLowerCase().trim();
+      const contactsBlobCheck = Array.isArray(blob.contacts) ? blob.contacts : [];
+      const matched = contactsBlobCheck.find(c =>
+        c && c.email && String(c.email).toLowerCase().trim() === cleanEmailCheck
+      );
+      if (!matched) {
+        return res.status(403).json({
+          error: 'Sorry, online booking is currently limited to existing patients. Please contact the office to schedule.'
+        });
+      }
+    }
+
     // 9. Compute totals per Payment Policy
     // taxableFlag was already set in the lookup branch above.
     const subtotal = r2(basePrice);
@@ -464,8 +532,14 @@ async function handler(req, res) {
     const tip = r2(tip_amount || 0);
     const total = r2(afterDiscount + taxAmount + tip);
 
-    // 10. Determine if payment must occur
+    // 10. Determine if payment must occur, and how much.
+    //
+    // require_payment is the on/off toggle. payment_mode controls HOW MUCH:
+    //   - 'full'    (default): charge full total
+    //   - 'deposit': charge deposit_value or deposit_value% of total, whichever applies
+    //   - 'none'   : record a payment row but skip the actual Square charge
     const requirePayment = !!(widget && widget.require_payment);
+    const paymentMode    = (widget && widget.payment_mode) || 'full';
     const hasNonceForPayment = !!square_nonce;
     let paymentStatus = 'completed';  // for the payments record
     let paymentMethod = 'none';        // 'card' if Square charge, 'none' if no charge needed
@@ -475,7 +549,23 @@ async function handler(req, res) {
     let cardBrand = '';
     let chargeOccurred = false;
 
-    if (requirePayment && total > 0) {
+    // Compute the actual amount to charge.
+    // depositCharge < total when payment_mode='deposit'; equals total otherwise.
+    let chargeAmount = total;
+    if (requirePayment && paymentMode === 'deposit' && widget && widget.deposit_value != null) {
+      const dv = parseFloat(widget.deposit_value) || 0;
+      if (widget.deposit_type === 'percent') {
+        chargeAmount = r2(total * dv / 100);
+      } else if (widget.deposit_type === 'flat') {
+        chargeAmount = Math.min(r2(dv), total);
+      }
+      if (chargeAmount <= 0) {
+        // Misconfigured deposit; fall back to full charge to avoid silent freebies.
+        chargeAmount = total;
+      }
+    }
+
+    if (requirePayment && paymentMode !== 'none' && chargeAmount > 0) {
       if (!hasNonceForPayment) {
         return res.status(400).json({ error: 'Payment information is required for this booking' });
       }
@@ -498,9 +588,9 @@ async function handler(req, res) {
         body: JSON.stringify({
           source_id:        square_nonce,
           idempotency_key:  paymentId,
-          amount_money:     { amount: Math.round(total * 100), currency: 'USD' },
+          amount_money:     { amount: Math.round(chargeAmount * 100), currency: 'USD' },
           location_id:      squareSettings.locationId,
-          note:             `${title} - ${date} ${time}`,
+          note:             `${title} - ${date} ${time}` + (paymentMode === 'deposit' ? ' (deposit)' : ''),
           buyer_email_address: client_info.email
         })
       });
@@ -616,6 +706,10 @@ async function handler(req, res) {
       const apptLocation = service ? (service.location || null) : null;
       const apptServiceId = service ? service_id : null; // null for appointment widgets
       const apptVariationId = service ? (variation_id || null) : null;
+      // Honor widget.collect_notes: if false, don't store any submitted notes.
+      const apptNotes = (widget && widget.collect_notes === false)
+        ? null
+        : (client_info.notes || null);
       await db.query(`
         INSERT INTO appointments (
           id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
@@ -626,7 +720,7 @@ async function handler(req, res) {
       `, [
         apptId, subaccountId, title, contactId, assignedStaffId,
         bookingDate, bookingTime, duration,
-        apptLocation, client_info.notes || null,
+        apptLocation, apptNotes,
         apptServiceId, apptVariationId, bufBefore, bufAfter,
         'widget', widget_id || null
       ]);
@@ -635,7 +729,24 @@ async function handler(req, res) {
     // 13. Create payment record (always, even if total=0 with no Square charge - records the booking)
     // Per Payment Policy: every booking through the widget creates a payment record.
     // If no charge occurred (e.g. pay-at-visit), method='none' and total may be 0 or service price.
+    //
+    // For payment_mode='deposit': the record reflects ONLY the deposit transaction
+    // (subtotal/total = chargeAmount, tax=0). The remaining balance is collected
+    // at the visit and creates a SECOND payment record at that time.
     if (chargeOccurred || requirePayment) {
+      const isDeposit = chargeOccurred && paymentMode === 'deposit' && chargeAmount < total;
+
+      const pmtSubtotal       = isDeposit ? chargeAmount : subtotal;
+      const pmtAfterDiscount  = isDeposit ? chargeAmount : afterDiscount;
+      const pmtTax            = isDeposit ? 0 : taxAmount;
+      const pmtTaxable        = isDeposit ? 0 : taxableAmount;
+      const pmtCouponDiscount = isDeposit ? 0 : couponDiscount;
+      const pmtTip            = isDeposit ? 0 : tip;
+      const pmtTotal          = isDeposit ? chargeAmount : total;
+      const pmtNotes = isDeposit
+        ? `Deposit for ${title} - full price $${total.toFixed(2)}` + (widget ? ` (widget: ${widget.name})` : '')
+        : 'Booked via widget' + (widget ? ` (${widget.name})` : '');
+
       // Real payment record - charge happened OR payment was required (total > 0)
       const pmt = {
         id: paymentId,
@@ -644,27 +755,27 @@ async function handler(req, res) {
         staff_id: assignedStaffId,
         items: JSON.stringify([{
           desc: title,
-          price: subtotal,
-          taxable: taxableFlag
+          price: pmtSubtotal,
+          taxable: isDeposit ? false : taxableFlag
         }]),
-        subtotal: subtotal,
-        coupon_discount: couponDiscount,
-        coupon_code: couponCode,
-        coupon_id: couponId,
+        subtotal: pmtSubtotal,
+        coupon_discount: pmtCouponDiscount,
+        coupon_code: isDeposit ? '' : couponCode,
+        coupon_id: isDeposit ? '' : couponId,
         discount_amount: 0,
-        after_discount: afterDiscount,
+        after_discount: pmtAfterDiscount,
         fee_amount: 0,
-        tax_amount: taxAmount,
-        taxable_amount: taxableAmount,
-        tip_amount: tip,
+        tax_amount: pmtTax,
+        taxable_amount: pmtTaxable,
+        tip_amount: pmtTip,
         credit_applied: 0,
-        total: total,
+        total: pmtTotal,
         payment_method: paymentMethod,
         card_last4: cardLast4,
         card_brand: cardBrand,
         square_payment_id: squarePaymentId,
         status: 'completed',
-        notes: 'Booked via widget' + (widget ? ` (${widget.name})` : ''),
+        notes: pmtNotes,
         appointment_id: apptId,                // null for class bookings
         class_session_id: classSession ? classSession.id : null,
         participant_contact_id: classSession ? contactId : null
@@ -761,7 +872,12 @@ async function handler(req, res) {
     });
 
     // 16. Confirmation email (don't fail the booking if email fails)
-    if (bs.send_confirmation_email !== false) {
+    // Per-widget send_confirmation_email overrides global bookingSettings.send_confirmation_email.
+    // Default: send. Either setting being explicitly false suppresses.
+    const emailGate = (widget && widget.send_confirmation_email === false)
+      ? false
+      : (bs.send_confirmation_email !== false);
+    if (emailGate) {
       const bizName = settings.businessName || slug;
       const staffUser = allUsers.find(u => u.id === assignedStaffId) || null;
       const staffLabel = classSession ? 'Instructor' : 'Provider';
