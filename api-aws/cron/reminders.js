@@ -47,6 +47,30 @@ async function getSubaccountData(subaccountId) {
   }
 }
 
+// Load widget reminder config for a subaccount. Returns map of widget_id -> config.
+async function getWidgetReminderConfig(subaccountId) {
+  try {
+    const r = await db.query(
+      `SELECT id, send_reminder_email, send_reminder_sms, reminder_hours_before
+         FROM service_widgets
+        WHERE subaccount_id = $1`,
+      [subaccountId]
+    );
+    const map = {};
+    for (const w of r.rows) {
+      map[w.id] = {
+        send_reminder_email: w.send_reminder_email !== false,
+        send_reminder_sms: !!w.send_reminder_sms,
+        reminder_hours_before: w.reminder_hours_before != null ? parseInt(w.reminder_hours_before) : 24
+      };
+    }
+    return map;
+  } catch (e) {
+    console.error('getWidgetReminderConfig error:', e.message);
+    return {};
+  }
+}
+
 async function getSmsSettings(subaccountId) {
   try {
     return await db.findOne('sms_settings', { subaccount_id: subaccountId });
@@ -105,8 +129,10 @@ async function runReminders() {
 
   // Cast a wide UTC date net first to limit DB scan, then filter precisely
   // against each appointment's actual TZ-aware timestamp.
-  const startDate = new Date(now.getTime() + 12 * 3600000).toISOString().slice(0, 10);
-  const endDate   = new Date(now.getTime() + 36 * 3600000).toISOString().slice(0, 10);
+  // Window goes out to 72h to accommodate widgets configured up to 48h-before
+  // reminders. Per-widget hours_before is then enforced precisely below.
+  const startDate = new Date(now.getTime() + 0 * 3600000).toISOString().slice(0, 10);
+  const endDate   = new Date(now.getTime() + 72 * 3600000).toISOString().slice(0, 10);
 
   const apptsResult = await db.query(
     `SELECT * FROM appointments
@@ -127,22 +153,51 @@ async function runReminders() {
     subDataCache.set(subaccountId, d);
     return d;
   }
+  // Cache widget reminder configs per-tenant
+  const widgetCfgCache = new Map();
+  async function getCachedWidgetCfgs(subaccountId) {
+    if (widgetCfgCache.has(subaccountId)) return widgetCfgCache.get(subaccountId);
+    const cfgs = await getWidgetReminderConfig(subaccountId);
+    widgetCfgCache.set(subaccountId, cfgs);
+    return cfgs;
+  }
 
   for (const appt of appointments) {
     const data = await getCachedSubData(appt.subaccount_id);
     if (!data) { skipped++; continue; }
 
     // Compute the actual appointment timestamp in the subaccount's TZ.
-    // This is the appointment's wall-clock time, converted to absolute UTC.
     const subTz = (data.settings && data.settings.timezone) || 'America/Chicago';
     const apptDate = apptTimestampInTz(appt.date, appt.time || '00:00', subTz);
     if (!apptDate) { skipped++; continue; }
 
     const hoursUntilDate = (apptDate - now) / 3600000;
 
-    // Window: 22-26 hours away from now (centered on 24h reminder).
-    // Cron runs hourly so this catches every appointment exactly once.
-    if (hoursUntilDate < 22 || hoursUntilDate > 26) {
+    // Determine reminder config: per-widget for widget-booked appts, defaults otherwise.
+    // Non-widget defaults preserve existing behavior (24h, both channels attempted).
+    let hoursBefore = 24;
+    let emailEnabled = true;
+    let smsEnabled = true;
+    if (appt.booked_via === 'widget' && appt.widget_id) {
+      const widgetCfgs = await getCachedWidgetCfgs(appt.subaccount_id);
+      const cfg = widgetCfgs[appt.widget_id];
+      if (cfg) {
+        hoursBefore = cfg.reminder_hours_before;
+        emailEnabled = cfg.send_reminder_email;
+        smsEnabled = cfg.send_reminder_sms;
+      }
+    }
+
+    // Window: hoursBefore +/- 2 hours. Cron runs hourly so each appt is
+    // checked multiple times in this 4h window; idempotency guard below
+    // prevents duplicate sends.
+    if (hoursUntilDate < hoursBefore - 2 || hoursUntilDate > hoursBefore + 2) {
+      skipped++;
+      continue;
+    }
+
+    // Skip entirely if both channels are disabled
+    if (!emailEnabled && !smsEnabled) {
       skipped++;
       continue;
     }
@@ -178,7 +233,7 @@ async function runReminders() {
     let emailSentFlag = false;
     let smsSentFlag = false;
 
-    if (contact.email) {
+    if (emailEnabled && contact.email) {
       try {
         const tpl = await getTemplate(appt.subaccount_id, 'appt-reminder');
         let subject, html;
@@ -214,7 +269,7 @@ async function runReminders() {
       }
     }
 
-    if (contact.phone) {
+    if (smsEnabled && contact.phone) {
       try {
         const smsSettings = await getSmsSettings(appt.subaccount_id);
         if (smsSettings && smsSettings.enabled && smsSettings.campaign_status === 'approved') {
