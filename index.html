@@ -1772,6 +1772,16 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <button class="btn btn-purple btn-sm" style="margin-top:10px" onclick="saveBH()">Save Hours</button>
           </div>
           <div class="s-card">
+            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="14" x2="9.01" y2="14"/><line x1="15" y1="14" x2="15.01" y2="14"/></svg>Blackout Dates</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Block bookings on holidays or other closed days. Applies to all booking widgets and disables online booking for these dates.</div>
+            <div id="blackout-list"></div>
+            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
+              <div class="form-group" style="margin:0"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Date</label><input type="date" id="blackout-date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none"></div>
+              <div class="form-group" style="margin:0;flex:1;min-width:180px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Reason (optional)</label><input type="text" id="blackout-reason" placeholder="Christmas Day" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box"></div>
+              <button class="btn btn-ghost btn-sm" onclick="addBlackoutDate()">Add</button>
+            </div>
+          </div>
+          <div class="s-card">
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Contact Tags</div>
             <div class="tag-mgr" id="tag-mgr"></div>
             <button class="btn btn-ghost btn-sm" onclick="openTagModal()">+ Add Tag</button>
@@ -5409,7 +5419,7 @@ async function processCharge(){  // ── Gift Card payment path ──
 // SETTINGS
 // =====================================================
 function renderSettings(){renderSquareCard();
-  renderUserList();renderTagMgr();renderBH();
+  renderUserList();renderTagMgr();renderBH();renderBlackoutList();
   const s=db.settings;
   if(s.square){
     const sq=s.square;
@@ -5428,6 +5438,54 @@ function renderBH(){
 
 function toggleBH(dk){const bh=db.settings.businessHours;bh[dk].open=!bh[dk].open;const t=document.getElementById('bht-'+dk);if(t)t.classList.toggle('on',bh[dk].open);const s=document.getElementById('bhs-'+dk),e=document.getElementById('bhe-'+dk);if(s)s.disabled=!bh[dk].open;if(e)e.disabled=!bh[dk].open}
 function saveBH(){const bh=db.settings.businessHours;DKEYS.forEach(dk=>{const s=document.getElementById('bhs-'+dk)&&document.getElementById('bhs-'+dk).value,e=document.getElementById('bhe-'+dk)&&document.getElementById('bhe-'+dk).value;if(s)bh[dk].start=s;if(e)bh[dk].end=e});saveData();toast('Business hours saved.','success')}
+
+// Blackout dates - workspace-level dates where bookings are not accepted.
+// Applies to all booking widgets. Stored in db.settings.blackoutDates as
+// array of {date: 'YYYY-MM-DD', reason: ''}.
+function renderBlackoutList(){
+  var el=document.getElementById('blackout-list');
+  if(!el)return;
+  if(!db.settings.blackoutDates)db.settings.blackoutDates=[];
+  // Filter past dates from display only - don't mutate storage so historical
+  // records survive in case any backend logic needs them.
+  var today=new Date().toISOString().slice(0,10);
+  var future=db.settings.blackoutDates.filter(b=>b.date>=today);
+  if(!future.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--text-muted);padding:6px 0">No upcoming blackout dates.</div>';
+    return;
+  }
+  future.sort((a,b)=>a.date.localeCompare(b.date));
+  el.innerHTML=future.map(function(b){
+    return '<div class="ov-item"><span class="ov-date">'+fmtDate(b.date)+'</span>'
+      +(b.reason?'<span style="font-size:12px;color:var(--text-muted);flex:1">'+esc(b.reason)+'</span>':'<span style="flex:1"></span>')
+      +'<button class="icon-btn-xs" onclick="rmBlackoutDate(\''+esc(b.date)+'\')" style="margin-left:auto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+  }).join('');
+}
+
+function addBlackoutDate(){
+  var dEl=document.getElementById('blackout-date');
+  var rEl=document.getElementById('blackout-reason');
+  var date=dEl&&dEl.value;
+  if(!date){toast('Pick a date.','error');return;}
+  if(!db.settings.blackoutDates)db.settings.blackoutDates=[];
+  // Replace if same date already exists
+  db.settings.blackoutDates=db.settings.blackoutDates.filter(b=>b.date!==date);
+  db.settings.blackoutDates.push({date:date, reason:(rEl&&rEl.value||'').trim()});
+  saveData();
+  if(dEl)dEl.value='';
+  if(rEl)rEl.value='';
+  renderBlackoutList();
+  toast('Blackout date added.','success');
+}
+
+function rmBlackoutDate(date){
+  if(!db.settings.blackoutDates)return;
+  if(!confirm('Remove this blackout date?'))return;
+  db.settings.blackoutDates=db.settings.blackoutDates.filter(b=>b.date!==date);
+  saveData();
+  renderBlackoutList();
+  toast('Blackout date removed.','success');
+}
 
 
 function renderTagMgr(){const el=document.getElementById('tag-mgr');if(!el)return;el.innerHTML=db.tags.map(t=>'<div class="tag-manage-item" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'<button class="tag-rm" onclick="delTag(\''+t.id+'\')">×</button></div>').join('')}
@@ -7845,14 +7903,21 @@ function buildUserBody(){
 
 function buildSchedSection(standalone){
   const dLabels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  // Max bookings per day. Stored in schedule.maxBookingsPerDay (no separate column).
+  const maxBookingsVal=(editSched&&editSched.maxBookingsPerDay!=null)?String(editSched.maxBookingsPerDay):'';
+  const maxBookingsInput='<div style="margin-bottom:14px;padding:10px 12px;background:rgba(107,33,234,.04);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;gap:10px;flex-wrap:wrap"><label style="font-size:12px;font-weight:600;color:var(--text);margin:0;flex-shrink:0">Maximum bookings per day</label><input type="number" min="0" step="1" id="sched-max-bookings" value="'+esc(maxBookingsVal)+'" placeholder="No limit" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:6px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:90px"><span style="font-size:11px;color:var(--text-muted)">Leave blank for no limit. Caps appointments per day across all booking sources.</span></div>';
   const sg=DKEYS.map((dk,i)=>{const ds=editSched[dk]||{on:false,start:'08:00',end:'17:00'};return'<div class="sched-row"><span class="sched-day">'+dLabels[i]+'</span><button type="button" class="sched-toggle'+(ds.on?' on':'')+'" id="st-'+dk+'" onclick="toggleSchedDay(\''+dk+'\')">'+( ds.on?'On':'Off')+'</button><input class="sched-time" type="time" id="ss-'+dk+'" value="'+ds.start+'"'+(ds.on?'':' disabled')+' oninput="updateTimeFmt(this)"><span class="bh-time-fmt">'+fmtTime(ds.start)+'</span><span style="font-size:11px;color:var(--text-muted)">to</span><input class="sched-time" type="time" id="se-'+dk+'" value="'+ds.end+'"'+(ds.on?'':' disabled')+' oninput="updateTimeFmt(this)"><span class="bh-time-fmt">'+fmtTime(ds.end)+'</span></div>'}).join('');
   const ov='<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:7px">Date Overrides</div><div id="ov-list">'+renderOvList()+'</div><div style="display:flex;gap:7px;align-items:flex-end;flex-wrap:wrap;margin-top:8px"><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Date</label><input type="date" id="ov-date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Type</label><select id="ov-type" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;height:36px" onchange="document.getElementById(\'ov-hrs\').style.display=this.value===\'custom\'?\'flex\':\'none\'"><option value="off">Day Off</option><option value="custom">Custom Hours</option></select></div><div id="ov-hrs" style="display:none;gap:6px;align-items:flex-end"><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Start</label><input type="time" id="ov-start" value="09:00" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 9px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">End</label><input type="time" id="ov-end" value="14:00" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 9px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Note</label><input type="text" id="ov-note" placeholder="Vacation, conf..." style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;width:130px"></div><button class="btn btn-ghost btn-sm" onclick="addOv()">Add</button></div></div>';
-  return'<div style="display:grid;gap:5px">'+sg+'</div>'+ov;
+  return maxBookingsInput+'<div style="display:grid;gap:5px">'+sg+'</div>'+ov;
 }
 
 function renderOvList(){
   if(!userOvs.length)return'<div style="font-size:12px;color:var(--text-muted);padding:3px 0">No date overrides yet.</div>';
-  return userOvs.sort((a,b)=>a.date.localeCompare(b.date)).map((ov,i)=>'<div class="ov-item"><span class="ov-date">'+fmtDate(ov.date)+'</span><span class="ov-type" style="color:'+(ov.type==='off'?'#f87171':'#fbbf24')+'">'+(ov.type==='off'?'Day Off':'Custom: '+ov.start+'-'+ov.end)+'</span>'+(ov.note?'<span style="font-size:11px;color:var(--text-muted);flex:1">'+esc(ov.note)+'</span>':'')+'<button class="icon-btn-xs" onclick="rmOv('+i+')" style="margin-left:auto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>').join('');
+  // Hide past overrides from view (data is preserved in storage).
+  var today=new Date().toISOString().slice(0,10);
+  var future=userOvs.map(function(ov,i){return {ov:ov,i:i};}).filter(function(x){return x.ov.date>=today;});
+  if(!future.length)return'<div style="font-size:12px;color:var(--text-muted);padding:3px 0">No upcoming date overrides.</div>';
+  return future.sort(function(a,b){return a.ov.date.localeCompare(b.ov.date);}).map(function(x){var ov=x.ov,i=x.i;return'<div class="ov-item"><span class="ov-date">'+fmtDate(ov.date)+'</span><span class="ov-type" style="color:'+(ov.type==='off'?'#f87171':'#fbbf24')+'">'+(ov.type==='off'?'Day Off':'Custom: '+ov.start+'-'+ov.end)+'</span>'+(ov.note?'<span style="font-size:11px;color:var(--text-muted);flex:1">'+esc(ov.note)+'</span>':'')+'<button class="icon-btn-xs" onclick="rmOv('+i+')" style="margin-left:auto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';}).join('');
 }
 
 function toggleSchedDay(dk){
@@ -7885,6 +7950,13 @@ async function saveUser(){
   if(allUsers().find(u=>u.username===username)){toast('Username taken.','error');return}
   const sched=JSON.parse(JSON.stringify(editSched));
   DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
+  // Max bookings per day. Empty/0 = no cap (delete the field).
+  var mxEl=document.getElementById('sched-max-bookings');
+  if(mxEl){
+    var mx=parseInt(mxEl.value,10);
+    if(isNaN(mx)||mx<=0)delete sched.maxBookingsPerDay;
+    else sched.maxBookingsPerDay=mx;
+  }
   var userEmail=(document.getElementById('uf-email')&&document.getElementById('uf-email').value||'').trim().toLowerCase();
 
   // Call update-user. With newPassword and a username that doesn't exist,
@@ -7938,7 +8010,17 @@ async function saveUserSched(){
   const uid=state.modal.id;
   const sched=JSON.parse(JSON.stringify(editSched));
   DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
+  // Max bookings per day. Empty/0 = no cap (delete the field).
+  var mxEl=document.getElementById('sched-max-bookings');
+  if(mxEl){
+    var mx=parseInt(mxEl.value,10);
+    if(isNaN(mx)||mx<=0)delete sched.maxBookingsPerDay;
+    else sched.maxBookingsPerDay=mx;
+  }
   const overrides=[...userOvs];
+  // Drop overrides for dates that have already passed. Keeps stored data lean.
+  var todayStr=new Date().toISOString().slice(0,10);
+  var trimmedOverrides=overrides.filter(function(ov){return ov && ov.date && ov.date>=todayStr;});
 
   // Look up the target user
   const target=(db.users||[]).find(x=>x.id===uid);
@@ -7954,7 +8036,7 @@ async function saveUserSched(){
         body:JSON.stringify({
           username:target.username,
           schedule:sched,
-          dateOverrides:overrides
+          dateOverrides:trimmedOverrides
         })
       });
       var data=await res.json().catch(function(){return {};});
@@ -8648,7 +8730,7 @@ function renderUserList(){
 // OVERRIDE: renderSettings — include notification settings
 // =====================================================
 function renderSettings(){
-  renderUserList();renderTagMgr();renderBH();renderNotifSettings();cfRenderSettings();renderSquareCard();renderTimezoneSelect();
+  renderUserList();renderTagMgr();renderBH();renderBlackoutList();renderNotifSettings();cfRenderSettings();renderSquareCard();renderTimezoneSelect();
   // Activity Log tab visible only for admins
   var actBtn=document.getElementById('stab-activity');
   if(actBtn){
