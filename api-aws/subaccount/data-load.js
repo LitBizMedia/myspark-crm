@@ -41,6 +41,10 @@ function appointmentToFrontend(row) {
     buffer_after: row.buffer_after,
     service_id: row.service_id,
     service_variation_id: row.service_variation_id || null,
+    price: row.price != null ? parseFloat(row.price) : null,
+    appointment_type_id: row.appointment_type_id || null,
+    booked_via: row.booked_via || null,
+    widget_id: row.widget_id || null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   };
