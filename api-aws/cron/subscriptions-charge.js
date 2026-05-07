@@ -164,6 +164,11 @@ exports.handler = async function (event) {
   const options = {};
   let subIdFilter = null;
   let skipReminders = false;
+  // Scheduled invocations come from EventBridge with detail-type 'Scheduled Event'.
+  // For those, we throw on internal failures so the Lambda Errors metric fires
+  // and CloudWatch alarms can pick it up. Manual invocations get the normal
+  // structured response even on failure (so CLI testing isn't broken).
+  const isScheduled = !!(event && (event['detail-type'] === 'Scheduled Event' || event.source === 'aws.scheduler'));
 
   if (event && typeof event === 'object') {
     if (event.body) {
@@ -237,9 +242,24 @@ exports.handler = async function (event) {
     }
 
     summary.finished_at = new Date().toISOString();
+
+    // Scheduled mode: throw on internal failures so Lambda Errors metric fires
+    // and CloudWatch alarms trigger. Log full summary first so it's preserved.
+    if (isScheduled && (summary.failed > 0 || summary.reminders_failed > 0)) {
+      console.error('Scheduled run had failures. Summary:', JSON.stringify(summary, null, 2));
+      const err = new Error('Scheduled run had failures: ' + summary.failed + ' charges, ' + summary.reminders_failed + ' reminders');
+      err.summary = summary;
+      throw err;
+    }
+
     return { statusCode: 200, body: JSON.stringify(summary, null, 2) };
   } catch (e) {
-    console.error('Cron error:', e.stack);
+    console.error('Cron error:', e.stack || e.message);
+    if (isScheduled) {
+      // Re-throw uncaught errors in scheduled mode for CloudWatch visibility.
+      console.error('Summary at failure:', JSON.stringify(summary, null, 2));
+      throw e;
+    }
     summary.error = e.message;
     summary.stack = e.stack;
     return { statusCode: 500, body: JSON.stringify(summary, null, 2) };

@@ -409,13 +409,24 @@ exports.handler = async function (event, context) {
   const isScheduledEvent = event && (event['detail-type'] === 'Scheduled Event' || event.source === 'aws.scheduler');
 
   if (isScheduledEvent) {
+    // Scheduled mode: re-throw on errors so Lambda Errors metric fires and
+    // CloudWatch alarms trigger. summary.failed (declined cards) is normal
+    // and does NOT throw; only summary.errors[] (processing exceptions) does.
+    let summary;
     try {
       const synthReq = { headers: {} };
-      return await runBilling(synthReq);
+      summary = await runBilling(synthReq);
     } catch (e) {
-      console.error('run-billing eventbridge error:', e);
-      return { success: false, error: e.message };
+      console.error('run-billing eventbridge fatal error:', e.stack || e.message);
+      throw e;
     }
+    if (summary && summary.errors && summary.errors.length > 0) {
+      console.error('run-billing had ' + summary.errors.length + ' errors. Summary:', JSON.stringify(summary, null, 2));
+      const err = new Error('run-billing had ' + summary.errors.length + ' processing errors');
+      err.summary = summary;
+      throw err;
+    }
+    return summary;
   }
 
   return httpWrapped(event, context);

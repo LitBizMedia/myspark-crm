@@ -260,12 +260,23 @@ exports.handler = async function (event, context) {
   const isScheduledEvent = event && (event['detail-type'] === 'Scheduled Event' || event.source === 'aws.scheduler');
 
   if (isScheduledEvent) {
+    // Scheduled mode: re-throw on errors so Lambda Errors metric fires.
+    // summary.failed (failed reminder sends) is treated as a real failure
+    // since reminders are time-sensitive and should retry-via-alarm.
+    let summary;
     try {
-      return await runReminders();
+      summary = await runReminders();
     } catch (e) {
-      console.error('reminders eventbridge error:', e);
-      return { success: false, error: e.message };
+      console.error('reminders eventbridge fatal error:', e.stack || e.message);
+      throw e;
     }
+    if (summary && summary.failed > 0) {
+      console.error('reminders had ' + summary.failed + ' failures. Summary:', JSON.stringify(summary, null, 2));
+      const err = new Error('reminders had ' + summary.failed + ' failed sends');
+      err.summary = summary;
+      throw err;
+    }
+    return summary;
   }
 
   return httpWrapped(event, context);
