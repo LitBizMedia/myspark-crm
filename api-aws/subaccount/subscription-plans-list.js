@@ -19,6 +19,7 @@ function rowToPlan(row) {
     taxable: row.taxable !== false,
     items: row.items || [],
     pricing: row.pricing || {},
+    trialDays: parseInt(row.trial_days, 10) || 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by
