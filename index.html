@@ -1373,8 +1373,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           </div>
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="classes-list-search" type="text" placeholder="Search classes..." oninput="renderClassesList()"></div>
+            <select class="filter-sel" id="classes-list-range" onchange="renderClassesList()"><option value="2w">Next 2 weeks</option><option value="30d">Next 30 days</option><option value="60d">Next 60 days</option><option value="future">All upcoming</option></select>
             <select class="filter-sel" id="classes-list-filter" onchange="renderClassesList()">
-              <option value="upcoming">All upcoming</option>
+              <option value="upcoming">Any roster</option>
               <option value="has_roster">Has roster (≥1 enrolled)</option>
               <option value="unpaid">Unpaid roster</option>
             </select>
@@ -11593,10 +11594,17 @@ function renderClassesList(){
   var search=(document.getElementById('classes-list-search')&&document.getElementById('classes-list-search').value||'').toLowerCase().trim();
   var filter=(document.getElementById('classes-list-filter')&&document.getElementById('classes-list-filter').value)||'upcoming';
   var instructor=(document.getElementById('classes-list-instructor')&&document.getElementById('classes-list-instructor').value)||'';
+  var range=(document.getElementById('classes-list-range')&&document.getElementById('classes-list-range').value)||'2w';
   var today=todayStr();
+  // Compute the cutoff date for the range filter. 'future' = no cutoff.
+  var cutoff=null;
+  if(range==='2w')cutoff=new Date(Date.now()+14*86400000).toISOString().slice(0,10);
+  else if(range==='30d')cutoff=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+  else if(range==='60d')cutoff=new Date(Date.now()+60*86400000).toISOString().slice(0,10);
   var sessions=(db.classSessions||[]).filter(function(s){
     if(s.status==='cancelled')return false;
     if(s.date<today)return false;
+    if(cutoff && s.date>cutoff)return false;
     if(instructor && s.instructor_id!==instructor)return false;
     var enrolled=Array.isArray(s.participants)?s.participants.filter(function(p){return p.status==='enrolled';}):[];
     if(filter==='has_roster' && enrolled.length===0)return false;
