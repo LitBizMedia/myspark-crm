@@ -6122,14 +6122,16 @@ function _getApptPrice(appt){
 }
 
 // Returns sum of the "service portion" of completed payments toward this
-// appointment. Uses afterDiscount (subtotal minus coupon and manual discount)
-// so tips do NOT count toward the appointment balance.
-// Falls back to total when afterDiscount isn't set (legacy payments).
+// appointment. Uses subtotal (the gross pre-discount line item amount)
+// because we compare against service.price which is also gross. Coupons
+// and manual discounts are credits against the bill: when a customer pays
+// the discounted amount, the bill is settled.
+// Falls back to total when subtotal isn't set (legacy payments).
 function _getApptPaidAmount(apptId){
   var paid=0;
   (db.payments||[]).forEach(function(p){
     if(p.appointmentId===apptId && p.status==='completed'){
-      var contribution=p.afterDiscount!=null?parseFloat(p.afterDiscount):parseFloat(p.total||0);
+      var contribution=p.subtotal!=null?parseFloat(p.subtotal):parseFloat(p.total||0);
       paid+=contribution;
     }
   });
@@ -6165,7 +6167,10 @@ function _getClassParticipantPaidAmount(sessionId, contactId){
   var paid=0;
   (db.payments||[]).forEach(function(p){
     if(p.classSessionId===sessionId && p.participantContactId===contactId && p.status==='completed'){
-      var contribution=p.afterDiscount!=null?parseFloat(p.afterDiscount):parseFloat(p.total||0);
+      // Use subtotal (gross) to compare against gross class price.
+      // Coupons reduce what the customer owes; full payment of the discounted
+      // amount settles the bill.
+      var contribution=p.subtotal!=null?parseFloat(p.subtotal):parseFloat(p.total||0);
       paid+=contribution;
     }
   });
