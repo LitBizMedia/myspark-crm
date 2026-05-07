@@ -10050,6 +10050,9 @@ function _renderSubDetailHistory(s){
 // =====================================================
 let _subEditMode='catalog';   // 'catalog' or 'custom'
 let _subEditItems=[];          // for custom mode
+let _subEditPlanId='';         // catalog mode: selected plan ID (survives re-renders)
+let _subEditContactId='';      // tracked contact ID for dynamic card picker refresh
+let _subContactWatcher=null;   // interval id watching sf-cv for changes
 
 function openSubModal(id,preContactId){
   if(!canManageSubscriptions()){toast('You do not have permission to manage subscriptions.','error');return;}
@@ -10057,18 +10060,72 @@ function openSubModal(id,preContactId){
   // Edit existing: preserve mode that was used at creation
   _subEditMode=s?(s.planId?'catalog':'custom'):'catalog';
   _subEditItems=s?JSON.parse(JSON.stringify(s.items||[])):[];
+  _subEditPlanId=s?(s.planId||''):'';
+  _subEditContactId=s?(s.contactId||''):(preContactId||'');
   state.modal={type:'sub',id:id||null,extra:preContactId||null};
   _renderSubModalBody(s);
+  _startContactWatcher();
 }
 
 function _switchSubEditMode(mode){
   _subEditMode=mode;
+  // Read current selections from DOM before re-render so they survive
+  const planEl=document.getElementById('sf-plan');
+  if(planEl)_subEditPlanId=planEl.value||'';
+  const cidEl=document.getElementById('sf-cv');
+  if(cidEl)_subEditContactId=cidEl.value||'';
   const s=state.modal&&state.modal.id?getSub(state.modal.id):null;
   _renderSubModalBody(s);
 }
 
+// Watch the contact picker's hidden input for changes. ssSelect doesn't fire
+// any event, so we poll. Cheap (~250ms cycle, only one input check).
+// Re-renders the card section when the contact changes.
+function _startContactWatcher(){
+  _stopContactWatcher();
+  _subContactWatcher=setInterval(function(){
+    const el=document.getElementById('sf-cv');
+    if(!el)return;
+    const v=el.value||'';
+    if(v!==_subEditContactId){
+      _subEditContactId=v;
+      _refreshCardPickerSection();
+    }
+  },250);
+}
+function _stopContactWatcher(){
+  if(_subContactWatcher){clearInterval(_subContactWatcher);_subContactWatcher=null;}
+}
+
+function _refreshCardPickerSection(){
+  const wrap=document.getElementById('sf-card-wrap');
+  if(!wrap)return;
+  const c=_subEditContactId?getContact(_subEditContactId):null;
+  const s=state.modal&&state.modal.id?getSub(state.modal.id):null;
+  const currentSelected=document.getElementById('sf-card');
+  const currentVal=currentSelected?currentSelected.value:(s&&s.cardId||'');
+  wrap.innerHTML=_renderCardPickerInner(c,s,currentVal);
+}
+
+function _renderCardPickerInner(c,s,selectedCardId){
+  const cards=(c&&c.squareCards)||[];
+  if(!c){
+    return '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Select a contact first.</div>';
+  }
+  if(!cards.length){
+    return '<div style="font-size:12px;color:var(--text-muted);padding:8px 10px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius)">No card on file. Add one from the contact\'s Saved Cards tab before billing can occur.</div>';
+  }
+  const sel=selectedCardId||(s&&s.cardId)||'';
+  const cardOpts='<option value="">No card (manual processing)</option>'+cards.map(function(cd){
+    return '<option value="'+cd.id+'"'+(sel===cd.id?' selected':'')+'>'+esc(cd.brand||'Card')+' ending in '+esc(cd.last4||'****')+(cd.expMonth?' ('+cd.expMonth+'/'+cd.expYear+')':'')+'</option>';
+  }).join('');
+  return '<select id="sf-card">'+cardOpts+'</select>';
+}
+
 function _renderSubModalBody(s){
-  const cid=s&&s.contactId||(state.modal&&state.modal.extra)||'';
+  // Use the persistent _subEditContactId rather than reading from DOM, so it
+  // survives mode toggles and other re-renders that destroy form state.
+  const cid=_subEditContactId||'';
   const c=cid?getContact(cid):null;
   const isEdit=!!s;
 
@@ -10078,14 +10135,14 @@ function _renderSubModalBody(s){
     +'<button type="button" onclick="_switchSubEditMode(\'custom\')" style="flex:1;padding:9px 14px;border-radius:var(--radius);border:1px solid '+(_subEditMode==='custom'?'var(--orange)':'var(--border)')+';background:'+(_subEditMode==='custom'?'rgba(255,107,53,.1)':'transparent')+';color:'+(_subEditMode==='custom'?'var(--orange)':'var(--text)')+';font-weight:600;font-size:13px;cursor:pointer">Custom</button>'
     +'</div>';
 
-  // Cycle options (filtered by plan availability if catalog mode)
+  // Cycle options. Use _subEditPlanId (persistent) rather than reading from DOM.
   let cycleOpts;
   if(_subEditMode==='catalog'){
-    const planId=s?s.planId:(document.getElementById('sf-plan')&&document.getElementById('sf-plan').value);
+    const planId=isEdit?s.planId:_subEditPlanId;
     const plan=planId?getPlan(planId):null;
     cycleOpts=SUB_CYCLES.map(function(cy){
       const enabled=plan&&plan.pricing&&plan.pricing[cy]&&plan.pricing[cy].enabled;
-      const sel=s&&s.billingCycle===cy?' selected':(!s&&cy==='monthly'?' selected':'');
+      const sel=s&&s.billingCycle===cy?' selected':(!s&&cy==='monthly'&&(!plan||enabled)?' selected':'');
       const disabled=plan?(!enabled?' disabled':''):'';
       return '<option value="'+cy+'"'+sel+disabled+'>'+(cy[0].toUpperCase()+cy.slice(1))+(plan&&enabled?' \u2014 '+fmt$(plan.pricing[cy].price):'')+'</option>';
     }).join('');
@@ -10103,8 +10160,9 @@ function _renderSubModalBody(s){
     if(!activePlans.length){
       modeBody='<div style="padding:14px;background:rgba(255,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:var(--radius);font-size:13px;color:#fbbf24;margin-bottom:12px">No active plans. <a onclick="closeModal();openSubPlansModal()" style="color:#fbbf24;text-decoration:underline;cursor:pointer">Create a plan</a> or switch to Custom mode.</div>';
     }else{
+      const seedPlanId=isEdit?s.planId:_subEditPlanId;
       const planOpts='<option value="">Select a plan...</option>'+activePlans.map(function(p){
-        return '<option value="'+p.id+'"'+(s&&s.planId===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
+        return '<option value="'+p.id+'"'+(seedPlanId===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
       }).join('');
       modeBody='<div class="form-row">'
         +'<div class="form-group"><label>Plan *</label><select id="sf-plan"'+(isEdit?' disabled':'')+' onchange="_onSubPlanChange()">'+planOpts+'</select></div>'
@@ -10124,20 +10182,6 @@ function _renderSubModalBody(s){
       +'<div class="form-group"><label style="display:flex;justify-content:space-between;align-items:center"><span>Items *</span>'+(isEdit?'':'<button type="button" class="btn btn-purple btn-sm" onclick="_addSubCustomItem()">+ Add Item</button>')+'</label>'
       +'<div id="sf-custom-items">'+_renderSubCustomItems(isEdit)+'</div>'
       +'</div>';
-  }
-
-  // Card on file picker
-  const cards=(c&&c.squareCards)||[];
-  let cardSection;
-  if(!c){
-    cardSection='<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Select a contact first.</div>';
-  }else if(!cards.length){
-    cardSection='<div style="font-size:12px;color:var(--text-muted);padding:8px 10px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius)">No card on file. Add one from the contact\'s Saved Cards tab before billing can occur.</div>';
-  }else{
-    const cardOpts='<option value="">No card (manual processing)</option>'+cards.map(function(cd){
-      return '<option value="'+cd.id+'"'+(s&&s.cardId===cd.id?' selected':'')+'>'+esc(cd.brand||'Card')+' ending in '+esc(cd.last4||'****')+(cd.expMonth?' ('+cd.expMonth+'/'+cd.expYear+')':'')+'</option>';
-    }).join('');
-    cardSection='<select id="sf-card">'+cardOpts+'</select>';
   }
 
   // Owner picker (staff users)
@@ -10164,25 +10208,30 @@ function _renderSubModalBody(s){
     +'<div class="form-group" style="margin-bottom:0"><label>Note (optional)</label><input id="sf-discount-note" type="text" value="'+esc(md&&md.manualDiscountNote||'')+'" placeholder="Reason for the discount"></div>'
     +'</div>';
 
-  // Other fields
+  // Other fields. Card picker is wrapped in #sf-card-wrap which we refresh
+  // on contact change via _refreshCardPickerSection().
   const otherFields='<div class="form-group"><label>Contact *</label>'+ssHTML('sf-cw','sf-ci','sf-cv','sf-cd','Search contact...',cid)+'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Start Date *</label><input id="sf-start" type="date" value="'+(s&&s.startDate||todayStr())+'"'+(isEdit?' disabled':'')+'></div>'
     +'<div class="form-group"><label>Owner</label><select id="sf-owner">'+ownerOpts+'</select></div>'
     +'</div>'
-    +'<div class="form-group"><label>Card on File</label>'+cardSection+'</div>'
+    +'<div class="form-group"><label>Card on File</label><div id="sf-card-wrap">'+_renderCardPickerInner(c,s,s&&s.cardId)+'</div></div>'
     +couponSection
     +discountSection
     +'<div class="form-group"><label>Notes</label><textarea id="sf-notes" rows="2">'+esc(s&&s.notes||'')+'</textarea></div>';
 
   const body=modeToggle+modeBody+otherFields;
   openModal(isEdit?'Edit Subscription':'New Subscription',body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSub()">Save</button>',
+    '<button class="btn btn-ghost" onclick="_closeSubModal()">Cancel</button><button class="btn btn-primary" onclick="saveSub()">Save</button>',
     'modal-xl');
 }
 
+function _closeSubModal(){_stopContactWatcher();closeModal();}
+
 function _onSubPlanChange(){
-  // When plan changes, re-render so cycle options reflect that plan's availability
+  // Persist the new selection, then re-render so cycle options reflect this plan
+  const planEl=document.getElementById('sf-plan');
+  if(planEl)_subEditPlanId=planEl.value||'';
   const s=state.modal&&state.modal.id?getSub(state.modal.id):null;
   _renderSubModalBody(s);
 }
@@ -10319,6 +10368,7 @@ async function saveSub(){
   }
 
   closeModal();
+  _stopContactWatcher();
   await fetchFromServer();
   renderSubscriptions();
   if(state.drawer)renderDrawer();
