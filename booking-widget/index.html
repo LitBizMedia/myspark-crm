@@ -1491,7 +1491,11 @@ function setCustomTip(val) {
 async function initSquare() {
   const appId = D.settings.square_app_id;
   const locId = D.settings.square_location_id;
-  if (!appId || !locId) return;
+  if (!appId || !locId) {
+    const el = document.getElementById('bw-sq-card');
+    if (el) el.innerHTML = `<div class="bw-error">Online payment is not configured for this business. Please contact them to book.</div>`;
+    return;
+  }
   try {
     if (!window.Square) {
       const script = document.createElement('script');
@@ -1499,13 +1503,22 @@ async function initSquare() {
         ? 'https://sandbox.web.squarecdn.com/v1/square.js'
         : 'https://web.squarecdn.com/v1/square.js';
       document.head.appendChild(script);
-      await new Promise(r => { script.onload = r; });
+      await new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Square SDK failed to load'));
+        setTimeout(() => reject(new Error('Square SDK load timeout')), 10000);
+      });
     }
     S.sq_payments = window.Square.payments(appId, locId);
     S.sq_card = await S.sq_payments.card();
+    // Clear loading spinner before Square injects its iframe.
+    const target = document.getElementById('bw-sq-card');
+    if (target) target.innerHTML = '';
     await S.sq_card.attach('#bw-sq-card');
   } catch(e) {
-    document.getElementById('bw-sq-card').innerHTML = `<div class="bw-error">Payment form unavailable. You can still book and pay at your appointment.</div>`;
+    console.error('Square init error:', e);
+    const el = document.getElementById('bw-sq-card');
+    if (el) el.innerHTML = `<div class="bw-error">Payment form unavailable: ${e.message || 'unknown error'}. You can still book and pay at your appointment.</div>`;
   }
 }
 
