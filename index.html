@@ -61,15 +61,22 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .form-group select option{background:var(--bg-card)}
 /* Radio and checkbox inputs should NOT inherit the full-width style above */
 .form-group input[type="radio"],.form-group input[type="checkbox"]{width:auto;padding:0}
-/* Date/time pickers: invert the native calendar icon so it's visible on dark input backgrounds */
+/* Date/time pickers: force the native calendar icon visible against dark
+   input backgrounds. Some browsers/themes try to render a dark icon when
+   the input's color-scheme inherits or the popup forces light mode, so
+   we use !important to win over those. */
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-input[type="month"]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(2);opacity:.85;cursor:pointer}
+input[type="month"]::-webkit-calendar-picker-indicator{
+  filter:invert(1) brightness(2)!important;
+  opacity:.9!important;
+  cursor:pointer!important;
+}
 input[type="date"]::-webkit-calendar-picker-indicator:hover,
 input[type="time"]::-webkit-calendar-picker-indicator:hover,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
-input[type="month"]::-webkit-calendar-picker-indicator:hover{opacity:1}
+input[type="month"]::-webkit-calendar-picker-indicator:hover{opacity:1!important}
 
 /* Globally fix native time/date input contrast in dark theme. The internal
    ::-webkit-datetime-edit shadow elements don't inherit color: from the
@@ -2851,12 +2858,6 @@ function switchPanel(name){
   document.querySelectorAll('.sb-item').forEach(i=>i.classList.toggle('active',i.dataset.panel===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('hidden',p.id!=='panel-'+name));
   document.getElementById('top-bar-title').textContent=PANEL_TITLES[name]||name;
-  // Admin section: hide label + Settings button entirely for non-admins.
-  const isAdmin=(state.user&&state.user.role==='admin');
-  const sbAdminLabel=document.getElementById('sb-admin-label');
-  if(sbAdminLabel)sbAdminLabel.style.display=isAdmin?'':'none';
-  const sbSettings=document.getElementById('sb-settings');
-  if(sbSettings)sbSettings.style.display=isAdmin?'':'none';
   // Media Library is visible to all authenticated users.
   // Read access is open; upload/delete are restricted in the UI by isAdminOrManager().
   const sbMedia=document.querySelector('[data-panel="media"]');
@@ -23519,6 +23520,7 @@ function applyRolePermissions(){
   hide('sb-products',   !am);
   hide('sb-forms',      prac);
   hide('sb-staff',      !am);
+  hide('sb-admin-label',!adm);
   hide('sb-settings',   !adm);
   // Hide transactions tab for users and practitioners
   hide('ppt-transactions', !am);
