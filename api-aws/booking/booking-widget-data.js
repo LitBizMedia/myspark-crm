@@ -13,6 +13,7 @@
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz, dateInTzPlusDays } = require('./lib/timezone');
+const { getSquareCreds, getOAuthAppId, getSquareEnv } = require('./lib/square');
 
 async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -236,6 +237,16 @@ async function handler(req, res) {
       }
     }
 
+    // Fetch real Square config: per-subaccount creds from RDS,
+    // app-level OAuth app id from Secrets Manager. Run in parallel.
+    // Empty/missing => the public page surfaces a friendly error.
+    const [sqCreds, sqAppId, sqEnv] = await Promise.all([
+      getSquareCreds(slug).catch(() => null),
+      getOAuthAppId().catch(() => null),
+      getSquareEnv().catch(() => 'production')
+    ]);
+    const sqSandbox = sqCreds ? !!sqCreds.sandbox : (sqEnv === 'sandbox');
+
     // 6. Public-safe settings.
     // Per-widget config takes precedence over workspace blob defaults.
     // We expose only the fields the public page actually needs.
@@ -284,9 +295,9 @@ async function handler(req, res) {
       widget_tagline:          w.tagline || bs.widget_tagline || '',
       widget_footer_text:      bs.widget_footer_text || '',
       confirm_message:         w.confirm_message || bs.confirmation_message || '',
-      square_app_id:           settings.square?.appId || null,
-      square_location_id:      settings.square?.locationId || null,
-      square_sandbox:          settings.square?.sandbox !== false
+      square_app_id:           sqAppId || null,
+      square_location_id:      (sqCreds && sqCreds.location_id) || null,
+      square_sandbox:          sqSandbox
     };
 
     return res.status(200).json({

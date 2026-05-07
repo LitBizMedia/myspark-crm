@@ -24,6 +24,7 @@ const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const resend = require('./lib/resend');
+const { getSquareCreds, squareHost, squareHeaders } = require('./lib/square');
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const now_ = () => new Date().toISOString();
@@ -570,26 +571,21 @@ async function handler(req, res) {
         return res.status(400).json({ error: 'Payment information is required for this booking' });
       }
 
-      const squareSettings = settings.square || {};
-      if (!squareSettings.accessToken || !squareSettings.locationId) {
+      // Per-subaccount Square creds live in RDS square_credentials, not in the blob.
+      // Fetched via lib/square helper (matches POS/charge/etc.).
+      const sqCreds = await getSquareCreds(slug);
+      if (!sqCreds || !sqCreds.access_token || !sqCreds.location_id) {
         return res.status(500).json({ error: 'Payment processing is not configured. Please contact the business.' });
       }
 
-      const squareBase = squareSettings.sandbox
-        ? 'https://connect.squareupsandbox.com'
-        : 'https://connect.squareup.com';
-
-      const chargeRes = await fetch(`${squareBase}/v2/payments`, {
+      const chargeRes = await fetch(`https://${squareHost(sqCreds.sandbox)}/v2/payments`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${squareSettings.accessToken}`
-        },
+        headers: squareHeaders(sqCreds.access_token),
         body: JSON.stringify({
           source_id:        square_nonce,
           idempotency_key:  paymentId,
           amount_money:     { amount: Math.round(chargeAmount * 100), currency: 'USD' },
-          location_id:      squareSettings.locationId,
+          location_id:      sqCreds.location_id,
           note:             `${title} - ${date} ${time}` + (paymentMode === 'deposit' ? ' (deposit)' : ''),
           buyer_email_address: client_info.email
         })
