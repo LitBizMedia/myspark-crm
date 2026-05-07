@@ -32,6 +32,10 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);color:var(--main-text);font-size:14px;line-height:1.5}
 .hidden{display:none!important}
+/* Admin-only sidebar items. Body class is set/unset in applyRolePermissions.
+   Belt-and-suspenders: even if JS gating misses, the CSS hides them. */
+body:not(.role-admin) #sb-admin-label,
+body:not(.role-admin) #sb-settings{display:none!important}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--purple-border);border-radius:3px}
 
@@ -61,22 +65,27 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
 .form-group select option{background:var(--bg-card)}
 /* Radio and checkbox inputs should NOT inherit the full-width style above */
 .form-group input[type="radio"],.form-group input[type="checkbox"]{width:auto;padding:0}
-/* Date/time pickers: force the native calendar icon visible against dark
-   input backgrounds. Some browsers/themes try to render a dark icon when
-   the input's color-scheme inherits or the popup forces light mode, so
-   we use !important to win over those. */
+/* Date/time pickers: render a custom white calendar icon so the picker is
+   always visible regardless of how the browser handles color-scheme. The
+   native indicator is made transparent but stays clickable on top. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"]{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ede8ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>")!important;
+  background-repeat:no-repeat!important;
+  background-position:right 10px center!important;
+  background-size:16px 16px!important;
+  padding-right:34px!important;
+}
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator,
 input[type="month"]::-webkit-calendar-picker-indicator{
-  filter:invert(1) brightness(2)!important;
-  opacity:.9!important;
+  opacity:0!important;
   cursor:pointer!important;
+  width:24px;
 }
-input[type="date"]::-webkit-calendar-picker-indicator:hover,
-input[type="time"]::-webkit-calendar-picker-indicator:hover,
-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
-input[type="month"]::-webkit-calendar-picker-indicator:hover{opacity:1!important}
 
 /* Globally fix native time/date input contrast in dark theme. The internal
    ::-webkit-datetime-edit shadow elements don't inherit color: from the
@@ -23513,6 +23522,8 @@ function applyRolePermissions(){
   var adm=r==='admin';
   var am=adm||r==='manager';
   var prac=r==='practitioner';
+  // Body class drives the admin-only CSS rules at the top of the file.
+  document.body.classList.toggle('role-admin',adm);
   function hide(id,hidden){var el=document.getElementById(id);if(el)el.classList.toggle('hidden',hidden);}
   hide('sb-contacts',   prac);
   hide('sb-tasks',      prac);
