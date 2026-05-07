@@ -346,6 +346,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .cal-cell:hover{background:#f5f3ff}
 .cal-cell.other-month .cal-day-num{opacity:.25}
 .cal-cell.today .cal-day-num{background:var(--purple);color:#fff;border-radius:50%}
+.cal-cell.cal-blackout{background:repeating-linear-gradient(45deg,rgba(248,113,113,.04),rgba(248,113,113,.04) 10px,rgba(248,113,113,.09) 10px,rgba(248,113,113,.09) 20px)}
 .cal-day-num{font-size:12px;font-weight:600;margin-bottom:3px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:var(--main-text)}
 .cal-ev{font-size:10px;padding:2px 5px;border-radius:3px;margin-bottom:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer}
 .cal-ev:hover{filter:brightness(1.2)}
@@ -2202,6 +2203,16 @@ function globalCalHours(){
   let min=8,max=18;
   Object.values(bh).forEach(d=>{if(d.open){const s=parseInt(d.start),e=parseInt(d.end);if(s<min)min=s;if(e>max)max=e}});
   return Array.from({length:max-min},(_,i)=>i+min);
+}
+
+// Workspace-level blackout date lookup. Returns the matching {date, reason}
+// object if dateStr is a blackout day, null otherwise. Blackouts apply to
+// both the public booking widget and the internal calendar.
+function isBlackoutDate(dateStr){
+  if(!dateStr)return null;
+  var arr=db.settings && db.settings.blackoutDates;
+  if(!Array.isArray(arr))return null;
+  return arr.find(function(b){return b && b.date===dateStr;}) || null;
 }
 
 // =====================================================
@@ -4713,8 +4724,9 @@ function renderMonthCal(){
         }
       }
     }
-    html+='<div class="cal-cell'+(cur?'':' other-month')+(isToday?' today':'')+'" onclick="'+(str?'openDayInCal(\''+str+'\')':'')+'">'
+    html+='<div class="cal-cell'+(cur?'':' other-month')+(isToday?' today':'')+(str&&isBlackoutDate(str)?' cal-blackout':'')+'" onclick="'+(str?'openDayInCal(\''+str+'\')':'')+'"'+(str&&isBlackoutDate(str)?' title="Blackout: '+esc(isBlackoutDate(str).reason||'closed')+'"':'')+'>'
       +'<div class="cal-day-num">'+day+'</div>'
+      +(str&&isBlackoutDate(str)?'<div style="font-size:10px;font-weight:600;color:#f87171;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Blackout</div>':'')
       +schedHTML
       +userSummaryHTML
       +shown.join('')
@@ -4863,7 +4875,11 @@ function renderWeekCal(){
       var lbl=esc(b.name.split(' ')[0])+' – Day Off'+(b.reason&&b.reason!=='Day Off'?' ('+b.reason.slice(0,12)+')':'');
       return'<span class="cal-allday-chip" style="background:'+b.color+'18;border:1px solid '+b.color+'44;color:'+b.color+'">'+lbl+'</span>';
     }).join('');
-    html+='<div class="day-col"><div class="day-col-head'+(str===td?' today':'')+'">'+DSHORT[day.getDay()]+' '+day.getDate()+staffDots2+'</div><div class="day-col-allday">'+dOffChips+'</div>'+banW+buildTimedCol(str,appts,allH)+'</div>';
+    var boW=isBlackoutDate(str);
+    if(boW){
+      dOffChips='<span class="cal-allday-chip" style="background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.4);color:#f87171;font-weight:600">Blackout'+(boW.reason?': '+esc(boW.reason.slice(0,18)):'')+'</span>'+dOffChips;
+    }
+    html+='<div class="day-col"'+(boW?' style="background:rgba(248,113,113,.04)"':'')+'><div class="day-col-head'+(str===td?' today':'')+'">'+DSHORT[day.getDay()]+' '+day.getDate()+staffDots2+'</div><div class="day-col-allday">'+dOffChips+'</div>'+banW+buildTimedCol(str,appts,allH)+'</div>';
   });
   html+='</div>';
   document.getElementById('cal-body').innerHTML=html;
@@ -4884,7 +4900,12 @@ function renderDayCal(){
   document.getElementById('cal-big-month').textContent=MONTHS[d.getMonth()].slice(0,3);
   var allH=globalCalHours();
   var staffCols=getSelectedDayStaff();
-  var html='<div class="cal-timed" style="min-width:'+((staffCols.length*190)+80)+'px">';
+  var boD=isBlackoutDate(str);
+  var html='';
+  if(boD){
+    html+='<div style="margin:0 0 10px;padding:10px 14px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);border-radius:8px;color:#f87171;font-size:13px"><strong>Blackout date:</strong> '+esc(boD.reason||'Online bookings disabled for this date.')+' Internal scheduling still possible with override.</div>';
+  }
+  html+='<div class="cal-timed" style="min-width:'+((staffCols.length*190)+80)+'px'+(boD?';background:rgba(248,113,113,.03)':'')+'">';
   // Time labels
   html+='<div class="time-col"><div class="time-col-head" style="height:56px;border-bottom:1px solid var(--border)"></div>';
   html+=allH.map(function(h){return'<div class="time-slot">'+(h===12?'12 PM':h<12?h+' AM':(h-12)+' PM')+'</div>';}).join('');
@@ -7451,6 +7472,17 @@ function checkApptConflict(){
   const time=document.getElementById('af-time')&&document.getElementById('af-time').value;
   const dur=document.getElementById('af-dur')&&document.getElementById('af-dur').value;
   const userId=document.getElementById('af-user')&&document.getElementById('af-user').value;
+  // Workspace-level blackout date check. Trumps everything else when triggered.
+  if(date && !apptOverride){
+    var bo=isBlackoutDate(date);
+    if(bo){
+      var wbBO=document.getElementById('appt-warn');
+      var btnBO=document.getElementById('appt-save-btn');
+      if(wbBO){wbBO.classList.remove('hidden');wbBO.innerHTML='<strong>Blackout date:</strong> '+esc(bo.reason||'Bookings disabled for this date.')+'<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
+      if(btnBO){btnBO.disabled=true;btnBO.style.opacity='.4';}
+      return;
+    }
+  }
   // Schedule availability check
   if(userId&&date){
     const schHrs=getCalHours(date,userId);
