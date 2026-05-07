@@ -1176,9 +1176,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <button class="sb-item" id="sb-payments" data-panel="payments" onclick="switchPanel('payments')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Payments
       </button>
-      <button class="sb-item" id="sb-products" data-panel="products" onclick="switchPanel('products')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Products
-      </button>
       <button class="sb-item" id="sb-forms" data-panel="forms" onclick="switchPanel('forms')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Forms
       </button>
@@ -1715,11 +1712,18 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           </div>
         </div>
         <div id="pay-orders-view" class="hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+            <div>
+              <div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Orders</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Track product orders and fulfillment</div>
+            </div>
+            <button class="btn btn-ghost" onclick="openProductsModal()" id="orders-manage-products-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Manage Products</button>
+          </div>
           <div class="coming-soon-wrap">
             <span class="coming-soon-badge">Coming Soon</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-            <h3>Orders</h3>
-            <p>View and manage all orders. Sync with Square or your e-commerce platform to track order status and fulfillment.</p>
+            <h3>Order Tracking</h3>
+            <p>View and manage all orders here. Sync with Square or your e-commerce platform to track order status and fulfillment.</p>
           </div>
         </div>
         <div id="pay-coupons-view" class="hidden"></div>
@@ -5042,6 +5046,9 @@ function switchPayTab(tab){
     renderGiftCards();
   }else if(tab==='sessionpacks'){
     renderSessionPacks();
+  }else if(tab==='orders'){
+    var mp=document.getElementById('orders-manage-products-btn');
+    if(mp)mp.style.display=(state.user&&state.user.role==='admin')?'':'none';
   }else if(tab==='paysettings'){
     if(!isAdminOrManager()){switchPayTab('pos');return;}
     renderPaySettings();
@@ -19292,6 +19299,30 @@ function openSpSellModal(){
   var body=_modalLightContent('<div id="sp-sell-modal-body">'+spRenderSell()+'</div>');
   openModal('Sell Session Pack', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
   setTimeout(spInitSellForm,0);
+}
+
+// Manage Products modal: temporarily moves the panel-products children into
+// the modal body (preserves IDs and event bindings), then moves them back on
+// close. Avoids duplicating the entire products UI markup.
+function openProductsModal(){
+  if(!state.user || state.user.role!=='admin'){toast('Admin only.','error');return;}
+  var panel=document.getElementById('panel-products');
+  if(!panel)return;
+  openModal('Products & Services', '', '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-xxl');
+  var modalBody=document.getElementById('modal-body');
+  if(!modalBody)return;
+  // Move children, remember original parent for restoration on close
+  while(panel.firstChild) modalBody.appendChild(panel.firstChild);
+  state.modalAfterClose=function(){
+    var p=document.getElementById('panel-products');
+    var mb=document.getElementById('modal-body');
+    if(!p||!mb)return;
+    while(mb.firstChild) p.appendChild(mb.firstChild);
+  };
+  setTimeout(function(){
+    if(typeof renderProducts==='function')renderProducts();
+    if(typeof renderCatChips==='function')renderCatChips();
+  },10);
 }
 
 function spRenderTemplates(){
