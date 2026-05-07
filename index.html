@@ -5994,7 +5994,26 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   }
   const uOpts = _apptStaffOptions(initialAllowedStaff, defUid);
 
-  const b =
+  // Banner for appointments booked via the public widget. Shows source widget
+  // name, price (when on the row), and any appointment_type info so staff
+  // immediately know this didn't come from the dashboard.
+  var widgetBanner = '';
+  if (a && a.booked_via === 'widget') {
+    var sourceWidget = a.widget_id ? (db.serviceWidgets||[]).find(function(x){return x.id===a.widget_id;}) : null;
+    var widgetName = sourceWidget ? sourceWidget.name : 'Public widget';
+    var priceLine = a.price != null ? ' &middot; ' + fmt$(parseFloat(a.price)) : '';
+    var typeLine = '';
+    if (a.appointment_type_id && sourceWidget && Array.isArray(sourceWidget.appointment_types)) {
+      var typeObj = sourceWidget.appointment_types.find(function(t){return t && t.id===a.appointment_type_id;});
+      if (typeObj && typeObj.duration) typeLine = ' &middot; ' + parseInt(typeObj.duration) + ' min';
+    }
+    widgetBanner = '<div style="background:rgba(107,33,234,.06);border:1px solid var(--brand);border-radius:8px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:12px">'
+      + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--brand);flex-shrink:0"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>'
+      + '<div><strong style="color:var(--text)">Booked via widget</strong> &middot; ' + esc(widgetName) + priceLine + typeLine + '</div>'
+      + '</div>';
+  }
+
+  const b = widgetBanner +
     // Service section: visible only in Service mode. Mode is set at open time
     // by the +Schedule menu choice, no in-modal switching.
     (initialMode === 'service'
@@ -14811,6 +14830,18 @@ function _swgPolicyToPayload(){
   };
 }
 
+// Guard against accidental widget deactivation. Returns false if user
+// declines to deactivate; true otherwise. Only prompts when an existing
+// active widget is being changed to inactive.
+function _swgConfirmDeactivate(existingId){
+  var newActive = (document.getElementById('swg-active')||{}).checked !== false;
+  if (newActive) return true;
+  if (!existingId) return true; // brand-new widget being saved inactive - fine
+  var existing = (db.serviceWidgets||[]).find(function(x){ return x.id === existingId; });
+  if (!existing || existing.active === false) return true; // already inactive
+  return confirm('Deactivate this widget?\n\nPatients will not be able to book through it. The public booking page will show "This booking link is unavailable."');
+}
+
 function openServiceWidgetModal(id){
   var w=id?(db.serviceWidgets||[]).find(function(x){return x.id===id;}):null;
   // widget_type defaults to 'service'. New widgets pick a type; existing are locked.
@@ -15081,6 +15112,7 @@ function openClassWidgetEditor(w,isNew){
 function saveClassWidget(id){
   var name=((document.getElementById('swg-name')||{}).value||'').trim();
   if(!name){toast('Widget name is required.','error');return;}
+  if(!_swgConfirmDeactivate(id)) return;
   var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
   // Class widgets store the chosen class service IDs. If none chosen, all class services show.
   var w={
@@ -15418,6 +15450,7 @@ function apptAvailSetEnd(day,val){
 function saveAppointmentWidget(id){
   var name=((document.getElementById('swg-name')||{}).value||'').trim();
   if(!name){toast('Widget name is required.','error');return;}
+  if(!_swgConfirmDeactivate(id)) return;
   var staffIds=Array.from(document.querySelectorAll('.swg-staff-chk:checked')).map(function(c){return c.value;});
   if(!staffIds.length){toast('Pick at least one provider.','error');return;}
   var activeTypes=_apptWidgetTypes.filter(function(t){return t.active!==false;});
@@ -15598,6 +15631,7 @@ function swgLogoClear(){
 function saveServiceWidget(id){
   var name=(document.getElementById('swg-name')||{}).value;
   if(!name||!name.trim()){toast('Widget name is required.','error');return;}
+  if(!_swgConfirmDeactivate(id)) return;
   var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
   // Read assignment strategy from the radio group
   var rrRadio=document.querySelector('input[name="swg-rr-strategy"]:checked');
