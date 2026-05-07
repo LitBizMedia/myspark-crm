@@ -5088,10 +5088,12 @@ function calcTotals(){
   else if(state.posTip==='20')tip=afterDiscount*.2;
   else if(state.posTip==='custom')tip=parseFloat(document.getElementById('pos-custom-tip')&&document.getElementById('pos-custom-tip').value)||0;
   const credit=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
-  // Step 5: Additional fee (computed on after-discount, NOT taxed)
+  // Step 5: Additional fee (computed on after-discount, NOT taxed). Only when
+  // workspace apply_to.pos is true (defaults to true for back-compat).
   let additionalFee=0;
   const ps=db.paySettings||{};
-  if(ps.additionalFee&&ps.additionalFee.enabled){
+  const feeApplyPos=!ps.additionalFee||!ps.additionalFee.apply_to||ps.additionalFee.apply_to.pos!==false;
+  if(ps.additionalFee&&ps.additionalFee.enabled&&feeApplyPos){
     const feeAmt=parseFloat(ps.additionalFee.amount)||0;
     if(ps.additionalFee.type==='pct')additionalFee=afterDiscount*(feeAmt/100);
     else additionalFee=feeAmt;
@@ -6709,6 +6711,10 @@ function apptUpdateTotals(){
   var taxCalc=calcTax([{price:subtotal,taxable:taxableFlag,qty:1}], couponDiscount+discountAmount);
   var taxAmount=taxCalc.tax;
   var taxableAmount=taxCalc.taxableAmount;
+
+  // TODO: workspace additionalFee with apply_to.calendar_take_payment
+  // toggle exists in Settings but Calendar Take Payment fee integration
+  // is deferred. Requires updates to totals display + save flow + payment record.
 
   var total=afterDiscount+taxAmount+tipAmount;
 
@@ -22802,6 +22808,9 @@ function renderPaySettings(){
   if(!el)return;
   if(!db.paySettings)db.paySettings={};
   if(!db.paySettings.additionalFee)db.paySettings.additionalFee={enabled:false,label:'Additional Fee',type:'flat',amount:0};
+  // Migrate fee config to include apply_to surface flags. Defaults preserve current behavior:
+  // POS had fees applied; booking widgets and calendar take-payment did not.
+  if(!db.paySettings.additionalFee.apply_to)db.paySettings.additionalFee.apply_to={pos:true,booking_widget:false,calendar_take_payment:false};
   if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
   var af=db.paySettings.additionalFee;
   var tx=db.paySettings.tax;
@@ -22824,7 +22833,15 @@ function renderPaySettings(){
     +'</select></div>'
     +'<div class="form-group" style="flex:1;min-width:80px"><label>'+(af.type==='pct'?'Rate (%)':'Amount ($)')+'</label><input id="fee-amount" type="number" style="'+inp+'" min="0" step="0.01" value="'+(af.amount||'')+'" placeholder="0.00" oninput="savePaySettings()"></div>'
     +'</div>'
-    +'<p style="font-size:12px;color:var(--main-text-muted);margin:4px 0 0">This fee is automatically added to every POS transaction when enabled.</p>'
+    +'<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">'
+    +'<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Apply this fee to:</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" id="fee-apply-pos"'+(af.apply_to.pos?' checked':'')+' onchange="savePaySettings()"> Point of Sale</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" id="fee-apply-widget"'+(af.apply_to.booking_widget?' checked':'')+' onchange="savePaySettings()"> Booking Widgets</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" id="fee-apply-calendar"'+(af.apply_to.calendar_take_payment?' checked':'')+' onchange="savePaySettings()"> Calendar Take Payment</label>'
+    +'</div>'
+    +'<p style="font-size:11px;color:var(--main-text-muted);margin:8px 0 0;font-style:italic">More surfaces, like forms and invoices, will be added in future updates.</p>'
+    +'</div>'
     +'</div>'
     +'</div>'
     +'<div class="s-card">'
@@ -22939,6 +22956,7 @@ function calcTax(items, preTaxDiscount){
 function savePaySettings(){
   if(!db.paySettings)db.paySettings={};
   if(!db.paySettings.additionalFee)db.paySettings.additionalFee={enabled:false,label:'Additional Fee',type:'flat',amount:0};
+  if(!db.paySettings.additionalFee.apply_to)db.paySettings.additionalFee.apply_to={pos:true,booking_widget:false,calendar_take_payment:false};
   if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
   var af=db.paySettings.additionalFee;
   var tx=db.paySettings.tax;
@@ -22948,6 +22966,13 @@ function savePaySettings(){
   if(lbl)af.label=lbl.value||'Additional Fee';
   if(typ)af.type=typ.value||'flat';
   if(amt)af.amount=parseFloat(amt.value)||0;
+  // Apply-to surface flags
+  var aPos=document.getElementById('fee-apply-pos');
+  var aWidget=document.getElementById('fee-apply-widget');
+  var aCal=document.getElementById('fee-apply-calendar');
+  if(aPos)af.apply_to.pos=!!aPos.checked;
+  if(aWidget)af.apply_to.booking_widget=!!aWidget.checked;
+  if(aCal)af.apply_to.calendar_take_payment=!!aCal.checked;
   var tlbl=document.getElementById('tax-label');
   var trate=document.getElementById('tax-rate');
   var prevRateZero=(parseFloat(tx.rate)||0)<=0;

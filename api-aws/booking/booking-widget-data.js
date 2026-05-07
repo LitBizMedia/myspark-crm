@@ -252,11 +252,12 @@ async function handler(req, res) {
     // We expose only the fields the public page actually needs.
     const settings = blob.settings || {};
     const bs = settings.bookingSettings || {};
-    const taxSettings = bs.tax || (settings.paySettings && settings.paySettings.tax) || {};
-    // Workspace-level additional fee (e.g. convenience fee). Applies to ALL
-    // widget bookings when enabled. Toggled in Settings -> Payments,
-    // not per-widget per Patrick's intent.
-    const feeSettings = (settings.paySettings && settings.paySettings.additionalFee) || {};
+    const taxSettings = bs.tax || (settings.paySettings && settings.paySettings.tax) || (blob.paySettings && blob.paySettings.tax) || {};
+    // Workspace-level additional fee. Stored at blob.paySettings (top level),
+    // not under blob.settings. Only exposed to widgets when apply_to.booking_widget=true.
+    const paySettings = blob.paySettings || {};
+    const feeSettings = paySettings.additionalFee || {};
+    const feeApplyToWidget = feeSettings.apply_to && feeSettings.apply_to.booking_widget === true;
     // Default helpers for widget-vs-blob-vs-default precedence.
     const w = widget || {};
     const widgetBool = (val, def) => (val == null ? def : !!val);
@@ -295,7 +296,7 @@ async function handler(req, res) {
         label: taxSettings.label || 'Sales Tax'
       },
       additional_fee: {
-        enabled: !!feeSettings.enabled,
+        enabled: !!(feeSettings.enabled && feeApplyToWidget),
         label: feeSettings.label || 'Additional Fee',
         type: feeSettings.type === 'pct' ? 'pct' : 'flat',
         amount: parseFloat(feeSettings.amount) || 0

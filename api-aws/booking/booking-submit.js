@@ -299,7 +299,8 @@ async function handler(req, res) {
     const blob     = blobResult.rows[0]?.data || {};
     const settings = blob.settings || {};
     const bs       = settings.bookingSettings || {};
-    const paySettings = settings.paySettings || {};
+    // paySettings stored at blob.paySettings (top level), not blob.settings.paySettings
+    const paySettings = blob.paySettings || settings.paySettings || {};
     const taxSettings = paySettings.tax || bs.tax || { enabled: false, rate: 0, label: 'Sales Tax' };
 
     // 6. Resolve assigned staff (eligible pool).
@@ -532,11 +533,11 @@ async function handler(req, res) {
     const subtotal = r2(basePrice);
     const afterDiscount = r2(Math.max(0, subtotal - couponDiscount));
     const { tax: taxAmount, taxableAmount } = calcTax(subtotal, taxableFlag, couponDiscount, taxSettings);
-    // Workspace-level additional fee (e.g. convenience fee). Applies to all
-    // widget bookings when enabled in Settings -> Payments.
+    // Workspace-level additional fee. Applies only when apply_to.booking_widget=true.
     const feeSettings = paySettings.additionalFee || {};
+    const feeApplyToWidget = feeSettings.apply_to && feeSettings.apply_to.booking_widget === true;
     let feeAmount = 0;
-    if (feeSettings.enabled) {
+    if (feeSettings.enabled && feeApplyToWidget) {
       const feeAmt = parseFloat(feeSettings.amount) || 0;
       if (feeSettings.type === 'pct') {
         feeAmount = r2(afterDiscount * feeAmt / 100);
