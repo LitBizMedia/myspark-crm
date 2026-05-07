@@ -1309,6 +1309,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="cal-panel-tabs">
           <button class="cal-panel-tab active" id="cpt-calendar" onclick="switchCalTab('calendar')">Calendar</button>
           <button class="cal-panel-tab" id="cpt-appointments" onclick="switchCalTab('appointments')">Appointments</button>
+          <button class="cal-panel-tab" id="cpt-classes" onclick="switchCalTab('classes')">Classes</button>
           <button class="cal-panel-tab" id="cpt-service" onclick="switchCalTab('service')">Service Calendars</button>
           <button class="cal-panel-tab" id="cpt-booking" onclick="switchCalTab('booking')">Booking Widgets</button>
         </div>
@@ -1359,6 +1360,27 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <select class="filter-sel" id="appt-list-status" onchange="renderApptList()"><option value="scheduled">Scheduled</option><option value="">All Status</option><option value="completed">Completed</option><option value="rescheduled">Rescheduled</option><option value="no-show">No-show</option><option value="cancelled">Cancelled</option></select>
           </div>
           <div id="appt-list-body"></div>
+        </div>
+        <div id="cal-classes-view" class="hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+            <div>
+              <div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Classes</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="classes-list-sub">Upcoming class sessions</div>
+            </div>
+            <button class="btn btn-primary" onclick="openScheduleMenu(this)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Schedule
+            </button>
+          </div>
+          <div class="toolbar" style="margin-bottom:14px">
+            <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="classes-list-search" type="text" placeholder="Search classes..." oninput="renderClassesList()"></div>
+            <select class="filter-sel" id="classes-list-filter" onchange="renderClassesList()">
+              <option value="upcoming">All upcoming</option>
+              <option value="has_roster">Has roster (≥1 enrolled)</option>
+              <option value="unpaid">Unpaid roster</option>
+            </select>
+            <select class="filter-sel" id="classes-list-instructor" onchange="renderClassesList()"><option value="">All instructors</option></select>
+          </div>
+          <div id="classes-list-body"></div>
         </div>
         <div id="cal-service-view" class="hidden"><div id="svc-cal-body"></div></div>
         <div id="cal-booking-view" class="hidden"><div id="bw-cal-body"></div></div>
@@ -11522,7 +11544,7 @@ function _returnToPlanEdit(){
 // =====================================================
 function switchCalTab(tab){
   state.calTab=tab;
-  ['calendar','appointments','service','booking'].forEach(t=>{
+  ['calendar','appointments','classes','service','booking'].forEach(t=>{
     const btn=document.getElementById('cpt-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
     const v=document.getElementById('cal-'+t+'-view');
@@ -11530,8 +11552,145 @@ function switchCalTab(tab){
   });
   if(tab==='calendar')renderCal();
   else if(tab==='appointments')renderApptList();
+  else if(tab==='classes')renderClassesList();
   else if(tab==='service')renderServiceCal();
   else if(tab==='booking')renderBookingWidgets();
+}
+
+// =====================================================
+// CLASSES LIST (sub-tab under Calendar)
+// =====================================================
+
+// Has the participant paid for this class session?
+// Considers any completed payment record matching the linkage,
+// excluding 'none' (no-charge bookings) per Payment Policy.
+function _classParticipantPaid(sessionId, contactId){
+  return (db.payments||[]).some(function(p){
+    return p.classSessionId===sessionId
+      && p.participantContactId===contactId
+      && p.status==='completed'
+      && p.paymentMethod!=='none';
+  });
+}
+
+function _classUnpaidCount(session){
+  if(!session || !Array.isArray(session.participants))return 0;
+  var enrolled=session.participants.filter(function(p){return p.status==='enrolled';});
+  return enrolled.filter(function(p){return !_classParticipantPaid(session.id, p.contact_id);}).length;
+}
+
+function renderClassesList(){
+  var body=document.getElementById('classes-list-body');
+  if(!body)return;
+  // Populate instructor filter once
+  var instrSel=document.getElementById('classes-list-instructor');
+  if(instrSel && instrSel.options.length<=1){
+    var staff=allUsers();
+    instrSel.innerHTML='<option value="">All instructors</option>'+staff.map(function(u){
+      return '<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>';
+    }).join('');
+  }
+  var search=(document.getElementById('classes-list-search')&&document.getElementById('classes-list-search').value||'').toLowerCase().trim();
+  var filter=(document.getElementById('classes-list-filter')&&document.getElementById('classes-list-filter').value)||'upcoming';
+  var instructor=(document.getElementById('classes-list-instructor')&&document.getElementById('classes-list-instructor').value)||'';
+  var today=todayStr();
+  var sessions=(db.classSessions||[]).filter(function(s){
+    if(s.status==='cancelled')return false;
+    if(s.date<today)return false;
+    if(instructor && s.instructor_id!==instructor)return false;
+    var enrolled=Array.isArray(s.participants)?s.participants.filter(function(p){return p.status==='enrolled';}):[];
+    if(filter==='has_roster' && enrolled.length===0)return false;
+    if(filter==='unpaid' && _classUnpaidCount(s)===0)return false;
+    if(search){
+      var svc=db.services.find(function(x){return x.id===s.service_id;});
+      var nm=(svc&&svc.name||'').toLowerCase();
+      if(!nm.includes(search))return false;
+    }
+    return true;
+  }).sort(function(a,b){
+    return a.date.localeCompare(b.date) || (a.time||'').localeCompare(b.time||'');
+  });
+
+  var subEl=document.getElementById('classes-list-sub');
+  if(subEl)subEl.textContent=sessions.length+' session'+(sessions.length!==1?'s':'');
+
+  if(sessions.length===0){
+    body.innerHTML='<div class="empty-state" style="padding:32px;text-align:center;color:var(--text-muted)"><div style="font-size:13px">No classes match these filters.</div></div>';
+    return;
+  }
+
+  body.innerHTML=sessions.map(function(s){
+    var svc=db.services.find(function(x){return x.id===s.service_id;});
+    var name=svc?svc.name:'Class';
+    var instr=getUserById(s.instructor_id);
+    var instrName=instr?(instr.name||instr.username):'TBD';
+    var enrolled=Array.isArray(s.participants)?s.participants.filter(function(p){return p.status==='enrolled';}):[];
+    var cap=s.capacity||10;
+    var unpaidN=_classUnpaidCount(s);
+    var unpaidPill=unpaidN>0
+      ? '<span class="sb-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">'+unpaidN+' unpaid</span>'
+      : (enrolled.length>0?'<span class="sb-sm" style="background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.4);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">All paid</span>':'');
+    var rosterPill='<span style="font-size:11px;color:var(--text-muted);font-weight:500">'+enrolled.length+'/'+cap+'</span>';
+    return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">'
+      +'<div style="width:54px;flex-shrink:0;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;line-height:1">'+(new Date(s.date+'T12:00:00').getDate())+'</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600">'+MONTHS[new Date(s.date+'T12:00:00').getMonth()].slice(0,3)+'</div></div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(name)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+fmtTime(s.time||'')+' &middot; '+esc(instrName)+'</div></div>'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+rosterPill+unpaidPill+'</div>'
+      +'<div style="display:flex;gap:6px;flex-shrink:0">'
+        +'<button class="btn btn-ghost btn-sm" onclick="quickAddToClass(\''+s.id+'\')" title="Add someone to this class">+ Add</button>'
+        +'<button class="btn btn-ghost btn-sm" onclick="openRosterModal(\''+s.id+'\')">Roster</button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+// Quick-add a contact to a class session via a tiny picker modal.
+// Reuses svcEnroll for the actual enrollment.
+function quickAddToClass(sessionId){
+  var s=(db.classSessions||[]).find(function(x){return x.id===sessionId;});
+  if(!s){toast('Session not found.','error');return;}
+  var svc=db.services.find(function(x){return x.id===s.service_id;});
+  var enrolled=Array.isArray(s.participants)?s.participants.filter(function(p){return p.status==='enrolled';}):[];
+  var enrolledIds=enrolled.map(function(p){return p.contact_id;});
+  var available=(db.contacts||[]).filter(function(c){return !enrolledIds.includes(c.id);})
+    .sort(function(a,b){return ((a.first||'')+(a.last||'')).localeCompare((b.first||'')+(b.last||''));});
+  var capLeft=(s.capacity||10)-enrolled.length;
+  var body='<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px"><strong>'+esc(svc?svc.name:'Class')+'</strong> &middot; '+fmtDate(s.date)+' '+fmtTime(s.time||'')+' &middot; '+capLeft+' spot'+(capLeft!==1?'s':'')+' left</div>'
+    +'<div class="form-group"><label>Search contacts</label><input id="qac-search" type="text" placeholder="Type to filter..." oninput="_qacFilter()" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box"></div>'
+    +'<div id="qac-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)"></div>';
+  state._qacSession=sessionId;
+  state._qacAvail=available;
+  openModal('Add to class', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-md');
+  _qacRender();
+}
+
+function _qacRender(){
+  var listEl=document.getElementById('qac-list');
+  var search=(document.getElementById('qac-search')&&document.getElementById('qac-search').value||'').toLowerCase().trim();
+  var avail=state._qacAvail||[];
+  var filtered=avail.filter(function(c){
+    if(!search)return true;
+    var nm=((c.first||'')+' '+(c.last||'')+' '+(c.email||'')).toLowerCase();
+    return nm.includes(search);
+  }).slice(0,30);
+  if(filtered.length===0){
+    listEl.innerHTML='<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:13px">No contacts match.</div>';
+    return;
+  }
+  listEl.innerHTML=filtered.map(function(c){
+    var nm=((c.first||'')+' '+(c.last||'')).trim()||c.email||'(unnamed)';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="_qacAdd(\''+c.id+'\')"><div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(nm)+'</div>'+(c.email?'<div style="font-size:11px;color:var(--text-muted)">'+esc(c.email)+'</div>':'')+'</div><span class="btn btn-purple btn-sm" style="pointer-events:none">Add</span></div>';
+  }).join('');
+}
+
+function _qacFilter(){_qacRender();}
+
+function _qacAdd(contactId){
+  var sessionId=state._qacSession;
+  if(!sessionId)return;
+  closeModal();
+  svcEnroll(sessionId, contactId);
+  // Refresh the list view after the enrollment posts
+  setTimeout(renderClassesList, 250);
 }
 
 
