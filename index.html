@@ -1676,7 +1676,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           </div>
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="subs-search" type="text" placeholder="Search subscriptions..." oninput="renderSubscriptions()"></div>
-            <select class="filter-sel" id="subs-status-filter" onchange="renderSubscriptions()"><option value="">All Status</option><option value="active">Active</option><option value="paused">Paused</option><option value="suspended">Suspended</option><option value="cancelled">Cancelled</option></select>
+            <select class="filter-sel" id="subs-status-filter" onchange="renderSubscriptions()"><option value="">All Status</option><option value="trialing">Trial</option><option value="active">Active</option><option value="paused">Paused</option><option value="suspended">Suspended</option><option value="cancelled">Cancelled</option></select>
             <select class="filter-sel" id="subs-cycle-filter" onchange="renderSubscriptions()"><option value="">All Cycles</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select>
           </div>
           <div id="subs-list"></div>
@@ -9771,9 +9771,9 @@ function invBadge(p){
 
 const SUB_CYCLES=['weekly','monthly','quarterly','annual'];
 const SUBS_PER_PAGE=10;
-const SUB_STATUSES=['active','paused','suspended','cancelled'];
-const SUB_STATUS_LABEL={active:'Active',paused:'Paused',suspended:'Suspended',cancelled:'Cancelled'};
-const SUB_STATUS_COLOR={active:'#34d399',paused:'var(--orange)',suspended:'#f87171',cancelled:'var(--text-dim)'};
+const SUB_STATUSES=['trialing','active','paused','suspended','cancelled'];
+const SUB_STATUS_LABEL={trialing:'Trial',active:'Active',paused:'Paused',suspended:'Suspended',cancelled:'Cancelled'};
+const SUB_STATUS_COLOR={trialing:'#fbbf24',active:'#34d399',paused:'var(--orange)',suspended:'#f87171',cancelled:'var(--text-dim)'};
 const SUB_STATUS_ORDER={active:0,paused:1,suspended:2,cancelled:3};
 const CANCELLATION_REASONS=[
   'Customer requested',
@@ -10072,7 +10072,7 @@ function renderSubscriptions(){
     return;
   }
   // Group by status for section headers
-  const groups={active:[],paused:[],suspended:[],cancelled:[]};
+  const groups={trialing:[],active:[],paused:[],suspended:[],cancelled:[]};
   slice.forEach(s=>{ if(groups[s.status])groups[s.status].push(s); });
   let html='';
   SUB_STATUSES.forEach(st=>{
@@ -10087,6 +10087,9 @@ function renderSubscriptions(){
       const discounted=hasActiveDiscount(s)&&breakdown.discount>0;
       const nd=s.nextDueDate||calcNextDueDate(s.startDate,cycle);
       const failBadge=(s.status==='suspended'&&s.failedChargeCount)?'<span style="font-size:10px;font-weight:700;color:#f87171;margin-left:6px">'+s.failedChargeCount+' failed charge'+(s.failedChargeCount===1?'':'s')+'</span>':'';
+      // Trial badge: shown only for trialing subs with a trial_ends_at date
+      const trialEnd=s.trialEndsAt||s.trial_ends_at;
+      const trialBadge=(s.status==='trialing'&&trialEnd)?'<span style="font-size:10px;font-weight:700;color:#fbbf24;margin-left:6px">trial ends '+fmtDate(trialEnd)+'</span>':'';
       // Price cell: shows total including tax. When discounted, sticker is shown
       // struck through above. When tax applies, indicate with tiny "incl tax" label.
       const taxNote=breakdown.taxEnabled&&breakdown.tax>0?' incl tax':'';
@@ -10099,7 +10102,7 @@ function renderSubscriptions(){
       html+='<div class="sub-row '+s.status+'" onclick="openSubDetail(\''+s.id+'\')">'
         +'<div><div class="sub-name">'+(c?esc(c.name):esc(s.planName||'Unnamed'))+'</div>'
         +(c&&c.company?'<div class="sub-biz">'+esc(c.company)+'</div>':'')
-        +'<span class="sub-cycle-badge">'+cycle+'</span>'+failBadge+'</div>'
+        +'<span class="sub-cycle-badge">'+cycle+'</span>'+failBadge+trialBadge+'</div>'
         +'<div class="sub-date-cell"><strong>'+fmtDate(s.startDate)+'</strong>Started</div>'
         +'<div class="sub-date-cell"><strong>'+(nd?fmtDate(nd):'TBD')+'</strong>Next Due</div>'
         +'<div>'+priceCell+'</div>'
@@ -10170,6 +10173,19 @@ function _renderSubDetailDetails(s,c){
     +(c?'<div style="font-size:13px;color:var(--text-muted);margin-top:2px">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>':'')
     +'</div><span style="font-size:11px;font-weight:700;text-transform:uppercase;padding:3px 9px;border-radius:4px;background:'+SUB_STATUS_COLOR[s.status]+'20;color:'+SUB_STATUS_COLOR[s.status]+'">'+SUB_STATUS_LABEL[s.status]+'</span></div>';
 
+  // Trial banner: shown for trialing subs, with trial end date and first
+  // charge amount.
+  if(s.status==='trialing'){
+    const te=s.trialEndsAt||s.trial_ends_at;
+    const reminded=s.trialReminderSentAt||s.trial_reminder_sent_at;
+    html+='<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:#fbbf24">'
+      +'<strong>In trial.</strong>'
+      +(te?' Trial ends '+fmtDate(te)+'.':'')
+      +' First charge of '+fmt$(total)+' will run automatically on the trial end date.'
+      +(reminded?' Reminder email sent '+fmtDateOnly(reminded)+'.':'')
+      +'</div>';
+  }
+
   // Suspended banner
   if(s.status==='suspended'){
     html+='<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:#f87171">'
@@ -10192,7 +10208,7 @@ function _renderSubDetailDetails(s,c){
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:12px">'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Cycle</div><div style="font-size:13px;font-weight:600">'+(s.billingCycle||'monthly')+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Started</div><div style="font-size:13px;font-weight:600">'+fmtDate(s.startDate)+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Next Due</div><div style="font-size:13px;font-weight:600">'+(s.status==='active'?(nd?fmtDate(nd):'TBD'):'\u2014')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Next Due</div><div style="font-size:13px;font-weight:600">'+((s.status==='active'||s.status==='trialing')?(nd?fmtDate(nd):'TBD'):'\u2014')+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Per Cycle</div>'
     +(hasDiscount
       ? '<div style="font-size:11px;color:var(--text-muted);text-decoration:line-through;line-height:1">'+fmt$(sticker)+'</div>'
@@ -10574,7 +10590,34 @@ function _renderItemsSummary(){
   const taxNote=b.taxEnabled
     ? ''
     : '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Tax not enabled in subaccount settings.</div>';
-  return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:6px;font-size:13px">'
+
+  // Trial banner: scan items for plan trial_days. Show longest trial offered by
+  // any plan-based item, matching backend logic (Math.max).
+  let trialBanner='';
+  let trialDays=0;
+  for(const it of _subEditItems){
+    if(it.planId){
+      const p=getPlan(it.planId);
+      const td=p&&parseInt(p.trial_days||p.trialDays,10);
+      if(td&&td>trialDays)trialDays=td;
+    }
+  }
+  if(trialDays>0){
+    // Compute trial end date: today + trialDays (display only)
+    const startEl=document.getElementById('sf-start');
+    const startStr=(startEl&&startEl.value)||todayStr();
+    const startDate=startStr>todayStr()?startStr:todayStr();
+    const [ty,tm,tdy]=startDate.split('-').map(Number);
+    const endDate=new Date(Date.UTC(ty,tm-1,tdy+trialDays));
+    const endStr=endDate.toISOString().slice(0,10);
+    const endDisplay=fmtDate(endStr);
+    trialBanner='<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius);padding:10px 12px;margin-top:6px;margin-bottom:6px;font-size:13px;color:#fbbf24">'
+      +'<strong>'+trialDays+'-day free trial.</strong> First charge of '+fmt$(b.total)+' on '+endDisplay+'.'
+      +'</div>';
+  }
+
+  return trialBanner
+    +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:6px;font-size:13px">'
     +'<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text-muted)">Subtotal</span><span>'+fmt$(b.subtotal)+'</span></div>'
     +(b.discount>0?'<div style="display:flex;justify-content:space-between;padding:3px 0;color:#34d399"><span>Discount</span><span>-'+fmt$(b.discount)+'</span></div>':'')
     +(b.discount>0?'<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text-muted)"><span>After discount</span><span>'+fmt$(b.afterDiscount)+'</span></div>':'')
@@ -11030,7 +11073,12 @@ function _renderPlanEditModalBody(p){
     +'</div>'
     +'<div class="form-group"><label>Pricing per Cycle * <span style="font-weight:400;color:var(--text-muted)">(at least one required)</span></label>'
     +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px">'+pricingRows+'</div>'
-    +'</div>';
+    +'</div>'
+    +'<div class="form-group"><label>Free Trial</label>'
+    +'<div style="display:flex;align-items:center;gap:10px">'
+    +'<input type="number" id="pe-trial-days" min="0" max="365" value="'+(p&&parseInt(p.trial_days||p.trialDays,10)>0?parseInt(p.trial_days||p.trialDays,10):'')+'" placeholder="0" style="width:120px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:13px;outline:none">'
+    +'<span style="font-size:13px;color:var(--text-muted)">days. New subscribers on this plan get this many free days before the first charge. Leave blank or 0 for no trial.</span>'
+    +'</div></div>';
 
   openModal(isEdit?'Edit Plan':'New Plan',body,
     '<button class="btn btn-ghost" onclick="_backToSubPlansModal()">Back</button><button class="btn btn-primary" onclick="savePlan()">'+(isEdit?'Save Changes':'Create Plan')+'</button>',
@@ -11067,7 +11115,15 @@ async function savePlan(){
   const enabledCount=SUB_CYCLES.filter(function(cy){return _planEditPricing[cy].enabled&&_planEditPricing[cy].price>0;}).length;
   if(!enabledCount){toast('Enable at least one cycle with a price > 0.','error');return;}
 
-  const payload={name:name,description:description,active:active,taxable:taxable,categoryId:categoryId,pricing:_planEditPricing};
+  // Trial days: optional, integer 0-365. Empty / 0 = no trial.
+  const trialEl=document.getElementById('pe-trial-days');
+  let trialDays=0;
+  if(trialEl){
+    const n=parseInt(trialEl.value,10);
+    if(!isNaN(n)&&n>0)trialDays=Math.min(365,n);
+  }
+
+  const payload={name:name,description:description,active:active,taxable:taxable,categoryId:categoryId,pricing:_planEditPricing,trialDays:trialDays};
 
   try{
     if(isEdit){

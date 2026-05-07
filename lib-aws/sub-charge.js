@@ -177,17 +177,22 @@ async function advanceSubAfterCharge(sub, tz) {
   });
   const newCyclePrice = remainingItems.reduce((sum, it) => sum + (parseFloat(it.price) || 0) * (it.qty || 1), 0);
 
+  // After a successful charge, status always becomes 'active'. This is the
+  // transition point for trialing subs (trialing -> active on first charge).
+  // Defensive WHERE clause: only update if status was active or trialing,
+  // never accidentally resurrect a paused/suspended/cancelled sub.
   await db.query(
     `UPDATE subscriptions
      SET last_charged_at = NOW(),
          next_due_date = next_due_date + INTERVAL '${interval}',
          items = $1::jsonb,
          cycle_price = $2,
+         status = 'active',
          failed_charge_count = 0,
          last_failure_at = NULL,
          last_failure_reason = NULL,
          updated_at = NOW()
-     WHERE id = $3`,
+     WHERE id = $3 AND status IN ('active', 'trialing')`,
     [JSON.stringify(remainingItems), newCyclePrice, sub.id]
   );
 }

@@ -167,6 +167,8 @@ function subscriptionToFrontend(row) {
     status: row.status,
     startDate: dateOnly(row.start_date),
     nextDueDate: dateOnly(row.next_due_date),
+    trialEndsAt: dateOnly(row.trial_ends_at),
+    trialReminderSentAt: row.trial_reminder_sent_at instanceof Date ? row.trial_reminder_sent_at.toISOString() : row.trial_reminder_sent_at,
     lastChargedAt: row.last_charged_at instanceof Date ? row.last_charged_at.toISOString() : row.last_charged_at,
     pausedAt: row.paused_at instanceof Date ? row.paused_at.toISOString() : row.paused_at,
     cancelledAt: row.cancelled_at instanceof Date ? row.cancelled_at.toISOString() : row.cancelled_at,

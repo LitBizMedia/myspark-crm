@@ -31,6 +31,16 @@ function validatePricing(pricing) {
   return null;
 }
 
+// Normalize trial_days: accept number or string, clamp to [0, 365], default 0.
+// Returns integer.
+function parseTrialDays(v) {
+  if (v == null || v === '') return 0;
+  const n = parseInt(v, 10);
+  if (isNaN(n) || n < 0) return 0;
+  if (n > 365) return 365;
+  return n;
+}
+
 // Normalize items: ensure each has id, name, taxable defaults.
 function normalizeItems(items) {
   if (!Array.isArray(items)) return [];
@@ -62,6 +72,7 @@ async function handler(req, res) {
   const pricing = body.pricing || {};
   const categoryId = body.categoryId || null;
   const taxable = body.taxable !== false;
+  const trialDays = parseTrialDays(body.trialDays);
 
   if (!name) return res.status(400).json({ error: 'Plan name is required' });
 
@@ -91,13 +102,13 @@ async function handler(req, res) {
     await db.query(
       `INSERT INTO subscription_plans (
         id, subaccount_id, name, description, active, items, pricing,
-        category_id, taxable,
+        category_id, taxable, trial_days,
         created_at, updated_at, created_by
       ) VALUES ($1, $2, $3, $4, TRUE, $5::jsonb, $6::jsonb,
-                $7, $8,
-                NOW(), NOW(), $9)`,
+                $7, $8, $9,
+                NOW(), NOW(), $10)`,
       [id, auth.subaccount_id, name, description, JSON.stringify(items),
-       JSON.stringify(cleanPricing), categoryId, taxable, auth.user_id]
+       JSON.stringify(cleanPricing), categoryId, taxable, trialDays, auth.user_id]
     );
 
     await logAudit({
@@ -110,7 +121,7 @@ async function handler(req, res) {
       targetType: 'subscription_plan',
       targetId: id,
       targetSubaccountId: auth.subaccount_id,
-      metadata: { name, category_id: categoryId, taxable, item_count: items.length }
+      metadata: { name, category_id: categoryId, taxable, trial_days: trialDays, item_count: items.length }
     });
 
     const verify = await db.query('SELECT * FROM subscription_plans WHERE id = $1', [id]);

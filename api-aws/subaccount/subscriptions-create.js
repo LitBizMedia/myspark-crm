@@ -49,7 +49,7 @@ async function buildItem(rawItem, idx, billingCycle, subaccountId, addedAt) {
     throw new Error(`items[${idx}]: percent discount cannot exceed 100`);
   }
 
-  let id, planId, name, description, taxable, price;
+  let id, planId, name, description, taxable, price, planTrialDays = 0;
   if (rawItem.planId) {
     const pRes = await db.query(
       `SELECT * FROM subscription_plans WHERE id = $1 AND subaccount_id = $2`,
@@ -67,6 +67,7 @@ async function buildItem(rawItem, idx, billingCycle, subaccountId, addedAt) {
     description = plan.description || '';
     taxable = plan.taxable !== false;
     price = parseFloat(cfg.price);
+    planTrialDays = parseInt(plan.trial_days, 10) || 0;
     id = rawItem.id || `si-${Date.now()}-${idx}-p`;
   } else {
     name = String(rawItem.name || '').trim();
@@ -83,7 +84,8 @@ async function buildItem(rawItem, idx, billingCycle, subaccountId, addedAt) {
     id, planId, name, description, taxable, price, qty,
     discountType, discountValue, discountNote, discountRecurring,
     addedAt: addedAt || new Date().toISOString(),
-    billingEndsAt: null
+    billingEndsAt: null,
+    _planTrialDays: planTrialDays  // transient: stripped before INSERT
   };
 }
 
@@ -131,13 +133,22 @@ async function handler(req, res) {
 
     const nowIso = new Date().toISOString();
     const items = [];
+    const planTrialDaysSeen = [];
     for (let i = 0; i < rawItems.length; i++) {
       try {
-        items.push(await buildItem(rawItems[i], i, billingCycle, subaccountId, nowIso));
+        const it = await buildItem(rawItems[i], i, billingCycle, subaccountId, nowIso);
+        // Capture and strip the transient plan trial signal before storing
+        if (it._planTrialDays && it._planTrialDays > 0) planTrialDaysSeen.push(it._planTrialDays);
+        delete it._planTrialDays;
+        items.push(it);
       } catch (e) {
         return res.status(400).json({ error: e.message });
       }
     }
+
+    // Trial: take the longest trial offered by any plan-based item. If multi-item
+    // sub mixes plans with different trial lengths, customer gets the most generous.
+    const trialDays = planTrialDaysSeen.length ? Math.max(...planTrialDaysSeen) : 0;
 
     const cyclePrice = items.reduce((sum, it) => sum + (parseFloat(it.price) || 0) * (it.qty || 1), 0);
 
@@ -159,23 +170,58 @@ async function handler(req, res) {
     const interval = intervalForCycle(billingCycle);
     void interval; // reserved for future use; not needed now that next_due_date = start_date
 
+    // Fetch sub timezone upfront. Used for both trial date math and the
+    // immediate-charge "today" check.
+    let blob;
+    try {
+      const blobRes = await db.query(
+        'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
+        [subaccountId]
+      );
+      blob = { data: blobRes.rows[0]?.data || {} };
+    } catch (_) {
+      blob = { data: {} };
+    }
+    const tz = (blob.data.settings && blob.data.settings.timezone) || DEFAULT_TZ;
+    const todayInZone = todayInTz(tz);
+
+    // Trial dates: trial begins on max(start_date, today) and ends after
+    // trial_days. During trial: status='trialing', next_due_date=trial_ends_at,
+    // first charge fires when cron runs on or after trial_ends_at.
+    const startStr = String(startDate).slice(0, 10);
+    let trialEndsAt = null;
+    let initialStatus = 'active';
+    let initialNextDue = startStr;
+
+    if (trialDays > 0) {
+      const trialStart = startStr > todayInZone ? startStr : todayInZone;
+      const [ty, tm, td] = trialStart.split('-').map(Number);
+      const endDate = new Date(Date.UTC(ty, tm - 1, td + trialDays));
+      trialEndsAt = endDate.toISOString().slice(0, 10);
+      initialStatus = 'trialing';
+      initialNextDue = trialEndsAt;
+    }
+
     await db.query('BEGIN');
     try {
       await db.query(
         `INSERT INTO subscriptions (
           id, subaccount_id, contact_id, plan_id, plan_name_snapshot,
-          billing_cycle, cycle_price, items, status, start_date, next_due_date,
+          billing_cycle, cycle_price, items, status,
+          start_date, next_due_date, trial_ends_at,
           card_id, owner_user_id, notes,
           created_at, updated_at, created_by
         ) VALUES (
           $1, $2, $3, $4, $5,
-          $6, $7, $8::jsonb, 'active', $9::date, $9::date,
-          $10, $11, $12,
-          NOW(), NOW(), $13
+          $6, $7, $8::jsonb, $9,
+          $10::date, $11::date, $12::date,
+          $13, $14, $15,
+          NOW(), NOW(), $16
         )`,
         [
           id, subaccountId, contactId, planIdForSub, planNameSnapshot,
-          billingCycle, cyclePrice, JSON.stringify(items), startDate,
+          billingCycle, cyclePrice, JSON.stringify(items), initialStatus,
+          startDate, initialNextDue, trialEndsAt,
           b.cardId || null, b.ownerUserId || null, b.notes || null,
           auth.user_id
         ]
@@ -184,16 +230,20 @@ async function handler(req, res) {
       await db.query(
         `INSERT INTO subscription_events (
           id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, metadata, created_at
-        ) VALUES ($1, $2, $3, 'created', $4, 'user', $5::jsonb, NOW())`,
+        ) VALUES ($1, $2, $3, $4, $5, 'user', $6::jsonb, NOW())`,
         [
           `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          id, subaccountId, auth.user_id,
+          id, subaccountId,
+          trialDays > 0 ? 'trial_started' : 'created',
+          auth.user_id,
           JSON.stringify({
             plan_id: planIdForSub,
             plan_name: planNameSnapshot,
             cycle: billingCycle,
             cycle_price: cyclePrice,
             item_count: items.length,
+            trial_days: trialDays,
+            trial_ends_at: trialEndsAt,
             items_summary: items.map(it => ({ name: it.name, price: it.price, qty: it.qty }))
           })
         ]
@@ -221,33 +271,19 @@ async function handler(req, res) {
         plan_name: planNameSnapshot,
         billing_cycle: billingCycle,
         cycle_price: cyclePrice,
-        item_count: items.length
+        item_count: items.length,
+        trial_days: trialDays,
+        trial_ends_at: trialEndsAt,
+        initial_status: initialStatus
       }
     });
 
     const verify = await db.query('SELECT * FROM subscriptions WHERE id = $1', [id]);
 
-    // Immediate charge: if start_date is today (in the subaccount's timezone)
-    // or earlier, run the charge synchronously. Future-dated subs wait for cron.
-    //
-    // Important: "today" must be computed in the subaccount's timezone, not UTC.
-    // Otherwise a customer who creates a sub at 10pm Eastern for "tomorrow" would
-    // get charged immediately because it's already after midnight UTC.
+    // Immediate charge: only fires when sub starts today (in sub's TZ) AND no
+    // trial is active. Trialing subs wait for the cron to charge on trial_ends_at.
     let immediateChargeResult = null;
-    let blob;
-    try {
-      const blobRes = await db.query(
-        'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
-        [subaccountId]
-      );
-      blob = { data: blobRes.rows[0]?.data || {} };
-    } catch (_) {
-      blob = { data: {} };
-    }
-    const tz = (blob.data.settings && blob.data.settings.timezone) || DEFAULT_TZ;
-    const todayInZone = todayInTz(tz);
-
-    if (String(startDate).slice(0, 10) <= todayInZone) {
+    if (initialStatus !== 'trialing' && startStr <= todayInZone) {
       try {
         immediateChargeResult = await processSub(verify.rows[0], blob, { dry_run: false });
       } catch (chargeErr) {

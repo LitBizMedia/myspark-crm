@@ -113,6 +113,13 @@ async function handler(req, res) {
       }
       updates.push(`pricing = $${i++}::jsonb`); params.push(JSON.stringify(cleanPricing));
     }
+    if (body.trialDays !== undefined) {
+      // Clamp to [0, 365]; 0 means no trial.
+      let n = parseInt(body.trialDays, 10);
+      if (isNaN(n) || n < 0) n = 0;
+      if (n > 365) n = 365;
+      updates.push(`trial_days = $${i++}`); params.push(n);
+    }
 
     if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
