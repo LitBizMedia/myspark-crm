@@ -6495,12 +6495,41 @@ function _renderPaymentForm(ctx){
       var dateStr=p.createdAt?fmtDateOnly(p.createdAt):'';
       var methodLbl=(p.paymentMethod||'').replace(/_/g,' ');
       var statusLbl=p.status==='completed'?'':' · '+p.status;
-      history+='<div class="light-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px">'
+
+      // Build a breakdown line showing subtotal + every nonzero adjustment.
+      // Skip when payment is a clean total with no extras (subtotal == total).
+      var sub=parseFloat(p.subtotal||0);
+      var coup=parseFloat(p.couponDiscount||0);
+      var disc=parseFloat(p.discountAmount||0);
+      var tax=parseFloat(p.taxAmount||0);
+      var fee=parseFloat(p.feeAmount||0);
+      var tip=parseFloat(p.tipAmount||0);
+      var gc=parseFloat(p.giftCardApplied||0);
+      var credit=parseFloat(p.creditApplied||0);
+      var total=parseFloat(p.total||0);
+      var hasExtras=coup>0||disc>0||tax>0||fee>0||tip>0||gc>0||credit>0;
+      var breakdown='';
+      if(hasExtras&&sub>0){
+        var parts=['Subtotal '+fmt$(sub)];
+        if(coup>0)parts.push('Coupon'+(p.couponCode?' '+esc(p.couponCode):'')+' -'+fmt$(coup));
+        if(disc>0)parts.push('Discount -'+fmt$(disc));
+        if(tax>0)parts.push('Tax '+fmt$(tax));
+        if(fee>0)parts.push('Fee '+fmt$(fee));
+        if(tip>0)parts.push('Tip '+fmt$(tip));
+        if(credit>0)parts.push('Credit -'+fmt$(credit));
+        if(gc>0)parts.push('Gift card -'+fmt$(gc));
+        breakdown='<div style="font-size:11px;color:var(--main-text-muted);margin-top:4px;line-height:1.5">'+parts.join(' · ')+'</div>';
+      }
+
+      history+='<div class="light-card" style="padding:10px 12px">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between">'
         +'<div>'
-        +'<div style="font-size:13px;font-weight:600">'+fmt$(parseFloat(p.total||0))+'</div>'
+        +'<div style="font-size:13px;font-weight:600">'+fmt$(total)+'</div>'
         +'<div style="font-size:11px;color:var(--main-text-muted)">'+dateStr+' &middot; '+methodLbl+statusLbl+'</div>'
         +'</div>'
-        +(p.tipAmount>0?'<div style="font-size:11px;color:var(--main-text-muted)">+'+fmt$(parseFloat(p.tipAmount))+' tip</div>':'')
+        +(p.cardLast4?'<div style="font-size:11px;color:var(--main-text-muted)">'+esc(p.cardBrand||'Card')+' &middot;&middot;&middot;&middot; '+esc(p.cardLast4)+'</div>':'')
+        +'</div>'
+        +breakdown
         +'</div>';
     });
     history+='</div>';
