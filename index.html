@@ -652,7 +652,15 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 /* Products */
 .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
 .prod-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);
-  padding:16px;transition:border-color .18s;display:flex;flex-direction:column;box-shadow:0 1px 6px rgba(107,33,234,.06)}
+  padding:16px;transition:border-color .18s;display:flex;flex-direction:column;box-shadow:0 1px 6px rgba(107,33,234,.06);
+  /* Self-contained light-on-white tokens so the card reads correctly whether
+     it sits inside .panel (light theme) or inside a dark modal. */
+  --text:var(--main-text);
+  --text-muted:var(--main-text-muted);
+  --text-dim:#9b8fc4;
+  --border:var(--main-border);
+  color:var(--main-text);
+}
 .prod-card:hover{border-color:var(--purple-border)}
 .prod-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
 .prod-name{font-family:'Exo 2',sans-serif;font-size:14px;font-weight:700;color:var(--main-text)}
@@ -1462,31 +1470,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
 
       <!-- PRODUCTS -->
-      <div id="panel-products" class="panel hidden">
-        <div class="page-header">
-          <div><div class="page-title">Products &amp; Services</div><div class="page-subtitle" id="prod-sub"></div></div>
-          <button class="btn btn-primary" onclick="openProductModal(null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</button>
-        </div>
-        <div class="cat-mgr-bar" id="cat-mgr-bar">
-          <div class="cat-mgr-head" onclick="toggleCatMgr()">
-            <span class="cat-mgr-head-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Manage Categories</span>
-            <svg id="cat-mgr-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="color:var(--text-dim);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
-          </div>
-          <div class="cat-mgr-body hidden" id="cat-mgr-body">
-            <div id="cat-chips-list" style="display:flex;flex-wrap:wrap;gap:7px;width:100%"></div>
-            <div class="cat-mgr-add">
-              <input id="cat-new-input" type="text" placeholder="New category name..." style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none" onkeydown="if(event.key==='Enter')addProductCategory()">
-              <button class="btn btn-purple btn-sm" onclick="addProductCategory()">Add</button>
-            </div>
-          </div>
-        </div>
-        <div class="toolbar">
-          <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="prod-search" type="text" placeholder="Search products..." oninput="renderProducts()"></div>
-          <select class="filter-sel" id="prod-cat-filter" onchange="renderProducts()"><option value="">All Categories</option></select>
-          <select class="filter-sel" id="prod-stat-filter" onchange="renderProducts()"><option value="">All Status</option><option value="true">Active</option><option value="false">Inactive</option></select>
-        </div>
-        <div class="prod-grid" id="prod-list"></div>
-      </div>
+      <div id="panel-products" class="panel hidden"><!-- Products UI now rendered in modal via openProductsModal() --></div>
 
       <!-- PAYMENTS -->
       <div id="panel-payments" class="panel hidden">
@@ -9849,13 +9833,14 @@ function removeProductCategory(name){
   document.getElementById('modal-title').textContent='Remove Category';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove category <strong>'+esc(name)+'</strong>? Products using this category will keep it but it will no longer appear in the list.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmRemoveProductCategory()">Remove</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="_backToProductsModal()">Cancel</button><button class="btn btn-danger" onclick="confirmRemoveProductCategory()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function confirmRemoveProductCategory(){
   const name=state.modal&&state.modal.data;if(!name)return;
   db.productCategories=(db.productCategories||[]).filter(c=>c!==name);
-  saveData();closeModal();renderCatChips();renderProducts();toast('Category removed.','success');
+  saveData();closeModal();toast('Category removed.','success');
+  setTimeout(openProductsModal,50);
 }
 
 let editPricingOpts=[];
@@ -9897,12 +9882,8 @@ function openProductModal(id){
     +'<div class="form-group"><label>Status</label><select id="prd-active"><option value="true"'+(!p||p.active?' selected':'')+'>Active</option><option value="false"'+(p&&!p.active?' selected':'')+'>Inactive</option></select></div>'
     +'</div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="prd-taxable" type="checkbox"'+((p&&p.taxable!==false)||!p?' checked':'')+'>Charge tax on this product</label></div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Category</label><select id="prd-cat" class="filter-sel" style="width:100%;height:42px" onchange="if(this.value)document.getElementById(\'prd-cat-new\').value=\'\'"><option value="">Select or type below\u2026</option>'+catOpts+'</select></div>'
-    +'<div class="form-group"><label>Or create new category</label><input id="prd-cat-new" type="text" placeholder="New category name\u2026" oninput="if(this.value)document.getElementById(\'prd-cat\').value=\'\'"></div>'
-    +'</div>'
+    +'<div class="form-group"><label>Category</label><select id="prd-cat" class="filter-sel" style="width:100%;height:42px"><option value="">No category</option>'+catOpts+'</select><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Add or remove categories from the Manage Categories section in Manage Products.</div></div>'
     +'<div class="form-group"><label>Description</label><textarea id="prd-desc" rows="3">'+esc(p&&p.description||'')+'</textarea></div>'
-    +'<div class="form-group"><label>Square Catalog ID <span style="font-weight:400;color:var(--text-muted)">(auto-filled when Square is connected)</span></label><input id="prd-sq" type="text" value="'+esc(p&&p.squareCatalogId||'')+'" placeholder="Auto-populated" style="opacity:.7"></div>'
     +'<div class="divider"></div>'
     +'<div class="inv-track-row"><div class="bh-toggle'+(p&&p.trackInventory?' on':'')+'" id="prd-inv-toggle" onclick="toggleInvTrack()" style="flex-shrink:0"></div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:#ffffff">Track Inventory</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:1px">Enable for physical products to monitor stock levels</div></div></div>'
     +'<div id="prd-inv-fields" style="'+(p&&p.trackInventory?'':'display:none')+'">'
@@ -9911,7 +9892,7 @@ function openProductModal(id){
     +'<div class="divider"></div>'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:#ffffff">Pricing Options</div><button class="btn btn-purple btn-sm" onclick="addPricingOptRow()">+ Add Option</button></div>'
     +'<div id="pricing-opts-list">'+renderPricingOptsList()+'</div>';
-  openModal(p?'Edit Product':'Add Product',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveProduct,\'product\')">Save Product</button>','modal-xl');
+  openModal(p?'Edit Product':'Add Product',b,'<button class="btn btn-ghost" onclick="_backToProductsModal()">Back</button><button class="btn btn-primary" onclick="confirmSave(saveProduct,\'product\')">Save Product</button>','modal-xl');
 }
 
 function renderPricingOptsList(){
@@ -9971,19 +9952,19 @@ function toggleInvTrack(){
 function saveProduct(){
   const name=document.getElementById('prd-name').value.trim();
   if(!name){toast('Product name required.','error');return}
-  const catSel=document.getElementById('prd-cat')&&document.getElementById('prd-cat').value||'';
-  const catNew=(document.getElementById('prd-cat-new')&&document.getElementById('prd-cat-new').value||'').trim();
-  const category=catNew||catSel||'';
-  if(catNew&&catNew.trim()){if(!db.productCategories)db.productCategories=[];if(!db.productCategories.find(function(c){return c.toLowerCase()===catNew.toLowerCase();})){db.productCategories.push(catNew);}}
+  const category=document.getElementById('prd-cat')&&document.getElementById('prd-cat').value||'';
   syncPricingOptsFromDOM();
   const invOn=document.getElementById('prd-inv-toggle')&&document.getElementById('prd-inv-toggle').classList.contains('on');
+  // Preserve any existing squareCatalogId on edit (field removed from UI but
+  // value may have been set by a prior Square sync).
+  const existing=state.modal.id?db.products.find(x=>x.id===state.modal.id):null;
   const data={
     name,
     description:(document.getElementById('prd-desc')&&document.getElementById('prd-desc').value||'').trim(),
     category,
     active:document.getElementById('prd-active')&&document.getElementById('prd-active').value==='true',
     taxable:!!(document.getElementById('prd-taxable')&&document.getElementById('prd-taxable').checked),
-    squareCatalogId:(document.getElementById('prd-sq')&&document.getElementById('prd-sq').value||'').trim(),
+    squareCatalogId:existing&&existing.squareCatalogId||'',
     pricingOptions:[...editPricingOpts],
     trackInventory:invOn,
     sku:invOn?(document.getElementById('prd-sku')&&document.getElementById('prd-sku').value||'').trim():'',
@@ -9993,8 +9974,9 @@ function saveProduct(){
   };
   if(state.modal.id){const p=db.products.find(x=>x.id===state.modal.id);if(p)Object.assign(p,data)}
   else db.products.push({id:'prod-'+uid(),...data,createdAt:now_()});
-  saveData();closeModal();renderProducts();
+  saveData();closeModal();
   toast(state.modal.id?'Product updated.':'Product added.','success');
+  setTimeout(openProductsModal,50);
 }
 
 function delProduct(id){
@@ -10003,12 +9985,13 @@ function delProduct(id){
   document.getElementById('modal-title').textContent='Delete Product';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+(p?esc(p.name):'this product')+'</strong>? This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelProduct()">Delete</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="_backToProductsModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelProduct()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function confirmDelProduct(){const id=state.modal&&state.modal.id;if(!id)return;
   db.products=db.products.filter(p=>p.id!==id);
-  saveData();closeModal();renderProducts();toast('Product removed.','success');
+  saveData();closeModal();toast('Product removed.','success');
+  setTimeout(openProductsModal,50);
 }
 
 function invBadge(p){
@@ -19301,28 +19284,47 @@ function openSpSellModal(){
   setTimeout(spInitSellForm,0);
 }
 
-// Manage Products modal: temporarily moves the panel-products children into
-// the modal body (preserves IDs and event bindings), then moves them back on
-// close. Avoids duplicating the entire products UI markup.
+// Manage Products modal: renders fresh HTML each time. Edit/Delete/Save all
+// follow the same pattern as Subscription Plans: nested modals close back to
+// this one via _backToProductsModal().
 function openProductsModal(){
   if(!state.user || state.user.role!=='admin'){toast('Admin only.','error');return;}
-  var panel=document.getElementById('panel-products');
-  if(!panel)return;
-  openModal('Products & Services', '', '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-xxl');
-  var modalBody=document.getElementById('modal-body');
-  if(!modalBody)return;
-  // Move children, remember original parent for restoration on close
-  while(panel.firstChild) modalBody.appendChild(panel.firstChild);
-  state.modalAfterClose=function(){
-    var p=document.getElementById('panel-products');
-    var mb=document.getElementById('modal-body');
-    if(!p||!mb)return;
-    while(mb.firstChild) p.appendChild(mb.firstChild);
-  };
+  openModal('Products & Services', _renderProductsModalBody(), '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-xxl');
   setTimeout(function(){
     if(typeof renderProducts==='function')renderProducts();
     if(typeof renderCatChips==='function')renderCatChips();
   },10);
+}
+
+function _renderProductsModalBody(){
+  return '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--text)">Products &amp; Services</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="prod-sub"></div></div>'
+    +'<button class="btn btn-primary" onclick="openProductModal(null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</button>'
+    +'</div>'
+    +'<div class="cat-mgr-bar" id="cat-mgr-bar">'
+    +'<div class="cat-mgr-head" onclick="toggleCatMgr()">'
+    +'<span class="cat-mgr-head-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Manage Categories</span>'
+    +'<svg id="cat-mgr-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="color:var(--text-dim);transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>'
+    +'</div>'
+    +'<div class="cat-mgr-body hidden" id="cat-mgr-body">'
+    +'<div id="cat-chips-list" style="display:flex;flex-wrap:wrap;gap:7px;width:100%"></div>'
+    +'<div class="cat-mgr-add">'
+    +'<input id="cat-new-input" type="text" placeholder="New category name..." style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none" onkeydown="if(event.key===\'Enter\')addProductCategory()">'
+    +'<button class="btn btn-purple btn-sm" onclick="addProductCategory()">Add</button>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +'<div class="toolbar">'
+    +'<div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="prod-search" type="text" placeholder="Search products..." oninput="renderProducts()"></div>'
+    +'<select class="filter-sel" id="prod-cat-filter" onchange="renderProducts()"><option value="">All Categories</option></select>'
+    +'<select class="filter-sel" id="prod-stat-filter" onchange="renderProducts()"><option value="">All Status</option><option value="true">Active</option><option value="false">Inactive</option></select>'
+    +'</div>'
+    +'<div class="prod-grid" id="prod-list"></div>';
+}
+
+function _backToProductsModal(){
+  closeModal();
+  setTimeout(openProductsModal,50);
 }
 
 function spRenderTemplates(){
