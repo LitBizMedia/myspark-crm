@@ -226,21 +226,35 @@ async function handler(req, res) {
 
     const verify = await db.query('SELECT * FROM subscriptions WHERE id = $1', [id]);
 
-    // Immediate charge: if start_date is today or in the past, run the charge
-    // synchronously so the customer's first payment hits within seconds of save.
-    // Future-dated subs wait for the daily cron.
+    // Immediate charge: if start_date is today (in the subaccount's timezone)
+    // or earlier, run the charge synchronously. Future-dated subs wait for cron.
+    //
+    // Important: "today" must be computed in the subaccount's timezone, not UTC.
+    // Otherwise a customer who creates a sub at 10pm Eastern for "tomorrow" would
+    // get charged immediately because it's already after midnight UTC.
     let immediateChargeResult = null;
-    const todayIso = new Date().toISOString().slice(0, 10);
-    if (String(startDate).slice(0, 10) <= todayIso) {
+    let blob;
+    try {
+      const blobRes = await db.query(
+        'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
+        [subaccountId]
+      );
+      blob = { data: blobRes.rows[0]?.data || {} };
+    } catch (_) {
+      blob = { data: {} };
+    }
+    const tz = (blob.data.settings && blob.data.settings.timezone) || 'America/New_York';
+    let todayInTz;
+    try {
+      todayInTz = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+    } catch (_) {
+      todayInTz = new Date().toISOString().slice(0, 10); // fallback to UTC
+    }
+
+    if (String(startDate).slice(0, 10) <= todayInTz) {
       try {
-        const blobRes = await db.query(
-          'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
-          [subaccountId]
-        );
-        const blob = { data: blobRes.rows[0]?.data || {} };
         immediateChargeResult = await processSub(verify.rows[0], blob, { dry_run: false });
       } catch (chargeErr) {
-        // Don't fail the create if the charge errors out; the daily cron will retry.
         console.error('Immediate charge error:', chargeErr.message);
         immediateChargeResult = { success: false, error: chargeErr.message };
       }

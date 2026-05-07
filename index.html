@@ -10387,7 +10387,7 @@ function _renderSubModalBody(s){
     +'<div class="form-group" style="margin-top:14px"><label>Notes</label><textarea id="sf-notes" rows="2">'+esc(s&&s.notes||'')+'</textarea></div>';
 
   openModal(isEdit?'Edit Subscription':'New Subscription',body,
-    '<button class="btn btn-ghost" onclick="_closeSubModal()">Cancel</button><button class="btn btn-primary" onclick="saveSub()">Save</button>',
+    '<button class="btn btn-ghost" onclick="_closeSubModal()">Cancel</button><button class="btn btn-primary" onclick="withBtnLock(this,()=>saveSub())">Save</button>',
     'modal-xl');
 }
 
@@ -10479,7 +10479,9 @@ function _renderItemsSummary(){
   // Use a fake sub-shape (lastChargedAt:null = first cycle) so first-cycle-only discounts apply too
   const fakeSub={items:_subEditItems,lastChargedAt:null};
   const b=calcSubTaxBreakdown(fakeSub);
-  const taxLine=b.taxEnabled&&b.tax>0
+  // Show tax line whenever tax is enabled, even at $0.00, so user can verify
+  // tax is being calculated (especially helpful for tiny amounts that round away)
+  const taxLine=b.taxEnabled
     ? '<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text-muted)"><span>'+esc(b.taxLabel)+' ('+b.taxRate+'%)</span><span>'+fmt$(b.tax)+'</span></div>'
     : '';
   const taxNote=b.taxEnabled

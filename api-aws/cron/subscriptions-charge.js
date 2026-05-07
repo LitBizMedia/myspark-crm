@@ -45,6 +45,9 @@ exports.handler = async function (event) {
   };
 
   try {
+    // For the date-filtered run, compare next_due_date against "today" in the
+    // subaccount's timezone, not UTC. Without this, a sub due May 7 in Eastern
+    // gets picked up at 8pm Eastern May 6 (which is May 7 UTC).
     const sql = subIdFilter
       ? `SELECT s.*, sd.data AS blob_data
          FROM subscriptions s
@@ -53,7 +56,8 @@ exports.handler = async function (event) {
       : `SELECT s.*, sd.data AS blob_data
          FROM subscriptions s
          LEFT JOIN subaccount_data sd ON sd.subaccount_id = s.subaccount_id
-         WHERE s.status = 'active' AND s.next_due_date <= CURRENT_DATE`;
+         WHERE s.status = 'active'
+           AND s.next_due_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', 'America/New_York'))::date)`;
     const params = subIdFilter ? [subIdFilter] : [];
     const r = await db.query(sql, params);
     summary.found = r.rows.length;
