@@ -1734,13 +1734,21 @@ function bookingSummaryHtml(showTotal) {
   const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
     ? Math.round(afterDiscount * taxSettings.rate) / 100
     : 0;
-  const total = afterDiscount + taxAmount + tipAmt;
+  // Workspace-level additional fee, post-tax, NOT taxed itself
+  const feeSettings = D.settings.additional_fee || { enabled:false, type:'flat', amount:0, label:'Additional Fee' };
+  const feeAmount = (feeSettings.enabled && parseFloat(feeSettings.amount) > 0)
+    ? (feeSettings.type === 'pct'
+        ? Math.round(afterDiscount * parseFloat(feeSettings.amount)) / 100
+        : Math.round(parseFloat(feeSettings.amount) * 100) / 100)
+    : 0;
+  const total = afterDiscount + taxAmount + feeAmount + tipAmt;
 
   const itemLabel = S.appointment_type ? 'Appointment' : 'Service';
   const breakdown = showTotal && subtotal > 0 ? `<hr class="bw-summary-divider">
     <div class="bw-summary-row"><span>${itemLabel}</span><strong>$${subtotal.toFixed(2)}</strong></div>
     ${couponDiscount > 0 ? `<div class="bw-summary-row" style="color:#10b981"><span>Coupon (${esc(S.coupon_code)})</span><strong>-$${couponDiscount.toFixed(2)}</strong></div>` : ''}
     ${taxAmount > 0 ? `<div class="bw-summary-row"><span>${esc(taxSettings.label||'Tax')}</span><strong>$${taxAmount.toFixed(2)}</strong></div>` : ''}
+    ${feeAmount > 0 ? `<div class="bw-summary-row"><span>${esc(feeSettings.label||'Additional Fee')}</span><strong>$${feeAmount.toFixed(2)}</strong></div>` : ''}
     ${tipAmt > 0 ? `<div class="bw-summary-row"><span>Tip</span><strong>$${tipAmt.toFixed(2)}</strong></div>` : ''}
     <div class="bw-summary-row" style="font-size:15px;padding-top:6px;border-top:1px solid var(--border);margin-top:4px"><span>Total</span><strong>$${total.toFixed(2)}</strong></div>` : '';
 
@@ -1766,7 +1774,13 @@ function computeTotal() {
   const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
     ? Math.round(afterDiscount * taxSettings.rate) / 100
     : 0;
-  return { subtotal, couponDiscount, afterDiscount, taxAmount, tipAmt, total: afterDiscount + taxAmount + tipAmt };
+  const feeSettings = D.settings.additional_fee || { enabled:false, type:'flat', amount:0 };
+  const feeAmount = (feeSettings.enabled && parseFloat(feeSettings.amount) > 0)
+    ? (feeSettings.type === 'pct'
+        ? Math.round(afterDiscount * parseFloat(feeSettings.amount)) / 100
+        : Math.round(parseFloat(feeSettings.amount) * 100) / 100)
+    : 0;
+  return { subtotal, couponDiscount, afterDiscount, taxAmount, feeAmount, tipAmt, total: afterDiscount + taxAmount + feeAmount + tipAmt };
 }
 
 function cancellationPolicyHtml() {

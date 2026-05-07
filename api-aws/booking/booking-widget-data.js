@@ -253,6 +253,10 @@ async function handler(req, res) {
     const settings = blob.settings || {};
     const bs = settings.bookingSettings || {};
     const taxSettings = bs.tax || (settings.paySettings && settings.paySettings.tax) || {};
+    // Workspace-level additional fee (e.g. convenience fee). Applies to ALL
+    // widget bookings when enabled. Toggled in Settings -> Payments,
+    // not per-widget per Patrick's intent.
+    const feeSettings = (settings.paySettings && settings.paySettings.additionalFee) || {};
     // Default helpers for widget-vs-blob-vs-default precedence.
     const w = widget || {};
     const widgetBool = (val, def) => (val == null ? def : !!val);
@@ -289,6 +293,12 @@ async function handler(req, res) {
         enabled: !!taxSettings.enabled,
         rate: parseFloat(taxSettings.rate) || 0,
         label: taxSettings.label || 'Sales Tax'
+      },
+      additional_fee: {
+        enabled: !!feeSettings.enabled,
+        label: feeSettings.label || 'Additional Fee',
+        type: feeSettings.type === 'pct' ? 'pct' : 'flat',
+        amount: parseFloat(feeSettings.amount) || 0
       },
       widget_primary_color:    w.primary_color || bs.widget_primary_color || '#6b21ea',
       widget_logo_url:         w.logo_url || bs.widget_logo_url || '',

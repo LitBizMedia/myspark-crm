@@ -526,12 +526,26 @@ async function handler(req, res) {
     }
 
     // 9. Compute totals per Payment Policy
+    // Math chain: subtotal -> coupon -> afterDiscount -> tax -> fee -> tip -> total
+    // (Fee is post-tax and NOT taxed itself, per policy.)
     // taxableFlag was already set in the lookup branch above.
     const subtotal = r2(basePrice);
     const afterDiscount = r2(Math.max(0, subtotal - couponDiscount));
     const { tax: taxAmount, taxableAmount } = calcTax(subtotal, taxableFlag, couponDiscount, taxSettings);
+    // Workspace-level additional fee (e.g. convenience fee). Applies to all
+    // widget bookings when enabled in Settings -> Payments.
+    const feeSettings = paySettings.additionalFee || {};
+    let feeAmount = 0;
+    if (feeSettings.enabled) {
+      const feeAmt = parseFloat(feeSettings.amount) || 0;
+      if (feeSettings.type === 'pct') {
+        feeAmount = r2(afterDiscount * feeAmt / 100);
+      } else {
+        feeAmount = r2(feeAmt);
+      }
+    }
     const tip = r2(tip_amount || 0);
-    const total = r2(afterDiscount + taxAmount + tip);
+    const total = r2(afterDiscount + taxAmount + feeAmount + tip);
 
     // 10. Determine if payment must occur, and how much.
     //
@@ -745,6 +759,7 @@ async function handler(req, res) {
       const pmtAfterDiscount  = isDeposit ? chargeAmount : afterDiscount;
       const pmtTax            = isDeposit ? 0 : taxAmount;
       const pmtTaxable        = isDeposit ? 0 : taxableAmount;
+      const pmtFee            = isDeposit ? 0 : feeAmount;
       const pmtCouponDiscount = isDeposit ? 0 : couponDiscount;
       const pmtTip            = isDeposit ? 0 : tip;
       const pmtTotal          = isDeposit ? chargeAmount : total;
@@ -769,7 +784,7 @@ async function handler(req, res) {
         coupon_id: isDeposit ? '' : couponId,
         discount_amount: 0,
         after_discount: pmtAfterDiscount,
-        fee_amount: 0,
+        fee_amount: pmtFee,
         tax_amount: pmtTax,
         taxable_amount: pmtTaxable,
         tip_amount: pmtTip,
