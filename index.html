@@ -18489,23 +18489,43 @@ function renderGiftCards(){
   if(!el)return;
   if(!db.giftCardProducts)db.giftCardProducts=[];
   if(!db.giftCards)db.giftCards=[];
-  var gcState=state.gcTab||'products';
-  var h='<div class="pay-panel-tabs" style="margin:-22px -24px 22px">'
-    +'<button class="pay-panel-tab'+(gcState==='products'?' active':'')+'" onclick="switchGcTab(\'products\')">Gift Card Products</button>'
-    +'<button class="pay-panel-tab'+(gcState==='orders'?' active':'')+'" onclick="switchGcTab(\'orders\')">Issued Cards</button>'
-    +'<button class="pay-panel-tab'+(gcState==='send'?' active':'')+'" onclick="switchGcTab(\'send\')">Issue / Send</button>'
+  var orders=db.giftCards||[];
+  orders=[...orders].sort(function(a,b){return(b.issuedAt||'').localeCompare(a.issuedAt||'');});
+  var manage=canManageGiftCards();
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Gift Cards</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+orders.length+' issued &bull; '+fmt$(orders.reduce(function(s,g){return s+(g.balance||0);},0))+' outstanding balance</div></div>'
+    +(manage?'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button class="btn btn-ghost" onclick="openGcDesignsModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Designs</button>'
+      +'<button class="btn btn-primary" onclick="openGcIssueModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Issue Card</button>'
+      +'</div>':'')
     +'</div>'
-    +'<div id="gc-tab-body">';
-  if(gcState==='products') h+=gcRenderProducts();
-  else if(gcState==='orders') h+=gcRenderOrders();
-  else if(gcState==='send') h+=gcRenderSend();
-  h+='</div>';
+    +'<div class="toolbar" style="margin-bottom:14px">'
+    +'<div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="gc-orders-search" type="text" placeholder="Search code or name..." oninput="gcRenderOrdersTable()"></div>'
+    +'<select id="gc-orders-filter" class="filter-sel" onchange="gcRenderOrdersTable()"><option value="">All Status</option><option value="active">Active</option><option value="redeemed">Redeemed</option><option value="partial">Partial</option><option value="refunded">Refunded</option></select>'
+    +'</div>'
+    +'<div id="gc-orders-table"></div>';
   el.innerHTML=h;
+  setTimeout(gcRenderOrdersTable,0);
 }
 
+// Backward-compat shim: old code paths that called switchGcTab now just re-render.
 function switchGcTab(tab){
-  state.gcTab=tab;
+  if(tab==='send')return openGcIssueModal();
+  if(tab==='products')return openGcDesignsModal();
   renderGiftCards();
+}
+
+// Modal: shows the Gift Card Products grid (designs) for management.
+function openGcDesignsModal(){
+  var body='<div id="gc-designs-modal-body">'+gcRenderProducts()+'</div>';
+  openModal('Gift Card Designs', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-xl');
+}
+
+// Modal: shows the Issue / Send form.
+function openGcIssueModal(){
+  var body='<div id="gc-issue-modal-body">'+gcRenderSend()+'</div>';
+  openModal('Issue a Gift Card', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
 }
 
 // ── Products Tab ──
@@ -19288,21 +19308,42 @@ function gcHandleBgUpload(input){
 function renderSessionPacks(){
   var el=document.getElementById('pay-sessionpacks-view');
   if(!el)return;
-  var tab=state.spTab||'templates';
-  var h='<div class="pay-panel-tabs" style="margin:-22px -24px 22px">'
-    +'<button class="pay-panel-tab'+(tab==='templates'?' active':'')+'" onclick="switchSpTab(\'templates\')">Pack Templates</button>'
-    +'<button class="pay-panel-tab'+(tab==='clients'?' active':'')+'" onclick="switchSpTab(\'clients\')">Client Packs</button>'
-    +'<button class="pay-panel-tab'+(tab==='sell'?' active':'')+'" onclick="switchSpTab(\'sell\')">Sell / Issue</button>'
-    +'</div>';
-  if(tab==='templates') h+=spRenderTemplates();
-  else if(tab==='clients') h+=spRenderClientPacks();
-  else if(tab==='sell') h+=spRenderSell();
+  var packs=(db.sessionPacks||[]);
+  var manage=isAdminOrManager();
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Session Packs</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+packs.length+' issued</div></div>'
+    +(manage?'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +'<button class="btn btn-ghost" onclick="openSpTemplatesModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Templates</button>'
+      +'<button class="btn btn-primary" onclick="openSpSellModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Sell Pack</button>'
+      +'</div>':'')
+    +'</div>'
+    +'<div class="toolbar" style="margin-bottom:14px">'
+    +'<div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="sp-clients-search" type="text" placeholder="Search client or pack..." oninput="spRenderClientPacksTable()"></div>'
+    +'<select id="sp-clients-filter" class="filter-sel" onchange="spRenderClientPacksTable()"><option value="">All Status</option><option value="active">Active</option><option value="exhausted">Exhausted</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option></select>'
+    +'</div>'
+    +'<div id="sp-clients-table"></div>';
   el.innerHTML=h;
-  if(tab==='clients') setTimeout(spRenderClientPacksTable,0);
-  if(tab==='sell') setTimeout(spInitSellForm,0);
+  setTimeout(spRenderClientPacksTable,0);
 }
 
-function switchSpTab(tab){state.spTab=tab;renderSessionPacks();}
+// Backward-compat shim
+function switchSpTab(tab){
+  if(tab==='templates')return openSpTemplatesModal();
+  if(tab==='sell')return openSpSellModal();
+  renderSessionPacks();
+}
+
+function openSpTemplatesModal(){
+  var body='<div id="sp-tmpl-modal-body">'+spRenderTemplates()+'</div>';
+  openModal('Pack Templates', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-xl');
+}
+
+function openSpSellModal(){
+  var body='<div id="sp-sell-modal-body">'+spRenderSell()+'</div>';
+  openModal('Sell Session Pack', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
+  setTimeout(spInitSellForm,0);
+}
 
 function spRenderTemplates(){
   var tmpls=(db.sessionPackTemplates||[]).sort(function(a,b){return(a.name||'').localeCompare(b.name||'');});
