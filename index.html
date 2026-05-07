@@ -6712,11 +6712,38 @@ function apptUpdateTotals(){
   var taxAmount=taxCalc.tax;
   var taxableAmount=taxCalc.taxableAmount;
 
-  // TODO: workspace additionalFee with apply_to.calendar_take_payment
-  // toggle exists in Settings but Calendar Take Payment fee integration
-  // is deferred. Requires updates to totals display + save flow + payment record.
+  // Workspace additional fee. Applies when:
+  //   1. Fee is enabled in Settings
+  //   2. apply_to.calendar_take_payment is true
+  //   3. No prior payment on this appointment/session already collected a fee
+  //      (prevents double-charging when widget already collected the fee)
+  var feeAmount=0;
+  var feeLabel='Additional Fee';
+  var ps=db.paySettings||{};
+  var afS=ps.additionalFee||{};
+  var feeApplyCal=afS.enabled&&afS.apply_to&&afS.apply_to.calendar_take_payment===true;
+  if(feeApplyCal){
+    // Check for prior fee collected on this appt/class
+    var alreadyCharged=false;
+    var linkApptId=ctx.linkage&&ctx.linkage.appointmentId;
+    var linkClassId=ctx.linkage&&ctx.linkage.classSessionId;
+    var linkPartId=ctx.linkage&&ctx.linkage.participantContactId;
+    (db.payments||[]).forEach(function(p){
+      if(p.status!=='completed')return;
+      if(parseFloat(p.feeAmount||0)<=0)return;
+      if(linkApptId&&p.appointmentId===linkApptId)alreadyCharged=true;
+      if(linkClassId&&p.classSessionId===linkClassId&&p.participantContactId===linkPartId)alreadyCharged=true;
+    });
+    if(!alreadyCharged){
+      var feeVal=parseFloat(afS.amount)||0;
+      if(afS.type==='pct')feeAmount=afterDiscount*(feeVal/100);
+      else feeAmount=feeVal;
+      feeAmount=Math.round(feeAmount*100)/100;
+      feeLabel=afS.label||'Additional Fee';
+    }
+  }
 
-  var total=afterDiscount+taxAmount+tipAmount;
+  var total=afterDiscount+taxAmount+feeAmount+tipAmount;
 
   // Gift card application: only when GC method is active AND a GC has been applied
   var gcApplied=0;
@@ -6742,6 +6769,7 @@ function apptUpdateTotals(){
   if(couponDiscount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Coupon ('+esc(coupon.code)+')</span><span>-'+fmt$(couponDiscount)+'</span></div>';
   if(discountAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Discount</span><span>-'+fmt$(discountAmount)+'</span></div>';
   if(taxAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>'+esc(taxLabel)+'</span><span>+'+fmt$(taxAmount)+'</span></div>';
+  if(feeAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>'+esc(feeLabel)+'</span><span>+'+fmt$(feeAmount)+'</span></div>';
   if(tipAmount>0)rows+='<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--text-muted)"><span>Tip</span><span>+'+fmt$(tipAmount)+'</span></div>';
   rows+='<div style="display:flex;justify-content:space-between;padding:6px 0 2px 0;border-top:1px solid var(--border);margin-top:4px;font-weight:700;color:var(--text)"><span>Total</span><span style="color:var(--text);font-size:14px">'+fmt$(total)+'</span></div>';
   if(inGC){
@@ -6766,6 +6794,7 @@ function apptUpdateTotals(){
     afterDiscount:afterDiscount,
     taxAmount:taxAmount,
     taxableAmount:taxableAmount,
+    feeAmount:feeAmount,
     tipAmount:tipAmount,
     total:total,
     giftCard:inGC?state.apptGC:null,
@@ -6989,6 +7018,7 @@ async function takeApptPayment(){
     afterDiscount:totals.afterDiscount,
     taxAmount:totals.taxAmount||0,
     taxableAmount:totals.taxableAmount||0,
+    feeAmount:totals.feeAmount||0,
     tipAmount:totals.tipAmount,
     creditApplied:0,
     total:totals.total,
@@ -7054,6 +7084,7 @@ async function _takeApptPaymentCard(ctx, totals, notes, staffId, staffName, tipS
       discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
       afterDiscount:totals.afterDiscount,
       taxAmount:totals.taxAmount||0,taxableAmount:totals.taxableAmount||0,
+      feeAmount:totals.feeAmount||0,
       tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
       paymentMethod:'card',
       notes:notes,
@@ -7132,6 +7163,7 @@ async function _takeApptPaymentCOF(ctx, totals, notes, staffId, staffName, tipSt
       discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
       afterDiscount:totals.afterDiscount,
       taxAmount:totals.taxAmount||0,taxableAmount:totals.taxableAmount||0,
+      feeAmount:totals.feeAmount||0,
       tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
       paymentMethod:'card_on_file',
       cardLast4:card.last4,
@@ -7209,6 +7241,7 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
     discountAmount:totals.discountAmount,discountType:totals.discountType,discountVal:totals.discountVal,
     afterDiscount:totals.afterDiscount,
     taxAmount:totals.taxAmount||0,taxableAmount:totals.taxableAmount||0,
+    feeAmount:totals.feeAmount||0,
     tipAmount:totals.tipAmount,creditApplied:0,total:totals.total,
     paymentMethod:'gift_card',
     giftCardId:gObj.id,
