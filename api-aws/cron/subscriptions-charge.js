@@ -12,15 +12,12 @@
 //   { "sub_id": "sub-..." }  -- only process this one sub (skips date filter)
 //   { "dry_run": true }      -- compute and log but don't charge or write
 //
-// Idempotency: source_id = sub-{id}-{next_due_date}-{cycle_count}. If the
-// Lambda crashes mid-flow, the next run with the same key returns Square's
-// original payment (no double-charge), allowing us to complete the DB writes.
+// Idempotency: source_id = sub-{id}-{next_due_date}. If the Lambda crashes
+// mid-flow, the next run with the same key returns Square's original payment
+// (no double-charge), allowing us to complete the DB writes.
 
 const db = require('./lib/db');
-
-const SQUARE_PROD_BASE = 'https://connect.squareup.com';
-const SQUARE_SANDBOX_BASE = 'https://connect.squareupsandbox.com';
-const SQUARE_VERSION = '2024-12-18';
+const { getSquareCreds, squareHost, squareHeaders } = require('./lib/square');
 
 // Auto-suspend after this many failed charges within the window
 const SUSPEND_AFTER = 3;
@@ -90,24 +87,19 @@ function computeCharge(sub, paySettings) {
   };
 }
 
-async function chargeSquare({ accessToken, sandbox, locationId, customerId, cardId, cents, idempotencyKey, note }) {
-  const base = sandbox ? SQUARE_SANDBOX_BASE : SQUARE_PROD_BASE;
-  const url = `${base}/v2/payments`;
+async function chargeSquare({ creds, customerId, cardId, cents, idempotencyKey, note }) {
+  const url = 'https://' + squareHost(creds.sandbox) + '/v2/payments';
   const body = {
     source_id: cardId,
     customer_id: customerId,
     amount_money: { amount: cents, currency: 'USD' },
     idempotency_key: idempotencyKey,
-    location_id: locationId,
     note: (note || '').slice(0, 500)
   };
+  if (creds.location_id) body.location_id = creds.location_id;
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'Square-Version': SQUARE_VERSION
-    },
+    headers: squareHeaders(creds.access_token),
     body: JSON.stringify(body)
   });
   const data = await res.json();
@@ -273,7 +265,6 @@ async function processSub(sub, blob, options) {
   try {
     const data = blob.data || {};
     const paySettings = data.paySettings || {};
-    const square = (data.settings && data.settings.square) || {};
 
     const breakdown = computeCharge(sub, paySettings);
     result.breakdown = breakdown;
@@ -296,8 +287,11 @@ async function processSub(sub, blob, options) {
     const card = (contact.squareCards || []).find(c => c && c.id === sub.card_id);
     if (!card) throw new Error('Card on file not found for this subscription');
 
-    if (!square.accessToken || !square.locationId) {
-      throw new Error('Subaccount Square credentials not configured');
+    // Slug derivation: subaccount_id is "sub-{slug}". Strip the prefix.
+    const slug = String(sub.subaccount_id || '').replace(/^sub-/, '');
+    const creds = await getSquareCreds(slug);
+    if (!creds || !creds.access_token) {
+      throw new Error('Square is not connected for this workspace');
     }
 
     if (options.dry_run) {
@@ -312,9 +306,7 @@ async function processSub(sub, blob, options) {
     const note = `Subscription cycle: ${sub.plan_name_snapshot || 'Subscription'}`;
 
     const charge = await chargeSquare({
-      accessToken: square.accessToken,
-      sandbox: !!square.sandbox,
-      locationId: square.locationId,
+      creds,
       customerId: contact.squareCustomerId,
       cardId: card.id,
       cents: breakdown.cents,
@@ -329,7 +321,7 @@ async function processSub(sub, blob, options) {
       return result;
     }
 
-    // Look up the owner's display name (best-effort; payment record can have null staff_name)
+    // Look up the owner's display name (best-effort)
     let ownerName = null;
     if (sub.owner_user_id) {
       try {
