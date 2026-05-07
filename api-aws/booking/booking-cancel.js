@@ -45,6 +45,31 @@ async function handler(req, res) {
     const appt = apptRes.rows[0];
     if (appt.status === 'cancelled') return res.status(400).json({ error: 'This appointment is already cancelled.' });
 
+    // Enforce the cancel window policy at click time. Look up the widget
+    // (if still active) for cancel_window_hours; default 24 hours.
+    const wRes = await db.query(
+      `SELECT cancel_window_hours FROM service_widgets WHERE id = (
+         SELECT widget_id FROM appointments WHERE id = $1
+       ) LIMIT 1`,
+      [appt.id]
+    );
+    const cancelWindowHrs = wRes.rows[0] && wRes.rows[0].cancel_window_hours != null
+      ? parseInt(wRes.rows[0].cancel_window_hours) : 24;
+    if (cancelWindowHrs > 0) {
+      // Look up subaccount tz to compute apptTimestamp accurately.
+      const subRes = await db.query(`SELECT data FROM subaccount_data WHERE subaccount_id = $1`, [tok.subaccount_id]);
+      const subTz = (subRes.rows[0] && subRes.rows[0].data && subRes.rows[0].data.settings && subRes.rows[0].data.settings.timezone) || 'America/New_York';
+      const tz = require('./lib/timezone');
+      const dateStr = appt.date instanceof Date ? appt.date.toISOString().slice(0,10) : appt.date;
+      const apptTs = tz.apptTimestampInTz(dateStr, appt.time, subTz);
+      const hoursUntil = (apptTs.getTime() - Date.now()) / 3600000;
+      if (hoursUntil < cancelWindowHrs) {
+        return res.status(400).json({
+          error: `Cancellations require at least ${cancelWindowHrs} hours notice. Please contact the business directly to cancel.`
+        });
+      }
+    }
+
     await db.query(
       `UPDATE appointments SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
       [appt.id]

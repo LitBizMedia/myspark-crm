@@ -947,17 +947,19 @@ async function handler(req, res) {
         const tz = require('./lib/timezone');
         const subTz = (blob && blob.settings && blob.settings.timezone) || 'America/New_York';
         const apptTs = tz.apptTimestampInTz(bookingDate, bookingTime, subTz);
-        const cancelWindowHrs = parseInt(widget.cancel_window_hours) || 24;
-        const cancelDeadline = new Date(apptTs.getTime() - cancelWindowHrs * 3600000);
-        if (cancelDeadline > new Date()) {
+        // Always generate tokens for future appointments. Token validity runs
+        // until the appointment itself. The cancel/reschedule endpoints enforce
+        // cancel_window_hours at click time so customers see a clear policy
+        // message instead of having no link to click.
+        if (apptTs > new Date()) {
           const cancelTok = genActionToken();
           const reschedTok = genActionToken();
           await db.query(
             `INSERT INTO booking_action_tokens (token, appointment_id, subaccount_id, action, expires_at)
              VALUES ($1, $2, $3, 'cancel', $4),
                     ($5, $6, $7, 'reschedule', $8)`,
-            [cancelTok, apptId, subaccountId, cancelDeadline.toISOString(),
-             reschedTok, apptId, subaccountId, cancelDeadline.toISOString()]
+            [cancelTok, apptId, subaccountId, apptTs.toISOString(),
+             reschedTok, apptId, subaccountId, apptTs.toISOString()]
           );
           cancelLink = `https://book.mysparkplus.app/cancel?token=${cancelTok}`;
           rescheduleLink = `https://book.mysparkplus.app/reschedule?token=${reschedTok}`;

@@ -86,6 +86,29 @@ async function handler(req, res) {
     if (!appt) return res.status(404).json({ error: 'Appointment not found.' });
     if (appt.status === 'cancelled') return res.status(400).json({ error: 'This appointment is cancelled.' });
 
+    // Enforce reschedule window policy at confirm time. Same window as cancel.
+    const wRes = await db.query(
+      `SELECT cancel_window_hours FROM service_widgets WHERE id = (
+         SELECT widget_id FROM appointments WHERE id = $1
+       ) LIMIT 1`,
+      [appt.id]
+    );
+    const cancelWindowHrs = wRes.rows[0] && wRes.rows[0].cancel_window_hours != null
+      ? parseInt(wRes.rows[0].cancel_window_hours) : 24;
+    if (cancelWindowHrs > 0) {
+      const subRes = await db.query(`SELECT data FROM subaccount_data WHERE subaccount_id = $1`, [tok.subaccount_id]);
+      const subTz = (subRes.rows[0] && subRes.rows[0].data && subRes.rows[0].data.settings && subRes.rows[0].data.settings.timezone) || 'America/New_York';
+      const tz = require('./lib/timezone');
+      const dateStr = appt.date instanceof Date ? appt.date.toISOString().slice(0,10) : appt.date;
+      const apptTs = tz.apptTimestampInTz(dateStr, appt.time, subTz);
+      const hoursUntil = (apptTs.getTime() - Date.now()) / 3600000;
+      if (hoursUntil < cancelWindowHrs) {
+        return res.status(400).json({
+          error: `Reschedules require at least ${cancelWindowHrs} hours notice. Please contact the business directly.`
+        });
+      }
+    }
+
     if (appt.assigned_to) {
       const conflict = await db.query(
         `SELECT id FROM appointments
