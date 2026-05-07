@@ -17129,6 +17129,10 @@ function txnGetFiltered(){
   var staff = state.txnStaff || '';
   var method = state.txnMethod || '';
   return (db.payments || []).filter(function(p){
+    // Skip booking-trace records where no money changed hands.
+    // These are kept for historical traceability (legacy data) but should
+    // not appear in the transactions ledger.
+    if(p.paymentMethod === 'none') return false;
     var date = (p.createdAt || '').split('T')[0];
     if(date < from || date > to) return false;
     if(staff && p.staffId !== staff) return false;
