@@ -727,21 +727,22 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .pay-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
 
 /* SUBSCRIPTIONS */
-/* Important: .sub-row sits inside .panel which redefines --text to the dark
-   light-theme value. We use --bg-panel (dark) as the background, so we need
-   to flip the text vars back to the dark-theme light values for children. */
-.sub-row{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:13px 16px;display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .18s;margin-bottom:7px;color:#ede8ff;
-  --text:#ede8ff;
-  --text-muted:#b8aee0;
-  --text-dim:#6b5fa0;
-  --bg-card:#181230;
-  --border:rgba(255,255,255,.08);
+/* Match the white-card pattern used elsewhere (stat-card, prod-card). The
+   row sits inside .panel which sets light-theme tokens, but we make the
+   tokens self-contained so the row renders correctly anywhere. */
+.sub-row{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:13px 16px;display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr auto;gap:12px;align-items:center;cursor:pointer;transition:border-color .18s,box-shadow .18s;margin-bottom:7px;box-shadow:0 1px 6px rgba(107,33,234,.06);
+  --text:var(--main-text);
+  --text-muted:var(--main-text-muted);
+  --text-dim:#9b8fc4;
+  --border:var(--main-border);
+  --bg-card:var(--main-card);
+  color:var(--main-text);
 }
-.sub-row:hover{border-color:var(--purple-border)}
+.sub-row:hover{border-color:var(--purple-border);box-shadow:0 2px 12px rgba(107,33,234,.1)}
 .sub-row.active{border-left:3px solid #34d399}
-.sub-row.paused{border-left:3px solid var(--orange);opacity:.75}
+.sub-row.paused{border-left:3px solid var(--orange);opacity:.85}
 .sub-row.suspended{border-left:3px solid #f87171}
-.sub-row.cancelled{border-left:3px solid var(--text-dim);opacity:.45}
+.sub-row.cancelled{border-left:3px solid var(--text-dim);opacity:.55}
 .sub-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sub-biz{font-size:11px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sub-cycle-badge{font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:var(--purple-dim);color:var(--purple-light);display:inline-block;margin-top:3px}
