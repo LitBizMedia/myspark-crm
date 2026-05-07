@@ -18497,7 +18497,6 @@ function renderGiftCards(){
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+orders.length+' issued &bull; '+fmt$(orders.reduce(function(s,g){return s+(g.balance||0);},0))+' outstanding balance</div></div>'
     +(manage?'<div style="display:flex;gap:8px;flex-wrap:wrap">'
       +'<button class="btn btn-ghost" onclick="openGcDesignsModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Designs</button>'
-      +'<button class="btn btn-ghost" onclick="openGcIssueModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Issue Card</button>'
       +'<button class="btn btn-primary" onclick="openGcSellModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Sell Card</button>'
       +'</div>':'')
     +'</div>'
@@ -18512,7 +18511,6 @@ function renderGiftCards(){
 
 // Backward-compat shim: old code paths that called switchGcTab now just re-render.
 function switchGcTab(tab){
-  if(tab==='send')return openGcIssueModal();
   if(tab==='products')return openGcDesignsModal();
   renderGiftCards();
 }
@@ -18525,12 +18523,6 @@ function _modalLightContent(html){ return html; }
 function openGcDesignsModal(){
   var body=_modalLightContent('<div id="gc-designs-modal-body">'+gcRenderProducts()+'</div>');
   openModal('Gift Card Designs', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-xxl');
-}
-
-// Modal: shows the Issue (no charge) form.
-function openGcIssueModal(){
-  var body=_modalLightContent('<div id="gc-issue-modal-body">'+gcRenderSend()+'</div>');
-  openModal('Issue a Gift Card', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
 }
 
 // Modal: pick a design, then opens the existing gcOpenSell flow with that product.
@@ -19067,101 +19059,6 @@ function gcConfirmAddBalance(id){
   toast(fmt$(amt)+' added to gift card.','success');
 }
 
-// ── Send / Issue Tab ──
-function gcRenderSend(){
-  var prods=(db.giftCardProducts||[]).filter(function(p){return p.status==='active';});
-  // Rendered inside a dark modal; entire form sits on modal bg with no nested
-  // light cards. Use --text/--text-muted directly for readability.
-  var h='<div style="max-width:540px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--text);margin-bottom:5px">Issue a Gift Card</div>'
-    +'<div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Issue a prepaid gift card to a customer without requiring a payment. For rewards, make-goods, or VIP perks.</div>'
-    +'<div class="form-group"><label>Gift Card Product</label>'
-    +'<select id="gc-issue-prod" class="filter-sel" style="width:100%;height:38px" onchange="gcUpdateIssueDenoms()">'
-    +(prods.length?prods.map(function(p){return'<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join(''):'<option value="">No active gift cards - create one first</option>')
-    +'</select></div>'
-    +'<div class="form-group"><label>Recipient Contact <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
-    +'<div class="ss-wrap"><input class="ss-inp" id="gc-issue-c-inp" type="text" placeholder="Search contacts..." oninput="gcIssueCSearch(this.value)" onclick="gcIssueCSearch(this.value)" autocomplete="off"><input type="hidden" id="gc-issue-c-id"><div class="ss-drop hidden" id="gc-issue-c-drop"></div></div></div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Amount ($)</label>'
-    +'<div id="gc-issue-denom-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>'
-    +'<input id="gc-issue-amt" type="number" min="1" step="0.01" placeholder="Or enter custom amount"></div>'
-    +'<div class="form-group"><label>Recipient Name <span style="font-weight:400;color:var(--text-muted)">(printed on card)</span></label>'
-    +'<input id="gc-issue-recip" type="text" placeholder="e.g. Jane Smith"></div>'
-    +'</div>'
-    +'<div class="form-group"><label>Note <span style="font-weight:400;color:var(--text-muted)">(internal)</span></label>'
-    +'<input id="gc-issue-note" type="text" placeholder="Birthday gift, service credit..."></div>'
-    +'<div style="display:flex;gap:8px;margin-top:4px">'
-    +'<button class="btn btn-primary" onclick="gcIssueCard()">Issue Gift Card</button>'
-    +'<button class="btn btn-ghost" onclick="gcIssueCard(true)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Issue &amp; Print</button>'
-    +'</div></div>';
-  setTimeout(gcUpdateIssueDenoms,50);
-  return h;
-}
-
-function gcUpdateIssueDenoms(){
-  var prodId=document.getElementById('gc-issue-prod')&&document.getElementById('gc-issue-prod').value;
-  var prod=prodId?(db.giftCardProducts||[]).find(function(x){return x.id===prodId;}):null;
-  var row=document.getElementById('gc-issue-denom-row');if(!row)return;
-  if(!prod){row.innerHTML='';return;}
-  var amtInp=document.getElementById('gc-issue-amt');
-  row.innerHTML=(prod.denominations||[]).map(function(d){
-    return'<button class="chip" onclick="if(document.getElementById(\'gc-issue-amt\'))document.getElementById(\'gc-issue-amt\').value='+d+'">$'+d+'</button>';
-  }).join('');
-}
-
-function gcIssueCSearch(v){
-  var dd=document.getElementById('gc-issue-c-drop');if(!dd)return;
-  if(!v.trim()){dd.classList.add('hidden');return;}
-  var m=db.contacts.filter(function(c){return!c.archived&&((c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase()));}).slice(0,8);
-  if(!m.length)dd.innerHTML='<div class="ss-empty">No contacts found</div>';
-  else dd.innerHTML=m.map(function(c){return'<div class="ss-opt" onclick="gcIssueSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';}).join('');
-  dd.classList.remove('hidden');
-  setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
-}
-
-function gcIssueSelC(id,name){
-  document.getElementById('gc-issue-c-id').value=id;
-  document.getElementById('gc-issue-c-inp').value=name;
-  document.getElementById('gc-issue-c-drop').classList.add('hidden');
-  var ri=document.getElementById('gc-issue-recip');
-  if(ri&&!ri.value)ri.value=name;
-}
-
-function gcIssueCard(andPrint){
-  var prodId=document.getElementById('gc-issue-prod')&&document.getElementById('gc-issue-prod').value;
-  var amt=parseFloat(document.getElementById('gc-issue-amt')&&document.getElementById('gc-issue-amt').value)||0;
-  var contactId=document.getElementById('gc-issue-c-id')&&document.getElementById('gc-issue-c-id').value||'';
-  var recipName=(document.getElementById('gc-issue-recip')&&document.getElementById('gc-issue-recip').value||'').trim();
-  var note=(document.getElementById('gc-issue-note')&&document.getElementById('gc-issue-note').value||'').trim();
-  if(!prodId){toast('Select a gift card product.','error');return;}
-  if(amt<=0){toast('Enter an amount.','error');return;}
-  var code=gcGenCode();
-  var card={
-    id:'gc-'+uid(),
-    code:code,
-    productId:prodId,
-    contactId:contactId||null,
-    recipientName:recipName||null,
-    originalAmount:amt,
-    balance:amt,
-    status:'active',
-    issuedById:state.user&&state.user.id||null,
-    issuedAt:now_(),
-    note:note,
-    log:[{type:'issued',amount:amt,note:'Issued'+( note?' - '+note:''),date:now_()}]
-  };
-  if(!db.giftCards)db.giftCards=[];
-  db.giftCards.push(card);
-  saveData();
-  toast('Gift card issued: '+code,'success');
-  if(andPrint)gcPrintCard(card.id);
-  // Reset form
-  var fields=['gc-issue-amt','gc-issue-recip','gc-issue-note','gc-issue-c-inp'];
-  fields.forEach(function(fid){var el=document.getElementById(fid);if(el)el.value='';});
-  var cid=document.getElementById('gc-issue-c-id');if(cid)cid.value='';
-  // Show the new card details
-  switchGcTab('orders');
-}
 
 // ── Print wallet card (3.5" x 2") ──
 function gcPrintCard(id){
