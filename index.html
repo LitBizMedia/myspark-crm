@@ -18497,6 +18497,7 @@ function renderGiftCards(){
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+orders.length+' issued &bull; '+fmt$(orders.reduce(function(s,g){return s+(g.balance||0);},0))+' outstanding balance</div></div>'
     +(manage?'<div style="display:flex;gap:8px;flex-wrap:wrap">'
       +'<button class="btn btn-ghost" onclick="openGcDesignsModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Designs</button>'
+      +'<button class="btn btn-ghost" onclick="openGcSellModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Sell Card</button>'
       +'<button class="btn btn-primary" onclick="openGcIssueModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Issue Card</button>'
       +'</div>':'')
     +'</div>'
@@ -18516,16 +18517,46 @@ function switchGcTab(tab){
   renderGiftCards();
 }
 
+// CSS scope wrapper: when content built for the light Payments panel is dropped
+// into a dark modal, swap --main-text/--main-text-muted to readable values.
+function _modalLightContent(html){
+  return '<div style="--main-text:var(--text);--main-text-muted:var(--text-muted)">'+html+'</div>';
+}
+
 // Modal: shows the Gift Card Products grid (designs) for management.
 function openGcDesignsModal(){
-  var body='<div id="gc-designs-modal-body">'+gcRenderProducts()+'</div>';
+  var body=_modalLightContent('<div id="gc-designs-modal-body">'+gcRenderProducts()+'</div>');
   openModal('Gift Card Designs', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-xl');
 }
 
-// Modal: shows the Issue / Send form.
+// Modal: shows the Issue (no charge) form.
 function openGcIssueModal(){
-  var body='<div id="gc-issue-modal-body">'+gcRenderSend()+'</div>';
+  var body=_modalLightContent('<div id="gc-issue-modal-body">'+gcRenderSend()+'</div>');
   openModal('Issue a Gift Card', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
+}
+
+// Modal: pick a design, then opens the existing gcOpenSell flow with that product.
+function openGcSellModal(){
+  var prods=(db.giftCardProducts||[]).filter(function(p){return p.status==='active';});
+  if(!prods.length){
+    toast('Create a gift card design first.','error');
+    return openGcDesignsModal();
+  }
+  if(prods.length===1){
+    return gcOpenSell(prods[0].id);
+  }
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Pick a design to sell.</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">'
+    +prods.map(function(p){
+      var bg=p.bgImage?'background:url(\''+esc(p.bgImage)+'\') center/cover no-repeat':'background:linear-gradient(135deg,'+esc(p.bgColor1||'#6b21ea')+','+esc(p.bgColor2||'#ff4000')+')';
+      var denoms=(p.denominations||[]).slice(0,3).map(function(d){return '$'+d;}).join(', ');
+      return '<div style="cursor:pointer;border:1px solid var(--border);border-radius:10px;overflow:hidden" onclick="closeModal();setTimeout(function(){gcOpenSell(\''+p.id+'\');},80)">'
+        +'<div style="height:90px;'+bg+';display:flex;align-items:flex-end;padding:10px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)">'+esc(p.name)+'</div></div>'
+        +'<div style="padding:10px 12px"><div style="font-size:13px;font-weight:600">'+esc(p.name)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+esc(denoms||'Custom amount')+'</div></div>'
+        +'</div>';
+    }).join('')
+    +'</div>';
+  openModal('Sell Gift Card', body, '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>', 'modal-lg');
 }
 
 // ── Products Tab ──
@@ -18936,7 +18967,7 @@ function gcRenderOrdersTable(){
     var issuedBy=g.issuedById?getUserById(g.issuedById):null;
     var sc=statusColors[g.status]||statusColors.active;
     h+='<tr onclick="gcOpenOrderDetail(\''+g.id+'\')" style="cursor:pointer">'
-      +'<td><span style="font-family:monospace;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--main-text)">'+esc(g.code)+'</span></td>'
+      +'<td onclick="event.stopPropagation()"><span style="display:inline-flex;align-items:center;gap:6px"><span style="font-family:monospace;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--main-text)">'+esc(g.code)+'</span><button class="icon-btn-xs" onclick="copyGcCode(\''+esc(g.code)+'\',this)" title="Copy code" style="padding:3px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></span></td>'
       +'<td style="font-size:12px">'+esc(prod?prod.name:'Gift Card')+'</td>'
       +'<td style="font-size:12px">'+(contact?esc(contact.name):'<span style="color:var(--main-text-muted)">No contact</span>')+'</td>'
       +'<td style="font-size:12px">'+(issuedBy?esc(issuedBy.name||issuedBy.username):'<span style="color:var(--main-text-muted)">Staff</span>')+'</td>'
@@ -18949,6 +18980,25 @@ function gcRenderOrdersTable(){
   });
   h+='</tbody></table></div>';
   el.innerHTML=h;
+}
+
+function copyGcCode(code, btn){
+  if(!navigator.clipboard){
+    var ta=document.createElement('textarea');
+    ta.value=code;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');}catch(e){}
+    document.body.removeChild(ta);
+    toast('Code copied.','success');
+    return;
+  }
+  navigator.clipboard.writeText(code).then(function(){
+    toast('Code copied.','success');
+    if(btn){
+      var orig=btn.innerHTML;
+      btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="3" xmlns="http://www.w3.org/2000/svg" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>';
+      setTimeout(function(){btn.innerHTML=orig;},1500);
+    }
+  }).catch(function(){toast('Could not copy.','error');});
 }
 
 function gcOpenOrderDetail(id){
@@ -19335,12 +19385,12 @@ function switchSpTab(tab){
 }
 
 function openSpTemplatesModal(){
-  var body='<div id="sp-tmpl-modal-body">'+spRenderTemplates()+'</div>';
+  var body=_modalLightContent('<div id="sp-tmpl-modal-body">'+spRenderTemplates()+'</div>');
   openModal('Pack Templates', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-xl');
 }
 
 function openSpSellModal(){
-  var body='<div id="sp-sell-modal-body">'+spRenderSell()+'</div>';
+  var body=_modalLightContent('<div id="sp-sell-modal-body">'+spRenderSell()+'</div>');
   openModal('Sell Session Pack', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
   setTimeout(spInitSellForm,0);
 }
