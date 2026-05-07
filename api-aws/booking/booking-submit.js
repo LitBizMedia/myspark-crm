@@ -1010,8 +1010,14 @@ async function handler(req, res) {
           <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
         </div>`;
 
-      // Don't await; let it run async so a slow email doesn't block the booking response
-      sendConfirmationEmail(slug, client_info.email, subject, html, bizName, contactId);
+      // Await the email send. Lambda will suspend its container as soon as the
+      // handler returns; fire-and-forget promises don't reliably complete.
+      // Adds ~200-800ms to booking response, acceptable trade for reliability.
+      try {
+        await sendConfirmationEmail(slug, client_info.email, subject, html, bizName, contactId);
+      } catch (e) {
+        console.error('Confirmation email send threw:', e.message);
+      }
     }
 
     return res.status(200).json({
