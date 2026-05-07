@@ -74,10 +74,17 @@ async function handler(req, res) {
   const subaccountId = auth.subaccount_id;
 
   try {
-    // Verify contact exists and belongs to this subaccount
+    // Verify contact exists in this subaccount's blob.
+    // Contacts live in subaccount_data.data.contacts as a JSONB array; there
+    // is no dedicated contacts table yet.
     const cRes = await db.query(
-      `SELECT id FROM contacts WHERE id = $1 AND subaccount_id = $2`,
-      [contactId, subaccountId]
+      `SELECT 1 FROM subaccount_data
+       WHERE subaccount_id = $1
+       AND EXISTS (
+         SELECT 1 FROM jsonb_array_elements(COALESCE(data->'contacts', '[]'::jsonb)) AS c
+         WHERE c->>'id' = $2
+       )`,
+      [subaccountId, contactId]
     );
     if (!cRes.rows.length) return res.status(404).json({ error: 'Contact not found' });
 
