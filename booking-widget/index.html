@@ -371,6 +371,10 @@ async function loadRescheduleSlots() {
     });
     if (a.service_id) params.set('service_id', a.service_id);
     if (a.service_variation_id) params.set('variation_id', a.service_variation_id);
+    if (a.appointment_type_id) {
+      params.set('appointment_type_id', a.appointment_type_id);
+      if (ctx.widget_id) params.set('widget_id', ctx.widget_id);
+    }
     const r = await fetch(`${API}/api/booking/availability?${params.toString()}`);
     const d = await r.json();
     if (!r.ok || !Array.isArray(d.slots) || d.slots.length === 0) {
