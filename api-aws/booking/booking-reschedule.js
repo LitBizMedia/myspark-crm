@@ -6,11 +6,46 @@
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
+const resend = require('./lib/resend');
+const crypto = require('crypto');
+
+function genActionToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+async function getContact(subaccountId, contactId) {
+  if (!contactId) return null;
+  try {
+    const r = await db.query(`SELECT data FROM subaccount_data WHERE subaccount_id = $1`, [subaccountId]);
+    const contacts = (r.rows[0] && r.rows[0].data && Array.isArray(r.rows[0].data.contacts)) ? r.rows[0].data.contacts : [];
+    return contacts.find(c => c && c.id === contactId) || null;
+  } catch (e) { return null; }
+}
+
+async function getSubaccountInfo(subaccountId) {
+  const r = await db.query(`SELECT slug FROM subaccounts WHERE id = $1`, [subaccountId]);
+  const d = await db.query(`SELECT data FROM subaccount_data WHERE subaccount_id = $1`, [subaccountId]);
+  const settings = (d.rows[0] && d.rows[0].data && d.rows[0].data.settings) || {};
+  return {
+    slug: r.rows[0] ? r.rows[0].slug : null,
+    bizName: settings.businessName || (r.rows[0] ? r.rows[0].slug : 'the business'),
+    timezone: settings.timezone || 'America/New_York'
+  };
+}
+
+function fmtTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  const hh = parseInt(h, 10);
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const h12 = hh === 0 ? 12 : (hh > 12 ? hh - 12 : hh);
+  return `${h12}:${m} ${ampm}`;
 }
 
 async function loadToken(token) {
@@ -141,6 +176,59 @@ async function handler(req, res) {
         metadata: { via: 'self_serve_link', from: { date: appt.date, time: appt.time }, to: { date: newDate, time: newTime } }
       });
     } catch (e) { /* swallow */ }
+
+    // Issue fresh cancel/reschedule tokens for the moved appointment so the
+    // customer can manage it again from the new confirmation email.
+    let newCancelLink = '';
+    let newReschedLink = '';
+    try {
+      const tz = require('./lib/timezone');
+      const sub = await getSubaccountInfo(tok.subaccount_id);
+      const newApptTs = tz.apptTimestampInTz(newDate, newTime, sub.timezone);
+      if (newApptTs > new Date()) {
+        const cancelTok = genActionToken();
+        const reschedTok = genActionToken();
+        await db.query(
+          `INSERT INTO booking_action_tokens (token, appointment_id, subaccount_id, action, expires_at)
+           VALUES ($1, $2, $3, 'cancel', $4),
+                  ($5, $6, $7, 'reschedule', $8)`,
+          [cancelTok,  appt.id, tok.subaccount_id, newApptTs.toISOString(),
+           reschedTok, appt.id, tok.subaccount_id, newApptTs.toISOString()]
+        );
+        newCancelLink  = `https://book.mysparkplus.app/cancel?token=${cancelTok}`;
+        newReschedLink = `https://book.mysparkplus.app/reschedule?token=${reschedTok}`;
+      }
+
+      // Send reschedule confirmation email
+      const contact = await getContact(tok.subaccount_id, appt.contact_id);
+      if (contact && contact.email && sub.slug) {
+        const html = `
+          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+            <h2 style="margin-bottom:4px;color:#1a1030">Appointment Rescheduled</h2>
+            <p style="color:#6b7280;margin-top:0">${sub.bizName}</p>
+            <div style="background:#f9f7ff;border-radius:8px;padding:20px;margin:20px 0">
+              <div style="margin-bottom:8px"><strong>Service:</strong> ${appt.title || 'Appointment'}</div>
+              <div style="margin-bottom:8px"><strong>New Date:</strong> ${newDate}</div>
+              <div style="margin-bottom:8px"><strong>New Time:</strong> ${fmtTime(newTime)}</div>
+            </div>
+            ${(newCancelLink || newReschedLink) ? `
+              <div style="margin:20px 0 8px;padding:14px 16px;background:#f3f1ff;border-radius:8px">
+                <div style="font-size:13px;color:#5a4d7a;margin-bottom:8px">Need to make changes?</div>
+                <div style="font-size:14px">
+                  ${newReschedLink ? `<a href="${newReschedLink}" style="color:#6b21ea;text-decoration:underline;margin-right:14px">Reschedule</a>` : ''}
+                  ${newCancelLink ? `<a href="${newCancelLink}" style="color:#6b21ea;text-decoration:underline">Cancel appointment</a>` : ''}
+                </div>
+              </div>
+            ` : ''}
+            <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
+          </div>`;
+        await resend.sendEmail(sub.slug, {
+          to: contact.email,
+          subject: `Appointment Rescheduled - ${sub.bizName}`,
+          html
+        });
+      }
+    } catch (e) { console.error('Reschedule email/tokens failed:', e.message); }
 
     return res.status(200).json({
       success: true,

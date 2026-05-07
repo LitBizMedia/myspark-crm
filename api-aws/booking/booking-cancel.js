@@ -7,11 +7,42 @@
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
+const resend = require('./lib/resend');
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+// Look up contact by id from the blob (contacts haven't migrated to RDS yet).
+async function getContact(subaccountId, contactId) {
+  if (!contactId) return null;
+  try {
+    const r = await db.query(`SELECT data FROM subaccount_data WHERE subaccount_id = $1`, [subaccountId]);
+    const contacts = (r.rows[0] && r.rows[0].data && Array.isArray(r.rows[0].data.contacts)) ? r.rows[0].data.contacts : [];
+    return contacts.find(c => c && c.id === contactId) || null;
+  } catch (e) { return null; }
+}
+
+async function getSubaccountInfo(subaccountId) {
+  const r = await db.query(`SELECT slug FROM subaccounts WHERE id = $1`, [subaccountId]);
+  const d = await db.query(`SELECT data FROM subaccount_data WHERE subaccount_id = $1`, [subaccountId]);
+  const settings = (d.rows[0] && d.rows[0].data && d.rows[0].data.settings) || {};
+  return {
+    slug: r.rows[0] ? r.rows[0].slug : null,
+    bizName: settings.businessName || (r.rows[0] ? r.rows[0].slug : 'the business'),
+    timezone: settings.timezone || 'America/New_York'
+  };
+}
+
+function fmtTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  const hh = parseInt(h, 10);
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const h12 = hh === 0 ? 12 : (hh > 12 ? hh - 12 : hh);
+  return `${h12}:${m} ${ampm}`;
 }
 
 async function handler(req, res) {
@@ -90,6 +121,32 @@ async function handler(req, res) {
         metadata: { via: 'self_serve_link' }
       });
     } catch (e) { /* swallow */ }
+
+    // Send cancellation confirmation email (await; Lambda would suspend otherwise)
+    try {
+      const contact = await getContact(tok.subaccount_id, appt.contact_id);
+      const sub = await getSubaccountInfo(tok.subaccount_id);
+      if (contact && contact.email && sub.slug) {
+        const dateStr = appt.date instanceof Date ? appt.date.toISOString().slice(0,10) : appt.date;
+        const html = `
+          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+            <h2 style="margin-bottom:4px;color:#1a1030">Appointment Cancelled</h2>
+            <p style="color:#6b7280;margin-top:0">${sub.bizName}</p>
+            <div style="background:#fef2f2;border-radius:8px;padding:20px;margin:20px 0">
+              <div style="margin-bottom:8px"><strong>Service:</strong> ${appt.title || 'Appointment'}</div>
+              <div style="margin-bottom:8px"><strong>Date:</strong> ${dateStr}</div>
+              <div style="margin-bottom:8px"><strong>Time:</strong> ${fmtTime(appt.time)}</div>
+            </div>
+            <p style="color:#374151">Your appointment has been cancelled. If this was a mistake or you'd like to book again, please contact ${sub.bizName} or visit the booking page.</p>
+            <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
+          </div>`;
+        await resend.sendEmail(sub.slug, {
+          to: contact.email,
+          subject: `Appointment Cancelled - ${sub.bizName}`,
+          html
+        });
+      }
+    } catch (e) { console.error('Cancel email failed:', e.message); }
 
     return res.status(200).json({
       success: true,
