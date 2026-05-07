@@ -9843,7 +9843,32 @@ function confirmRemoveProductCategory(){
   setTimeout(openProductsModal,50);
 }
 
-let editPricingOpts=[];
+// Normalize a product to the new shape: { price: number, variations: [{id,name,price}] }.
+// Reads either the new shape (price/variations) or the legacy pricingOptions array.
+// One variation collapses to a primary price (same UX intent).
+function _normalizeProductPricing(p){
+  if(!p)return{price:0,variations:[]};
+  if(Array.isArray(p.variations)&&p.variations.length>=2){
+    return{price:0,variations:p.variations.map(function(v){return{id:v.id||'pv-'+uid(),name:v.name||'',price:parseFloat(v.price)||0};})};
+  }
+  if(Array.isArray(p.variations)&&p.variations.length===1){
+    return{price:parseFloat(p.variations[0].price)||0,variations:[]};
+  }
+  if(p.price!==undefined&&p.price!==null){
+    return{price:parseFloat(p.price)||0,variations:[]};
+  }
+  // Legacy pricingOptions
+  var opts=p.pricingOptions||[];
+  if(!opts.length)return{price:0,variations:[]};
+  if(opts.length===1)return{price:parseFloat(opts[0].price)||0,variations:[]};
+  return{
+    price:0,
+    variations:opts.map(function(o){return{id:o.id||'pv-'+uid(),name:o.name||'',price:parseFloat(o.price)||0};})
+  };
+}
+
+let editProductPrice=0;
+let editVariations=[];
 
 function renderProducts(){
   const catF=document.getElementById('prod-cat-filter');
@@ -9861,12 +9886,20 @@ function renderProducts(){
   const el=document.getElementById('prod-list');if(!el)return;
   if(!list.length){el.innerHTML='<div class="empty-state" style="grid-column:1/-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg><h3>No products yet</h3><p>Add your first product or service.</p></div>';return}
   el.innerHTML=list.map(p=>{
-    const opts=(p.pricingOptions||[]);
+    const norm=_normalizeProductPricing(p);
+    var pricingHtml;
+    if(!norm.variations.length){
+      pricingHtml='<div class="prod-opts-section" style="display:flex;justify-content:flex-end;align-items:center"><span class="prod-opt-price" style="font-size:18px">'+fmt$(norm.price)+'</span></div>';
+    }else{
+      pricingHtml='<div class="prod-opts-section">'+norm.variations.map(function(v){
+        return'<div class="prod-opt-row"><span class="prod-opt-name">'+esc(v.name||'(unnamed)')+'</span><span class="prod-opt-price">'+fmt$(v.price)+'</span></div>';
+      }).join('')+'</div>';
+    }
     return'<div class="prod-card">'
       +'<div class="prod-head"><div><div class="prod-name">'+esc(p.name)+'</div>'+(p.category?'<div class="prod-cat-badge">'+esc(p.category)+'</div>':'')+'</div><div class="prod-status-dot'+(p.active?' on':'')+'"></div></div>'
       +(p.description?'<div class="prod-desc-text">'+esc(p.description.slice(0,90))+(p.description.length>90?'\u2026':'')+'</div>':'')
       +(p.trackInventory?'<div style="margin-bottom:6px">'+invBadge(p)+(p.sku?'<span style="font-size:10px;color:var(--text-muted);margin-left:6px">SKU: '+esc(p.sku)+'</span>':'')+'</div>':'')
-      +'<div class="prod-opts-section">'+(opts.length?opts.map(o=>'<div class="prod-opt-row"><span class="prod-opt-name">'+esc(o.name)+'</span><span class="prod-opt-price">'+fmt$(o.price)+(o.billingType==='recurring'&&o.interval?'<span style="font-size:9px;color:var(--text-muted)">/'+o.interval+'</span>':'')+'</span><span class="prod-opt-badge '+o.billingType+'">'+(o.billingType==='recurring'?'Recurring':'One-Time')+'</span></div>').join(''):'<div style="font-size:12px;color:var(--text-muted)">No pricing options</div>')+'</div>'
+      +pricingHtml
       +'<div class="prod-foot"><button class="btn btn-purple btn-sm" onclick="openProductModal(\''+p.id+'\')">Edit</button><button class="btn btn-danger btn-sm" onclick="delProduct(\''+p.id+'\')">Delete</button></div>'
       +'</div>';
   }).join('');
@@ -9874,7 +9907,9 @@ function renderProducts(){
 
 function openProductModal(id){
   const p=id?db.products.find(x=>x.id===id):null;
-  editPricingOpts=p?JSON.parse(JSON.stringify(p.pricingOptions||[])):[];
+  const norm=_normalizeProductPricing(p);
+  editProductPrice=norm.price;
+  editVariations=norm.variations.map(function(v){return{id:v.id||'pv-'+uid(),name:v.name||'',price:parseFloat(v.price)||0};});
   state.modal={type:'product',id:id||null};
   const catOpts=getProdCats().map(c=>'<option value="'+c+'"'+(p&&p.category===c?' selected':'')+'>'+esc(c)+'</option>').join('');
   const b='<div class="form-row">'
@@ -9890,55 +9925,69 @@ function openProductModal(id){
     +'<div class="form-row-3"><div class="form-group"><label>SKU</label><input id="prd-sku" type="text" value="'+esc(p&&p.sku||'')+'" placeholder="ABC-001"></div><div class="form-group"><label>Qty on Hand</label><input id="prd-stock" type="number" value="'+(p&&p.stockQty||0)+'" min="0" step="1"></div><div class="form-group"><label>Low Stock Alert</label><input id="prd-lowstock" type="number" value="'+(p&&p.lowStockThreshold||5)+'" min="0" step="1"></div></div>'
     +'</div>'
     +'<div class="divider"></div>'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:#ffffff">Pricing Options</div><button class="btn btn-purple btn-sm" onclick="addPricingOptRow()">+ Add Option</button></div>'
-    +'<div id="pricing-opts-list">'+renderPricingOptsList()+'</div>';
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:#ffffff">Pricing</div>'
+    +'<button class="btn btn-purple btn-sm" onclick="addProductVariation()">+ Add Variation</button>'
+    +'</div>'
+    +'<div id="prd-pricing-section">'+renderProductPricingSection()+'</div>';
   openModal(p?'Edit Product':'Add Product',b,'<button class="btn btn-ghost" onclick="_backToProductsModal()">Back</button><button class="btn btn-primary" onclick="confirmSave(saveProduct,\'product\')">Save Product</button>','modal-xl');
 }
 
-function renderPricingOptsList(){
-  if(!editPricingOpts.length)return'<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No pricing options yet. Click Add Option above.</div>';
-  return editPricingOpts.map((o,i)=>'<div class="pricing-edit-row">'
-    +'<div style="flex:1;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
-    +'<div style="min-width:150px;flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Option Name</div><input type="text" id="po-name-'+i+'" value="'+esc(o.name||'')+'" placeholder="Starter, Pro\u2026" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
-    +'<div style="width:90px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Price ($)</div><input type="number" id="po-price-'+i+'" value="'+(o.price||0)+'" min="0" step="0.01" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
-    +'<div style="width:130px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Billing</div><select id="po-type-'+i+'" onchange="togglePoInterval('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;height:38px"><option value="one_time"'+(o.billingType==='one_time'||!o.billingType?' selected':'')+'>One-Time</option><option value="recurring"'+(o.billingType==='recurring'?' selected':'')+'>Recurring</option></select></div>'
-    +'<div id="po-int-wrap-'+i+'" style="width:110px;'+(o.billingType!=='recurring'?'display:none':'')+'">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Interval</div>'
-    +'<select id="po-int-'+i+'" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;height:38px">'
-    +['weekly','monthly','quarterly','yearly'].map(x=>'<option value="'+x+'"'+(o.interval===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')
-    +'</select></div>'
-    +'<div style="width:70px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Trial Days</div><input type="number" id="po-trial-'+i+'" value="'+(o.trialDays||0)+'" min="0" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
-    +'</div>'
-    +'<div style="flex-shrink:0;padding-top:20px"><button class="icon-btn-xs" onclick="rmPricingOpt('+i+')" title="Remove option"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
-    +'</div>').join('');
+function renderProductPricingSection(){
+  var inputS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none;box-sizing:border-box';
+  if(!editVariations.length){
+    return'<div class="form-group" style="margin-bottom:0"><label>Price *</label>'
+      +'<input id="prd-price" type="number" min="0" step="0.01" value="'+editProductPrice+'" placeholder="0.00" style="'+inputS+'">'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:5px">Add variations if this product comes in multiple options at different prices (e.g. Small, Medium, Large).</div>'
+      +'</div>';
+  }
+  return'<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Buyers pick one variation when adding this product to a sale.</div>'
+    +editVariations.map(function(v,i){
+      return'<div style="display:flex;gap:8px;align-items:flex-end;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">'
+        +'<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Name</div>'
+        +'<input type="text" id="pv-name-'+i+'" value="'+esc(v.name)+'" placeholder="Small, Premium..." style="'+inputS+'"></div>'
+        +'<div style="width:120px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:3px">Price ($)</div>'
+        +'<input type="number" id="pv-price-'+i+'" value="'+v.price+'" min="0" step="0.01" style="'+inputS+'"></div>'
+        +'<button class="icon-btn-xs" onclick="removeProductVariation('+i+')" title="Remove variation" style="margin-bottom:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+        +'</div>';
+    }).join('');
 }
 
-function togglePoInterval(i){
-  const v=document.getElementById('po-type-'+i)&&document.getElementById('po-type-'+i).value;
-  const w=document.getElementById('po-int-wrap-'+i);
-  if(w)w.style.display=v==='recurring'?'block':'none';
-}
-
-function syncPricingOptsFromDOM(){
-  editPricingOpts.forEach((o,i)=>{
-    const n=document.getElementById('po-name-'+i);if(n)o.name=n.value.trim();
-    const p=document.getElementById('po-price-'+i);if(p)o.price=parseFloat(p.value)||0;
-    const t=document.getElementById('po-type-'+i);if(t)o.billingType=t.value;
-    const iv=document.getElementById('po-int-'+i);if(iv)o.interval=iv.value;
-    const tr=document.getElementById('po-trial-'+i);if(tr)o.trialDays=parseInt(tr.value)||0;
+function syncProductPricingFromDOM(){
+  if(!editVariations.length){
+    var inp=document.getElementById('prd-price');
+    if(inp)editProductPrice=parseFloat(inp.value)||0;
+    return;
+  }
+  editVariations.forEach(function(v,i){
+    var n=document.getElementById('pv-name-'+i);
+    var pr=document.getElementById('pv-price-'+i);
+    if(n)v.name=n.value.trim();
+    if(pr)v.price=parseFloat(pr.value)||0;
   });
 }
 
-function addPricingOptRow(){
-  syncPricingOptsFromDOM();
-  editPricingOpts.push({id:'popt-'+uid(),name:'',price:0,billingType:'one_time',interval:'monthly',trialDays:0,squareVariationId:'',active:true});
-  const el=document.getElementById('pricing-opts-list');if(el)el.innerHTML=renderPricingOptsList();
+function addProductVariation(){
+  syncProductPricingFromDOM();
+  if(!editVariations.length){
+    // Promote current primary price into the first variation, then add an empty second one
+    editVariations.push({id:'pv-'+uid(),name:'',price:editProductPrice||0});
+  }
+  editVariations.push({id:'pv-'+uid(),name:'',price:0});
+  var sec=document.getElementById('prd-pricing-section');
+  if(sec)sec.innerHTML=renderProductPricingSection();
 }
 
-function rmPricingOpt(i){
-  syncPricingOptsFromDOM();
-  editPricingOpts.splice(i,1);
-  const el=document.getElementById('pricing-opts-list');if(el)el.innerHTML=renderPricingOptsList();
+function removeProductVariation(i){
+  syncProductPricingFromDOM();
+  editVariations.splice(i,1);
+  if(editVariations.length===1){
+    // Collapse single remaining variation into primary price
+    editProductPrice=editVariations[0].price;
+    editVariations=[];
+  }
+  var sec=document.getElementById('prd-pricing-section');
+  if(sec)sec.innerHTML=renderProductPricingSection();
 }
 
 function toggleInvTrack(){
@@ -9953,10 +10002,14 @@ function saveProduct(){
   const name=document.getElementById('prd-name').value.trim();
   if(!name){toast('Product name required.','error');return}
   const category=document.getElementById('prd-cat')&&document.getElementById('prd-cat').value||'';
-  syncPricingOptsFromDOM();
+  syncProductPricingFromDOM();
+  // Validate variation names if present
+  if(editVariations.length){
+    for(var i=0;i<editVariations.length;i++){
+      if(!editVariations[i].name){toast('Each variation needs a name.','error');return;}
+    }
+  }
   const invOn=document.getElementById('prd-inv-toggle')&&document.getElementById('prd-inv-toggle').classList.contains('on');
-  // Preserve any existing squareCatalogId on edit (field removed from UI but
-  // value may have been set by a prior Square sync).
   const existing=state.modal.id?db.products.find(x=>x.id===state.modal.id):null;
   const data={
     name,
@@ -9965,15 +10018,24 @@ function saveProduct(){
     active:document.getElementById('prd-active')&&document.getElementById('prd-active').value==='true',
     taxable:!!(document.getElementById('prd-taxable')&&document.getElementById('prd-taxable').checked),
     squareCatalogId:existing&&existing.squareCatalogId||'',
-    pricingOptions:[...editPricingOpts],
+    price:editVariations.length?0:(parseFloat(editProductPrice)||0),
+    variations:editVariations.length?editVariations.map(function(v){return{id:v.id,name:v.name,price:parseFloat(v.price)||0};}):[],
     trackInventory:invOn,
     sku:invOn?(document.getElementById('prd-sku')&&document.getElementById('prd-sku').value||'').trim():'',
     stockQty:invOn?parseInt(document.getElementById('prd-stock')&&document.getElementById('prd-stock').value)||0:0,
     lowStockThreshold:invOn?parseInt(document.getElementById('prd-lowstock')&&document.getElementById('prd-lowstock').value)||5:5,
     updatedAt:now_()
   };
-  if(state.modal.id){const p=db.products.find(x=>x.id===state.modal.id);if(p)Object.assign(p,data)}
-  else db.products.push({id:'prod-'+uid(),...data,createdAt:now_()});
+  if(state.modal.id){
+    const p=db.products.find(x=>x.id===state.modal.id);
+    if(p){
+      // Drop legacy field on save so we don't carry it forward
+      delete p.pricingOptions;
+      Object.assign(p,data);
+    }
+  }else{
+    db.products.push({id:'prod-'+uid(),...data,createdAt:now_()});
+  }
   saveData();closeModal();
   toast(state.modal.id?'Product updated.':'Product added.','success');
   setTimeout(openProductsModal,50);
@@ -13100,44 +13162,6 @@ function switchFormsTab(tab){
     const v=document.getElementById('forms-'+t+'-view');
     if(v)v.classList.toggle('hidden',t!==tab);
   });
-}
-
-// =====================================================
-// SUBSCRIPTION PRODUCT PICKER
-// =====================================================
-function getRecurringProducts(){
-  return db.products.filter(p=>p.active&&(p.pricingOptions||[]).some(o=>o.billingType==='recurring'));
-}
-
-function subProdSearch(i, val){
-  const dd=document.getElementById('sub-prod-drop-'+i);if(!dd)return;
-  if(!val.trim()){dd.classList.add('hidden');return;}
-  const prods=getRecurringProducts().filter(p=>(p.name||'').toLowerCase().includes(val.toLowerCase())||(p.category||'').toLowerCase().includes(val.toLowerCase()));
-  if(!prods.length){dd.innerHTML='<div class="ss-empty">No recurring products found</div>';dd.classList.remove('hidden');return;}
-  let opts='';
-  prods.forEach(p=>{
-    const recurOpts=(p.pricingOptions||[]).filter(o=>o.billingType==='recurring');
-    recurOpts.forEach(o=>{
-      opts+='<div class="ss-opt" onclick="selSubProd('+i+','+JSON.stringify({pid:p.id,name:p.name+' - '+o.name,price:o.price,optId:o.id})+')">'
-        +'<div style="font-size:13px;font-weight:600">'+esc(p.name)+'</div>'
-        +'<div style="font-size:11px;color:var(--text-muted)">'+esc(o.name)+' &bull; '+fmt$(o.price)+'/'+( o.interval||'mo')+'</div>'
-        +'</div>';
-    });
-  });
-  dd.innerHTML=opts;dd.classList.remove('hidden');
-  setTimeout(()=>document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f)},{capture:true}),10);
-}
-
-function selSubProd(i, data){
-  const inp=document.getElementById('si-name-'+i);
-  const priceInp=document.getElementById('si-price-'+i);
-  if(inp)inp.value=data.name;
-  if(priceInp)priceInp.value=data.price;
-  editSubItems[i].name=data.name;
-  editSubItems[i].price=data.price;
-  editSubItems[i].productId=data.pid;
-  editSubItems[i].optionId=data.optId;
-  const dd=document.getElementById('sub-prod-drop-'+i);if(dd)dd.classList.add('hidden');
 }
 
 
@@ -17321,9 +17345,7 @@ function setPosMode(mode){
 function populatePosProducts(){
   const sel=document.getElementById('pos-prod-sel');
   if(!sel)return;
-  const prods=db.products.filter(function(p){
-    return p.active&&(p.pricingOptions||[]).some(function(o){return o.billingType==='one_time';});
-  });
+  const prods=db.products.filter(function(p){return p.active;});
   sel.innerHTML='<option value="">Select a product...</option>'+prods.map(function(p){
     return'<option value="'+esc(p.id)+'">'+esc(p.name)+(p.category?' ('+esc(p.category)+')':'')+'</option>';
   }).join('');
@@ -17341,19 +17363,16 @@ function onPosProductSelect(){
   if(!prodId){if(pricingWrap)pricingWrap.classList.add('hidden');if(priceRow)priceRow.classList.add('hidden');return;}
   const prod=db.products.find(function(p){return p.id===prodId;});
   if(!prod)return;
-  const opts=(prod.pricingOptions||[]).filter(function(o){return o.billingType==='one_time';});
+  const norm=_normalizeProductPricing(prod);
   const pricingSel=document.getElementById('pos-pricing-sel');
-  if(opts.length>1){
-    if(pricingSel)pricingSel.innerHTML=opts.map(function(o){return'<option value="'+esc(o.name)+'|'+o.price+'">'+esc(o.name)+' - '+fmt$(o.price)+'</option>';}).join('');
+  const priceInp=document.getElementById('pos-prod-price');
+  if(norm.variations.length){
+    if(pricingSel)pricingSel.innerHTML=norm.variations.map(function(v){return'<option value="'+esc(v.name)+'|'+v.price+'">'+esc(v.name)+' - '+fmt$(v.price)+'</option>';}).join('');
     if(pricingWrap)pricingWrap.classList.remove('hidden');
     onPosPricingSelect();
-  }else if(opts.length===1){
-    if(pricingWrap)pricingWrap.classList.add('hidden');
-    const priceInp=document.getElementById('pos-prod-price');
-    if(priceInp)priceInp.value=opts[0].price.toFixed(2);
-    if(priceRow)priceRow.classList.remove('hidden');
   }else{
     if(pricingWrap)pricingWrap.classList.add('hidden');
+    if(priceInp)priceInp.value=norm.price.toFixed(2);
     if(priceRow)priceRow.classList.remove('hidden');
   }
 }
