@@ -14,6 +14,7 @@ const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
+const { processSub } = require('./lib/sub-charge');
 
 const VALID_CYCLES = ['weekly', 'monthly', 'quarterly', 'annual'];
 
@@ -224,7 +225,32 @@ async function handler(req, res) {
     });
 
     const verify = await db.query('SELECT * FROM subscriptions WHERE id = $1', [id]);
-    return res.status(200).json({ success: true, subscription: verify.rows[0] });
+
+    // Immediate charge: if start_date is today or in the past, run the charge
+    // synchronously so the customer's first payment hits within seconds of save.
+    // Future-dated subs wait for the daily cron.
+    let immediateChargeResult = null;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    if (String(startDate).slice(0, 10) <= todayIso) {
+      try {
+        const blobRes = await db.query(
+          'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
+          [subaccountId]
+        );
+        const blob = { data: blobRes.rows[0]?.data || {} };
+        immediateChargeResult = await processSub(verify.rows[0], blob, { dry_run: false });
+      } catch (chargeErr) {
+        // Don't fail the create if the charge errors out; the daily cron will retry.
+        console.error('Immediate charge error:', chargeErr.message);
+        immediateChargeResult = { success: false, error: chargeErr.message };
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      subscription: verify.rows[0],
+      immediate_charge: immediateChargeResult
+    });
   } catch (e) {
     console.error('subscriptions-create error:', e.message);
     return res.status(500).json({ error: 'Failed to create subscription' });

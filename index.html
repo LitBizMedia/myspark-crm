@@ -10184,11 +10184,18 @@ function _renderSubDetailHistory(s){
       +'</div>'
       +'<div style="font-size:11px;color:var(--text-muted)">by '+esc(actorName)+'</div>';
     if(e.metadata&&Object.keys(e.metadata).length){
-      const meta=Object.keys(e.metadata).map(function(k){
+      // Skip the breakdown blob (it's redundant with tax/total/error) and any object values
+      // that would dump as ugly JSON. Show simple key/value pairs only.
+      const SKIP_KEYS={breakdown:1,items_summary:1};
+      const meta=Object.keys(e.metadata).filter(function(k){return !SKIP_KEYS[k];}).map(function(k){
         const v=e.metadata[k];
-        return esc(k.replace(/_/g,' '))+': '+(typeof v==='object'?JSON.stringify(v):esc(String(v)));
-      }).join(', ');
-      html+='<div style="font-size:11px;color:var(--text-dim);margin-top:4px;font-family:monospace">'+meta+'</div>';
+        if(v==null||v==='')return null;
+        const valStr=typeof v==='object'?JSON.stringify(v):String(v);
+        return esc(k.replace(/_/g,' '))+': '+esc(valStr);
+      }).filter(Boolean).join(', ');
+      if(meta){
+        html+='<div style="font-size:11px;color:var(--text-dim);margin-top:4px;font-family:monospace;word-break:break-word;overflow-wrap:break-word;line-height:1.5">'+meta+'</div>';
+      }
     }
     html+='</div>';
   });
@@ -10624,9 +10631,24 @@ async function saveSub(){
       items:_subEditItems.map(stripItem)
     };
 
-    try{await apiSubCreate(payload);}
+    let createRes;
+    try{createRes=await apiSubCreate(payload);}
     catch(e){toast(e.message,'error');return;}
-    toast('Subscription created.','success');
+
+    // If the backend ran an immediate charge (start_date <= today), surface the
+    // result so Patrick knows whether the card actually hit.
+    if(createRes&&createRes.immediate_charge){
+      const ic=createRes.immediate_charge;
+      if(ic.success){
+        toast('Subscription created and charged '+fmt$(ic.breakdown?ic.breakdown.total:0)+'.','success');
+      }else if(ic.skipped){
+        toast('Subscription created. Charge skipped: '+(ic.reason||'zero total'),'success');
+      }else{
+        toast('Subscription created but charge failed: '+(ic.error||'unknown'),'error');
+      }
+    }else{
+      toast('Subscription created.','success');
+    }
   }else{
     // EDIT: diff items and call appropriate actions
     const sub=getSub(state.modal.id);if(!sub){toast('Subscription not found.','error');return;}
