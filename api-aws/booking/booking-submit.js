@@ -25,6 +25,12 @@ const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const resend = require('./lib/resend');
 const { getSquareCreds, squareHost, squareHeaders } = require('./lib/square');
+const crypto = require('crypto');
+
+// Generate a 32-byte hex random token (256 bits, URL-safe).
+function genActionToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const now_ = () => new Date().toISOString();
@@ -154,7 +160,8 @@ async function handler(req, res) {
                 collect_phone, collect_notes, require_existing_patient,
                 send_confirmation_email,
                 booking_lead_time_hours, booking_advance_days,
-                buffer_before_override, buffer_after_override
+                buffer_before_override, buffer_after_override,
+                allow_self_cancel, cancel_window_hours
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE LIMIT 1`,
         [widget_id, subaccountId]
@@ -303,6 +310,17 @@ async function handler(req, res) {
     const paySettings = blob.paySettings || settings.paySettings || {};
     const taxSettings = paySettings.tax || bs.tax || { enabled: false, rate: 0, label: 'Sales Tax' };
 
+    // Workspace blackout dates: reject bookings on those dates.
+    const blackoutDates = Array.isArray(settings.blackoutDates) ? settings.blackoutDates : [];
+    const blackoutHit = blackoutDates.find(b => b && b.date === date);
+    if (blackoutHit) {
+      return res.status(409).json({
+        error: blackoutHit.reason
+          ? `Bookings are not available on ${date} (${blackoutHit.reason}). Please choose another date.`
+          : `Bookings are not available on ${date}. Please choose another date.`
+      });
+    }
+
     // 6. Resolve assigned staff (eligible pool).
     //
     // Per MySpark-Booking-Widget-Spec:
@@ -375,13 +393,16 @@ async function handler(req, res) {
       const assignedStaff = service && Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
 
       const staffDbRes = await db.query(
-        `SELECT id, username, display_name FROM subaccount_users
+        `SELECT id, username, display_name, schedule FROM subaccount_users
          WHERE subaccount_id = $1 AND active = true`,
         [subaccountId]
       );
       allUsers = staffDbRes.rows.map(u => ({
         id: u.id,
-        name: u.display_name || u.username
+        name: u.display_name || u.username,
+        maxBookingsPerDay: (u.schedule && u.schedule.maxBookingsPerDay != null && parseInt(u.schedule.maxBookingsPerDay) > 0)
+          ? parseInt(u.schedule.maxBookingsPerDay)
+          : null
       }));
 
       if (widgetType === 'service') {
@@ -402,6 +423,36 @@ async function handler(req, res) {
       if (assignedStaffId && !allUsers.find(u => u.id === assignedStaffId)) {
         return res.status(400).json({ error: 'Selected staff member is not available for this service' });
       }
+
+      // Per-staff daily booking cap. Set in Edit Schedule (schedule.maxBookingsPerDay).
+      // Counted: all non-cancelled appointments for this staff member on `date`.
+      // Applies to both specific staff selections and round-robin auto-assign.
+      const cappedStaff = allUsers.filter(u => u.maxBookingsPerDay != null);
+      let staffDayCounts = {};
+      if (cappedStaff.length || (widget && widget.round_robin_config && widget.round_robin_config.strategy === 'least_busy')) {
+        const allIds = allUsers.map(u => u.id);
+        const dayCountRes = await db.query(
+          `SELECT assigned_to, COUNT(*)::int AS n
+             FROM appointments
+            WHERE subaccount_id = $1
+              AND date = $2
+              AND status != 'cancelled'
+              AND assigned_to = ANY($3)
+            GROUP BY assigned_to`,
+          [subaccountId, date, allIds]
+        );
+        for (const u of allUsers) staffDayCounts[u.id] = 0;
+        for (const r of dayCountRes.rows) staffDayCounts[r.assigned_to] = r.n;
+      }
+
+      // Reject specific staff if they've hit their cap.
+      if (assignedStaffId) {
+        const u = allUsers.find(x => x.id === assignedStaffId);
+        if (u && u.maxBookingsPerDay != null && staffDayCounts[u.id] >= u.maxBookingsPerDay) {
+          return res.status(409).json({ error: 'This provider has reached their booking limit for this day. Please choose another time or provider.' });
+        }
+      }
+
       // Auto-assign if 'any'.
       //
       // Strategy comes from widget.round_robin_config.strategy:
@@ -411,7 +462,7 @@ async function handler(req, res) {
       //     random tiebreaker. Smooths daily load distribution.
       //
       // Eligibility filter: only providers who are NOT already booked at the
-      // chosen time. Otherwise we'd pick a busy person and immediately race-fail.
+      // chosen time AND not at their daily cap.
       if (!assignedStaffId) {
         if (!allUsers.length) {
           return res.status(400).json({ error: 'No staff available for this service' });
@@ -424,7 +475,9 @@ async function handler(req, res) {
           [subaccountId, date, time]
       );
       const bookedAtTime = new Set(bookedRes.rows.map(r => r.assigned_to).filter(Boolean));
-      const eligible = allUsers.filter(u => !bookedAtTime.has(u.id));
+      // Filter: not booked at this time, and not at daily cap.
+      let eligible = allUsers.filter(u => !bookedAtTime.has(u.id));
+      eligible = eligible.filter(u => u.maxBookingsPerDay == null || (staffDayCounts[u.id] || 0) < u.maxBookingsPerDay);
       if (!eligible.length) {
         return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
       }
@@ -432,25 +485,10 @@ async function handler(req, res) {
       const strategy = (widget && widget.round_robin_config && widget.round_robin_config.strategy) || 'random';
 
       if (strategy === 'least_busy') {
-        // Count today's appointments per eligible provider, pick lowest.
-        // Random tiebreaker so we don't always favor the same person at the
-        // start of the day when everyone has 0 bookings.
-        const eligibleIds = eligible.map(u => u.id);
-        const countRes = await db.query(
-          `SELECT assigned_to, COUNT(*)::int AS n
-           FROM appointments
-           WHERE subaccount_id = $1
-             AND date = $2
-             AND status != 'cancelled'
-             AND assigned_to = ANY($3)
-           GROUP BY assigned_to`,
-          [subaccountId, date, eligibleIds]
-        );
-        const countMap = {};
-        for (const u of eligible) countMap[u.id] = 0;
-        for (const r of countRes.rows) countMap[r.assigned_to] = r.n;
-        const minCount = Math.min(...eligible.map(u => countMap[u.id]));
-        const tied = eligible.filter(u => countMap[u.id] === minCount);
+        // Use the staffDayCounts we already loaded above. Random tiebreaker
+        // so we don't always favor the same person when counts are equal.
+        const minCount = Math.min(...eligible.map(u => staffDayCounts[u.id] || 0));
+        const tied = eligible.filter(u => (staffDayCounts[u.id] || 0) === minCount);
         assignedStaffId = tied[Math.floor(Math.random() * tied.length)].id;
       } else {
         // 'random' (default)
@@ -898,6 +936,37 @@ async function handler(req, res) {
     const emailGate = (widget && widget.send_confirmation_email === false)
       ? false
       : (bs.send_confirmation_email !== false);
+
+    // Self-serve cancel/reschedule: generate tokens when widget allows.
+    // Cancel deadline: appointment time minus widget.cancel_window_hours (default 24).
+    // Tokens expire at the deadline. After that, links return "expired".
+    let cancelLink = '';
+    let rescheduleLink = '';
+    if (apptId && widget && widget.allow_self_cancel !== false) {
+      try {
+        const tz = require('./lib/timezone');
+        const subTz = (blob && blob.settings && blob.settings.timezone) || 'America/New_York';
+        const apptTs = tz.apptTimestampInTz(bookingDate, bookingTime, subTz);
+        const cancelWindowHrs = parseInt(widget.cancel_window_hours) || 24;
+        const cancelDeadline = new Date(apptTs.getTime() - cancelWindowHrs * 3600000);
+        if (cancelDeadline > new Date()) {
+          const cancelTok = genActionToken();
+          const reschedTok = genActionToken();
+          await db.query(
+            `INSERT INTO booking_action_tokens (token, appointment_id, subaccount_id, action, expires_at)
+             VALUES ($1, $2, $3, 'cancel', $4),
+                    ($5, $6, $7, 'reschedule', $8)`,
+            [cancelTok, apptId, subaccountId, cancelDeadline.toISOString(),
+             reschedTok, apptId, subaccountId, cancelDeadline.toISOString()]
+          );
+          cancelLink = `https://book.mysparkplus.app/cancel?token=${cancelTok}`;
+          rescheduleLink = `https://book.mysparkplus.app/reschedule?token=${reschedTok}`;
+        }
+      } catch (e) {
+        console.error('Failed to create action tokens:', e.message);
+      }
+    }
+
     if (emailGate) {
       const bizName = settings.businessName || slug;
       const staffUser = allUsers.find(u => u.id === assignedStaffId) || null;
@@ -928,6 +997,15 @@ async function handler(req, res) {
             ` : (basePrice > 0 ? `<div style="margin-top:8px"><strong>Price:</strong> $${basePrice.toFixed(2)} (to be paid at ${classSession ? 'class' : 'appointment'})</div>` : '')}
           </div>
           ${customMsg ? `<p>${customMsg}</p>` : ''}
+          ${(cancelLink || rescheduleLink) ? `
+            <div style="margin:20px 0 8px;padding:14px 16px;background:#f3f1ff;border-radius:8px">
+              <div style="font-size:13px;color:#5a4d7a;margin-bottom:8px">Need to make changes?</div>
+              <div style="font-size:14px">
+                ${rescheduleLink ? `<a href="${rescheduleLink}" style="color:#6b21ea;text-decoration:underline;margin-right:14px">Reschedule</a>` : ''}
+                ${cancelLink ? `<a href="${cancelLink}" style="color:#6b21ea;text-decoration:underline">Cancel appointment</a>` : ''}
+              </div>
+            </div>
+          ` : ''}
           ${bs.cancellation_policy_text ? `<p style="font-size:12px;color:#6b7280"><strong>Cancellation policy:</strong> ${bs.cancellation_policy_text}</p>` : ''}
           <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
         </div>`;

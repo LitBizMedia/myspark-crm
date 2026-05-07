@@ -222,6 +222,9 @@ const API = 'https://api.mysparkplus.app';
 const parts = window.location.pathname.split('/').filter(Boolean);
 const SLUG = parts[0] || '';
 const WIDGET_ID = parts[1] || '';
+// Detect special action pages routed by path: /cancel, /reschedule
+const ACTION = (SLUG === 'cancel' || SLUG === 'reschedule') ? SLUG : null;
+const ACTION_TOKEN = ACTION ? (new URLSearchParams(window.location.search).get('token') || '') : '';
 // Embed mode: when ?embed=1 is in the URL, hide header/footer chrome and
 // auto-post height to the parent window via postMessage. Used when the widget
 // is iframed on a third-party site.
@@ -251,6 +254,8 @@ let S = {     // booking state
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 async function init() {
+  if (ACTION === 'cancel') return initCancel();
+  if (ACTION === 'reschedule') return initReschedule();
   if (!SLUG) { showError('No booking link found. Please check the URL.'); return; }
   try {
     const r = await fetch(`${API}/api/booking/widget-data?slug=${encodeURIComponent(SLUG)}&widget_id=${encodeURIComponent(WIDGET_ID)}`);
@@ -287,6 +292,129 @@ function applyBranding() {
 
 function showError(msg) {
   document.getElementById('bw-main').innerHTML = `<div class="bw-error">${msg}</div>`;
+}
+
+// ── Cancel / reschedule self-serve flows ─────────────────────────────────────
+function _actionShell(html) {
+  document.getElementById('bw-main').innerHTML = `<div class="bw-card" style="max-width:520px;margin:24px auto;padding:32px 28px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px">${html}</div>`;
+}
+
+async function initCancel() {
+  if (!ACTION_TOKEN) { _actionShell('<h2 style="margin:0 0 12px">Cancellation link missing</h2><p style="color:var(--text-muted)">This link is incomplete. Please use the link from your confirmation email.</p>'); return; }
+  _actionShell('<h2 style="margin:0 0 8px">Cancel appointment</h2><p style="color:var(--text-muted);margin:0 0 20px">Click the button below to confirm cancellation.</p><button class="bw-btn bw-btn-primary bw-btn-full" id="cancel-confirm-btn" onclick="doCancel()">Confirm cancellation</button>');
+}
+
+async function doCancel() {
+  const btn = document.getElementById('cancel-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cancelling...'; }
+  try {
+    const r = await fetch(`${API}/api/booking/cancel-appointment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: ACTION_TOKEN })
+    });
+    const d = await r.json();
+    if (!r.ok) { _actionShell(`<h2 style="margin:0 0 12px">Could not cancel</h2><p style="color:var(--text-muted)">${esc(d.error || 'Please contact the business.')}</p>`); return; }
+    _actionShell(`<h2 style="margin:0 0 12px;color:#10b981">Appointment cancelled</h2><p style="margin:0 0 8px"><strong>${esc(d.title || 'Your appointment')}</strong></p><p style="color:var(--text-muted);margin:0 0 6px">${esc(d.date || '')} ${d.time ? 'at ' + esc(d.time) : ''}</p><p style="color:var(--text-muted);font-size:13px;margin-top:20px">A confirmation has been recorded. You can close this page.</p>`);
+  } catch (e) {
+    _actionShell('<h2 style="margin:0 0 12px">Connection error</h2><p style="color:var(--text-muted)">Please try again or contact the business.</p>');
+  }
+}
+
+async function initReschedule() {
+  if (!ACTION_TOKEN) { _actionShell('<h2 style="margin:0 0 12px">Reschedule link missing</h2><p style="color:var(--text-muted)">Please use the link from your confirmation email.</p>'); return; }
+  _actionShell('<div class="bw-loading" style="padding:24px"><div class="bw-spinner"></div>Loading...</div>');
+  try {
+    const r = await fetch(`${API}/api/booking/reschedule-info?token=${encodeURIComponent(ACTION_TOKEN)}`);
+    const d = await r.json();
+    if (!r.ok) { _actionShell(`<h2 style="margin:0 0 12px">Could not load</h2><p style="color:var(--text-muted)">${esc(d.error || 'Please contact the business.')}</p>`); return; }
+    // Stash existing appointment context for the date+time picker
+    window._reschedCtx = d;
+    renderRescheduleStep();
+  } catch (e) {
+    _actionShell('<h2 style="margin:0 0 12px">Connection error</h2><p style="color:var(--text-muted)">Please try again or contact the business.</p>');
+  }
+}
+
+function renderRescheduleStep() {
+  const ctx = window._reschedCtx;
+  const a = ctx.appointment;
+  // Min date: today; default value: appointment's existing date
+  const today = new Date().toISOString().slice(0,10);
+  _actionShell(`
+    <h2 style="margin:0 0 8px">Reschedule appointment</h2>
+    <p style="color:var(--text-muted);margin:0 0 4px"><strong>${esc(a.title || 'Appointment')}</strong></p>
+    <p style="color:var(--text-muted);margin:0 0 20px;font-size:13px">Currently scheduled for ${esc(a.date)} at ${esc(a.time || '')}</p>
+    <div class="bw-field"><label>New date</label><input type="date" id="resched-date" min="${today}" value="${esc(a.date)}" onchange="loadRescheduleSlots()"></div>
+    <div class="bw-field"><label>New time</label><div id="resched-slots" style="display:flex;flex-wrap:wrap;gap:8px;min-height:40px"><div class="bw-loading" style="padding:8px"><div class="bw-spinner"></div></div></div></div>
+    <button class="bw-btn bw-btn-primary bw-btn-full" id="resched-confirm-btn" onclick="doReschedule()" disabled>Pick a new time</button>
+  `);
+  loadRescheduleSlots();
+}
+
+let _reschedSelectedTime = null;
+async function loadRescheduleSlots() {
+  const ctx = window._reschedCtx;
+  const a = ctx.appointment;
+  const dateEl = document.getElementById('resched-date');
+  const slotsEl = document.getElementById('resched-slots');
+  const btn = document.getElementById('resched-confirm-btn');
+  if (!dateEl || !slotsEl) return;
+  _reschedSelectedTime = null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Pick a new time'; }
+  slotsEl.innerHTML = '<div class="bw-loading" style="padding:8px"><div class="bw-spinner"></div></div>';
+  try {
+    const params = new URLSearchParams({
+      slug: ctx.slug,
+      date: dateEl.value,
+      staff_id: a.assigned_to || 'any'
+    });
+    if (a.service_id) params.set('service_id', a.service_id);
+    if (a.service_variation_id) params.set('variation_id', a.service_variation_id);
+    const r = await fetch(`${API}/api/booking/availability?${params.toString()}`);
+    const d = await r.json();
+    if (!r.ok || !Array.isArray(d.slots) || d.slots.length === 0) {
+      slotsEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">No times available on this date.</div>';
+      return;
+    }
+    slotsEl.innerHTML = d.slots.map(s => `<button type="button" class="bw-slot" data-time="${esc(s.time)}" onclick="pickReschedTime('${esc(s.time)}')" style="cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:14px;color:var(--text)">${esc(fmtTime(s.time))}</button>`).join('');
+  } catch (e) {
+    slotsEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">Could not load times. Try another date.</div>';
+  }
+}
+
+function pickReschedTime(t) {
+  _reschedSelectedTime = t;
+  document.querySelectorAll('#resched-slots .bw-slot').forEach(b => {
+    const isActive = b.getAttribute('data-time') === t;
+    b.style.background = isActive ? 'var(--brand)' : 'transparent';
+    b.style.color = isActive ? 'white' : 'var(--text)';
+    b.style.borderColor = isActive ? 'var(--brand)' : 'var(--border)';
+  });
+  const btn = document.getElementById('resched-confirm-btn');
+  if (btn) { btn.disabled = false; btn.textContent = `Confirm: ${fmtTime(t)}`; }
+}
+
+async function doReschedule() {
+  const dateEl = document.getElementById('resched-date');
+  const btn = document.getElementById('resched-confirm-btn');
+  if (!dateEl || !_reschedSelectedTime) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
+    const r = await fetch(`${API}/api/booking/reschedule-confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: ACTION_TOKEN, date: dateEl.value, time: _reschedSelectedTime })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      _actionShell(`<h2 style="margin:0 0 12px">Could not reschedule</h2><p style="color:var(--text-muted)">${esc(d.error || 'Please contact the business.')}</p>`);
+      return;
+    }
+    _actionShell(`<h2 style="margin:0 0 12px;color:#10b981">Appointment rescheduled</h2><p style="margin:0 0 8px"><strong>New date and time:</strong></p><p style="color:var(--text-muted);margin:0 0 20px">${esc(d.date)} at ${esc(fmtTime(d.time))}</p><p style="color:var(--text-muted);font-size:13px">A confirmation has been recorded. You can close this page.</p>`);
+  } catch (e) {
+    _actionShell('<h2 style="margin:0 0 12px">Connection error</h2><p style="color:var(--text-muted)">Please try again or contact the business.</p>');
+  }
 }
 
 // ── Step helpers ──────────────────────────────────────────────────────────────
