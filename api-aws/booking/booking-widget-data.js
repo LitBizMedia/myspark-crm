@@ -236,30 +236,54 @@ async function handler(req, res) {
       }
     }
 
-    // 6. Public-safe settings
+    // 6. Public-safe settings.
+    // Per-widget config takes precedence over workspace blob defaults.
+    // We expose only the fields the public page actually needs.
     const settings = blob.settings || {};
     const bs = settings.bookingSettings || {};
     const taxSettings = bs.tax || (settings.paySettings && settings.paySettings.tax) || {};
+    // Default helpers for widget-vs-blob-vs-default precedence.
+    const w = widget || {};
+    const widgetBool = (val, def) => (val == null ? def : !!val);
     const publicSettings = {
       timezone:                subTz,
       businessHours:           settings.businessHours || {},
       businessName:            settings.businessName || slug,
       cancellation_policy_text: bs.cancellation_policy_text || '',
-      tip_enabled:             bs.tip_enabled || false,
-      tip_percentages:         bs.tip_percentages || [10, 15, 20],
+
+      // Tip: widget.allow_tip wins over blob default
+      tip_enabled:             widgetBool(w.allow_tip, !!bs.tip_enabled),
+      tip_percentages:         (Array.isArray(w.tip_percentages) && w.tip_percentages.length)
+                                 ? w.tip_percentages
+                                 : (bs.tip_percentages || [10, 15, 20]),
       tip_allow_custom:        bs.tip_allow_custom !== false,
-      require_payment:         widget ? !!widget.require_payment : (bs.default_payment_mode === 'full'),
-      default_payment_mode:    bs.default_payment_mode || 'none',
+
+      // Payment: per-widget config; payment_mode says HOW, require_payment says IF
+      require_payment:         !!w.require_payment,
+      payment_mode:            w.payment_mode || 'full',
+      deposit_type:            w.deposit_type || null,
+      deposit_value:           w.deposit_value != null ? parseFloat(w.deposit_value) : null,
+      default_payment_mode:    bs.default_payment_mode || 'none',  // legacy/back-compat
+
+      // Patient form
+      allow_coupons:           widgetBool(w.allow_coupons, true),
+      collect_phone:           widgetBool(w.collect_phone, true),
+      collect_notes:           widgetBool(w.collect_notes, true),
+
+      // Booking window (for client-side display of error context)
+      booking_lead_time_hours: w.booking_lead_time_hours != null ? parseInt(w.booking_lead_time_hours) : null,
+      booking_advance_days:    w.booking_advance_days != null ? parseInt(w.booking_advance_days) : null,
+
       tax: {
         enabled: !!taxSettings.enabled,
         rate: parseFloat(taxSettings.rate) || 0,
         label: taxSettings.label || 'Sales Tax'
       },
-      widget_primary_color:    (widget && widget.primary_color) || bs.widget_primary_color || '#6b21ea',
-      widget_logo_url:         (widget && widget.logo_url) || bs.widget_logo_url || '',
-      widget_tagline:          (widget && widget.tagline) || bs.widget_tagline || '',
+      widget_primary_color:    w.primary_color || bs.widget_primary_color || '#6b21ea',
+      widget_logo_url:         w.logo_url || bs.widget_logo_url || '',
+      widget_tagline:          w.tagline || bs.widget_tagline || '',
       widget_footer_text:      bs.widget_footer_text || '',
-      confirm_message:         (widget && widget.confirm_message) || bs.confirmation_message || '',
+      confirm_message:         w.confirm_message || bs.confirmation_message || '',
       square_app_id:           settings.square?.appId || null,
       square_location_id:      settings.square?.locationId || null,
       square_sandbox:          settings.square?.sandbox !== false
