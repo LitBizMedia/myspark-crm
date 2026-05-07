@@ -211,6 +211,12 @@ async function handler(req, res) {
     const settings = blob.settings || {};
     const subTz = settings.timezone || 'America/Chicago';
 
+    // Workspace-level blackout dates: no slots returned for these dates.
+    const blackoutDates = Array.isArray(settings.blackoutDates) ? settings.blackoutDates : [];
+    if (blackoutDates.some(b => b && b.date === date)) {
+      return res.status(200).json({ slots: [], duration, date, blackout: true });
+    }
+
     let allowedStaffIds = [];
     if (service) {
       allowedStaffIds = Array.isArray(service.assigned_staff) ? service.assigned_staff : [];
@@ -248,6 +254,21 @@ async function handler(req, res) {
       if (!apptsByStaff[a.assigned_to]) apptsByStaff[a.assigned_to] = [];
       apptsByStaff[a.assigned_to].push(a);
     }
+
+    // Per-staff daily booking cap: filter out staff who've already hit it.
+    // schedule.maxBookingsPerDay is set in Edit Schedule. Excludes cancelled.
+    const dayCounts = {};
+    for (const a of apptResult.rows) {
+      if (a.status === 'cancelled') continue;
+      dayCounts[a.assigned_to] = (dayCounts[a.assigned_to] || 0) + 1;
+    }
+    staffPool = staffPool.filter(u => {
+      const max = u.schedule && u.schedule.maxBookingsPerDay;
+      const maxN = (max != null) ? parseInt(max) : 0;
+      if (!maxN || maxN <= 0) return true;
+      return (dayCounts[u.id] || 0) < maxN;
+    });
+    if (!staffPool.length) return res.status(200).json({ slots: [], duration, date });
 
     const strictAvailability = !!appointment_type_id;
     const slotInterval = (widget && widget.slot_interval_minutes) ? parseInt(widget.slot_interval_minutes) || 15 : 15;
