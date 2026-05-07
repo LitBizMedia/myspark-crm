@@ -3465,14 +3465,15 @@ function _dPaySubscriptions(c,cSubs){
   }
   list.forEach(function(s){
     const cycle=s.billingCycle||'monthly';
-    const sticker=parseFloat(s.cyclePrice||0)||((s.items||[]).reduce(function(t,i){return t+((parseFloat(i.price)||0)*(i.qty||1));},0));
-    const effective=calcSubNextCharge(s);
-    const discounted=hasActiveDiscount(s)&&effective!==sticker;
+    const breakdown=calcSubTaxBreakdown(s);
+    const sticker=breakdown.subtotal;
+    const total=breakdown.total;
+    const discounted=hasActiveDiscount(s)&&breakdown.discount>0;
     const borderColor=filter==='active'?'#34d399':filter==='paused'?'#fbbf24':filter==='suspended'?'#f87171':'#94a3b8';
     const failBadge=(s.status==='suspended'&&s.failedChargeCount)?' <span style="font-size:10px;color:#f87171;font-weight:700">'+s.failedChargeCount+' failed</span>':'';
     const priceText=discounted
-      ? '<span style="text-decoration:line-through;color:var(--text-muted);margin-right:4px">'+fmt$(sticker)+'</span><span style="color:#34d399">'+fmt$(effective)+'</span>'
-      : fmt$(sticker);
+      ? '<span style="text-decoration:line-through;color:var(--text-muted);margin-right:4px">'+fmt$(sticker)+'</span><span style="color:#34d399">'+fmt$(total)+'</span>'
+      : fmt$(total);
     h+='<div class="appt-row-sm" style="cursor:pointer;border-left-color:'+borderColor+'" onclick="openSubDetail(\''+s.id+'\')">'
       +'<div style="flex:1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+failBadge+'</div>'
       +'<div class="appt-sm-meta">'+fmtDate(s.startDate)+' \u00b7 '+priceText+'/'+cycle+'</div>'
@@ -9742,7 +9743,17 @@ function getPlan(id){return (db.subscriptionPlans||[]).find(p=>p.id===id)}
 //   - First-cycle-only: applies only when sub.lastChargedAt is null.
 //
 // Coupons are no longer used on subscriptions (Stage 3.5 decision).
-function calcSubNextCharge(s){
+
+// Per-cycle sticker price (sum of items, no discounts)
+function calcSubSticker(s){
+  if(!s)return 0;
+  return (s.items||[]).reduce(function(t,it){
+    return t+(parseFloat(it.price)||0)*(it.qty||1);
+  },0);
+}
+
+// After per-item discounts but BEFORE tax. Equivalent to "subtotal after discount".
+function calcSubAfterDiscount(s){
   if(!s)return 0;
   const isFirstCycle=!s.lastChargedAt;
   let total=0;
@@ -9759,12 +9770,51 @@ function calcSubNextCharge(s){
   return Math.round(total*100)/100;
 }
 
-// Per-cycle sticker price (sum of items, no discounts)
-function calcSubSticker(s){
+// Full breakdown: subtotal, discount, taxable, tax, total. Mirrors what the
+// cron Lambda computes. Use this for any UI that needs to show the components.
+//
+// taxLabel/taxRate/taxEnabled come from subaccount paySettings (db.paySettings.tax).
+// Tax is NOT applied to non-taxable items, and is computed on each item's
+// after-discount line (per Payment Policy).
+function calcSubTaxBreakdown(s){
+  const t=getTaxSettings();
+  const isFirstCycle=s?(!s.lastChargedAt):true;
+  let subtotal=0,afterDiscount=0,taxableBase=0;
+  (s&&s.items||[]).forEach(function(it){
+    const lineSticker=(parseFloat(it.price)||0)*(it.qty||1);
+    subtotal+=lineSticker;
+    let line=lineSticker;
+    if(it.discountType&&(it.discountRecurring!==false||isFirstCycle)){
+      const dv=parseFloat(it.discountValue)||0;
+      if(it.discountType==='pct')line-=line*dv/100;
+      else line-=dv;
+    }
+    line=Math.max(0,line);
+    afterDiscount+=line;
+    if(it.taxable!==false)taxableBase+=line;
+  });
+  const taxRate=t?t.rate:0;
+  const tax=t?Math.round(taxableBase*taxRate/100*100)/100:0;
+  const discount=subtotal-afterDiscount;
+  const total=afterDiscount+tax;
+  return {
+    subtotal:Math.round(subtotal*100)/100,
+    discount:Math.round(discount*100)/100,
+    afterDiscount:Math.round(afterDiscount*100)/100,
+    taxableAmount:Math.round(taxableBase*100)/100,
+    tax:tax,
+    total:Math.round(total*100)/100,
+    taxRate:taxRate,
+    taxLabel:t?t.label:'Sales Tax',
+    taxEnabled:!!t
+  };
+}
+
+// What the customer will be charged on the next cycle (after discount + tax).
+// This is the value to display in any "next charge" column.
+function calcSubNextCharge(s){
   if(!s)return 0;
-  return (s.items||[]).reduce(function(t,it){
-    return t+(parseFloat(it.price)||0)*(it.qty||1);
-  },0);
+  return calcSubTaxBreakdown(s).total;
 }
 
 // True if any item has an active discount applying to the next cycle
@@ -9777,6 +9827,7 @@ function hasActiveDiscount(s){
 }
 
 // Per-item: returns {sticker, effective, discounted:boolean}
+// Effective is line after discount, NOT including tax (tax is shown at totals level).
 function calcItemNextCharge(it,isFirstCycle){
   const sticker=(parseFloat(it.price)||0)*(it.qty||1);
   let effective=sticker;
@@ -9943,18 +9994,21 @@ function renderSubscriptions(){
     groups[st].forEach(s=>{
       const c=s.contactId?getContact(s.contactId):null;
       const cycle=s.billingCycle||'monthly';
-      const sticker=parseFloat(s.cyclePrice||0);
-      const effective=calcSubNextCharge(s);
-      const discounted=hasActiveDiscount(s)&&effective!==sticker;
+      const breakdown=calcSubTaxBreakdown(s);
+      const sticker=breakdown.subtotal;
+      const total=breakdown.total;
+      const discounted=hasActiveDiscount(s)&&breakdown.discount>0;
       const nd=s.nextDueDate||calcNextDueDate(s.startDate,cycle);
       const failBadge=(s.status==='suspended'&&s.failedChargeCount)?'<span style="font-size:10px;font-weight:700;color:#f87171;margin-left:6px">'+s.failedChargeCount+' failed charge'+(s.failedChargeCount===1?'':'s')+'</span>':'';
-      // Price cell: when discounted, show sticker struck through above the effective amount
+      // Price cell: shows total including tax. When discounted, sticker is shown
+      // struck through above. When tax applies, indicate with tiny "incl tax" label.
+      const taxNote=breakdown.taxEnabled&&breakdown.tax>0?' incl tax':'';
       const priceCell=discounted
         ? '<div style="font-size:11px;color:var(--text-muted);text-decoration:line-through;line-height:1">'+fmt$(sticker)+'</div>'
-          +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange);line-height:1.2">'+fmt$(effective)+'</div>'
-          +'<div style="font-size:10px;color:#34d399;text-transform:uppercase">/'+cycle+' after discount</div>'
-        : '<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(sticker)+'</div>'
-          +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase">/'+cycle+'</div>';
+          +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange);line-height:1.2">'+fmt$(total)+'</div>'
+          +'<div style="font-size:10px;color:#34d399;text-transform:uppercase">/'+cycle+taxNote+'</div>'
+        : '<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(total)+'</div>'
+          +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase">/'+cycle+taxNote+'</div>';
       html+='<div class="sub-row '+s.status+'" onclick="openSubDetail(\''+s.id+'\')">'
         +'<div><div class="sub-name">'+(c?esc(c.name):esc(s.planName||'Unnamed'))+'</div>'
         +(c&&c.company?'<div class="sub-biz">'+esc(c.company)+'</div>':'')
@@ -10016,9 +10070,10 @@ function _renderSubDetailModal(s){
 
 function _renderSubDetailDetails(s,c){
   const nd=s.nextDueDate||calcNextDueDate(s.startDate,s.billingCycle||'monthly');
-  const sticker=parseFloat(s.cyclePrice||0);
-  const effective=calcSubNextCharge(s);
-  const discounted=hasActiveDiscount(s)&&effective!==sticker;
+  const breakdown=calcSubTaxBreakdown(s);
+  const sticker=breakdown.subtotal;
+  const total=breakdown.total;
+  const hasDiscount=hasActiveDiscount(s)&&breakdown.discount>0;
   const owner=s.ownerUserId?getUserById(s.ownerUserId):null;
   const card=c&&c.squareCards?(c.squareCards.find(function(cd){return cd.id===s.cardId;})):null;
 
@@ -10052,11 +10107,12 @@ function _renderSubDetailDetails(s,c){
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Started</div><div style="font-size:13px;font-weight:600">'+fmtDate(s.startDate)+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Next Due</div><div style="font-size:13px;font-weight:600">'+(s.status==='active'?(nd?fmtDate(nd):'TBD'):'\u2014')+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Per Cycle</div>'
-    +(discounted
+    +(hasDiscount
       ? '<div style="font-size:11px;color:var(--text-muted);text-decoration:line-through;line-height:1">'+fmt$(sticker)+'</div>'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange);line-height:1.2">'+fmt$(effective)+'</div>'
-        +'<div style="font-size:10px;color:#34d399">after discount</div>'
-      : '<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange)">'+fmt$(sticker)+'</div>')
+        +'<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange);line-height:1.2">'+fmt$(total)+'</div>'
+        +'<div style="font-size:10px;color:#34d399">incl tax</div>'
+      : '<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange)">'+fmt$(total)+'</div>'
+        +(breakdown.taxEnabled&&breakdown.tax>0?'<div style="font-size:10px;color:var(--text-muted)">incl '+fmt$(breakdown.tax)+' tax</div>':''))
     +'</div>'
     +'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
@@ -10078,6 +10134,14 @@ function _renderSubDetailDetails(s,c){
         +'</div>'
         +'</div>';
     }).join(''):'<div style="font-size:13px;color:var(--text-muted)">No items.</div>')
+    +'</div>'
+    +'<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px">Per-Cycle Total</div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text-muted)"><span>Subtotal</span><span>'+fmt$(breakdown.subtotal)+'</span></div>'
+    +(breakdown.discount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#34d399"><span>Discount</span><span>-'+fmt$(breakdown.discount)+'</span></div>':'')
+    +(breakdown.discount>0?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text-muted)"><span>After discount</span><span>'+fmt$(breakdown.afterDiscount)+'</span></div>':'')
+    +(breakdown.taxEnabled&&breakdown.tax>0?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text-muted)"><span>'+esc(breakdown.taxLabel)+' ('+breakdown.taxRate+'%)</span><span>'+fmt$(breakdown.tax)+'</span></div>':'')
+    +'<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border)"><span>Total per cycle</span><span style="font-family:Exo 2,sans-serif;color:var(--orange)">'+fmt$(breakdown.total)+'</span></div>'
     +'</div>'
     +(s.notes?'<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(s.notes)+'</div></div>':'')
     +'</div>';
@@ -10405,16 +10469,22 @@ function _renderItemRow(it,idx){
 
 function _renderItemsSummary(){
   if(!_subEditItems.length)return '';
-  // Use a fake sub-shape so we can reuse calcSubNextCharge / calcSubSticker
+  // Use a fake sub-shape (lastChargedAt:null = first cycle) so first-cycle-only discounts apply too
   const fakeSub={items:_subEditItems,lastChargedAt:null};
-  const sticker=calcSubSticker(fakeSub);
-  const effective=calcSubNextCharge(fakeSub);
-  const discount=sticker-effective;
+  const b=calcSubTaxBreakdown(fakeSub);
+  const taxLine=b.taxEnabled&&b.tax>0
+    ? '<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text-muted)"><span>'+esc(b.taxLabel)+' ('+b.taxRate+'%)</span><span>'+fmt$(b.tax)+'</span></div>'
+    : '';
+  const taxNote=b.taxEnabled
+    ? ''
+    : '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Tax not enabled in subaccount settings.</div>';
   return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:6px;font-size:13px">'
-    +'<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text-muted)">Subtotal</span><span>'+fmt$(sticker)+'</span></div>'
-    +(discount>0?'<div style="display:flex;justify-content:space-between;padding:3px 0;color:#34d399"><span>Discount</span><span>-'+fmt$(discount)+'</span></div>':'')
-    +'<div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border);font-weight:700"><span>Total per cycle</span><span style="font-family:Exo 2,sans-serif;font-size:15px;color:var(--orange)">'+fmt$(effective)+'</span></div>'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Tax added at charge time based on subaccount tax settings.</div>'
+    +'<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text-muted)">Subtotal</span><span>'+fmt$(b.subtotal)+'</span></div>'
+    +(b.discount>0?'<div style="display:flex;justify-content:space-between;padding:3px 0;color:#34d399"><span>Discount</span><span>-'+fmt$(b.discount)+'</span></div>':'')
+    +(b.discount>0?'<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text-muted)"><span>After discount</span><span>'+fmt$(b.afterDiscount)+'</span></div>':'')
+    +taxLine
+    +'<div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border);font-weight:700"><span>Total per cycle</span><span style="font-family:Exo 2,sans-serif;font-size:15px;color:var(--orange)">'+fmt$(b.total)+'</span></div>'
+    +taxNote
     +'</div>';
 }
 
