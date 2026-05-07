@@ -704,6 +704,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .sub-row:hover{border-color:var(--purple-border)}
 .sub-row.active{border-left:3px solid #34d399}
 .sub-row.paused{border-left:3px solid var(--orange);opacity:.75}
+.sub-row.suspended{border-left:3px solid #f87171}
 .sub-row.cancelled{border-left:3px solid var(--text-dim);opacity:.45}
 .sub-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sub-biz{font-size:11px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1665,13 +1666,16 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Subscriptions</div>
               <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="subs-sub-label"></div>
             </div>
-            <button class="btn btn-primary" onclick="openSubModal(null)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subscription
-            </button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-ghost" onclick="openSubPlansModal()" id="subs-manage-plans-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Plans</button>
+              <button class="btn btn-primary" onclick="openSubModal(null)" id="subs-new-btn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subscription
+              </button>
+            </div>
           </div>
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="subs-search" type="text" placeholder="Search subscriptions..." oninput="renderSubscriptions()"></div>
-            <select class="filter-sel" id="subs-status-filter" onchange="renderSubscriptions()"><option value="">All Status</option><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select>
+            <select class="filter-sel" id="subs-status-filter" onchange="renderSubscriptions()"><option value="">All Status</option><option value="active">Active</option><option value="paused">Paused</option><option value="suspended">Suspended</option><option value="cancelled">Cancelled</option></select>
             <select class="filter-sel" id="subs-cycle-filter" onchange="renderSubscriptions()"><option value="">All Cycles</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select>
           </div>
           <div id="subs-list"></div>
@@ -1982,6 +1986,7 @@ let db={
   ],
   users:[],
   subscriptions:[],
+  subscriptionPlans:[],
   forms:[],
   formSubmissions:[],
   customFieldCategories:[],
@@ -3430,13 +3435,14 @@ function _dPayTransactions(c,cPays){
 }
 function setDPayDateRange(r){state.dPayDateRange=r;renderDrawer();}
 
-// Subscriptions: lifecycle chips (Active/Paused/Cancelled), default Active.
+// Subscriptions: lifecycle chips (Active/Paused/Suspended/Cancelled), default Active.
 // Click a sub row to open its detail modal.
 function _dPaySubscriptions(c,cSubs){
   const filter=state.dPaySubFilter||'active';
   const buckets={
     active:cSubs.filter(function(s){return s.status==='active';}),
     paused:cSubs.filter(function(s){return s.status==='paused';}),
+    suspended:cSubs.filter(function(s){return s.status==='suspended';}),
     cancelled:cSubs.filter(function(s){return s.status==='cancelled';})
   };
   const list=buckets[filter]||[];
@@ -3445,9 +3451,10 @@ function _dPaySubscriptions(c,cSubs){
     +'<div class="task-chip-row" style="margin-bottom:0">'
     +'<button class="chip'+(filter==='active'?' active':'')+'" onclick="setDPaySubFilter(\'active\')">Active ('+buckets.active.length+')</button>'
     +'<button class="chip'+(filter==='paused'?' active':'')+'" onclick="setDPaySubFilter(\'paused\')">Paused ('+buckets.paused.length+')</button>'
+    +'<button class="chip'+(filter==='suspended'?' active':'')+'" onclick="setDPaySubFilter(\'suspended\')">Suspended ('+buckets.suspended.length+')</button>'
     +'<button class="chip'+(filter==='cancelled'?' active':'')+'" onclick="setDPaySubFilter(\'cancelled\')">Cancelled ('+buckets.cancelled.length+')</button>'
     +'</div>'
-    +'<button class="btn btn-purple btn-sm" onclick="openSubModal(null,\''+c.id+'\')">+ New</button>'
+    +(canManageSubscriptions()?'<button class="btn btn-purple btn-sm" onclick="openSubModal(null,\''+c.id+'\')">+ New</button>':'')
     +'</div>';
 
   if(!list.length){
@@ -3456,13 +3463,14 @@ function _dPaySubscriptions(c,cSubs){
   }
   list.forEach(function(s){
     const cycle=s.billingCycle||'monthly';
-    const total=(s.items||[]).reduce(function(t,i){return t+(i.price*(i.qty||1));},0);
-    const borderColor=filter==='active'?'#34d399':filter==='paused'?'#fbbf24':'#94a3b8';
+    // cyclePrice is canonical; fall back to items sum for legacy rows that lack it
+    const total=parseFloat(s.cyclePrice||0)||((s.items||[]).reduce(function(t,i){return t+((parseFloat(i.price)||0)*(i.qty||1));},0));
+    const borderColor=filter==='active'?'#34d399':filter==='paused'?'#fbbf24':filter==='suspended'?'#f87171':'#94a3b8';
+    const failBadge=(s.status==='suspended'&&s.failedChargeCount)?' <span style="font-size:10px;color:#f87171;font-weight:700">'+s.failedChargeCount+' failed</span>':'';
     h+='<div class="appt-row-sm" style="cursor:pointer;border-left-color:'+borderColor+'" onclick="openSubDetail(\''+s.id+'\')">'
-      +'<div style="flex:1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+'</div>'
+      +'<div style="flex:1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+failBadge+'</div>'
       +'<div class="appt-sm-meta">'+fmtDate(s.startDate)+' \u00b7 '+fmt$(total)+'/'+cycle+'</div>'
       +'<span class="sub-cycle-badge">'+cycle+'</span></div>'
-      +(filter==='active'?'<span class="sub-pay-badge '+(s.paymentStatus==='paid'?'spb-paid':s.paymentStatus==='overdue'?'spb-overdue':'spb-unpaid')+'">'+(s.paymentStatus||'unpaid')+'</span>':'')
       +'</div>';
   });
   return h;
@@ -8046,6 +8054,10 @@ async function fetchFromServer(){
       // Migrated to RDS appointments table. Override blob appointments during transition.
       // The booking widget writes here, so this is now the source of truth.
       if(Array.isArray(result.appointments))db.appointments=result.appointments;
+      // Migrated to RDS subscription_plans + subscriptions tables (May 6, 2026).
+      // The blob fields are stripped server-side on save; these are now the source of truth.
+      if(Array.isArray(result.subscriptionPlans))db.subscriptionPlans=result.subscriptionPlans;
+      if(Array.isArray(result.subscriptions))db.subscriptions=result.subscriptions;
       // Users from subaccount_users table (UUIDs), not from blob.
       if(result.users){
         db.users=result.users.map(function(u){
@@ -9656,11 +9668,47 @@ function invBadge(p){
 }
 
 // =====================================================
-// SUBSCRIPTIONS
+// SUBSCRIPTIONS (RDS-backed since May 6, 2026)
 // =====================================================
+// All mutations go through Lambda endpoints. db.subscriptions and
+// db.subscriptionPlans are populated by data-load (read-only mirrors).
+// Frontend never mutates these arrays directly anymore.
+
 const SUB_CYCLES=['weekly','monthly','quarterly','annual'];
 const SUBS_PER_PAGE=10;
+const SUB_STATUSES=['active','paused','suspended','cancelled'];
+const SUB_STATUS_LABEL={active:'Active',paused:'Paused',suspended:'Suspended',cancelled:'Cancelled'};
+const SUB_STATUS_COLOR={active:'#34d399',paused:'var(--orange)',suspended:'#f87171',cancelled:'var(--text-dim)'};
+const SUB_STATUS_ORDER={active:0,paused:1,suspended:2,cancelled:3};
+const CANCELLATION_REASONS=[
+  'Customer requested',
+  'Payment issues',
+  'Service no longer needed',
+  'Switched to different plan',
+  'Customer dissatisfaction',
+  'Other'
+];
 
+// Permission helpers. Practitioner is blocked at panel level; defense in depth here.
+function canViewSubscriptions(){
+  var r=state.user&&state.user.role;
+  return r==='admin'||r==='manager'||r==='user'||r==='super_admin';
+}
+function canManageSubscriptions(){
+  var r=state.user&&state.user.role;
+  return r==='admin'||r==='manager'||r==='super_admin';
+}
+function canDeleteSubscription(){
+  var r=state.user&&state.user.role;
+  return r==='admin'||r==='super_admin';
+}
+function canManagePlans(){
+  // Plans (catalog) are admin-only per Stage 2 design.
+  var r=state.user&&state.user.role;
+  return r==='admin'||r==='super_admin';
+}
+
+// Compute next due date locally for display only. Server is the source of truth.
 function calcNextDueDate(startDate,cycle){
   if(!startDate)return'';
   const d=new Date(startDate+'T12:00:00');
@@ -9675,13 +9723,85 @@ function calcNextDueDate(startDate,cycle){
   return next.toISOString().split('T')[0];
 }
 
-function getSub(id){return db.subscriptions.find(s=>s.id===id)}
+function getSub(id){return (db.subscriptions||[]).find(s=>s.id===id)}
+function getPlan(id){return (db.subscriptionPlans||[]).find(p=>p.id===id)}
 
+// =====================================================
+// API helpers (subscriptions)
+// =====================================================
+async function apiSubCreate(payload){
+  const r=await fetch(apiUrl('/api/subaccount/subscriptions-create'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok)throw new Error(j.error||'Failed to create subscription');
+  return j;
+}
+async function apiSubAction(id,action,extra){
+  const r=await fetch(apiUrl('/api/subaccount/subscriptions-update'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(Object.assign({id:id,action:action},extra||{}))
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok)throw new Error(j.error||('Action "'+action+'" failed'));
+  return j;
+}
+async function apiSubDelete(id){
+  const r=await fetch(apiUrl('/api/subaccount/subscriptions-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id})
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok)throw new Error(j.error||'Delete failed');
+  return j;
+}
+async function apiPlanCreate(payload){
+  const r=await fetch(apiUrl('/api/subaccount/subscription-plans-create'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok)throw new Error(j.error||'Failed to create plan');
+  return j;
+}
+async function apiPlanUpdate(payload){
+  const r=await fetch(apiUrl('/api/subaccount/subscription-plans-update'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok)throw new Error(j.error||'Failed to update plan');
+  return j;
+}
+async function apiPlanDelete(id){
+  const r=await fetch(apiUrl('/api/subaccount/subscription-plans-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:id})
+  });
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok){
+    var err=new Error(j.error||'Delete failed');
+    err.subscription_count=j.subscription_count;
+    throw err;
+  }
+  return j;
+}
+
+// =====================================================
+// List view
+// =====================================================
 function filteredSubs(){
   const q=(document.getElementById('subs-search')&&document.getElementById('subs-search').value||'').toLowerCase();
   const sf=document.getElementById('subs-status-filter')&&document.getElementById('subs-status-filter').value||'';
   const cf=document.getElementById('subs-cycle-filter')&&document.getElementById('subs-cycle-filter').value||'';
-  return db.subscriptions.filter(s=>{
+  return (db.subscriptions||[]).filter(s=>{
     if(sf&&s.status!==sf)return false;
     if(cf&&s.billingCycle!==cf)return false;
     if(q){
@@ -9693,14 +9813,19 @@ function filteredSubs(){
     }
     return true;
   }).sort((a,b)=>{
-    const order={active:0,paused:1,cancelled:2};
-    const ao=order[a.status]??3,bo=order[b.status]??3;
+    const ao=SUB_STATUS_ORDER[a.status]??99,bo=SUB_STATUS_ORDER[b.status]??99;
     if(ao!==bo)return ao-bo;
     return(b.startDate||'').localeCompare(a.startDate||'');
   });
 }
 
 function renderSubscriptions(){
+  // Hide management buttons for staff; show for admin/manager
+  const newBtn=document.getElementById('subs-new-btn');
+  const planBtn=document.getElementById('subs-manage-plans-btn');
+  if(newBtn)newBtn.style.display=canManageSubscriptions()?'':'none';
+  if(planBtn)planBtn.style.display=canManagePlans()?'':'none';
+
   const all=filteredSubs();
   const pages=Math.ceil(all.length/SUBS_PER_PAGE)||1;
   if(state.subsPage>pages)state.subsPage=1;
@@ -9709,36 +9834,36 @@ function renderSubscriptions(){
   if(lbl)lbl.textContent=all.length+' subscription'+(all.length!==1?'s':'');
   const el=document.getElementById('subs-list');if(!el)return;
   if(!slice.length){
-    el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><h3>No subscriptions found</h3><p>Create a subscription or adjust filters.</p></div>';
+    el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><h3>No subscriptions found</h3><p>'+(canManageSubscriptions()?'Create a subscription or adjust filters.':'No subscriptions match your filters.')+'</p></div>';
     const pg=document.getElementById('subs-pg');if(pg)pg.innerHTML='';
     return;
   }
-  // group by status for section headers
-  const statuses=['active','paused','cancelled'];
-  const statusLabel={active:'Active',paused:'Paused',cancelled:'Cancelled'};
-  const groups={active:[],paused:[],cancelled:[]};
-  slice.forEach(s=>groups[s.status]&&groups[s.status].push(s));
+  // Group by status for section headers
+  const groups={active:[],paused:[],suspended:[],cancelled:[]};
+  slice.forEach(s=>{ if(groups[s.status])groups[s.status].push(s); });
   let html='';
-  statuses.forEach(st=>{
+  SUB_STATUSES.forEach(st=>{
     if(!groups[st].length)return;
-    html+='<div class="sub-section-label" style="color:'+(st==='active'?'#34d399':st==='paused'?'var(--orange)':'var(--text-dim)')+'">'+statusLabel[st]+'<span class="sub-count-badge">'+groups[st].length+'</span></div>';
+    html+='<div class="sub-section-label" style="color:'+SUB_STATUS_COLOR[st]+'">'+SUB_STATUS_LABEL[st]+'<span class="sub-count-badge">'+groups[st].length+'</span></div>';
     groups[st].forEach(s=>{
       const c=s.contactId?getContact(s.contactId):null;
-      const total=(s.items||[]).reduce((t,i)=>t+(i.price*(i.qty||1)),0);
       const cycle=s.billingCycle||'monthly';
+      // cyclePrice is the canonical price; items are display-only line breakdown
+      const total=parseFloat(s.cyclePrice||0);
       const nd=s.nextDueDate||calcNextDueDate(s.startDate,cycle);
+      const failBadge=(s.status==='suspended'&&s.failedChargeCount)?'<span style="font-size:10px;font-weight:700;color:#f87171;margin-left:6px">'+s.failedChargeCount+' failed charge'+(s.failedChargeCount===1?'':'s')+'</span>':'';
       html+='<div class="sub-row '+s.status+'" onclick="openSubDetail(\''+s.id+'\')">'
         +'<div><div class="sub-name">'+(c?esc(c.name):esc(s.planName||'Unnamed'))+'</div>'
         +(c&&c.company?'<div class="sub-biz">'+esc(c.company)+'</div>':'')
-        +'<span class="sub-cycle-badge">'+cycle+'</span></div>'
+        +'<span class="sub-cycle-badge">'+cycle+'</span>'+failBadge+'</div>'
         +'<div class="sub-date-cell"><strong>'+fmtDate(s.startDate)+'</strong>Started</div>'
         +'<div class="sub-date-cell"><strong>'+(nd?fmtDate(nd):'TBD')+'</strong>Next Due</div>'
-        +'<div><span class="sub-pay-badge '+(s.paymentStatus==='paid'?'spb-paid':s.paymentStatus==='overdue'?'spb-overdue':'spb-unpaid')+'">'+( s.paymentStatus||'unpaid')+'</span><div style="font-family:Exo 2,sans-serif;font-size:12px;font-weight:700;margin-top:4px">'+fmt$(total)+'/'+cycle+'</div></div>'
+        +'<div><div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(total)+'</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase">/'+cycle+'</div></div>'
         +'<div class="sub-actions" onclick="event.stopPropagation()">'
-        +'<button class="btn btn-ghost btn-sm" onclick="openSubModal(\''+s.id+'\')">Edit</button>'
-        +(s.status==='active'?'<button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border)" onclick="pauseSub(\''+s.id+'\')">Pause</button>':'')
-        +(s.status==='paused'?'<button class="btn btn-purple btn-sm" onclick="restartSub(\''+s.id+'\')">Restart</button>':'')
-        +(s.status!=='cancelled'?'<button class="btn btn-danger btn-sm" onclick="cancelSub(\''+s.id+'\')">Cancel</button>':'')
+        +(canManageSubscriptions()?'<button class="btn btn-ghost btn-sm" onclick="openSubModal(\''+s.id+'\')">Edit</button>':'')
+        +(canManageSubscriptions()&&s.status==='active'?'<button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border)" onclick="pauseSub(\''+s.id+'\')">Pause</button>':'')
+        +(canManageSubscriptions()&&(s.status==='paused'||s.status==='suspended')?'<button class="btn btn-purple btn-sm" onclick="restartSub(\''+s.id+'\')">Resume</button>':'')
+        +(canManageSubscriptions()&&s.status!=='cancelled'?'<button class="btn btn-danger btn-sm" onclick="cancelSub(\''+s.id+'\')">Cancel</button>':'')
         +'</div></div>';
     });
   });
@@ -9748,154 +9873,722 @@ function renderSubscriptions(){
 
 function subsPg(p){state.subsPage=p;renderSubscriptions()}
 
+// =====================================================
+// Subscription detail modal (Details + History tabs)
+// =====================================================
+let _subDetailTab='details';
+
 function openSubDetail(id){
   const s=getSub(id);if(!s)return;
+  _subDetailTab='details';
+  _renderSubDetailModal(s);
+}
+
+function setSubDetailTab(tab){
+  _subDetailTab=tab;
+  const s=getSub(state.modal&&state.modal.id);
+  if(s)_renderSubDetailModal(s);
+}
+
+function _renderSubDetailModal(s){
   const c=s.contactId?getContact(s.contactId):null;
-  const total=(s.items||[]).reduce((t,i)=>t+(i.price*(i.qty||1)),0);
+  const tabsHtml='<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:-22px -24px 16px;padding:0 22px">'
+    +'<button onclick="setSubDetailTab(\'details\')" style="padding:12px 18px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid '+(_subDetailTab==='details'?'var(--orange)':'transparent')+';color:'+(_subDetailTab==='details'?'var(--orange)':'var(--text-muted)')+';cursor:pointer">Details</button>'
+    +'<button onclick="setSubDetailTab(\'history\')" style="padding:12px 18px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid '+(_subDetailTab==='history'?'var(--orange)':'transparent')+';color:'+(_subDetailTab==='history'?'var(--orange)':'var(--text-muted)')+';cursor:pointer">History'+(s.events&&s.events.length?' ('+s.events.length+')':'')+'</button>'
+    +'</div>';
+
+  const body=tabsHtml+(_subDetailTab==='details'?_renderSubDetailDetails(s,c):_renderSubDetailHistory(s));
+
+  let foot='<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  if(canManageSubscriptions()&&s.status!=='cancelled'){
+    foot+='<button class="btn btn-purple" onclick="closeModal();openSubModal(\''+s.id+'\')">Edit</button>';
+  }
+  if(canDeleteSubscription()){
+    foot+='<button class="btn btn-danger btn-sm" onclick="deleteSub(\''+s.id+'\')">Hard Delete</button>';
+  }
+
+  state.modal={type:'subDetail',id:s.id};
+  openModal('Subscription Details',body,foot,'modal-lg');
+}
+
+function _renderSubDetailDetails(s,c){
   const nd=s.nextDueDate||calcNextDueDate(s.startDate,s.billingCycle||'monthly');
-  const statusColor={active:'#34d399',paused:'var(--orange)',cancelled:'var(--text-muted)'};
-  const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
+  const total=parseFloat(s.cyclePrice||0);
+  const owner=s.ownerUserId?getUserById(s.ownerUserId):null;
+  const card=c&&c.squareCards?(c.squareCards.find(function(cd){return cd.id===s.cardId;})):null;
+
+  let html='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">'+esc(s.planName||'Subscription')+'</div>'
-    +(c?'<div style="font-size:13px;color:var(--text-muted);margin-top:2px">'+esc(c.name)+(c.company?' · '+esc(c.company):'')+'</div>':'')
-    +'</div><span style="font-size:11px;font-weight:700;text-transform:uppercase;padding:3px 9px;border-radius:4px;background:'+statusColor[s.status]+'20;color:'+statusColor[s.status]+'">'+s.status+'</span></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Cycle</div><div style="font-size:13px;font-weight:600">'+( s.billingCycle||'monthly')+'</div></div>'
+    +(c?'<div style="font-size:13px;color:var(--text-muted);margin-top:2px">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>':'')
+    +'</div><span style="font-size:11px;font-weight:700;text-transform:uppercase;padding:3px 9px;border-radius:4px;background:'+SUB_STATUS_COLOR[s.status]+'20;color:'+SUB_STATUS_COLOR[s.status]+'">'+SUB_STATUS_LABEL[s.status]+'</span></div>';
+
+  // Suspended banner
+  if(s.status==='suspended'){
+    html+='<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:#f87171">'
+      +'<strong>Suspended:</strong> '+(s.failedChargeCount||0)+' failed charge'+(s.failedChargeCount===1?'':'s')+'.'
+      +(s.lastFailureReason?' Last error: '+esc(s.lastFailureReason):'')
+      +' Update card on file and resume to retry.'
+      +'</div>';
+  }
+  // Paused banner
+  if(s.status==='paused'){
+    const pd=s.pausedAt?new Date(s.pausedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    html+='<div style="background:rgba(255,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:#fbbf24"><strong>Paused</strong>'+(pd?' on '+esc(pd):'')+'. Click Resume to restart billing.</div>';
+  }
+  // Cancelled banner
+  if(s.status==='cancelled'){
+    const cd=s.cancelledAt?new Date(s.cancelledAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    html+='<div style="background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.3);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:#94a3b8"><strong>Cancelled</strong>'+(cd?' on '+esc(cd):'')+(s.cancellationReason?' \u00b7 Reason: '+esc(s.cancellationReason):'')+'</div>';
+  }
+
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:12px">'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Cycle</div><div style="font-size:13px;font-weight:600">'+(s.billingCycle||'monthly')+'</div></div>'
     +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Started</div><div style="font-size:13px;font-weight:600">'+fmtDate(s.startDate)+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Next Due</div><div style="font-size:13px;font-weight:600">'+(nd?fmtDate(nd):'TBD')+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Payment</div><div class="sub-pay-badge '+(s.paymentStatus==='paid'?'spb-paid':s.paymentStatus==='overdue'?'spb-overdue':'spb-unpaid')+'">'+( s.paymentStatus||'unpaid')+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Total/Cycle</div><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange)">'+fmt$(total)+'</div></div>'
-    +(s.squareSubscriptionId?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Square ID</div><div style="font-size:11px;font-family:monospace;color:var(--text-muted)">'+esc(s.squareSubscriptionId)+'</div></div>':'')
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Next Due</div><div style="font-size:13px;font-weight:600">'+(s.status==='active'?(nd?fmtDate(nd):'TBD'):'\u2014')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Per Cycle</div><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:800;color:var(--orange)">'+fmt$(total)+'</div></div>'
     +'</div>'
-    +'<div style="border-top:1px solid var(--border);padding-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px">Items</div>'
-    +(s.items&&s.items.length?s.items.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)"><span>'+esc(i.name)+(i.qty>1?' × '+i.qty:'')+'</span><span style="font-weight:600">'+fmt$(i.price*(i.qty||1))+'</span></div>').join(''):'<div style="font-size:13px;color:var(--text-muted)">No items.</div>')
+    +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Card on File</div><div style="font-size:12px">'+(card?(esc(card.brand||'Card')+' \u00b7\u00b7\u00b7\u00b7 '+esc(card.last4||'')):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Owner</div><div style="font-size:12px">'+(owner?esc(owner.name||owner.username):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
+    +(s.couponCode?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Coupon</div><div style="font-size:12px;color:#34d399">'+esc(s.couponCode)+(s.couponRecurring?' (recurring)':' (first cycle)')+'</div></div>':'')
+    +(s.manualDiscountType?'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Manual Discount</div><div style="font-size:12px;color:#34d399">'+(s.manualDiscountType==='pct'?(s.manualDiscountValue+'%'):fmt$(s.manualDiscountValue))+(s.manualDiscountRecurring?' (recurring)':' (first cycle)')+'</div></div>':'')
+    +'</div>'
+    +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px">Items</div>'
+    +(s.items&&s.items.length?s.items.map(function(i){return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)"><span>'+esc(i.name)+(i.qty>1?' \u00d7 '+i.qty:'')+'</span>'+(i.taxable===false?'<span style="font-size:10px;color:var(--text-muted)">non-taxable</span>':'')+'</div>';}).join(''):'<div style="font-size:13px;color:var(--text-muted)">No items.</div>')
     +'</div>'
     +(s.notes?'<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(s.notes)+'</div></div>':'')
     +'</div>';
-  openModal('Subscription Details',body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-purple" onclick="closeModal();openSubModal(\''+s.id+'\')">Edit</button>',
-    'modal-lg');
+  return html;
 }
 
-let editSubItems=[];
+function _renderSubDetailHistory(s){
+  const events=s.events||[];
+  if(!events.length){
+    return '<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px">No history events yet.</div>';
+  }
+  const eventLabel={
+    created:'Created',edited:'Edited',paused:'Paused',resumed:'Resumed',
+    cancelled:'Cancelled',resumed_from_suspension:'Resumed from suspension',
+    charge_succeeded:'Charge succeeded',charge_failed:'Charge failed',
+    charge_retried:'Charge retried',auto_suspended:'Auto-suspended',
+    coupon_applied:'Coupon applied',coupon_removed:'Coupon removed',
+    item_changed:'Items changed',owner_changed:'Owner changed',
+    card_changed:'Card changed',discount_applied:'Discount applied',
+    discount_removed:'Discount removed'
+  };
+  const eventColor={
+    created:'#34d399',edited:'var(--text-muted)',paused:'var(--orange)',
+    resumed:'#34d399',cancelled:'var(--text-dim)',
+    resumed_from_suspension:'#34d399',
+    charge_succeeded:'#34d399',charge_failed:'#f87171',
+    charge_retried:'#fbbf24',auto_suspended:'#f87171',
+    coupon_applied:'#34d399',coupon_removed:'var(--text-muted)',
+    item_changed:'var(--purple-light)',owner_changed:'var(--purple-light)',
+    card_changed:'var(--purple-light)',discount_applied:'#34d399',
+    discount_removed:'var(--text-muted)'
+  };
+  let html='';
+  events.forEach(function(e){
+    const dt=e.createdAt?new Date(e.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'';
+    const actor=e.actorUserId?getUserById(e.actorUserId):null;
+    const actorName=actor?(actor.name||actor.username):(e.actorType==='cron'?'System (auto)':e.actorType==='system'?'System':'Unknown');
+    const label=eventLabel[e.eventType]||e.eventType;
+    const color=eventColor[e.eventType]||'var(--text-muted)';
+    html+='<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid '+color+';border-radius:var(--radius);padding:10px 12px;margin-bottom:6px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
+      +'<div style="font-size:13px;font-weight:600;color:'+color+'">'+esc(label)+'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted)">'+esc(dt)+'</div>'
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted)">by '+esc(actorName)+'</div>';
+    if(e.metadata&&Object.keys(e.metadata).length){
+      const meta=Object.keys(e.metadata).map(function(k){
+        const v=e.metadata[k];
+        return esc(k.replace(/_/g,' '))+': '+(typeof v==='object'?JSON.stringify(v):esc(String(v)));
+      }).join(', ');
+      html+='<div style="font-size:11px;color:var(--text-dim);margin-top:4px;font-family:monospace">'+meta+'</div>';
+    }
+    html+='</div>';
+  });
+  return html;
+}
+
+// =====================================================
+// Subscription create/edit modal
+// =====================================================
+let _subEditMode='catalog';   // 'catalog' or 'custom'
+let _subEditItems=[];          // for custom mode
 
 function openSubModal(id,preContactId){
+  if(!canManageSubscriptions()){toast('You do not have permission to manage subscriptions.','error');return;}
   const s=id?getSub(id):null;
-  editSubItems=s?JSON.parse(JSON.stringify(s.items||[])):[];
+  // Edit existing: preserve mode that was used at creation
+  _subEditMode=s?(s.planId?'catalog':'custom'):'catalog';
+  _subEditItems=s?JSON.parse(JSON.stringify(s.items||[])):[];
   state.modal={type:'sub',id:id||null,extra:preContactId||null};
-  const cid=s&&s.contactId||preContactId||'';
-  const cycleOpts=SUB_CYCLES.map(c=>'<option value="'+c+'"'+(s&&s.billingCycle===c?' selected':c==='monthly'&&!s?' selected':'')+'>'+(c[0].toUpperCase()+c.slice(1))+'</option>').join('');
-  const payOpts=['paid','unpaid','overdue'].map(p=>'<option value="'+p+'"'+(s&&s.paymentStatus===p?' selected':p==='unpaid'&&!s?' selected':'')+'>'+(p[0].toUpperCase()+p.slice(1))+'</option>').join('');
-  const b='<div class="form-row">'
-    +'<div class="form-group"><label>Plan Name *</label><input id="sf-name" type="text" value="'+esc(s&&s.planName||'')+'" placeholder="e.g. Monthly SEO Retainer"></div>'
-    +'<div class="form-group"><label>Billing Cycle</label><select id="sf-cycle">'+cycleOpts+'</select></div>'
-    +'</div>'
-    +'<div class="form-group"><label>Contact</label>'+ssHTML('sf-cw','sf-ci','sf-cv','sf-cd','Search contact...',cid)+'</div>'
+  _renderSubModalBody(s);
+}
+
+function _switchSubEditMode(mode){
+  _subEditMode=mode;
+  const s=state.modal&&state.modal.id?getSub(state.modal.id):null;
+  _renderSubModalBody(s);
+}
+
+function _renderSubModalBody(s){
+  const cid=s&&s.contactId||(state.modal&&state.modal.extra)||'';
+  const c=cid?getContact(cid):null;
+  const isEdit=!!s;
+
+  // Mode toggle (only on create; edit is locked to original mode)
+  const modeToggle=isEdit?'':'<div style="display:flex;gap:8px;margin-bottom:14px">'
+    +'<button type="button" onclick="_switchSubEditMode(\'catalog\')" style="flex:1;padding:9px 14px;border-radius:var(--radius);border:1px solid '+(_subEditMode==='catalog'?'var(--orange)':'var(--border)')+';background:'+(_subEditMode==='catalog'?'rgba(255,107,53,.1)':'transparent')+';color:'+(_subEditMode==='catalog'?'var(--orange)':'var(--text)')+';font-weight:600;font-size:13px;cursor:pointer">From Catalog</button>'
+    +'<button type="button" onclick="_switchSubEditMode(\'custom\')" style="flex:1;padding:9px 14px;border-radius:var(--radius);border:1px solid '+(_subEditMode==='custom'?'var(--orange)':'var(--border)')+';background:'+(_subEditMode==='custom'?'rgba(255,107,53,.1)':'transparent')+';color:'+(_subEditMode==='custom'?'var(--orange)':'var(--text)')+';font-weight:600;font-size:13px;cursor:pointer">Custom</button>'
+    +'</div>';
+
+  // Cycle options (filtered by plan availability if catalog mode)
+  let cycleOpts;
+  if(_subEditMode==='catalog'){
+    const planId=s?s.planId:(document.getElementById('sf-plan')&&document.getElementById('sf-plan').value);
+    const plan=planId?getPlan(planId):null;
+    cycleOpts=SUB_CYCLES.map(function(cy){
+      const enabled=plan&&plan.pricing&&plan.pricing[cy]&&plan.pricing[cy].enabled;
+      const sel=s&&s.billingCycle===cy?' selected':(!s&&cy==='monthly'?' selected':'');
+      const disabled=plan?(!enabled?' disabled':''):'';
+      return '<option value="'+cy+'"'+sel+disabled+'>'+(cy[0].toUpperCase()+cy.slice(1))+(plan&&enabled?' \u2014 '+fmt$(plan.pricing[cy].price):'')+'</option>';
+    }).join('');
+  }else{
+    cycleOpts=SUB_CYCLES.map(function(cy){
+      const sel=s&&s.billingCycle===cy?' selected':(!s&&cy==='monthly'?' selected':'');
+      return '<option value="'+cy+'"'+sel+'>'+(cy[0].toUpperCase()+cy.slice(1))+'</option>';
+    }).join('');
+  }
+
+  // Catalog mode body: plan picker, then cycle (filtered)
+  let modeBody='';
+  if(_subEditMode==='catalog'){
+    const activePlans=(db.subscriptionPlans||[]).filter(function(p){return p.active||(s&&s.planId===p.id);});
+    if(!activePlans.length){
+      modeBody='<div style="padding:14px;background:rgba(255,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:var(--radius);font-size:13px;color:#fbbf24;margin-bottom:12px">No active plans. <a onclick="closeModal();openSubPlansModal()" style="color:#fbbf24;text-decoration:underline;cursor:pointer">Create a plan</a> or switch to Custom mode.</div>';
+    }else{
+      const planOpts='<option value="">Select a plan...</option>'+activePlans.map(function(p){
+        return '<option value="'+p.id+'"'+(s&&s.planId===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
+      }).join('');
+      modeBody='<div class="form-row">'
+        +'<div class="form-group"><label>Plan *</label><select id="sf-plan"'+(isEdit?' disabled':'')+' onchange="_onSubPlanChange()">'+planOpts+'</select></div>'
+        +'<div class="form-group"><label>Billing Cycle *</label><select id="sf-cycle"'+(isEdit?' disabled':'')+'>'+cycleOpts+'</select></div>'
+        +'</div>';
+      if(isEdit){
+        modeBody+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;padding:8px 10px;background:rgba(107,33,234,.08);border-radius:var(--radius)">Plan and cycle are locked at creation. Cancel and create a new subscription to change.</div>';
+      }
+    }
+  }else{
+    // Custom mode: name, cycle, price, items
+    modeBody='<div class="form-row">'
+      +'<div class="form-group"><label>Plan Name *</label><input id="sf-custom-name" type="text" value="'+esc(s&&s.planName||'')+'"'+(isEdit?' disabled':'')+' placeholder="e.g. Custom Retainer"></div>'
+      +'<div class="form-group"><label>Billing Cycle *</label><select id="sf-cycle"'+(isEdit?' disabled':'')+'>'+cycleOpts+'</select></div>'
+      +'</div>'
+      +'<div class="form-group"><label>Price per Cycle *</label><input id="sf-custom-price" type="number" min="0.01" step="0.01" value="'+(s&&s.cyclePrice||'')+'"'+(isEdit?' disabled':'')+' placeholder="99.00"></div>'
+      +'<div class="form-group"><label style="display:flex;justify-content:space-between;align-items:center"><span>Items *</span>'+(isEdit?'':'<button type="button" class="btn btn-purple btn-sm" onclick="_addSubCustomItem()">+ Add Item</button>')+'</label>'
+      +'<div id="sf-custom-items">'+_renderSubCustomItems(isEdit)+'</div>'
+      +'</div>';
+  }
+
+  // Card on file picker
+  const cards=(c&&c.squareCards)||[];
+  let cardSection;
+  if(!c){
+    cardSection='<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Select a contact first.</div>';
+  }else if(!cards.length){
+    cardSection='<div style="font-size:12px;color:var(--text-muted);padding:8px 10px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius)">No card on file. Add one from the contact\'s Saved Cards tab before billing can occur.</div>';
+  }else{
+    const cardOpts='<option value="">No card (manual processing)</option>'+cards.map(function(cd){
+      return '<option value="'+cd.id+'"'+(s&&s.cardId===cd.id?' selected':'')+'>'+esc(cd.brand||'Card')+' ending in '+esc(cd.last4||'****')+(cd.expMonth?' ('+cd.expMonth+'/'+cd.expYear+')':'')+'</option>';
+    }).join('');
+    cardSection='<select id="sf-card">'+cardOpts+'</select>';
+  }
+
+  // Owner picker (staff users)
+  const staffUsers=(db.users||[]).filter(function(u){return u.active!==false;});
+  const ownerOpts='<option value="">No owner</option>'+staffUsers.map(function(u){
+    return '<option value="'+u.id+'"'+(s&&s.ownerUserId===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>';
+  }).join('');
+
+  // Coupon section
+  const couponSection='<div class="form-row">'
+    +'<div class="form-group"><label>Coupon Code</label><input id="sf-coupon" type="text" value="'+esc(s&&s.couponCode||'')+'" placeholder="Leave blank for none"></div>'
+    +'<div class="form-group"><label>Coupon Applies</label><select id="sf-coupon-recurring"><option value="false"'+(s&&!s.couponRecurring?' selected':!s?' selected':'')+'>First cycle only</option><option value="true"'+(s&&s.couponRecurring?' selected':'')+'>Every cycle</option></select></div>'
+    +'</div>';
+
+  // Manual discount section
+  const md=s&&s.manualDiscountType?s:null;
+  const discountSection='<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Manual Discount (optional)</div>'
     +'<div class="form-row">'
-    +'<div class="form-group"><label>Start Date *</label><input id="sf-start" type="date" value="'+(s&&s.startDate||todayStr())+'"></div>'
-    +'<div class="form-group"><label>Payment Status</label><select id="sf-pay">'+payOpts+'</select></div>'
+    +'<div class="form-group"><label>Type</label><select id="sf-discount-type"><option value="">None</option><option value="flat"'+(md&&md.manualDiscountType==='flat'?' selected':'')+'>Flat $</option><option value="pct"'+(md&&md.manualDiscountType==='pct'?' selected':'')+'>Percent %</option></select></div>'
+    +'<div class="form-group"><label>Value</label><input id="sf-discount-value" type="number" min="0" step="0.01" value="'+(md?md.manualDiscountValue:'')+'" placeholder="e.g. 10"></div>'
+    +'<div class="form-group"><label>Applies</label><select id="sf-discount-recurring"><option value="true"'+(md?md.manualDiscountRecurring!==false?' selected':'':' selected')+'>Every cycle</option><option value="false"'+(md&&md.manualDiscountRecurring===false?' selected':'')+'>First cycle only</option></select></div>'
     +'</div>'
-    +'<div class="divider"></div>'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700">Subscription Items</div><button class="btn btn-purple btn-sm" onclick="addSubItemRow()">+ Add Item</button></div>'
-    +'<div id="sub-items-list">'+renderSubItemsList()+'</div>'
-    +'<div class="divider"></div>'
+    +'<div class="form-group" style="margin-bottom:0"><label>Note (optional)</label><input id="sf-discount-note" type="text" value="'+esc(md&&md.manualDiscountNote||'')+'" placeholder="Reason for the discount"></div>'
+    +'</div>';
+
+  // Other fields
+  const otherFields='<div class="form-group"><label>Contact *</label>'+ssHTML('sf-cw','sf-ci','sf-cv','sf-cd','Search contact...',cid)+'</div>'
     +'<div class="form-row">'
-    +'<div class="form-group"><label>Square Plan ID <span style="font-weight:400;color:var(--text-muted)">(future)</span></label><input id="sf-sq-plan" type="text" value="'+esc(s&&s.squarePlanId||'')+'" placeholder="Auto-populated"></div>'
-    +'<div class="form-group"><label>Square Subscription ID <span style="font-weight:400;color:var(--text-muted)">(future)</span></label><input id="sf-sq-sub" type="text" value="'+esc(s&&s.squareSubscriptionId||'')+'" placeholder="Auto-populated"></div>'
+    +'<div class="form-group"><label>Start Date *</label><input id="sf-start" type="date" value="'+(s&&s.startDate||todayStr())+'"'+(isEdit?' disabled':'')+'></div>'
+    +'<div class="form-group"><label>Owner</label><select id="sf-owner">'+ownerOpts+'</select></div>'
     +'</div>'
+    +'<div class="form-group"><label>Card on File</label>'+cardSection+'</div>'
+    +couponSection
+    +discountSection
     +'<div class="form-group"><label>Notes</label><textarea id="sf-notes" rows="2">'+esc(s&&s.notes||'')+'</textarea></div>';
-  openModal(s?'Edit Subscription':'New Subscription',b,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSub()">Save Subscription</button>',
+
+  const body=modeToggle+modeBody+otherFields;
+  openModal(isEdit?'Edit Subscription':'New Subscription',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSub()">Save</button>',
     'modal-xl');
 }
 
-function renderSubItemsList(){
-  if(!editSubItems.length)return'<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No items yet. Click Add Item above.</div>';
-  return editSubItems.map((it,i)=>'<div class="sub-item-edit-row">'
-    +'<div style="flex:2;min-width:160px;position:relative"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Item (or search products)</div>'
-    +'<input type="text" id="si-name-'+i+'" value="'+esc(it.name||'')+'" placeholder="Type to search recurring products..." oninput="subProdSearch('+i+',this.value)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none">'
-    +'<div class="ss-drop hidden" id="sub-prod-drop-'+i+'"></div></div>'
-    +'<div style="width:95px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price ($)</div><input type="number" id="si-price-'+i+'" value="'+(it.price||0)+'" min="0" step="0.01" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
-    +'<div style="width:60px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Qty</div><input type="number" id="si-qty-'+i+'" value="'+(it.qty||1)+'" min="1" step="1" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div>'
-    +'<div style="flex-shrink:0;padding-top:20px"><button class="icon-btn-xs" onclick="rmSubItem('+i+')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
-    +'</div>').join('');
+function _onSubPlanChange(){
+  // When plan changes, re-render so cycle options reflect that plan's availability
+  const s=state.modal&&state.modal.id?getSub(state.modal.id):null;
+  _renderSubModalBody(s);
 }
 
-function syncSubItemsFromDOM(){
-  editSubItems.forEach((it,i)=>{
-    const n=document.getElementById('si-name-'+i);if(n)it.name=n.value.trim();
-    const p=document.getElementById('si-price-'+i);if(p)it.price=parseFloat(p.value)||0;
-    const q=document.getElementById('si-qty-'+i);if(q)it.qty=parseInt(q.value)||1;
-  });
+function _renderSubCustomItems(disabled){
+  if(!_subEditItems.length){
+    return '<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No items yet. Click Add Item.</div>';
+  }
+  return _subEditItems.map(function(it,i){
+    const inputDisable=disabled?' disabled':'';
+    return '<div style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px">'
+      +'<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Name</div>'
+      +'<input type="text" id="ci-name-'+i+'" value="'+esc(it.name||'')+'"'+inputDisable+' onchange="_syncSubItem('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none">'
+      +'</div>'
+      +'<div style="width:70px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Qty</div>'
+      +'<input type="number" id="ci-qty-'+i+'" value="'+(it.qty||1)+'" min="1" step="1"'+inputDisable+' onchange="_syncSubItem('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none">'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;padding-top:18px;gap:5px"><input type="checkbox" id="ci-tax-'+i+'"'+(it.taxable!==false?' checked':'')+inputDisable+' onchange="_syncSubItem('+i+')"><label for="ci-tax-'+i+'" style="font-size:11px;color:var(--text-muted);margin:0">Taxable</label></div>'
+      +(disabled?'':'<div style="padding-top:18px"><button class="icon-btn-xs" onclick="_rmSubCustomItem('+i+')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>')
+      +'</div>';
+  }).join('');
 }
 
-function addSubItemRow(){
-  syncSubItemsFromDOM();
-  editSubItems.push({id:'si-'+uid(),name:'',price:0,qty:1});
-  const el=document.getElementById('sub-items-list');if(el)el.innerHTML=renderSubItemsList();
+function _addSubCustomItem(){
+  _subEditItems.push({id:'si-'+uid(),name:'',qty:1,taxable:true});
+  const el=document.getElementById('sf-custom-items');if(el)el.innerHTML=_renderSubCustomItems(false);
+}
+function _rmSubCustomItem(i){
+  _subEditItems.splice(i,1);
+  const el=document.getElementById('sf-custom-items');if(el)el.innerHTML=_renderSubCustomItems(false);
+}
+function _syncSubItem(i){
+  const it=_subEditItems[i];if(!it)return;
+  const n=document.getElementById('ci-name-'+i);if(n)it.name=n.value.trim();
+  const q=document.getElementById('ci-qty-'+i);if(q)it.qty=parseInt(q.value,10)||1;
+  const t=document.getElementById('ci-tax-'+i);if(t)it.taxable=t.checked;
 }
 
-function rmSubItem(i){
-  syncSubItemsFromDOM();
-  editSubItems.splice(i,1);
-  const el=document.getElementById('sub-items-list');if(el)el.innerHTML=renderSubItemsList();
+async function saveSub(){
+  if(!canManageSubscriptions()){toast('Permission denied.','error');return;}
+  const isEdit=!!(state.modal&&state.modal.id);
+  const contactId=document.getElementById('sf-cv').value||null;
+  if(!contactId){toast('Contact is required.','error');return;}
+
+  // Collect common fields
+  const ownerUserId=document.getElementById('sf-owner').value||null;
+  const cardEl=document.getElementById('sf-card');
+  const cardId=cardEl?(cardEl.value||null):null;
+  const couponCode=(document.getElementById('sf-coupon').value||'').trim();
+  const couponRecurring=document.getElementById('sf-coupon-recurring').value==='true';
+  const dt=document.getElementById('sf-discount-type').value||null;
+  const dv=parseFloat(document.getElementById('sf-discount-value').value);
+  const dr=document.getElementById('sf-discount-recurring').value==='true';
+  const dn=(document.getElementById('sf-discount-note').value||'').trim();
+  const notes=(document.getElementById('sf-notes').value||'').trim();
+
+  if(dt&&(isNaN(dv)||dv<0)){toast('Discount value must be a non-negative number.','error');return;}
+  if(dt==='pct'&&dv>100){toast('Percent discount cannot exceed 100.','error');return;}
+
+  if(isEdit){
+    // Edit mode: only owner, card, coupon, discount, notes, items can change.
+    // Cycle, plan, price are locked at creation per Payment Policy.
+    const sub=getSub(state.modal.id);if(!sub)return;
+    try{
+      // Owner change
+      if((sub.ownerUserId||null)!==(ownerUserId||null)){
+        await apiSubAction(sub.id,'edit',{ownerUserId:ownerUserId});
+      }
+      // Card change
+      if((sub.cardId||null)!==(cardId||null)){
+        await apiSubAction(sub.id,'change_card',{cardId:cardId});
+      }
+      // Coupon change
+      const oldCoupon=sub.couponCode||'';
+      if(couponCode&&couponCode!==oldCoupon){
+        await apiSubAction(sub.id,'apply_coupon',{couponCode:couponCode,recurring:couponRecurring});
+      }else if(!couponCode&&oldCoupon){
+        await apiSubAction(sub.id,'remove_coupon',{});
+      }else if(couponCode&&sub.couponRecurring!==couponRecurring){
+        await apiSubAction(sub.id,'apply_coupon',{couponCode:couponCode,recurring:couponRecurring});
+      }
+      // Discount change
+      const oldType=sub.manualDiscountType||null;
+      if(dt&&(dt!==oldType||dv!==parseFloat(sub.manualDiscountValue||0)||dn!==(sub.manualDiscountNote||'')||dr!==(sub.manualDiscountRecurring!==false))){
+        await apiSubAction(sub.id,'apply_discount',{discountType:dt,discountValue:dv,discountNote:dn,recurring:dr});
+      }else if(!dt&&oldType){
+        await apiSubAction(sub.id,'remove_discount',{});
+      }
+      // Notes
+      if((sub.notes||'')!==notes){
+        await apiSubAction(sub.id,'edit',{notes:notes});
+      }
+      toast('Subscription updated.','success');
+    }catch(e){toast(e.message,'error');return;}
+  }else{
+    // Create mode
+    const startDate=document.getElementById('sf-start').value;
+    const billingCycle=document.getElementById('sf-cycle').value;
+    if(!startDate){toast('Start date is required.','error');return;}
+    if(!billingCycle){toast('Billing cycle is required.','error');return;}
+
+    let payload={
+      contactId:contactId,billingCycle:billingCycle,startDate:startDate,
+      ownerUserId:ownerUserId,cardId:cardId,notes:notes,
+      manualDiscountType:dt,manualDiscountValue:dt?dv:null,
+      manualDiscountNote:dn,manualDiscountRecurring:dr
+    };
+    if(couponCode){
+      payload.couponCode=couponCode;
+      payload.couponRecurring=couponRecurring;
+    }
+
+    if(_subEditMode==='catalog'){
+      const planEl=document.getElementById('sf-plan');
+      if(!planEl||!planEl.value){toast('Plan is required.','error');return;}
+      payload.planId=planEl.value;
+    }else{
+      // Custom mode
+      const customName=(document.getElementById('sf-custom-name').value||'').trim();
+      const customPrice=parseFloat(document.getElementById('sf-custom-price').value);
+      // Sync items from DOM before submit
+      _subEditItems.forEach(function(_,i){_syncSubItem(i);});
+      if(!customName){toast('Plan name is required.','error');return;}
+      if(isNaN(customPrice)||customPrice<=0){toast('Price must be greater than 0.','error');return;}
+      const items=_subEditItems.filter(function(it){return it.name&&it.name.trim();});
+      if(!items.length){toast('At least one item is required.','error');return;}
+      payload.customPlanName=customName;
+      payload.customCyclePrice=customPrice;
+      payload.items=items;
+    }
+
+    try{await apiSubCreate(payload);toast('Subscription created.','success');}
+    catch(e){toast(e.message,'error');return;}
+  }
+
+  closeModal();
+  await fetchFromServer();
+  renderSubscriptions();
+  if(state.drawer)renderDrawer();
 }
 
-function saveSub(){
-  const name=document.getElementById('sf-name').value.trim();
-  const start=document.getElementById('sf-start').value;
-  if(!name||!start){toast('Plan name and start date required.','error');return}
-  syncSubItemsFromDOM();
-  const cycle=document.getElementById('sf-cycle').value;
-  const data={
-    planName:name,
-    contactId:document.getElementById('sf-cv').value||null,
-    billingCycle:cycle,
-    startDate:start,
-    nextDueDate:calcNextDueDate(start,cycle),
-    paymentStatus:document.getElementById('sf-pay').value,
-    status:(state.modal.id?getSub(state.modal.id).status:'active'),
-    items:[...editSubItems],
-    squarePlanId:(document.getElementById('sf-sq-plan')&&document.getElementById('sf-sq-plan').value||'').trim(),
-    squareSubscriptionId:(document.getElementById('sf-sq-sub')&&document.getElementById('sf-sq-sub').value||'').trim(),
-    notes:(document.getElementById('sf-notes')&&document.getElementById('sf-notes').value||'').trim(),
-    updatedAt:now_()
-  };
-  if(state.modal.id){const s=getSub(state.modal.id);if(s)Object.assign(s,data)}
-  else db.subscriptions.push({id:'sub-'+uid(),...data,createdAt:now_()});
-  saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();
-  toast(state.modal.id?'Subscription updated.':'Subscription created.','success');
-}
-
+// =====================================================
+// Lifecycle actions
+// =====================================================
 function pauseSub(id){
+  if(!canManageSubscriptions()){toast('Permission denied.','error');return;}
   openModal('Pause Subscription',
-    '<p style="color:var(--text-muted)">Pause this subscription? The customer will not be billed on the next due date. You can restart it at any time.</p>',
-    '<button class="btn btn-ghost" onclick="closeModal()">Keep Active</button><button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border);padding:9px 16px;border-radius:var(--radius);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:600;cursor:pointer" onclick="confirmPauseSub(\''+id+'\')">Pause</button>');
+    '<p style="color:var(--text-muted)">Pause this subscription? The customer will not be billed on the next due date. You can resume it at any time.</p>'
+    +'<div class="form-group" style="margin-top:12px"><label>Reason (optional)</label><input id="pause-reason" type="text" placeholder="e.g. Customer on vacation"></div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Keep Active</button><button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border);padding:9px 16px;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer" onclick="_doPauseSub(\''+id+'\')">Pause</button>');
 }
-function confirmPauseSub(id){const s=getSub(id);if(!s)return;s.status='paused';s.updatedAt=now_();saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();toast('Subscription paused.','warn')}
-
-function cancelSub(id){
-  const s=getSub(id);if(!s)return;
-  const c=s.contactId?getContact(s.contactId):null;
-  openModal('Cancel Subscription',
-    '<p style="color:var(--text-muted)">Cancel the subscription <strong style="color:var(--text)">'+esc(s.planName||'this subscription')+'</strong>'+(c?' for '+esc(c.name):'')+'? This cannot be undone. The record will remain for your history.</p>',
-    '<button class="btn btn-ghost" onclick="closeModal()">Keep It</button><button class="btn btn-danger" onclick="confirmCancelSub(\''+id+'\')">Cancel Subscription</button>');
+async function _doPauseSub(id){
+  const reason=(document.getElementById('pause-reason')&&document.getElementById('pause-reason').value||'').trim();
+  try{await apiSubAction(id,'pause',reason?{reason:reason}:{});}
+  catch(e){toast(e.message,'error');return;}
+  closeModal();await fetchFromServer();renderSubscriptions();
+  if(state.drawer)renderDrawer();
+  toast('Subscription paused.','warn');
 }
-function confirmCancelSub(id){const s=getSub(id);if(!s)return;s.status='cancelled';s.updatedAt=now_();saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();toast('Subscription cancelled.','success')}
 
 function restartSub(id){
+  if(!canManageSubscriptions()){toast('Permission denied.','error');return;}
   const s=getSub(id);if(!s)return;
-  openModal('Restart Subscription',
-    '<p style="color:var(--text-muted)">Restart this subscription? It will become active again and billing will resume on the next cycle.</p>',
-    '<button class="btn btn-ghost" onclick="closeModal()">Nevermind</button><button class="btn btn-purple" onclick="confirmRestartSub(\''+id+'\')">Restart</button>');
+  const wasSuspended=s.status==='suspended';
+  openModal('Resume Subscription',
+    '<p style="color:var(--text-muted)">Resume this subscription? '+(wasSuspended?'This will clear the suspension flags. The next charge will retry on the existing due date.':'Billing will resume on the next due date.')+'</p>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Nevermind</button><button class="btn btn-purple" onclick="_doResumeSub(\''+id+'\')">Resume</button>');
 }
-function confirmRestartSub(id){
+async function _doResumeSub(id){
+  try{await apiSubAction(id,'resume',{});}
+  catch(e){toast(e.message,'error');return;}
+  closeModal();await fetchFromServer();renderSubscriptions();
+  if(state.drawer)renderDrawer();
+  toast('Subscription resumed.','success');
+}
+
+function cancelSub(id){
+  if(!canManageSubscriptions()){toast('Permission denied.','error');return;}
   const s=getSub(id);if(!s)return;
-  s.status='active';
-  s.nextDueDate=calcNextDueDate(todayStr(),s.billingCycle||'monthly');
-  s.updatedAt=now_();
-  saveData();closeModal();renderSubscriptions();if(state.drawer)renderDrawer();toast('Subscription restarted.','success');
+  const c=s.contactId?getContact(s.contactId):null;
+  const reasonOpts=CANCELLATION_REASONS.map(function(r){return '<option value="'+esc(r)+'">'+esc(r)+'</option>';}).join('');
+  openModal('Cancel Subscription',
+    '<p style="color:var(--text-muted)">Cancel the subscription <strong style="color:var(--text)">'+esc(s.planName||'this subscription')+'</strong>'+(c?' for '+esc(c.name):'')+'? The record stays in your history.</p>'
+    +'<div class="form-group" style="margin-top:12px"><label>Cancellation Reason *</label><select id="cancel-reason" onchange="_cancelReasonChange()"><option value="">Select a reason...</option>'+reasonOpts+'</select></div>'
+    +'<div class="form-group hidden" id="cancel-reason-other-wrap"><label>Please describe</label><input id="cancel-reason-other" type="text"></div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Keep It</button><button class="btn btn-danger" onclick="_doCancelSub(\''+id+'\')">Cancel Subscription</button>');
 }
+function _cancelReasonChange(){
+  const v=document.getElementById('cancel-reason').value;
+  const wrap=document.getElementById('cancel-reason-other-wrap');
+  if(wrap)wrap.classList.toggle('hidden',v!=='Other');
+}
+async function _doCancelSub(id){
+  let reason=document.getElementById('cancel-reason').value;
+  if(!reason){toast('Please select a cancellation reason.','error');return;}
+  if(reason==='Other'){
+    const o=(document.getElementById('cancel-reason-other').value||'').trim();
+    if(!o){toast('Please describe the reason.','error');return;}
+    reason='Other: '+o;
+  }
+  try{await apiSubAction(id,'cancel',{reason:reason});}
+  catch(e){toast(e.message,'error');return;}
+  closeModal();await fetchFromServer();renderSubscriptions();
+  if(state.drawer)renderDrawer();
+  toast('Subscription cancelled.','success');
+}
+
+function deleteSub(id){
+  if(!canDeleteSubscription()){toast('Only admins can hard-delete subscriptions.','error');return;}
+  const s=getSub(id);if(!s)return;
+  openModal('Hard Delete Subscription',
+    '<p style="color:#f87171"><strong>This permanently deletes the subscription and all its history.</strong> Use Cancel instead unless you created this by mistake.</p>'
+    +'<p style="color:var(--text-muted);font-size:12px;margin-top:8px">A snapshot is recorded in the audit log before deletion.</p>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Nevermind</button><button class="btn btn-danger" onclick="_doDeleteSub(\''+id+'\')">Hard Delete</button>');
+}
+async function _doDeleteSub(id){
+  try{await apiSubDelete(id);}
+  catch(e){toast(e.message,'error');return;}
+  closeModal();await fetchFromServer();renderSubscriptions();
+  if(state.drawer)renderDrawer();
+  toast('Subscription deleted.','success');
+}
+
+// =====================================================
+// Plans catalog modal
+// =====================================================
+function openSubPlansModal(){
+  if(!canManagePlans()){toast('Only admins can manage plans.','error');return;}
+  _renderSubPlansModalBody();
+}
+
+function _renderSubPlansModalBody(){
+  const plans=db.subscriptionPlans||[];
+  const active=plans.filter(function(p){return p.active;});
+  const inactive=plans.filter(function(p){return !p.active;});
+
+  function planRow(p){
+    const cycleSummary=SUB_CYCLES.filter(function(cy){return p.pricing&&p.pricing[cy]&&p.pricing[cy].enabled;}).map(function(cy){return cy[0].toUpperCase()+cy.slice(1)+' '+fmt$(p.pricing[cy].price);}).join(' \u00b7 ');
+    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid '+(p.active?'#34d399':'var(--text-dim)')+';border-radius:var(--radius);padding:12px 14px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700">'+esc(p.name)+(p.active?'':' <span style="font-size:10px;color:var(--text-muted);font-weight:400">(inactive)</span>')+'</div>'
+      +(p.description?'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+esc(p.description)+'</div>':'')
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">'+(p.items||[]).length+' item'+((p.items||[]).length===1?'':'s')+(cycleSummary?' \u00b7 '+cycleSummary:'')+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:5px;flex-shrink:0">'
+      +'<button class="btn btn-ghost btn-sm" onclick="openPlanEditModal(\''+p.id+'\')">Edit</button>'
+      +'<button class="btn btn-sm" style="background:'+(p.active?'var(--orange-dim)':'rgba(52,211,153,.15)')+';color:'+(p.active?'var(--orange)':'#34d399')+';border:1px solid '+(p.active?'var(--orange-border)':'rgba(52,211,153,.3)')+'" onclick="togglePlanActive(\''+p.id+'\','+(!p.active)+')">'+(p.active?'Deactivate':'Activate')+'</button>'
+      +'<button class="btn btn-danger btn-sm" onclick="deletePlan(\''+p.id+'\')">Delete</button>'
+      +'</div>'
+      +'</div></div>';
+  }
+
+  let body='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:13px;color:var(--text-muted)">'+plans.length+' plan'+(plans.length===1?'':'s')+'</div><button class="btn btn-primary btn-sm" onclick="openPlanEditModal(null)">+ New Plan</button></div>';
+  if(!plans.length){
+    body+='<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px">No plans yet. Click <strong>+ New Plan</strong> to create your first one.</div>';
+  }else{
+    if(active.length){
+      body+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#34d399;margin:14px 0 6px">Active <span style="font-size:10px;color:var(--text-muted);font-weight:400">('+active.length+')</span></div>';
+      body+=active.map(planRow).join('');
+    }
+    if(inactive.length){
+      body+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin:14px 0 6px">Inactive <span style="font-size:10px;font-weight:400">('+inactive.length+')</span></div>';
+      body+=inactive.map(planRow).join('');
+    }
+  }
+  state.modal={type:'subPlans'};
+  openModal('Subscription Plans',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>','modal-lg');
+}
+
+let _planEditItems=[];
+let _planEditPricing={weekly:{enabled:false,price:0},monthly:{enabled:true,price:0},quarterly:{enabled:false,price:0},annual:{enabled:false,price:0}};
+
+function openPlanEditModal(id){
+  if(!canManagePlans()){toast('Permission denied.','error');return;}
+  const p=id?getPlan(id):null;
+  _planEditItems=p?JSON.parse(JSON.stringify(p.items||[])):[];
+  if(p&&p.pricing){
+    _planEditPricing={};
+    SUB_CYCLES.forEach(function(cy){
+      const x=p.pricing[cy]||{};
+      _planEditPricing[cy]={enabled:!!x.enabled,price:parseFloat(x.price)||0};
+    });
+  }else{
+    _planEditPricing={weekly:{enabled:false,price:0},monthly:{enabled:true,price:0},quarterly:{enabled:false,price:0},annual:{enabled:false,price:0}};
+  }
+  state.modal={type:'planEdit',id:id||null};
+  _renderPlanEditModalBody(p);
+}
+
+function _renderPlanEditModalBody(p){
+  const isEdit=!!p;
+  const pricingRows=SUB_CYCLES.map(function(cy){
+    const cfg=_planEditPricing[cy]||{enabled:false,price:0};
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
+      +'<input type="checkbox" id="pp-en-'+cy+'" '+(cfg.enabled?'checked':'')+' onchange="_togglePlanCycle(\''+cy+'\')" style="width:16px;height:16px">'
+      +'<label for="pp-en-'+cy+'" style="flex:1;font-weight:600;font-size:13px;cursor:pointer">'+(cy[0].toUpperCase()+cy.slice(1))+'</label>'
+      +'<div style="display:flex;align-items:center;gap:5px"><span style="color:var(--text-muted)">$</span><input type="number" id="pp-pr-'+cy+'" min="0" step="0.01" value="'+(cfg.price||'')+'" '+(cfg.enabled?'':'disabled')+' placeholder="0.00" onchange="_updatePlanPrice(\''+cy+'\')" style="width:120px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:6px 10px;font-size:13px;outline:none"></div>'
+      +'</div>';
+  }).join('');
+
+  const body='<div class="form-row">'
+    +'<div class="form-group"><label>Plan Name *</label><input id="pe-name" type="text" value="'+esc(p&&p.name||'')+'" placeholder="e.g. SEO Retainer"></div>'
+    +'<div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:18px"><input type="checkbox" id="pe-active" '+(p&&!p.active?'':'checked')+' style="width:16px;height:16px"><label for="pe-active" style="font-size:13px;cursor:pointer">Active (selectable for new subscriptions)</label></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Description</label><textarea id="pe-desc" rows="2" placeholder="What does this plan include?">'+esc(p&&p.description||'')+'</textarea></div>'
+    +'<div class="form-group"><label style="display:flex;justify-content:space-between;align-items:center"><span>Items *</span><button type="button" class="btn btn-purple btn-sm" onclick="_addPlanItem()">+ Add Item</button></label>'
+    +'<div id="pe-items">'+_renderPlanItems()+'</div>'
+    +'</div>'
+    +'<div class="form-group"><label>Pricing per Cycle * <span style="font-weight:400;color:var(--text-muted)">(at least one required)</span></label>'
+    +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px">'+pricingRows+'</div>'
+    +'</div>'
+    +'<div class="form-group"><label>Internal Notes</label><textarea id="pe-notes" rows="2">'+esc(p&&p.notes||'')+'</textarea></div>';
+
+  openModal(isEdit?'Edit Plan':'New Plan',body,
+    '<button class="btn btn-ghost" onclick="_backToSubPlansModal()">Back</button><button class="btn btn-primary" onclick="savePlan()">'+(isEdit?'Save Changes':'Create Plan')+'</button>',
+    'modal-lg');
+}
+
+function _renderPlanItems(){
+  if(!_planEditItems.length){
+    return '<div style="font-size:13px;color:var(--text-muted);padding:12px 0;text-align:center;border:1px dashed var(--border);border-radius:var(--radius)">No items yet.</div>';
+  }
+  return _planEditItems.map(function(it,i){
+    return '<div style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px">'
+      +'<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Name</div>'
+      +'<input type="text" id="pi-name-'+i+'" value="'+esc(it.name||'')+'" onchange="_syncPlanItem('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none">'
+      +'</div>'
+      +'<div style="flex:2"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Description</div>'
+      +'<input type="text" id="pi-desc-'+i+'" value="'+esc(it.description||'')+'" onchange="_syncPlanItem('+i+')" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-size:13px;outline:none">'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;padding-top:18px;gap:5px"><input type="checkbox" id="pi-tax-'+i+'"'+(it.taxable!==false?' checked':'')+' onchange="_syncPlanItem('+i+')"><label for="pi-tax-'+i+'" style="font-size:11px;color:var(--text-muted);margin:0">Taxable</label></div>'
+      +'<div style="padding-top:18px"><button class="icon-btn-xs" onclick="_rmPlanItem('+i+')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+      +'</div>';
+  }).join('');
+}
+
+function _addPlanItem(){
+  _planEditItems.push({id:'pi-'+uid(),name:'',description:'',taxable:true});
+  const el=document.getElementById('pe-items');if(el)el.innerHTML=_renderPlanItems();
+}
+function _rmPlanItem(i){
+  _planEditItems.splice(i,1);
+  const el=document.getElementById('pe-items');if(el)el.innerHTML=_renderPlanItems();
+}
+function _syncPlanItem(i){
+  const it=_planEditItems[i];if(!it)return;
+  const n=document.getElementById('pi-name-'+i);if(n)it.name=n.value.trim();
+  const d=document.getElementById('pi-desc-'+i);if(d)it.description=d.value.trim();
+  const t=document.getElementById('pi-tax-'+i);if(t)it.taxable=t.checked;
+}
+function _togglePlanCycle(cy){
+  const en=document.getElementById('pp-en-'+cy);if(!en)return;
+  _planEditPricing[cy].enabled=en.checked;
+  const pr=document.getElementById('pp-pr-'+cy);if(pr)pr.disabled=!en.checked;
+}
+function _updatePlanPrice(cy){
+  const pr=document.getElementById('pp-pr-'+cy);if(!pr)return;
+  _planEditPricing[cy].price=parseFloat(pr.value)||0;
+}
+function _backToSubPlansModal(){
+  // Close edit modal and re-open list
+  closeModal();
+  setTimeout(openSubPlansModal,50);
+}
+
+async function savePlan(){
+  if(!canManagePlans()){toast('Permission denied.','error');return;}
+  const isEdit=!!(state.modal&&state.modal.id);
+  const name=(document.getElementById('pe-name').value||'').trim();
+  const description=(document.getElementById('pe-desc').value||'').trim();
+  const notes=(document.getElementById('pe-notes').value||'').trim();
+  const active=document.getElementById('pe-active').checked;
+
+  if(!name){toast('Plan name is required.','error');return;}
+
+  // Sync items from DOM
+  _planEditItems.forEach(function(_,i){_syncPlanItem(i);});
+  const items=_planEditItems.filter(function(it){return it.name&&it.name.trim();});
+  if(!items.length){toast('At least one item is required.','error');return;}
+
+  // Sync pricing from DOM
+  SUB_CYCLES.forEach(function(cy){
+    _updatePlanPrice(cy);
+  });
+  const enabledCount=SUB_CYCLES.filter(function(cy){return _planEditPricing[cy].enabled&&_planEditPricing[cy].price>0;}).length;
+  if(!enabledCount){toast('Enable at least one cycle with a price > 0.','error');return;}
+
+  const payload={name:name,description:description,notes:notes,active:active,items:items,pricing:_planEditPricing};
+
+  try{
+    if(isEdit){
+      payload.id=state.modal.id;
+      await apiPlanUpdate(payload);
+    }else{
+      await apiPlanCreate(payload);
+    }
+  }catch(e){toast(e.message,'error');return;}
+
+  await fetchFromServer();
+  closeModal();
+  setTimeout(openSubPlansModal,50);
+  toast('Plan '+(isEdit?'updated':'created')+'.','success');
+}
+
+async function togglePlanActive(id,newActive){
+  if(!canManagePlans()){toast('Permission denied.','error');return;}
+  try{await apiPlanUpdate({id:id,active:newActive});}
+  catch(e){toast(e.message,'error');return;}
+  await fetchFromServer();
+  _renderSubPlansModalBody();
+  toast('Plan '+(newActive?'activated':'deactivated')+'.','success');
+}
+
+function deletePlan(id){
+  if(!canManagePlans()){toast('Permission denied.','error');return;}
+  const p=getPlan(id);if(!p)return;
+  openModal('Delete Plan',
+    '<p style="color:#f87171"><strong>Permanently delete plan "'+esc(p.name)+'"?</strong></p>'
+    +'<p style="color:var(--text-muted);font-size:12px;margin-top:8px">If any subscriptions reference this plan, delete will fail. Deactivate instead to keep existing subscribers but prevent new use.</p>',
+    '<button class="btn btn-ghost" onclick="closeModal();setTimeout(openSubPlansModal,50)">Nevermind</button><button class="btn btn-danger" onclick="_doDeletePlan(\''+id+'\')">Delete</button>');
+}
+async function _doDeletePlan(id){
+  try{await apiPlanDelete(id);}
+  catch(e){
+    toast(e.message,'error');
+    if(e.subscription_count){
+      // Stay on the list, user can deactivate instead
+      closeModal();setTimeout(openSubPlansModal,50);
+    }
+    return;
+  }
+  await fetchFromServer();
+  closeModal();
+  setTimeout(openSubPlansModal,50);
+  toast('Plan deleted.','success');
+}
+
 
 // =====================================================
 // CALENDAR TABS
