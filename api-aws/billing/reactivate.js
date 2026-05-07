@@ -9,6 +9,10 @@
 //   - Otherwise: charge immediately for one billing cycle
 //
 // MIGRATED: Supabase REST → lib/db.js for plan, subaccount, invoice queries.
+//
+// CHANGED 2026-05-07: TZ-aware. "Today" and "next billing date" are computed
+// in the subaccount's timezone, so the graceful-reactivation period check
+// doesn't lose a day at the UTC boundary.
 
 const db = require('./lib/db');
 const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('./lib/agency-billing');
@@ -17,16 +21,7 @@ const { sendEmail } = require('./lib/billing-emails');
 const { logAudit } = require('./lib/audit');
 const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
-
-function calcNextBillingDate(billingPeriod) {
-  const d = new Date();
-  if (billingPeriod === 'annual') {
-    d.setFullYear(d.getFullYear() + 1);
-  } else {
-    d.setMonth(d.getMonth() + 1);
-  }
-  return d.toISOString().split('T')[0];
-}
+const { todayInTz, nextBillingDateInTz, getSubTimezone } = require('./lib/timezone');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
@@ -44,7 +39,6 @@ async function handler(req, res) {
   };
 
   try {
-    // Load current plan
     let plan;
     try {
       plan = await db.findOne('subaccount_plans', { subaccount_id: subaccountId });
@@ -67,12 +61,10 @@ async function handler(req, res) {
       return sendError(res, 400, 'Account status is "' + plan.status + '". Only suspended, cancelled, or past_due accounts can be reactivated.');
     }
 
+    const subTz = await getSubTimezone(subaccountId, db);
     const now = new Date().toISOString();
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayInTz(subTz);
 
-    // ─────────────────────────────────────────────────────
-    // GRACEFUL REACTIVATION (cancelled, period still active)
-    // ─────────────────────────────────────────────────────
     const periodStillActive = plan.next_billing_date && plan.next_billing_date > today;
 
     if (plan.status === 'cancelled' && periodStillActive) {
@@ -131,9 +123,6 @@ async function handler(req, res) {
       });
     }
 
-    // ─────────────────────────────────────────────────────
-    // CHARGED REACTIVATION
-    // ─────────────────────────────────────────────────────
     if (!plan.square_customer_id || !plan.square_card_id) {
       await logAudit({
         req, ...actor,
@@ -165,7 +154,7 @@ async function handler(req, res) {
       idempotencyKey
     );
 
-    const nextDate = calcNextBillingDate(plan.billing_period);
+    const nextDate = nextBillingDateInTz(plan.billing_period, subTz);
 
     await db.insertOne('subaccount_invoices', {
       subaccount_id: subaccountId,

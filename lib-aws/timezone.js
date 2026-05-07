@@ -124,6 +124,26 @@ function apptTimestampInTz(dateStr, timeStr, tz) {
   return new Date(guessUtc + offsetMs);
 }
 
+// Add N months to today's date in the given TZ. Returns YYYY-MM-DD.
+// Mirrors JS Date semantics for end-of-month: Jan 31 + 1 month = March 3,
+// matching the existing billing logic so renewals stay consistent.
+function addMonthsInTz(months, tz) {
+  const today = todayInTz(tz);
+  const [y, mo, d] = today.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  dt.setUTCMonth(dt.getUTCMonth() + months);
+  return dt.toISOString().slice(0, 10);
+}
+
+// Calculate the next billing date for a billing period (monthly | annual).
+// "Today" is interpreted in the given TZ. Returns YYYY-MM-DD.
+function nextBillingDateInTz(billingPeriod, tz) {
+  if (billingPeriod === 'annual') {
+    return addMonthsInTz(12, tz);
+  }
+  return addMonthsInTz(1, tz);
+}
+
 module.exports = {
   DEFAULT_TZ,
   getSubTimezone,
@@ -132,5 +152,7 @@ module.exports = {
   isPastOrTodayInTz,
   nowMinutesInTz,
   dateInTzPlusDays,
-  apptTimestampInTz
+  apptTimestampInTz,
+  addMonthsInTz,
+  nextBillingDateInTz
 };

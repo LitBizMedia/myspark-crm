@@ -10,8 +10,13 @@
 // the next period's row on first use of the new period.
 //
 // MIGRATED: from Supabase REST fetch to direct pg via lib/db.js.
+//
+// CHANGED 2026-05-07: TZ-aware. Month-bounds and "today" are computed in the
+// subaccount's timezone, so a usage period boundary at midnight Eastern
+// doesn't trigger the rollover hours early at midnight UTC.
 
 const db = require('./db');
+const { todayInTz, getSubTimezone, DEFAULT_TZ } = require('./timezone');
 
 const PLAN_LIMITS = {
   starter: {
@@ -47,21 +52,25 @@ function getPlanLimits(planTier) {
   return PLAN_LIMITS[tier];
 }
 
-function currentMonthBounds() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+// Return the first and last day of the current calendar month, anchored to
+// the given timezone. Both as YYYY-MM-DD strings.
+function currentMonthBoundsInTz(tz) {
+  const today = todayInTz(tz || DEFAULT_TZ);
+  const [y, m] = today.split('-').map(Number);
+  // Last day of the month: day 0 of the next month.
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const pad = (n) => String(n).padStart(2, '0');
   return {
-    period_start: start.toISOString().split('T')[0],
-    period_end:   end.toISOString().split('T')[0]
+    period_start: `${y}-${pad(m)}-01`,
+    period_end:   `${y}-${pad(m)}-${pad(lastDay)}`
   };
 }
 
 // Load (or create) the current period's usage row for a subaccount.
 async function loadOrCreateUsageRow(subaccountId) {
-  const today = new Date().toISOString().split('T')[0];
+  const tz = await getSubTimezone(subaccountId, db);
+  const today = todayInTz(tz);
 
-  // Find the row whose period covers today
   const findResult = await db.query(
     `SELECT * FROM subaccount_usage
      WHERE subaccount_id = $1
@@ -74,8 +83,7 @@ async function loadOrCreateUsageRow(subaccountId) {
     return findResult.rows[0];
   }
 
-  // No active row, create one for current calendar month
-  const bounds = currentMonthBounds();
+  const bounds = currentMonthBoundsInTz(tz);
   try {
     const created = await db.insertOne('subaccount_usage', {
       subaccount_id: subaccountId,
@@ -92,7 +100,6 @@ async function loadOrCreateUsageRow(subaccountId) {
   throw new Error('Could not load or create usage row');
 }
 
-// Look up the subaccount's current plan to know which limits apply.
 async function loadPlanTier(subaccountId) {
   try {
     const row = await db.findOne('subaccount_plans',
@@ -110,7 +117,6 @@ async function loadPlanTier(subaccountId) {
   }
 }
 
-// Main entry point. Called by send endpoints before they actually send.
 async function checkAndIncrementUsage(slug, kind) {
   if (!slug) return { ok: false, error: 'slug required', code: 'MISSING_SLUG' };
   if (kind !== 'email' && kind !== 'sms') {
@@ -121,7 +127,6 @@ async function checkAndIncrementUsage(slug, kind) {
 
   const planInfo = await loadPlanTier(subaccountId);
 
-  // Exempt subaccounts bypass limits but still increment counter.
   if (planInfo.exempt) {
     await incrementUsageOnly(subaccountId, kind);
     return { ok: true, current: null, limit: null, exempt: true };
@@ -158,7 +163,6 @@ async function checkAndIncrementUsage(slug, kind) {
     };
   }
 
-  // Increment the counter
   const newCount = currentCount + 1;
   try {
     await db.update('subaccount_usage',
@@ -169,7 +173,6 @@ async function checkAndIncrementUsage(slug, kind) {
       { id: row.id }
     );
   } catch (e) {
-    // Increment failed but we already validated the send is allowed.
     console.error('plan-limits: increment failed for ' + subaccountId + ':', e.message);
   }
 
@@ -182,7 +185,6 @@ async function checkAndIncrementUsage(slug, kind) {
   };
 }
 
-// Helper for exempt subaccounts: increment without limit checking.
 async function incrementUsageOnly(subaccountId, kind) {
   try {
     const row = await loadOrCreateUsageRow(subaccountId);

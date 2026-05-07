@@ -5,6 +5,12 @@
 // AWS schedule: EventBridge → cron(0 9 * * ? *)
 //
 // CREDENTIALS: CRON_SECRET (HTTP testing path) from Secrets Manager.
+//
+// CHANGED 2026-05-07: TZ-aware. The "due today" filter now compares
+// next_billing_date against today in EACH subaccount's own timezone, so a
+// sub due May 8 in Eastern doesn't get charged at midnight UTC May 8 (which
+// is 8pm Eastern May 7, a day early). Same fix for retry-tomorrow, trial
+// reminders, and cancelled-account deactivation.
 
 const db = require('./lib/db');
 const secrets = require('./lib/secrets');
@@ -13,6 +19,9 @@ const { sendEmail } = require('./lib/billing-emails');
 const { logAudit } = require('./lib/audit');
 const { deleteSubaccount } = require('./lib/subaccount-lifecycle');
 const { wrap } = require('./lib/lambda-adapter');
+const {
+  todayInTz, nextBillingDateInTz, dateInTzPlusDays, getSubTimezone, DEFAULT_TZ
+} = require('./lib/timezone');
 
 const MAX_RETRIES        = 3;
 const SUSPEND_AFTER_DAYS = 7;
@@ -41,21 +50,12 @@ async function getAdminEmail(subaccountId) {
   }
 }
 
-function calcNextBillingDate(billingPeriod) {
-  const d = new Date();
-  if (billingPeriod === 'annual') {
-    d.setFullYear(d.getFullYear() + 1);
-  } else {
-    d.setMonth(d.getMonth() + 1);
-  }
-  return d.toISOString().split('T')[0];
-}
-
-function tomorrowDate() {
-  return new Date(Date.now() + 86400000).toISOString().split('T')[0];
-}
-
 async function processBilling(req, sub, summary) {
+  // Look up THIS subaccount's TZ for date math.
+  const tz = await getSubTimezone(sub.subaccount_id, db);
+  const todayLocal = todayInTz(tz);
+  const tomorrowLocal = dateInTzPlusDays(1, tz);
+
   const amountCents = calculateCharge(
     sub.plan_tier,
     sub.billing_period,
@@ -75,7 +75,7 @@ async function processBilling(req, sub, summary) {
     idempotencyKey
   );
 
-  const nextDate = calcNextBillingDate(sub.billing_period);
+  const nextDate = nextBillingDateInTz(sub.billing_period, tz);
 
   await db.insertOne('subaccount_invoices', {
     subaccount_id: sub.subaccount_id,
@@ -85,7 +85,7 @@ async function processBilling(req, sub, summary) {
     status: result.success ? 'succeeded' : 'failed',
     failure_reason: result.success ? null : result.error,
     retry_attempt: retryNum,
-    billing_period_start: new Date().toISOString().split('T')[0],
+    billing_period_start: todayLocal,
     billing_period_end: nextDate,
     succeeded_at: result.success ? new Date().toISOString() : null,
     failed_at: result.success ? null : new Date().toISOString()
@@ -166,7 +166,7 @@ async function processBilling(req, sub, summary) {
         last_charge_attempt_at: new Date().toISOString(),
         last_charge_status: 'failed',
         retry_count: newRetryCount,
-        next_billing_date: tomorrowDate()
+        next_billing_date: tomorrowLocal
       });
       if (adminEmail) await sendEmail(adminEmail, 'past_due', { subName, dollars, retryCount: newRetryCount });
 
@@ -189,14 +189,14 @@ async function processBilling(req, sub, summary) {
         last_charge_attempt_at: new Date().toISOString(),
         last_charge_status: 'failed',
         retry_count: newRetryCount,
-        next_billing_date: tomorrowDate()
+        next_billing_date: tomorrowLocal
       });
       if (adminEmail) {
         await sendEmail(adminEmail, 'payment_failed', {
           subName, dollars,
           retryCount: newRetryCount,
           maxRetries: MAX_RETRIES,
-          nextRetryDate: tomorrowDate()
+          nextRetryDate: tomorrowLocal
         });
       }
       await logAudit({
@@ -210,7 +210,7 @@ async function processBilling(req, sub, summary) {
         metadata: {
           retry_count: newRetryCount,
           attempted_amount_cents: amountCents,
-          next_retry_date: tomorrowDate()
+          next_retry_date: tomorrowLocal
         }
       });
     }
@@ -218,7 +218,6 @@ async function processBilling(req, sub, summary) {
 }
 
 async function processCancelledAccounts(req, summary) {
-  const today = new Date().toISOString().split('T')[0];
   const cutoffDate = new Date(Date.now() - 30 * 86400000).toISOString();
 
   let cancelled = [];
@@ -230,6 +229,8 @@ async function processCancelledAccounts(req, summary) {
 
   for (const sub of cancelled) {
     try {
+      // Deletion cutoff: 30 days since cancel timestamp. canceled_at is a
+      // TIMESTAMPTZ so UTC comparison is correct here (both UTC).
       if (sub.canceled_at && sub.canceled_at <= cutoffDate) {
         console.log('run-billing: auto-deleting cancelled subaccount ' + sub.subaccount_id);
         const delResult = await deleteSubaccount(sub.subaccount_id, {
@@ -249,7 +250,11 @@ async function processCancelledAccounts(req, summary) {
         }
         continue;
       }
-      if (sub.next_billing_date && sub.next_billing_date <= today) {
+      // Period-ended deactivation: compare next_billing_date against today
+      // in THIS sub's timezone, not UTC.
+      const subTz = await getSubTimezone(sub.subaccount_id, db);
+      const todayLocal = todayInTz(subTz);
+      if (sub.next_billing_date && sub.next_billing_date <= todayLocal) {
         await db.update('subaccounts', { active: false }, { id: sub.subaccount_id });
         console.log('run-billing: deactivated cancelled subaccount ' + sub.subaccount_id);
         await logAudit({
@@ -271,17 +276,17 @@ async function processCancelledAccounts(req, summary) {
 }
 
 async function sendTrialReminders(req) {
+  // Trial reminder window: 2-3 days from now. Ranges expressed against
+  // each subaccount's TZ via SQL JOIN to the blob timezone.
   try {
-    const threeDaysFromNow = new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0];
-    const twoDaysFromNow   = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
-    
     const dueSubsResult = await db.query(
-      `SELECT * FROM subaccount_plans
-       WHERE status = 'trialing'
-         AND trial_ends_at >= $1
-         AND trial_ends_at <= $2
-         AND exempt_from_billing = false`,
-      [twoDaysFromNow, threeDaysFromNow]
+      `SELECT sp.* FROM subaccount_plans sp
+       LEFT JOIN subaccount_data sd ON sd.subaccount_id = sp.subaccount_id
+       WHERE sp.status = 'trialing'
+         AND sp.exempt_from_billing = false
+         AND sp.trial_ends_at::date >= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date + INTERVAL '2 days')
+         AND sp.trial_ends_at::date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date + INTERVAL '3 days')`,
+      [DEFAULT_TZ]
     );
     const dueSubs = dueSubsResult.rows;
 
@@ -302,7 +307,7 @@ async function sendTrialReminders(req) {
           sub.discount_percent || 0
         );
         const dollars     = (amountCents / 100).toFixed(2);
-        const trialEndDate = sub.trial_ends_at ? sub.trial_ends_at.split('T')[0] : 'soon';
+        const trialEndDate = sub.trial_ends_at ? sub.trial_ends_at.toISOString().slice(0, 10) : 'soon';
 
         await sendEmail(adminEmail, 'trial_ending_soon', { subName, trialEndDate, dollars });
         console.log('trial-reminder sent to ' + adminEmail + ' for ' + sub.subaccount_id);
@@ -329,20 +334,23 @@ async function sendTrialReminders(req) {
 }
 
 async function runBilling(req) {
-  const today = new Date().toISOString().split('T')[0];
   const summary = { processed: 0, succeeded: 0, failed: 0, suspended: 0, errors: [] };
 
   try {
+    // Due-today filter: compare next_billing_date against today in EACH
+    // subaccount's own timezone (read from the blob). Falls back to default
+    // TZ for any sub without a timezone setting.
     const dueResult = await db.query(
-      `SELECT * FROM subaccount_plans
-       WHERE next_billing_date <= $1
-         AND status IN ('trialing', 'active', 'past_due')
-         AND exempt_from_billing = false`,
-      [today]
+      `SELECT sp.* FROM subaccount_plans sp
+       LEFT JOIN subaccount_data sd ON sd.subaccount_id = sp.subaccount_id
+       WHERE sp.next_billing_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date)
+         AND sp.status IN ('trialing', 'active', 'past_due')
+         AND sp.exempt_from_billing = false`,
+      [DEFAULT_TZ]
     );
     const dueSubaccounts = dueResult.rows;
     summary.processed = dueSubaccounts.length;
-    console.log('run-billing: ' + dueSubaccounts.length + ' subaccounts due on ' + today);
+    console.log('run-billing: ' + dueSubaccounts.length + ' subaccounts due');
 
     for (const sub of dueSubaccounts) {
       try {
@@ -399,7 +407,7 @@ const httpWrapped = wrap(httpHandler);
 
 exports.handler = async function (event, context) {
   const isScheduledEvent = event && (event['detail-type'] === 'Scheduled Event' || event.source === 'aws.scheduler');
-  
+
   if (isScheduledEvent) {
     try {
       const synthReq = { headers: {} };
@@ -409,6 +417,6 @@ exports.handler = async function (event, context) {
       return { success: false, error: e.message };
     }
   }
-  
+
   return httpWrapped(event, context);
 };

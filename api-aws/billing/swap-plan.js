@@ -7,6 +7,10 @@
 // Downgrades and period changes: scheduled for next billing cycle.
 //
 // MIGRATED: Supabase REST → lib/db.js for plan, invoice queries.
+//
+// CHANGED 2026-05-07: TZ-aware. Proration days-remaining calc and the
+// billing_period_start invoice field now use today in the subaccount's
+// timezone, so Patrick at 11pm Eastern doesn't get a day of proration off.
 
 const db = require('./lib/db');
 const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('./lib/agency-billing');
@@ -14,16 +18,20 @@ const { sendError } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
 const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
+const { todayInTz, getSubTimezone } = require('./lib/timezone');
 
 const TIER_ORDER = { starter: 1, professional: 2, business: 3, enterprise: 4 };
 
-function calcProration(oldTier, newTier, billingPeriod, hipaaAddon, nextBillingDate, discountPercent) {
+function calcProration(oldTier, newTier, billingPeriod, hipaaAddon, nextBillingDate, discountPercent, todayLocal) {
   const oldCents = calculateCharge(oldTier, billingPeriod, hipaaAddon, discountPercent || 0);
   const newCents = calculateCharge(newTier, billingPeriod, hipaaAddon, discountPercent || 0);
   const totalDays = billingPeriod === 'annual' ? 365 : 30;
-  const today = new Date();
-  const nextDate = new Date(nextBillingDate);
-  const daysRemaining = Math.max(1, Math.ceil((nextDate - today) / 86400000));
+  // Day-count math in pure date space, anchored to today-in-TZ.
+  const [ty, tm, td] = todayLocal.split('-').map(Number);
+  const [ny, nm, nd] = String(nextBillingDate).slice(0, 10).split('-').map(Number);
+  const todayMs = Date.UTC(ty, tm - 1, td);
+  const nextMs  = Date.UTC(ny, nm - 1, nd);
+  const daysRemaining = Math.max(1, Math.ceil((nextMs - todayMs) / 86400000));
   const effectiveDays = Math.min(daysRemaining, totalDays);
   const oldDaily = oldCents / totalDays;
   const newDaily = newCents / totalDays;
@@ -63,6 +71,9 @@ async function handler(req, res) {
       return sendError(res, 500, 'Could not load plan');
     }
     if (!plan) return sendError(res, 404, 'No plan found for ' + subaccountId);
+
+    const subTz = await getSubTimezone(subaccountId, db);
+    const todayLocal = todayInTz(subTz);
 
     const beforeSnapshot = {
       plan_tier: plan.plan_tier,
@@ -138,7 +149,6 @@ async function handler(req, res) {
       return res.status(200).json({ success: true, action: 'exempt_updated' });
     }
 
-    // Trial path
     if (plan.status === 'trialing') {
       await updatePlan(subaccountId, {
         plan_tier: newTier,
@@ -178,7 +188,6 @@ async function handler(req, res) {
     const isPeriodChange = newPeriod !== oldPeriod;
     const isTierChange = newTier !== oldTier;
 
-    // Downgrade or period-only change: scheduled
     if (!isUpgrade) {
       await updatePlan(subaccountId, {
         plan_tier: newTier,
@@ -234,7 +243,8 @@ async function handler(req, res) {
     const proratedCents = calcProration(
       oldTier, newTier, oldPeriod, !!newHipaa,
       plan.next_billing_date,
-      discountPercent || plan.discount_percent || 0
+      discountPercent || plan.discount_percent || 0,
+      todayLocal
     );
 
     if (proratedCents <= 0) {
@@ -266,8 +276,7 @@ async function handler(req, res) {
       return res.status(200).json({ success: true, action: 'upgraded_no_charge' });
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const idempotencyKey = makeIdempotencyKey('up', subaccountId, today, oldTier, newTier);
+    const idempotencyKey = makeIdempotencyKey('up', subaccountId, todayLocal, oldTier, newTier);
 
     const chargeNote = 'MySpark+ upgrade: ' + oldTier + ' to ' + newTier + ' (prorated)';
     const result = await chargeCardOnFile(
@@ -286,7 +295,7 @@ async function handler(req, res) {
       status: result.success ? 'succeeded' : 'failed',
       failure_reason: result.success ? null : result.error,
       retry_attempt: 0,
-      billing_period_start: today,
+      billing_period_start: todayLocal,
       billing_period_end: plan.next_billing_date,
       succeeded_at: result.success ? new Date().toISOString() : null,
       failed_at: result.success ? null : new Date().toISOString()

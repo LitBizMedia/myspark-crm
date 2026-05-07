@@ -7,6 +7,9 @@
 // Does NOT charge yet (14-day trial).
 //
 // MIGRATED: Supabase REST upsert → lib/db.js insertOne with onConflict.
+//
+// CHANGED 2026-05-07: TZ-aware. The next_billing_date (trial end) is computed
+// in the subaccount's timezone so trials end on the correct calendar day.
 
 const db = require('./lib/db');
 const { findOrCreateCustomer, saveCardOnFile } = require('./lib/agency-billing');
@@ -14,6 +17,7 @@ const { sendError } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
 const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
+const { dateInTzPlusDays, getSubTimezone, DEFAULT_TZ } = require('./lib/timezone');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
@@ -58,7 +62,6 @@ async function handler(req, res) {
   const subaccountId = 'sub-' + subaccountSlug;
 
   try {
-    // 1. Get or create Square customer + card
     let customerId, cardId, cardLast4 = '', cardBrand = '';
     let cardSource = hasExistingCard ? 'existing' : 'new';
 
@@ -82,14 +85,15 @@ async function handler(req, res) {
       cardBrand = card.card_brand || '';
     }
 
-    // 2. Calculate trial and billing dates
+    // Trial dates use the subaccount's TZ when available. New subaccount
+    // might not have a blob yet, so fall back to DEFAULT_TZ.
+    const subTz = (await getSubTimezone(subaccountId, db)) || DEFAULT_TZ;
     const trialDays = skipTrial ? 0 : 14;
     const now = new Date();
-    const nextBillingDate = new Date(now.getTime() + trialDays * 86400000).toISOString().split('T')[0];
+    const nextBillingDate = dateInTzPlusDays(trialDays, subTz);
     const trialEndsAt = trialDays > 0 ? new Date(now.getTime() + trialDays * 86400000).toISOString() : null;
     const currentPeriodStart = now.toISOString();
 
-    // 3. Upsert subaccount_plans row
     const planPayload = {
       subaccount_id: subaccountId,
       plan_tier: tier,
