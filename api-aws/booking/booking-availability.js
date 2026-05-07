@@ -23,7 +23,7 @@ function minsToTime(m) {
   return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 }
 
-function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailability, strictAvailability, tz) {
+function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailability, strictAvailability, tz, slotIntervalMinutes) {
   const dayKey = DAY_KEYS[new Date(date + 'T12:00:00').getDay()];
   const schedule = staff.schedule || {};
   const daySchedule = schedule[dayKey];
@@ -57,7 +57,10 @@ function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, lea
   }
 
   const slots = [];
-  for (let t = workStart; t + duration <= workEnd; t += 15) {
+  // Slot interval defaults to 15 minutes. Widget can override to 10/30/60.
+  // The interval is the GAP between slot start times, not the duration.
+  const step = (slotIntervalMinutes && slotIntervalMinutes > 0) ? slotIntervalMinutes : 15;
+  for (let t = workStart; t + duration <= workEnd; t += step) {
     if (t < cutoffMins) continue;
 
     const slotCalStart = t - bufBefore;
@@ -113,7 +116,7 @@ async function handler(req, res) {
       const wRes = await db.query(
         `SELECT id, widget_type, staff_ids, appointment_types, widget_availability,
                 booking_lead_time_hours, booking_advance_days,
-                buffer_before_override, buffer_after_override
+                buffer_before_override, buffer_after_override, slot_interval_minutes
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1`,
         [widget_id, subaccountId]
@@ -168,7 +171,7 @@ async function handler(req, res) {
       if (widget_id) {
         const wExtraRes = await db.query(
           `SELECT booking_lead_time_hours, booking_advance_days,
-                  buffer_before_override, buffer_after_override
+                  buffer_before_override, buffer_after_override, slot_interval_minutes
            FROM service_widgets
            WHERE id = $1 AND subaccount_id = $2 AND active = true LIMIT 1`,
           [widget_id, subaccountId]
@@ -247,10 +250,11 @@ async function handler(req, res) {
     }
 
     const strictAvailability = !!appointment_type_id;
+    const slotInterval = (widget && widget.slot_interval_minutes) ? parseInt(widget.slot_interval_minutes) || 15 : 15;
     const slotMap = {};
     for (const staff of staffPool) {
       const appts = apptsByStaff[staff.id] || [];
-      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailabilityWindow, strictAvailability, subTz);
+      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailabilityWindow, strictAvailability, subTz, slotInterval);
       for (const s of staffSlots) {
         if (!slotMap[s.time]) slotMap[s.time] = [];
         slotMap[s.time].push(staff.id);

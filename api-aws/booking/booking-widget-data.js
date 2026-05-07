@@ -53,7 +53,7 @@ async function handler(req, res) {
                 send_confirmation_email, send_reminder_email, reminder_hours_before, send_reminder_sms,
                 booking_lead_time_hours, booking_advance_days,
                 buffer_before_override, buffer_after_override,
-                total_views, total_bookings, custom_domain
+                total_views, total_bookings, custom_domain, slot_interval_minutes
          FROM service_widgets
          WHERE id = $1 AND subaccount_id = $2 AND active = TRUE
          LIMIT 1`,
@@ -87,7 +87,7 @@ async function handler(req, res) {
                 send_confirmation_email, send_reminder_email, reminder_hours_before, send_reminder_sms,
                 booking_lead_time_hours, booking_advance_days,
                 buffer_before_override, buffer_after_override,
-                total_views, total_bookings, custom_domain
+                total_views, total_bookings, custom_domain, slot_interval_minutes
          FROM service_widgets
          WHERE subaccount_id = $1 AND active = TRUE
          ORDER BY created_at ASC

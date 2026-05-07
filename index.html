@@ -14569,6 +14569,7 @@ function _swgPolicySection(w, opts){
   var bufBefore        = (w && w.buffer_before_override != null) ? w.buffer_before_override : '';
   var bufAfter         = (w && w.buffer_after_override != null) ? w.buffer_after_override : '';
   var customDomain     = (w && w.custom_domain) || '';
+  var slotInterval     = (w && w.slot_interval_minutes) ? String(w.slot_interval_minutes) : '';
   var requirePayment   = !!(w && w.require_payment);
 
   function cbRow(id, label, checked, hint, onchangeAttr){
@@ -14591,8 +14592,10 @@ function _swgPolicySection(w, opts){
 
     // PAYMENT
     +sectionLabel('Payment')
-    +'<div class="form-group" id="swg-pol-pay-wrap" style="'+(requirePayment?'':'opacity:0.5;pointer-events:none')+'">'
-    +'<label>Payment mode <span style="color:var(--text-muted);font-weight:400">(only used when "Require payment" is on)</span></label>'
+    +'<div id="swg-pol-payment-wrap" style="'+(requirePayment?'':'opacity:0.5;pointer-events:none')+'">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;font-style:italic">'+(requirePayment?'':'Turn on "Require payment to book online" above to enable these settings.')+'</div>'
+    +'<div class="form-group">'
+    +'<label>Payment mode</label>'
     +'<select id="swg-payment-mode" onchange="_swgTogglePolicy()">'
     +'<option value="full"'+(paymentMode==='full'?' selected':'')+'>Charge full amount</option>'
     +'<option value="deposit"'+(paymentMode==='deposit'?' selected':'')+'>Charge a deposit</option>'
@@ -14613,6 +14616,7 @@ function _swgPolicySection(w, opts){
     +'<label>Tip percentages <span style="color:var(--text-muted);font-weight:400">(comma separated)</span></label>'
     +'<input id="swg-tip-pcts" type="text" placeholder="10,15,20" value="'+esc(tipPcts)+'">'
     +'</div>'
+    +'</div>'  // end swg-pol-payment-wrap
 
     // PATIENT FORM
     +sectionLabel('Patient form')
@@ -14640,6 +14644,16 @@ function _swgPolicySection(w, opts){
 
     // BOOKING WINDOW
     +sectionLabel('Booking window')
+    +'<div class="form-group">'
+    +'<label>Slot interval <span style="color:var(--text-muted);font-weight:400">(how often a new slot is offered)</span></label>'
+    +'<select id="swg-slot-interval">'
+    +'<option value=""'+(!slotInterval?' selected':'')+'>Default (every 15 min)</option>'
+    +'<option value="10"'+(slotInterval==='10'?' selected':'')+'>Every 10 min</option>'
+    +'<option value="15"'+(slotInterval==='15'?' selected':'')+'>Every 15 min</option>'
+    +'<option value="30"'+(slotInterval==='30'?' selected':'')+'>Every 30 min</option>'
+    +'<option value="60"'+(slotInterval==='60'?' selected':'')+'>Every hour</option>'
+    +'</select>'
+    +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Lead time <span style="color:var(--text-muted);font-weight:400">(hours)</span></label><input id="swg-lead-hours" type="number" min="0" max="720" placeholder="no minimum" value="'+esc(leadHours)+'"></div>'
     +'<div class="form-group"><label>Advance window <span style="color:var(--text-muted);font-weight:400">(days)</span></label><input id="swg-advance-days" type="number" min="0" max="365" placeholder="no maximum" value="'+esc(advanceDays)+'"></div>'
@@ -14670,8 +14684,8 @@ function _swgTogglePolicy(){
     rp._swgWired = true;
   }
 
-  // Payment mode wrapper: dimmed when require_payment is off
-  var pwrap = document.getElementById('swg-pol-pay-wrap');
+  // Payment wrapper: dim entire section when require_payment is off
+  var pwrap = document.getElementById('swg-pol-payment-wrap');
   if (pwrap && rp) {
     pwrap.style.opacity = rp.checked ? '1' : '0.5';
     pwrap.style.pointerEvents = rp.checked ? 'auto' : 'none';
@@ -14728,6 +14742,8 @@ function _swgPolicyToPayload(){
   if (!tipPcts.length) tipPcts = [10, 15, 20];
 
   var dtVal = getValue('swg-deposit-type','');
+  var siVal = getValue('swg-slot-interval','');
+  var slotIntervalMins = siVal === '' ? null : (parseInt(siVal,10) || null);
 
   return {
     payment_mode: getValue('swg-payment-mode','full'),
@@ -14749,7 +14765,8 @@ function _swgPolicyToPayload(){
     booking_advance_days: nullableInt('swg-advance-days'),
     buffer_before_override: nullableInt('swg-buf-before'),
     buffer_after_override: nullableInt('swg-buf-after'),
-    custom_domain: (getValue('swg-custom-domain','').trim() || null)
+    custom_domain: (getValue('swg-custom-domain','').trim() || null),
+    slot_interval_minutes: slotIntervalMins
   };
 }
 

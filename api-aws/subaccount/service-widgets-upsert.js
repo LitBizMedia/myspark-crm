@@ -106,6 +106,10 @@ async function handler(req, res) {
   if (advanceDays != null && (advanceDays < 0 || advanceDays > 365)) {
     return res.status(400).json({ error: 'booking_advance_days must be 0-365' });
   }
+  const slotInterval = toNullableInt(w.slot_interval_minutes);
+  if (slotInterval != null && ![10, 15, 30, 60].includes(slotInterval)) {
+    return res.status(400).json({ error: 'slot_interval_minutes must be 10, 15, 30, or 60' });
+  }
 
   if (w.widget_type === 'appointment' && Array.isArray(w.appointment_types)) {
     for (const t of w.appointment_types) {
@@ -178,7 +182,8 @@ async function handler(req, res) {
       advanceDays,                                                // $34
       toNullableInt(w.buffer_before_override),                    // $35
       toNullableInt(w.buffer_after_override),                     // $36
-      w.custom_domain || null                                     // $37
+      w.custom_domain || null,                                    // $37
+      slotInterval                                                 // $38
     ];
 
     await db.query(`
@@ -194,6 +199,7 @@ async function handler(req, res) {
         booking_lead_time_hours, booking_advance_days,
         buffer_before_override, buffer_after_override,
         custom_domain,
+        slot_interval_minutes,
         created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9,
@@ -207,6 +213,7 @@ async function handler(req, res) {
         $33, $34,
         $35, $36,
         $37,
+        $38,
         NOW(), NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -244,6 +251,7 @@ async function handler(req, res) {
         buffer_before_override = EXCLUDED.buffer_before_override,
         buffer_after_override = EXCLUDED.buffer_after_override,
         custom_domain = EXCLUDED.custom_domain,
+        slot_interval_minutes = EXCLUDED.slot_interval_minutes,
         updated_at = NOW()
       WHERE service_widgets.subaccount_id = $2
     `, params);
