@@ -6118,6 +6118,8 @@ function _getApptPrice(appt){
     var s=(db.services||[]).find(function(x){return x.id===appt.service_id;});
     if(s&&s.price!=null)return parseFloat(s.price);
   }
+  // Appointment widget bookings: price stored on the row itself.
+  if(appt.price!=null)return parseFloat(appt.price);
   return null;
 }
 

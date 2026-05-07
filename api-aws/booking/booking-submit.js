@@ -702,6 +702,13 @@ async function handler(req, res) {
       const apptLocation = service ? (service.location || null) : null;
       const apptServiceId = service ? service_id : null; // null for appointment widgets
       const apptVariationId = service ? (variation_id || null) : null;
+      // Per-appointment price + type_id when this is an appointment widget.
+      // For service widgets, price is derived from the service/variation in the dashboard.
+      // For appointment widgets, price/type live on the row itself.
+      const apptPrice = appointmentType
+        ? (appointmentType.price != null ? parseFloat(appointmentType.price) : null)
+        : null;
+      const apptTypeId = appointmentType ? (appointmentType.id || null) : null;
       // Honor widget.collect_notes: if false, don't store any submitted notes.
       const apptNotes = (widget && widget.collect_notes === false)
         ? null
@@ -710,15 +717,15 @@ async function handler(req, res) {
         INSERT INTO appointments (
           id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
           status, location, notes, service_id, service_variation_id, buffer_before, buffer_after,
-          booked_via, widget_id,
+          booked_via, widget_id, price, appointment_type_id,
           created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,$15,$16,NOW(),NOW())
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW(),NOW())
       `, [
         apptId, subaccountId, title, contactId, assignedStaffId,
         bookingDate, bookingTime, duration,
         apptLocation, apptNotes,
         apptServiceId, apptVariationId, bufBefore, bufAfter,
-        'widget', widget_id || null
+        'widget', widget_id || null, apptPrice, apptTypeId
       ]);
     }
 
