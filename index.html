@@ -6717,7 +6717,12 @@ function openClassParticipantPayment(sessionId, contactId){
 // Computes the source-of-truth price for an appointment.
 // Variation price wins when a variation is selected. Falls back to service
 // price. Returns null when no price is set anywhere.
-function _getApptPrice(appt){
+function _getApptAddonsTotal(appt){
+  if(!appt||!Array.isArray(appt.addons))return 0;
+  return appt.addons.reduce(function(s,a){return s+(parseFloat(a.price)||0);},0);
+}
+
+function _getApptBaseServicePrice(appt){
   if(!appt)return null;
   if(appt.service_variation_id){
     var v=(db.serviceVariations||[]).find(function(x){return x.id===appt.service_variation_id;});
@@ -6730,6 +6735,12 @@ function _getApptPrice(appt){
   // Appointment widget bookings: price stored on the row itself.
   if(appt.price!=null)return parseFloat(appt.price);
   return null;
+}
+
+function _getApptPrice(appt){
+  var base=_getApptBaseServicePrice(appt);
+  if(base==null)return null;
+  return base+_getApptAddonsTotal(appt);
 }
 
 // Returns sum of the "service portion" of completed payments toward this
