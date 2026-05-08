@@ -8390,7 +8390,8 @@ function syncAppointment(appt, deleted, override){
     buffer_before:parseInt(appt.buffer_before)||0,
     buffer_after:parseInt(appt.buffer_after)||0,
     service_id:appt.service_id||null,
-    service_variation_id:appt.service_variation_id||null
+    service_variation_id:appt.service_variation_id||null,
+    addons:Array.isArray(appt.addons)?appt.addons.map(function(x){return {id:x.id};}):[]
   };
   if(override)payload.override=true;
   return fetch(apiUrl('/api/subaccount/appointments-upsert'),{
