@@ -1136,6 +1136,50 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .svc-ms-opt{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;font-size:12px;color:var(--main-text)}
 .svc-ms-opt:hover{background:var(--main-bg)}
 .svc-ms-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0} /* unused */
+/* ── Tabbed widget editor + ordered service list ─────────────────────────── */
+.swg-tabs{display:flex;gap:4px;border-bottom:1px solid var(--main-border);margin-bottom:14px;padding:0 0 0 2px}
+.swg-tab{padding:10px 16px;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s;text-transform:none}
+.swg-tab:hover{color:var(--text)}
+.swg-tab.active{color:var(--brand,#6b21ea);border-bottom-color:var(--brand,#6b21ea)}
+.swg-tab-badge{display:inline-block;background:var(--main-bg);color:var(--text-muted);font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;min-width:14px;text-align:center}
+.swg-tab.active .swg-tab-badge{background:var(--brand,#6b21ea);color:#fff}
+.swg-tab-pane{display:none}
+.swg-tab-pane.active{display:flex;flex-direction:column;gap:14px}
+.swg-svc-add-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.swg-svc-add-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:var(--brand,#6b21ea);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+.swg-svc-add-btn:hover{filter:brightness(1.1)}
+.swg-svc-add-wrap{position:relative}
+.swg-svc-add-pop{position:absolute;top:calc(100% + 4px);left:0;width:340px;max-width:calc(100vw - 32px);background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:600;overflow:hidden;display:flex;flex-direction:column;max-height:420px}
+.swg-svc-add-search{width:100%;border:none;border-bottom:1px solid var(--main-border);padding:9px 12px;background:transparent;color:var(--main-text);font-size:13px;outline:none;box-sizing:border-box;flex-shrink:0}
+.swg-svc-add-list{overflow-y:auto;flex:1;min-height:60px}
+.swg-svc-add-cathdr{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:var(--main-bg);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;z-index:1}
+.swg-svc-add-catbtn{font-size:11px;font-weight:600;color:var(--brand,#6b21ea);background:none;border:none;cursor:pointer;text-transform:none;letter-spacing:0;padding:0}
+.swg-svc-add-catbtn:hover{text-decoration:underline}
+.swg-svc-add-row{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;font-size:13px;color:var(--main-text);border-bottom:1px solid rgba(0,0,0,.04)}
+.swg-svc-add-row:hover{background:var(--main-bg)}
+.swg-svc-add-row input[type=checkbox]{margin:0;flex-shrink:0;cursor:pointer}
+.swg-svc-add-row .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.swg-svc-add-empty{padding:20px 14px;text-align:center;font-size:12px;color:var(--text-muted)}
+.swg-svc-add-foot{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--main-bg);border-top:1px solid var(--main-border);flex-shrink:0;font-size:12px}
+.swg-svc-add-foot .ct{color:var(--text-muted)}
+.swg-svc-add-foot .acts{display:flex;gap:6px}
+.swg-svc-add-foot button{font-size:12px;font-weight:600;padding:5px 12px;border-radius:5px;border:none;cursor:pointer}
+.swg-svc-add-foot .cancel{background:transparent;color:var(--text-muted)}
+.swg-svc-add-foot .ok{background:var(--brand,#6b21ea);color:#fff}
+.swg-svc-add-foot .ok:disabled{opacity:.45;cursor:not-allowed}
+.swg-svc-list{display:flex;flex-direction:column;gap:6px;background:var(--main-bg);border-radius:8px;padding:8px;border:1px solid var(--main-border);min-height:80px}
+.swg-svc-list-empty{padding:28px 14px;text-align:center;font-size:12px;color:var(--text-muted);font-style:italic}
+.swg-svc-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--main-card);border:1px solid var(--main-border);border-radius:6px;transition:box-shadow .15s,opacity .15s}
+.swg-svc-row[draggable=true]{cursor:grab}
+.swg-svc-row.is-drag{opacity:.4}
+.swg-svc-row.drop-above{border-top:2px solid var(--brand,#6b21ea)}
+.swg-svc-row.drop-below{border-bottom:2px solid var(--brand,#6b21ea)}
+.swg-svc-handle{color:var(--text-muted);font-size:14px;line-height:1;cursor:grab;user-select:none;padding:0 2px}
+.swg-svc-row .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.swg-svc-name{flex:1;font-size:13px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.swg-svc-cat{font-size:10px;font-weight:700;color:var(--text-muted);background:var(--main-bg);border:1px solid var(--main-border);padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;white-space:nowrap}
+.swg-svc-rm{background:transparent;border:none;color:var(--text-muted);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1}
+.swg-svc-rm:hover{background:rgba(248,113,113,.12);color:#f87171}
 .cal-appt-count{font-size:10px;font-weight:600;color:var(--orange);margin-top:1px}
 .tpl-list{display:flex;flex-direction:column;gap:8px}
 .tpl-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border:1px solid var(--main-border,rgba(107,33,234,.12));border-radius:8px;cursor:pointer;transition:border-color .15s}
@@ -15879,6 +15923,220 @@ function openServiceWidgetModal(id){
   return openServiceWidgetEditor(w);
 }
 
+// ── Service Widget Editor: tabbed UI helpers ───────────────────────────────
+// _swgState holds the working ordered service ID list while the modal is open.
+// Saved out by saveServiceWidget; reset by closeModal/openServiceWidgetEditor.
+var _swgState={svcIds:[],dragId:null};
+
+function swgTabSwitch(tab){
+  var tabs=document.querySelectorAll('.swg-tab');
+  var panes=document.querySelectorAll('.swg-tab-pane');
+  tabs.forEach(function(t){t.classList.toggle('active',t.getAttribute('data-tab')===tab);});
+  panes.forEach(function(p){p.classList.toggle('active',p.getAttribute('data-pane')===tab);});
+}
+
+function _swgGetSvcById(sid){
+  return (db.services||[]).find(function(x){return x.id===sid;});
+}
+
+function _swgEligibleSvcs(){
+  // Service widgets exclude class-type services.
+  return (db.services||[]).filter(function(s){return s.type!=='class' && s.active!==false;});
+}
+
+function _swgUpdateTabBadge(){
+  var b=document.getElementById('swg-tab-svc-badge');
+  if(b)b.textContent=String(_swgState.svcIds.length);
+}
+
+function swgRenderSvcList(){
+  var host=document.getElementById('swg-svc-list');
+  if(!host)return;
+  _swgUpdateTabBadge();
+  if(!_swgState.svcIds.length){
+    host.innerHTML='<div class="swg-svc-list-empty">No services added. The widget will show all eligible services in alphabetical order.</div>';
+    return;
+  }
+  host.innerHTML=_swgState.svcIds.map(function(sid){
+    var s=_swgGetSvcById(sid);
+    if(!s)return ''; // service was deleted; skip
+    var col=s.color||'#6b21ea';
+    var cat=s.category?'<span class="swg-svc-cat">'+esc(s.category)+'</span>':'';
+    return '<div class="swg-svc-row" draggable="true" data-sid="'+esc(sid)+'"'
+      +' ondragstart="swgSvcDragStart(event)"'
+      +' ondragend="swgSvcDragEnd(event)"'
+      +' ondragover="swgSvcDragOver(event)"'
+      +' ondragenter="swgSvcDragEnter(event)"'
+      +' ondragleave="swgSvcDragLeave(event)"'
+      +' ondrop="swgSvcDrop(event)">'
+      +'<span class="swg-svc-handle" title="Drag to reorder">&#9776;</span>'
+      +'<span class="dot" style="background:'+esc(col)+'"></span>'
+      +'<span class="swg-svc-name">'+esc(s.name)+'</span>'
+      +cat
+      +'<button class="swg-svc-rm" type="button" onclick="swgRemoveSvc(\''+esc(sid)+'\')" title="Remove">&times;</button>'
+      +'</div>';
+  }).join('');
+}
+
+function swgRemoveSvc(sid){
+  _swgState.svcIds=_swgState.svcIds.filter(function(x){return x!==sid;});
+  swgRenderSvcList();
+}
+
+// Add Services dropdown
+function swgAddOpen(){
+  var pop=document.getElementById('swg-add-pop');
+  if(!pop)return;
+  if(pop.style.display==='flex'){pop.style.display='none';return;}
+  swgAddRender('');
+  pop.style.display='flex';
+  setTimeout(function(){
+    var s=document.getElementById('swg-add-search');
+    if(s)s.focus();
+  },0);
+}
+
+function swgAddClose(){
+  var pop=document.getElementById('swg-add-pop');
+  if(pop)pop.style.display='none';
+}
+
+function swgAddFilter(inp){
+  swgAddRender((inp.value||'').toLowerCase());
+}
+
+function swgAddRender(filter){
+  var host=document.getElementById('swg-add-list');
+  if(!host)return;
+  filter=(filter||'').trim().toLowerCase();
+  var added=new Set(_swgState.svcIds);
+  var pool=_swgEligibleSvcs().filter(function(s){
+    if(added.has(s.id))return false;
+    if(!filter)return true;
+    return s.name.toLowerCase().indexOf(filter)>=0
+      || (s.category||'').toLowerCase().indexOf(filter)>=0;
+  });
+  if(!pool.length){
+    host.innerHTML='<div class="swg-svc-add-empty">'+(filter?'No matches.':'All services are already added.')+'</div>';
+    _swgUpdateAddFootCount();
+    return;
+  }
+  // Group by category
+  var groups={};
+  var order=[];
+  pool.forEach(function(s){
+    var c=s.category||'Uncategorized';
+    if(!groups[c]){groups[c]=[];order.push(c);}
+    groups[c].push(s);
+  });
+  var html='';
+  order.forEach(function(cat){
+    var list=groups[cat];
+    html+='<div class="swg-svc-add-cathdr">'
+      +'<span>'+esc(cat)+'</span>'
+      +'<button type="button" class="swg-svc-add-catbtn" onclick="swgAddAllCategory(\''+esc(cat).replace(/'/g,"\\'")+'\')">Add all '+list.length+'</button>'
+      +'</div>';
+    list.forEach(function(s){
+      var col=s.color||'#6b21ea';
+      html+='<label class="swg-svc-add-row">'
+        +'<input type="checkbox" class="swg-add-chk" value="'+esc(s.id)+'" onchange="_swgUpdateAddFootCount()">'
+        +'<span class="dot" style="background:'+esc(col)+'"></span>'
+        +'<span style="flex:1">'+esc(s.name)+'</span>'
+        +'</label>';
+    });
+  });
+  host.innerHTML=html;
+  _swgUpdateAddFootCount();
+}
+
+function _swgUpdateAddFootCount(){
+  var n=document.querySelectorAll('#swg-add-list .swg-add-chk:checked').length;
+  var ct=document.getElementById('swg-add-foot-ct');
+  var ok=document.getElementById('swg-add-foot-ok');
+  if(ct)ct.textContent=n?(n+' selected'):'';
+  if(ok){ok.disabled=!n;ok.textContent=n?('Add '+n):'Add';}
+}
+
+function swgAddSelected(){
+  var checks=document.querySelectorAll('#swg-add-list .swg-add-chk:checked');
+  if(!checks.length)return;
+  var addedIds=Array.from(checks).map(function(c){return c.value;});
+  // Append in current visual order (not click order) so categories stay grouped.
+  // Actually: walk eligible pool in same order as render and append matching IDs.
+  var addedSet=new Set(addedIds);
+  var ordered=[];
+  _swgEligibleSvcs().forEach(function(s){if(addedSet.has(s.id))ordered.push(s.id);});
+  _swgState.svcIds=_swgState.svcIds.concat(ordered);
+  swgRenderSvcList();
+  swgAddClose();
+}
+
+function swgAddAllCategory(cat){
+  var added=new Set(_swgState.svcIds);
+  var toAdd=_swgEligibleSvcs().filter(function(s){
+    var c=s.category||'Uncategorized';
+    return c===cat && !added.has(s.id);
+  }).map(function(s){return s.id;});
+  if(!toAdd.length){toast('Nothing to add.','info');return;}
+  _swgState.svcIds=_swgState.svcIds.concat(toAdd);
+  swgRenderSvcList();
+  swgAddClose();
+}
+
+// Drag-and-drop reorder
+function swgSvcDragStart(e){
+  _swgState.dragId=e.currentTarget.getAttribute('data-sid');
+  e.dataTransfer.effectAllowed='move';
+  e.currentTarget.classList.add('is-drag');
+}
+function swgSvcDragEnd(e){
+  e.currentTarget.classList.remove('is-drag');
+  document.querySelectorAll('#swg-svc-list .swg-svc-row').forEach(function(r){
+    r.classList.remove('drop-above');r.classList.remove('drop-below');
+  });
+  _swgState.dragId=null;
+}
+function swgSvcDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+}
+function swgSvcDragEnter(e){
+  if(!_swgState.dragId)return;
+  var row=e.currentTarget;
+  if(row.getAttribute('data-sid')===_swgState.dragId)return;
+  row.classList.add('drop-above');
+}
+function swgSvcDragLeave(e){
+  e.currentTarget.classList.remove('drop-above');
+  e.currentTarget.classList.remove('drop-below');
+}
+function swgSvcDrop(e){
+  e.preventDefault();
+  e.stopPropagation();
+  var dragId=_swgState.dragId;
+  if(!dragId)return;
+  var targetId=e.currentTarget.getAttribute('data-sid');
+  if(targetId===dragId){_swgState.dragId=null;return;}
+  var ids=_swgState.svcIds.slice();
+  var fromIdx=ids.indexOf(dragId);
+  var toIdx=ids.indexOf(targetId);
+  if(fromIdx<0||toIdx<0){_swgState.dragId=null;return;}
+  ids.splice(fromIdx,1);
+  var insertAt=ids.indexOf(targetId);
+  ids.splice(insertAt,0,dragId);
+  _swgState.svcIds=ids;
+  _swgState.dragId=null;
+  swgRenderSvcList();
+}
+
+// Close add-popover on outside click
+document.addEventListener('click',function(e){
+  var pop=document.getElementById('swg-add-pop');
+  if(!pop||pop.style.display!=='flex')return;
+  var wrap=document.getElementById('swg-add-wrap');
+  if(wrap && !wrap.contains(e.target))swgAddClose();
+});
+
 // Step 1: when the user clicks "New Widget", show a type picker.
 // The choice locks widget_type for the lifetime of the widget.
 function openWidgetTypePicker(){
@@ -15919,50 +16177,28 @@ function openNewWidgetOfType(type){
 }
 
 function openServiceWidgetEditor(w,isNew){
-  var _selSvcs=(w&&w.service_ids)||[];
-  // Service widgets can only book individual services. Class services belong
-  // to class widgets (Stage 3 widget type). Filter them out here so users
-  // can't accidentally include them.
-  var availableSvcs=(db.services||[]).filter(function(s){return s.type!=='class';});
-  var svcMsOpts=availableSvcs.map(function(s){
-    var col=s.color||'#6b21ea';
-    return'<div class="svc-ms-opt" onclick="swgMsToggle(\''+s.id+'\')">'
-      +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
-      +esc(s.name)
-      +'<span id="swg-ms-ck-'+s.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selSvcs.includes(s.id)?'':'display:none')+'">&#10003;</span>'
-      +'<input type="checkbox" id="swg-svc-'+s.id+'" class="swg-svc-chk" value="'+s.id+'" style="display:none"'+(_selSvcs.includes(s.id)?' checked':'')+'>'
-      +'</div>';
-  }).join('');
-
-  var initialChips=_selSvcs.length
-    ?_selSvcs.map(function(sid){var s=(db.services||[]).find(function(x){return x.id===sid;});var col=s?s.color||'#6b21ea':'#6b21ea';var nm=s?esc(s.name):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();swgMsRemove(\''+sid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
-    :'<span style="color:var(--text-muted);font-size:12px">All services (none selected)</span>';
+  // Initialize working state from saved widget (or empty for new)
+  _swgState.svcIds=((w&&w.service_ids)||[]).slice();
+  _swgState.dragId=null;
 
   var curLogo=(w&&w.logo_url)||'';
   var requirePayment=!!(w&&w.require_payment);
   var confirmMsg=(w&&w.confirm_message)||'';
   // Read saved round_robin_config strategy (default 'random')
   var savedStrategy=(w&&w.round_robin_config&&w.round_robin_config.strategy)||'random';
+  var hasAnyEligible=_swgEligibleSvcs().length>0;
 
-  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+  // ── Tabs header ─────────────────────────────────────────────────────────
+  var tabs='<div class="swg-tabs">'
+    +'<div class="swg-tab active" data-tab="settings" onclick="swgTabSwitch(\'settings\')">Settings</div>'
+    +'<div class="swg-tab" data-tab="services" onclick="swgTabSwitch(\'services\')">Services <span class="swg-tab-badge" id="swg-tab-svc-badge">'+_swgState.svcIds.length+'</span></div>'
+    +'</div>';
+
+  // ── Settings tab (everything except service picker) ─────────────────────
+  var settingsPane='<div class="swg-tab-pane active" data-pane="settings">'
     +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'"></div>'
-    +'<div class="form-group"><label>Included Services <span style="color:var(--text-muted);font-weight:400">(none = show all)</span></label>'
-    +(svcMsOpts
-      ?'<div class="svc-ms-wrap" id="swg-svc-ms">'
-        +'<div class="svc-ms-display" onclick="swgMsOpen(event)">'
-        +'<div class="svc-ms-chips" id="swg-ms-chips">'+initialChips+'</div>'
-        +'<span class="svc-ms-arrow">&#9660;</span></div>'
-        +'<div class="svc-ms-dd hidden" id="swg-ms-dd">'
-        +'<input type="text" class="svc-ms-search" placeholder="Search services..." oninput="swgMsFilter(this)">'
-        +'<div class="svc-ms-options">'+svcMsOpts+'</div>'
-        +'</div></div>'
-      :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No services yet. Add services in Service Calendars first.</div>')
-    +'</div>'
 
-    // Staff selection: REMOVED for service widgets.
-    // Staff is INHERITED from the services included in this widget. To control which
-    // staff can perform a service, edit the service. Stage 3 will reintroduce a staff
-    // picker for the appointment widget type only (which has no service catalog).
+    // Staff inheritance note
     +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
     +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin-bottom:4px">Staff</div>'
     +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.5">Staff is inherited from the services in this widget. Patients see only staff who can perform the service they pick. To change which staff perform a service, edit the service.</div>'
@@ -15983,7 +16219,7 @@ function openServiceWidgetEditor(w,isNew){
     +'</div>'
     +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Book your appointment online" value="'+esc(w&&w.tagline||'')+'"></div>'
 
-    // Provider assignment strategy (when staff='any')
+    // Provider assignment strategy
     +'<div class="form-group">'
     +'<label style="margin-bottom:6px;display:block">Provider Assignment</label>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:none;font-weight:400;line-height:1.5">When a service has multiple staff and the system needs to auto-assign, how should it pick?</div>'
@@ -16022,11 +16258,39 @@ function openServiceWidgetEditor(w,isNew){
 
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
+
+  // ── Services tab (new ordered list UI) ──────────────────────────────────
+  var servicesPane='<div class="swg-tab-pane" data-pane="services">'
+    +'<div style="font-size:12px;color:var(--text-muted);line-height:1.5">Choose which services this widget offers and the order they appear on the booking page. Drag rows to reorder. If you leave the list empty, all eligible services show in alphabetical order.</div>'
+    +(hasAnyEligible
+      ?'<div class="swg-svc-add-bar">'
+        +'<div class="swg-svc-add-wrap" id="swg-add-wrap">'
+        +'<button type="button" class="swg-svc-add-btn" onclick="event.stopPropagation();swgAddOpen()">+ Add Services</button>'
+        +'<div class="swg-svc-add-pop" id="swg-add-pop" style="display:none">'
+        +'<input type="text" class="swg-svc-add-search" id="swg-add-search" placeholder="Search services or categories..." oninput="swgAddFilter(this)">'
+        +'<div class="swg-svc-add-list" id="swg-add-list"></div>'
+        +'<div class="swg-svc-add-foot">'
+        +'<span class="ct" id="swg-add-foot-ct"></span>'
+        +'<div class="acts">'
+        +'<button class="cancel" type="button" onclick="swgAddClose()">Cancel</button>'
+        +'<button class="ok" id="swg-add-foot-ok" type="button" disabled onclick="swgAddSelected()">Add</button>'
+        +'</div></div>'
+        +'</div></div>'
+        +'</div>'
+      :'<div style="background:var(--bg-card);border:1px solid var(--main-border);border-radius:6px;padding:12px;font-size:12px;color:var(--text-muted);line-height:1.5">No services yet. Create services on the Services page first, then come back to add them here.</div>')
+    +'<div class="swg-svc-list" id="swg-svc-list"></div>'
+    +'</div>';
+
+  var body=tabs+settingsPane+servicesPane;
+
   var existing=w&&w.id;
   var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="saveServiceWidget('+(existing?'\''+w.id+'\'':'null')+')">Save</button>';
   openModal(existing?'Edit Service Widget':'New Service Widget',body,footer,'modal-lg');
+
+  // Render the ordered list now that DOM exists
+  swgRenderSvcList();
 }
 
 // =============================================================
@@ -16654,7 +16918,8 @@ function saveServiceWidget(id){
   var name=(document.getElementById('swg-name')||{}).value;
   if(!name||!name.trim()){toast('Widget name is required.','error');return;}
   if(!_swgConfirmDeactivate(id)) return;
-  var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
+  // Service IDs come from the working ordered list managed by the Services tab.
+  var svcIds=(_swgState&&Array.isArray(_swgState.svcIds))?_swgState.svcIds.slice():[];
   // Read assignment strategy from the radio group
   var rrRadio=document.querySelector('input[name="swg-rr-strategy"]:checked');
   var strategy=(rrRadio&&rrRadio.value==='least_busy')?'least_busy':'random';

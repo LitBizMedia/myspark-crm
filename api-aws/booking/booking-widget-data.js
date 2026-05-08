@@ -319,11 +319,27 @@ async function handler(req, res) {
       square_sandbox:          sqSandbox
     };
 
+    // For service and class widgets with an explicit ordered service_ids list,
+    // return the services in that exact order (not alphabetical) so the public
+    // booking page renders them as the admin arranged them on the dashboard.
+    let orderedServices = svcResult.rows;
+    if (widgetServiceIds.length && (widgetType === 'service' || widgetType === 'class')) {
+      const orderIndex = new Map();
+      widgetServiceIds.forEach((id, i) => orderIndex.set(id, i));
+      orderedServices = svcResult.rows.slice().sort((a, b) => {
+        const ai = orderIndex.has(a.id) ? orderIndex.get(a.id) : Number.MAX_SAFE_INTEGER;
+        const bi = orderIndex.has(b.id) ? orderIndex.get(b.id) : Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+        // Stable fallback for any rows not in the list (shouldn't happen):
+        return (a.name || '').localeCompare(b.name || '');
+      });
+    }
+
     return res.status(200).json({
       subaccount_id: subaccountId,
       slug,
       widget,
-      services: svcResult.rows,
+      services: orderedServices,
       variations: varResult.rows,
       class_sessions: classSessions,
       staff: publicStaff,
