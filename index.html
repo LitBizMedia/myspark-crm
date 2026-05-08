@@ -5111,7 +5111,7 @@ function renderMonthCal(){
     const isToday=str===td;
     const appts=str?getCalAppts(state.calUser,str):[];
     const tasks_=str?db.tasks.filter(t=>t.dueDate===str&&t.status!=='done'):[];
-    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'}),
+    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);var addonPill=_apptAddonsPillHTML(a);return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+addonPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'}),
       ...tasks_.slice(0,Math.max(0,2-appts.length)).map(t=>'<div class="cal-ev cal-ev-task" onclick="event.stopPropagation();openTaskModal(null,\''+t.id+'\')">'+esc(t.title)+'</div>')];
     const more=appts.length+tasks_.length-shown.length;
     let schedHTML='';
@@ -5228,7 +5228,7 @@ function buildTimedCol(dateStr,appts,allHours){
     var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
-      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+'</div>'
+      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
       +'</div>';
@@ -5268,7 +5268,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
-      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+'</div>'
+      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
       +'</div>';
@@ -6603,7 +6603,31 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
       + '</div>';
   }
 
-  const b = widgetBanner +
+  // Add-ons section: shown when appointment has addons regardless of source.
+  // Displays each addon with name, price, and any duration impact.
+  var addonsSection = '';
+  if (a && Array.isArray(a.addons) && a.addons.length) {
+    var addonRows = a.addons.map(function(ad){
+      var dur = parseInt(ad.duration_add) || 0;
+      var price = parseFloat(ad.price) || 0;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:12px">'
+        + '<div><div style="font-weight:600;color:var(--text)">' + esc(ad.name||'Add-on') + '</div>'
+        + (ad.description ? '<div style="color:var(--text-muted);font-size:11px;margin-top:2px">' + esc(ad.description) + '</div>' : '')
+        + (dur ? '<div style="color:var(--text-muted);font-size:11px;margin-top:2px">+' + dur + ' min</div>' : '')
+        + '</div>'
+        + '<div style="font-weight:700;color:var(--text)">' + fmt$(price) + '</div>'
+        + '</div>';
+    }).join('');
+    addonsSection = '<div style="background:rgba(107,33,234,.04);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px">'
+      + '<div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">'
+      + '<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:5px;background:var(--brand);color:#fff;letter-spacing:0">+' + a.addons.length + '</span>'
+      + 'Add-ons'
+      + '</div>'
+      + addonRows
+      + '</div>';
+  }
+
+  const b = widgetBanner + addonsSection +
     // Service section: visible only in Service mode. Mode is set at open time
     // by the +Schedule menu choice, no in-modal switching.
     (initialMode === 'service'
@@ -6837,6 +6861,20 @@ function _getClassSessionPaymentStatus(session){
 // Returns a payment status pill as HTML. Pass compact:true for calendar
 // (only paid/partial render, no_price and unpaid render empty). Pass
 // compact:false for list views (all three statuses render).
+
+// Builds the addon "+N" pill HTML for calendar event tiles.
+// Returns empty string if appt has no addons. Native title attribute
+// shows the breakdown on hover.
+function _apptAddonsPillHTML(appt){
+  if(!appt||!Array.isArray(appt.addons)||!appt.addons.length)return '';
+  var n=appt.addons.length;
+  var lines=appt.addons.map(function(a){
+    return (a.name||'Add-on')+': '+fmt$(parseFloat(a.price)||0)+(a.duration_add?' (+'+a.duration_add+' min)':'');
+  }).join('\n');
+  var tooltip='Add-ons:\n'+lines;
+  return '<span title="'+esc(tooltip)+'" style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:6px;background:var(--brand);color:#fff;line-height:1.2;flex-shrink:0;margin-right:4px">+'+n+'</span>';
+}
+
 function _paymentPillHTML(status, compact){
   if(status==='no_price'||status==='no_participants')return '';
   if(compact){
@@ -7096,6 +7134,7 @@ function _renderPaymentForm(ctx){
       +'</div>'
 
       // Live totals breakdown
+      +'<div id="apt-pay-addons-list"></div>'
       +'<div id="apt-pay-totals" style="background:var(--bg-input);border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px"></div>'
 
       +'<div class="form-group"><label>Notes</label><textarea id="apt-pay-notes" rows="2" placeholder="Optional"></textarea></div>'
@@ -7275,6 +7314,29 @@ function apptUpdateTotals(){
 
   var ctx=state.payCtx||{};
   var subtotal=parseFloat((amountInput||{}).value)||0;
+
+  // Render addon line items above the totals box if this appointment has addons.
+  var addonsListEl=document.getElementById('apt-pay-addons-list');
+  if(addonsListEl){
+    var apptForAddons=null;
+    if(ctx.linkage&&ctx.linkage.appointmentId){
+      apptForAddons=(db.appointments||[]).find(function(x){return x.id===ctx.linkage.appointmentId;});
+    }
+    if(apptForAddons&&Array.isArray(apptForAddons.addons)&&apptForAddons.addons.length){
+      var lines=apptForAddons.addons.map(function(ad){
+        return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px">'
+          +'<span style="color:var(--text-muted)">+ '+esc(ad.name||'Add-on')+'</span>'
+          +'<span style="color:var(--text);font-weight:600">'+fmt$(parseFloat(ad.price)||0)+'</span>'
+          +'</div>';
+      }).join('');
+      addonsListEl.innerHTML='<div style="background:rgba(107,33,234,.04);border:1px solid var(--border-subtle);border-radius:6px;padding:8px 12px;margin-bottom:8px">'
+        +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:4px">Add-ons (included in subtotal)</div>'
+        +lines
+        +'</div>';
+    } else {
+      addonsListEl.innerHTML='';
+    }
+  }
   var discType=state.apptDiscType||'flat';
   var discVal=parseFloat((discInput||{}).value)||0;
   var tipAmount=parseFloat((tipInput||{}).value)||0;
