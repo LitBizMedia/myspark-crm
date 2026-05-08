@@ -148,7 +148,7 @@ async function handler(req, res) {
       svcArgs = [subaccountId];
     }
 
-    const [svcResult, varResult] = await Promise.all([
+    const [svcResult, varResult, addonResult] = await Promise.all([
       skipServiceQuery
         ? Promise.resolve({ rows: [] })
         : db.query(svcQuery, svcArgs),
@@ -159,6 +159,16 @@ async function handler(req, res) {
              JOIN services s ON sv.service_id = s.id
              WHERE s.subaccount_id = $1 AND sv.active = true
              ORDER BY sv.service_id, sv.name`,
+            [subaccountId]
+          ),
+      skipServiceQuery
+        ? Promise.resolve({ rows: [] })
+        : db.query(
+            `SELECT id, service_id, name, description, price,
+                    duration_add, display_order
+             FROM service_addons
+             WHERE subaccount_id = $1 AND active = true
+             ORDER BY service_id, display_order, name`,
             [subaccountId]
           )
     ]);
@@ -341,6 +351,7 @@ async function handler(req, res) {
       widget,
       services: orderedServices,
       variations: varResult.rows,
+      service_addons: (addonResult && addonResult.rows) || [],
       class_sessions: classSessions,
       staff: publicStaff,
       settings: publicSettings
