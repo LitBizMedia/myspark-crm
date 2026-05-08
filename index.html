@@ -6203,7 +6203,8 @@ function confirmDelContact(id){
 }
 
 // APPOINTMENT MODAL
-let apptOverride=false;
+let apptOverrides={}; // {conflictType: true} when user has acknowledged that conflict
+let apptConflicts=[];   // populated by checkApptConflict; list of {type, label, message}
 // Helper for calendar to look up service color from a service_id.
 function getServiceColor(serviceId){
   if (!serviceId) return null;
@@ -6552,7 +6553,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   }
 
   const a=apptId?getAppt(apptId):null,cid=a&&a.contactId||contactId;
-  apptOverride=false;state.modal={type:'appt',id:apptId||null,extra:cid};
+  apptOverrides={};apptConflicts=[];state.modal={type:'appt',id:apptId||null,extra:cid};
 
   // Determine initial mode and service link.
   // Priority: explicit prefMode > existing service_id implies service > default custom.
@@ -7976,64 +7977,70 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
 }
 
 function checkApptConflict(){
+  // Collect ALL conflicts up front. No early-returns. Each conflict gets its
+  // own checkbox in the warning panel. Save stays disabled until either there
+  // are zero conflicts OR every conflict has been individually acknowledged.
   const date=document.getElementById('af-date')&&document.getElementById('af-date').value;
   const time=_readTimeInput('af-time');
   const dur=document.getElementById('af-dur')&&document.getElementById('af-dur').value;
   const userId=document.getElementById('af-user')&&document.getElementById('af-user').value;
-  // Workspace-level blackout date check. Trumps everything else when triggered.
-  if(date && !apptOverride){
+  const conflicts=[];
+
+  // Blackout date
+  if(date){
     var bo=isBlackoutDate(date);
     if(bo){
-      var wbBO=document.getElementById('appt-warn');
-      var btnBO=document.getElementById('appt-save-btn');
-      if(wbBO){wbBO.classList.remove('hidden');wbBO.innerHTML='<strong>Blackout date:</strong> '+esc(bo.reason||'Bookings disabled for this date.')+'<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
-      if(btnBO){btnBO.disabled=true;btnBO.style.opacity='.4';}
-      return;
+      conflicts.push({
+        type:'blackout',
+        label:'Blackout date',
+        message:esc(bo.reason||'Bookings disabled for this date.')
+      });
     }
   }
-  // Per-staff daily booking cap (schedule.maxBookingsPerDay set in Edit Schedule).
-  if(userId && date && !apptOverride){
+
+  // Daily booking cap for assigned staff
+  if(userId && date){
     var userCap=getUserById(userId);
     var cap=userCap && userCap.schedule && parseInt(userCap.schedule.maxBookingsPerDay);
     if(cap && cap>0){
       var thisApptId=state.modal && state.modal.id;
       var existing=db.appointments.filter(function(a){
-        return a.date===date && a.assignedTo===userId && a.status!=='cancelled' && a.id!==thisApptId;
-      }).length;
-      if(existing>=cap){
-        var wbCap=document.getElementById('appt-warn');
-        var btnCap=document.getElementById('appt-save-btn');
-        if(wbCap){wbCap.classList.remove('hidden');wbCap.innerHTML='<strong>Daily limit reached:</strong> '+esc(userCap.name||userCap.username)+' is at the daily cap of '+cap+' booking'+(cap!==1?'s':'')+' on this date.<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
-        if(btnCap){btnCap.disabled=true;btnCap.style.opacity='.4';}
-        return;
+        return a && a.assignedTo===userId && a.date===date && a.id!==thisApptId
+          && a.status!=='cancelled' && a.status!=='no-show';
+      });
+      if(existing.length>=cap){
+        conflicts.push({
+          type:'daily_cap',
+          label:'Daily limit reached',
+          message:esc(userCap.name||userCap.username)+' is at the daily cap of '+cap+' booking'+(cap!==1?'s':'')+' on this date.'
+        });
       }
     }
   }
-  // Schedule availability check
-  if(userId&&date){
-    const schHrs=getCalHours(date,userId);
-    const wb2_=document.getElementById('appt-warn');
-    if(!schHrs.length&&!apptOverride){
+
+  // Staff not scheduled (zero hours) for this date
+  if(userId && date){
+    const schHrs=getStaffAvailableHours(userId,date);
+    if(!schHrs || !schHrs.size){
       const u2_=getUserById(userId);
       const ov2_=u2_&&u2_.dateOverrides&&u2_.dateOverrides.find(function(o){return o.date===date;});
-      const reason2_=ov2_&&ov2_.type==='off'?(ov2_.note?'Day off: '+ov2_.note:'Marked as day off'):'Not scheduled on this day';
-      const btn2_=document.getElementById('appt-save-btn');
-      if(wb2_){wb2_.classList.remove('hidden');wb2_.innerHTML='<strong>Not available:</strong> '+esc(u2_&&(u2_.name||u2_.username)||'Staff member')+' is not scheduled on this date ('+esc(reason2_)+').<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
-      if(btn2_){btn2_.disabled=true;btn2_.style.opacity='.4';}
-      return;
+      const reason2_=(ov2_&&ov2_.type==='off')?(ov2_.note||'Day Off'):'no schedule for this day';
+      conflicts.push({
+        type:'not_scheduled',
+        label:'Staff not available',
+        message:esc(u2_&&(u2_.name||u2_.username)||'Staff member')+' is not scheduled on this date ('+esc(reason2_)+').'
+      });
     }
   }
-  // Check if appointment time falls within working hours (Set-based: catches
-  // lunch breaks and Hours Off override gaps, not just outer bounds).
-  if(userId&&date&&time&&!apptOverride){
+
+  // Time slot overlaps lunch, hoursOff, or sits outside working hours
+  if(userId && date && time){
     const hSet=getStaffAvailableHours(userId,date);
-    if(hSet.size>0){
+    if(hSet && hSet.size>0){
       const apptHour=parseInt(time.split(':')[0]);
       const apptMin=parseInt(time.split(':')[1])||0;
       const apptStart=apptHour*60+apptMin;
       const apptEnd=apptStart+(parseInt(dur)||60);
-      // Walk every 5-min slot the appointment occupies; if any falls in an
-      // unavailable hour, that's a conflict.
       var conflictHour=null;
       for(var tt=apptStart;tt<apptEnd;tt+=5){
         var hh=Math.floor(tt/60);
@@ -8046,32 +8053,26 @@ function checkApptConflict(){
         const firstH=sortedH[0],lastH=sortedH[sortedH.length-1];
         var msg;
         if(conflictHour<firstH||conflictHour>lastH){
-          msg='<strong>Outside working hours:</strong> '+esc(u2name)+' is scheduled '+fmtTime(String(firstH).padStart(2,'0')+':00')+' to '+fmtTime(String(lastH+1).padStart(2,'0')+':00')+' on this date.';
+          msg=esc(u2name)+' works '+fmtTime(String(firstH).padStart(2,'0')+':00')+' to '+fmtTime(String(lastH+1).padStart(2,'0')+':00')+' on this date.';
         }else{
-          // Identify the gap: lunch break or hoursOff override
           const u2obj=getUserById(userId);
           const ov=u2obj&&u2obj.dateOverrides&&u2obj.dateOverrides.find(function(o){return o.date===date;});
           const sched=u2obj&&u2obj.schedule&&u2obj.schedule[getDK(date)];
           var gapDesc='a scheduling gap';
           if(ov&&ov.type==='hoursOff'&&ov.start&&ov.end&&parseInt(ov.start)<=conflictHour&&conflictHour<parseInt(ov.end)){
-            gapDesc='Hours Off ('+fmtTime(ov.start)+' \u2013 '+fmtTime(ov.end)+')'+(ov.note?': '+esc(ov.note):'');
+            gapDesc='Hours Off ('+fmtTime(ov.start)+' – '+fmtTime(ov.end)+')'+(ov.note?': '+esc(ov.note):'');
           }else if(sched&&sched.hasLunch&&sched.lunchStart&&sched.lunchEnd&&parseInt(sched.lunchStart)<=conflictHour&&conflictHour<parseInt(sched.lunchEnd)){
-            gapDesc='lunch break ('+fmtTime(sched.lunchStart)+' \u2013 '+fmtTime(sched.lunchEnd)+')';
+            gapDesc='lunch break ('+fmtTime(sched.lunchStart)+' – '+fmtTime(sched.lunchEnd)+')';
           }
-          msg='<strong>Conflict:</strong> '+esc(u2name)+' is unavailable at this time due to '+gapDesc+'.';
+          msg=esc(u2name)+' is unavailable at this time due to '+gapDesc+'.';
         }
-        const wb2=document.getElementById('appt-warn');
-        const btn2=document.getElementById('appt-save-btn');
-        if(wb2){wb2.classList.remove('hidden');wb2.innerHTML=msg+'<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
-        if(btn2){btn2.disabled=true;btn2.style.opacity='.4';}
-        return;
+        conflicts.push({type:'time_slot',label:'Time conflict',message:msg});
       }
     }
   }
-  // Service mode: lead time and advance booking soft warnings.
-  // Both rely on optional service fields. If unset, checks are skipped.
-  // Soft warnings only - user can override and schedule anyway.
-  if(state.apptMode==='service'&&!apptOverride){
+
+  // Service mode: lead time and advance booking
+  if(state.apptMode==='service'){
     const svcInpC=document.getElementById('af-service');
     const serviceIdC=svcInpC?svcInpC.value:'';
     if(serviceIdC&&date&&time){
@@ -8079,46 +8080,119 @@ function checkApptConflict(){
       if(svcC){
         const apptDt=new Date(date+'T'+time);
         const nowDt=new Date();
-        const wbC=document.getElementById('appt-warn');
-        const btnC=document.getElementById('appt-save-btn');
-
-        // Lead time: appointment must be at least N hours from now.
         const leadHours=parseInt(svcC.booking_lead_time_hours,10)||0;
         if(leadHours>0){
           const minDt=new Date(nowDt.getTime()+leadHours*3600000);
           if(apptDt<minDt){
-            if(wbC){wbC.classList.remove('hidden');wbC.innerHTML='<strong>Lead time required:</strong> '+esc(svcC.name)+' requires '+leadHours+' hour'+(leadHours!==1?'s':'')+' notice. Booking earlier skips that requirement.<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
-            if(btnC){btnC.disabled=true;btnC.style.opacity='.4';}
-            return;
+            conflicts.push({
+              type:'service_lead_time',
+              label:'Lead time required',
+              message:esc(svcC.name)+' requires '+leadHours+' hour'+(leadHours!==1?'s':'')+' notice. Booking earlier skips that requirement.'
+            });
           }
         }
-
-        // Advance booking: appointment must be no more than N days from today.
         const advDays=parseInt(svcC.booking_advance_days,10)||0;
         if(advDays>0){
           const maxDt=new Date(nowDt);
           maxDt.setDate(maxDt.getDate()+advDays);
           if(apptDt>maxDt){
-            if(wbC){wbC.classList.remove('hidden');wbC.innerHTML='<strong>Booking too far out:</strong> '+esc(svcC.name)+' is normally bookable up to '+advDays+' day'+(advDays!==1?'s':'')+' in advance.<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
-            if(btnC){btnC.disabled=true;btnC.style.opacity='.4';}
-            return;
+            conflicts.push({
+              type:'service_advance_days',
+              label:'Booking too far out',
+              message:esc(svcC.name)+' is normally bookable up to '+advDays+' day'+(advDays!==1?'s':'')+' in advance.'
+            });
           }
         }
       }
     }
   }
 
-  const conflict=checkDoubleBook(state.modal.id,date,time,dur,userId);
-  const wb=document.getElementById('appt-warn'),btn=document.getElementById('appt-save-btn');
-  if(!wb||!btn)return;
-  if(conflict&&!apptOverride){
+  // Double-book: existing appointment for this staff at this slot
+  const dbConflict=checkDoubleBook(state.modal.id,date,time,dur,userId);
+  if(dbConflict){
     const u=getUserById(userId);
-    wb.innerHTML='<strong>Scheduling conflict:</strong> '+esc(u&&(u.name||u.username)||'This staff member')+' already has <strong>"'+esc(conflict.title)+'"</strong> at '+fmtTime(conflict.time)+' on this date.<div style="margin-top:8px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Override and Schedule Anyway</button></div>';
-    wb.classList.remove('hidden');btn.disabled=true;btn.style.opacity='.4';
-  }else{wb.classList.add('hidden');btn.disabled=false;btn.style.opacity='1'}
+    conflicts.push({
+      type:'double_book',
+      label:'Scheduling conflict',
+      message:esc(u&&(u.name||u.username)||'This staff member')+' already has "'+esc(dbConflict.title)+'" at '+fmtTime(dbConflict.time)+' on this date.'
+    });
+  }
+
+  apptConflicts=conflicts;
+  // Reset acknowledgments for any conflict types no longer present.
+  Object.keys(apptOverrides).forEach(function(k){
+    if(!conflicts.some(function(c){return c.type===k;}))delete apptOverrides[k];
+  });
+
+  renderApptConflictPanel();
 }
 
-function overrideAppt(){apptOverride=true;checkApptConflict();toast('Override confirmed. Save when ready.','warn')}
+function renderApptConflictPanel(){
+  const wb=document.getElementById('appt-warn');
+  const btn=document.getElementById('appt-save-btn');
+  if(!wb||!btn)return;
+
+  if(!apptConflicts.length){
+    wb.classList.add('hidden');
+    wb.innerHTML='';
+    btn.disabled=false;
+    btn.style.opacity='1';
+    btn.style.background='';
+    btn.style.borderColor='';
+    btn.textContent='Save';
+    return;
+  }
+
+  const ackCount=apptConflicts.filter(function(c){return apptOverrides[c.type];}).length;
+  const allAcked=ackCount===apptConflicts.length;
+
+  var rows=apptConflicts.map(function(c){
+    const checked=apptOverrides[c.type]?'checked':'';
+    return '<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;cursor:pointer;border-top:1px solid rgba(245,158,11,.2)">'
+      +'<input type="checkbox" '+checked+' onchange="toggleApptOverride(\''+c.type+'\', this.checked)" style="margin-top:3px;flex-shrink:0;cursor:pointer">'
+      +'<span style="flex:1"><strong>'+c.label+':</strong> '+c.message+'</span>'
+      +'</label>';
+  }).join('');
+
+  const headerLabel=apptConflicts.length===1
+    ? '1 conflict detected. Acknowledge to override.'
+    : apptConflicts.length+' conflicts detected. Acknowledge each to override.';
+
+  wb.innerHTML='<div style="font-weight:700;margin-bottom:4px">'+headerLabel+'</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Each box you check is logged in the audit trail.</div>'
+    +rows;
+  wb.classList.remove('hidden');
+
+  if(allAcked){
+    btn.disabled=false;
+    btn.style.opacity='1';
+    btn.style.background='rgba(245,158,11,.15)';
+    btn.style.borderColor='rgba(245,158,11,.4)';
+    btn.style.color='#fbbf24';
+    btn.textContent='Save with Override ('+ackCount+' acknowledged)';
+  }else{
+    btn.disabled=true;
+    btn.style.opacity='.4';
+    btn.style.background='';
+    btn.style.borderColor='';
+    btn.style.color='';
+    btn.textContent='Save';
+  }
+}
+
+function toggleApptOverride(type, checked){
+  if(checked)apptOverrides[type]=true;
+  else delete apptOverrides[type];
+  renderApptConflictPanel();
+}
+
+// Legacy shim: _reopenWithOverride path uses this to skip server race check
+// after a 409. Sets a synthetic 'race' override so syncAppointment will pass
+// the override flag to the server.
+function overrideAppt(){
+  apptOverrides['_legacy_race']=true;
+  toast('Race condition acknowledged. Save when ready.','warn');
+}
 
 function sendApptConfirmation(data){
   if(!data.contactId)return;
@@ -8225,13 +8299,20 @@ function saveAppt(){
   var editingIdForRecovery = state.modal && state.modal.id || null;
   // Override flag: user already overrode in the local conflict UI (apptOverride),
   // tell the server to skip its own race check.
-  syncAppointment(apptForSync, false, !!apptOverride).then(function(res){
+  var ackList=Object.keys(apptOverrides||{});
+  var hasOverride=ackList.length>0;
+  syncAppointment(apptForSync, false, hasOverride).then(function(res){
     if(res && res.ok){
-      // Audit only on success
+      // Audit only on success. If user acknowledged any conflicts, record which ones.
+      var auditMeta={ title: data.title, date: data.date, time: data.time, contact_id: data.contactId, assigned_to: data.assignedTo, status: data.status, service_id: serviceId, service_variation_id: variationId };
+      if(hasOverride){
+        auditMeta.overrides_acknowledged=ackList;
+        auditMeta.override_count=ackList.length;
+      }
       logSubaccountAudit(isNewAppt ? 'subaccount.appointment.create' : 'subaccount.appointment.update', {
         targetId: apptIdForAudit,
         targetType: 'appointment',
-        metadata: { title: data.title, date: data.date, time: data.time, contact_id: data.contactId, assigned_to: data.assignedTo, status: data.status, service_id: serviceId, service_variation_id: variationId }
+        metadata: auditMeta
       });
       return;
     }
@@ -8295,8 +8376,10 @@ function _showApptConflictRecovery(message, data, isNew, editingId){
 }
 function _reopenWithOverride(editingId){
   closeModal();
-  apptOverride=true;
   openApptModal(null, editingId||null);
+  // Pre-set the legacy race override so the server-side race check is skipped.
+  // The user already saw and dismissed the conflict prompt before re-opening.
+  setTimeout(function(){apptOverrides['_legacy_race']=true;checkApptConflict();},100);
 }
 
 function delAppt(id){
