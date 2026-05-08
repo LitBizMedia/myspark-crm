@@ -6462,6 +6462,66 @@ function enrollSubmit(){
 
 // Called when service dropdown changes. Prefills title, duration, buffers,
 // refreshes variation dropdown, and filters staff to assigned_staff.
+function renderApptAddonsSection(){
+  var wrap = document.getElementById('apt-addons-wrap');
+  var listEl = document.getElementById('apt-addons-list');
+  if (!wrap || !listEl) return;
+  var svcSel = document.getElementById('af-service');
+  var serviceId = svcSel ? svcSel.value : '';
+  if (!serviceId) { wrap.style.display = 'none'; return; }
+  var addons = (db.serviceAddons || [])
+    .filter(function(a){ return a.service_id === serviceId && a.active !== false; })
+    .sort(function(a,b){
+      var ao=a.display_order!=null?a.display_order:9999;
+      var bo=b.display_order!=null?b.display_order:9999;
+      if(ao!==bo)return ao-bo;
+      return(a.name||'').localeCompare(b.name||'');
+    });
+  if (!addons.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  var sel = state.apptSelectedAddons || [];
+  var html = '<div style="display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--main-bg)">';
+  addons.forEach(function(a){
+    var checked = sel.some(function(x){return x.id===a.id;}) ? ' checked' : '';
+    var dur = parseInt(a.duration_add) || 0;
+    var price = parseFloat(a.price) || 0;
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:12px;border-radius:4px">'
+      + '<input type="checkbox"' + checked + ' onchange="toggleApptAddon(\'' + a.id + '\', this.checked)">'
+      + '<div style="flex:1">'
+      + '<div style="font-weight:600;color:var(--main-text)">' + esc(a.name) + '</div>'
+      + (a.description ? '<div style="font-size:11px;color:var(--main-text-muted);margin-top:1px">' + esc(a.description) + '</div>' : '')
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--main-text-muted);text-align:right">' + fmt$(price) + (dur ? '<br>+' + dur + ' min' : '') + '</div>'
+      + '</label>';
+  });
+  html += '</div>';
+  if (sel.length) {
+    var addonsPrice = sel.reduce(function(s,x){return s+(parseFloat(x.price)||0);},0);
+    var addonsDur = sel.reduce(function(s,x){return s+(parseInt(x.duration_add)||0);},0);
+    html += '<div style="font-size:11px;color:var(--main-text-muted);margin-top:6px">' + sel.length + ' add-on' + (sel.length===1?'':'s') + ' selected: ' + fmt$(addonsPrice) + (addonsDur?' / +' + addonsDur + ' min':'') + '</div>';
+  }
+  listEl.innerHTML = html;
+}
+
+function toggleApptAddon(addonId, checked){
+  var src = (db.serviceAddons || []).find(function(x){return x.id===addonId;});
+  if (!src) return;
+  var sel = state.apptSelectedAddons || [];
+  var existing = sel.find(function(x){return x.id===addonId;});
+  var durInp = document.getElementById('af-dur');
+  var curDur = durInp ? (parseInt(durInp.value) || 0) : 0;
+  var addonDur = parseInt(src.duration_add) || 0;
+  if (checked && !existing) {
+    sel.push({id:src.id, name:src.name, price:parseFloat(src.price)||0, duration_add:addonDur});
+    if (durInp && addonDur) durInp.value = curDur + addonDur;
+  } else if (!checked && existing) {
+    state.apptSelectedAddons = sel.filter(function(x){return x.id!==addonId;});
+    if (durInp && addonDur) durInp.value = Math.max(0, curDur - addonDur);
+  }
+  renderApptAddonsSection();
+  if (typeof checkApptConflict === 'function') checkApptConflict();
+}
+
 function apptOnServiceChange(){
   var svcSel = document.getElementById('af-service');
   var serviceId = svcSel ? svcSel.value : '';
@@ -6505,6 +6565,9 @@ function apptOnServiceChange(){
   } else if (varWrap) {
     varWrap.style.display = 'none';
   }
+
+  state.apptSelectedAddons = [];
+  renderApptAddonsSection();
 
   checkApptConflict();
 }
@@ -6554,6 +6617,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
 
   const a=apptId?getAppt(apptId):null,cid=a&&a.contactId||contactId;
   apptOverrides={};apptConflicts=[];state.modal={type:'appt',id:apptId||null,extra:cid};
+  state.apptSelectedAddons = (a && Array.isArray(a.addons)) ? a.addons.map(function(x){return {id:x.id,name:x.name,price:parseFloat(x.price)||0,duration_add:parseInt(x.duration_add)||0};}) : [];
 
   // Determine initial mode and service link.
   // Priority: explicit prefMode > existing service_id implies service > default custom.
@@ -6634,6 +6698,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
       ? '<div id="apt-svc-section">'
         + '<div class="form-group"><label>Service *</label>' + svcSsHTML('af-svc-wrap','af-svc-inp','af-service','af-svc-drop','Search services...', initialServiceId || '') + '</div>'
         + '<div class="form-group" id="apt-var-wrap" style="display:' + (initialVarHTML ? 'block' : 'none') + '"><label>Variation</label><select id="af-variation" onchange="apptOnVariationChange()">' + initialVarHTML + '</select></div>'
+        + '<div class="form-group" id="apt-addons-wrap" style="display:none"><label>Add-ons</label><div id="apt-addons-list"></div></div>'
         + '</div>'
       : '')
 
@@ -6676,7 +6741,10 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var detailFooter = (a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
 
   openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
-  setTimeout(checkApptConflict,80);
+  setTimeout(function(){
+    if (typeof renderApptAddonsSection === 'function') renderApptAddonsSection();
+    checkApptConflict();
+  }, 80);
 }
 
 // Switch between Details and Take Payment tabs in the appointment modal.
@@ -8352,16 +8420,22 @@ function saveAppt(){
     variationId=(varSel&&varSel.value)||null;
     if(!serviceId){toast('Pick a service or switch to Custom mode.','error');return;}
   }
-  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:_readTimeInput('af-time'),duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0,service_id:serviceId,service_variation_id:variationId};
+  var apptAddons = (state.apptSelectedAddons || []).map(function(x){return {id:x.id};});
+  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:_readTimeInput('af-time'),duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0,service_id:serviceId,service_variation_id:variationId,addons:apptAddons};
   var isNewAppt=!state.modal.id;
   var apptIdForAudit=state.modal.id||null;
   // Snapshot state for potential rollback if the server returns a 409 race conflict
   var rollback=null;
   if(state.modal.id){
     const a=getAppt(state.modal.id);
-    if(a){rollback={kind:'update',id:a.id,prev:JSON.parse(JSON.stringify(a))};Object.assign(a,data);}
+    if(a){
+      rollback={kind:'update',id:a.id,prev:JSON.parse(JSON.stringify(a))};
+      Object.assign(a,data);
+      a.addons = (state.apptSelectedAddons || []).map(function(x){return {id:x.id, name:x.name, price:parseFloat(x.price)||0, duration_add:parseInt(x.duration_add)||0};});
+    }
   } else {
     var newAppt={id:uid(),...data,createdAt:now_()};
+    newAppt.addons = (state.apptSelectedAddons || []).map(function(x){return {id:x.id, name:x.name, price:parseFloat(x.price)||0, duration_add:parseInt(x.duration_add)||0};});
     db.appointments.push(newAppt);
     apptIdForAudit=newAppt.id;
     rollback={kind:'create',id:newAppt.id};
