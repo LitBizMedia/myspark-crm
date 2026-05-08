@@ -295,8 +295,11 @@ async function handler(req, res) {
       // Resolve add-ons from client-supplied IDs. Server fetches authoritative
       // price/duration/name from DB. Client prices IGNORED to prevent tampering.
       // Inactive or cross-subaccount IDs are silently dropped.
+      // Accept either array of strings (legacy) OR array of {id} objects (current frontend).
       if (Array.isArray(addonIds) && addonIds.length) {
-        const ids = addonIds.filter(x => typeof x === 'string' && x.length);
+        const ids = addonIds
+          .map(x => (typeof x === 'string') ? x : (x && x.id))
+          .filter(x => typeof x === 'string' && x.length);
         if (ids.length) {
           const addRes = await db.query(
             `SELECT id, name, description, price, duration_add
