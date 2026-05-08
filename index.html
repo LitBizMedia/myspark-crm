@@ -9115,6 +9115,7 @@ async function fetchFromServer(){
       db={...db,...rem,settings:{...db.settings,...rem.settings}};
       if(result.services)db.services=result.services;
       if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
+      if(result.serviceAddons)db.serviceAddons=result.serviceAddons;
       if(result.classSessions)db.classSessions=result.classSessions;
       // Migrated out of blob into dedicated column/table. Override anything
       // the blob might still have during the transition.
@@ -13380,6 +13381,172 @@ function renderVariationsSection(serviceId){
   el.innerHTML=h;
 }
 
+function renderServiceAddonsSection(serviceId){
+  var el=document.getElementById('svc-addons-section');if(!el)return;
+  var addons=(db.serviceAddons||[])
+    .filter(function(a){return a.service_id===serviceId;})
+    .sort(function(a,b){
+      var ao=a.display_order!=null?a.display_order:9999;
+      var bo=b.display_order!=null?b.display_order:9999;
+      if(ao!==bo)return ao-bo;
+      return(a.name||'').localeCompare(b.name||'');
+    });
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<div><div style="font-size:13px;font-weight:700;color:var(--main-text)">Add-ons</div>'
+    +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">Optional extras patients can add. Inherits tax setting from this service.</div></div>'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="openAddonModal(\''+serviceId+'\',null)">+ Add Add-on</button>'
+    +'</div>';
+  if(!addons.length){
+    h+='<div style="font-size:12px;color:var(--main-text-muted);padding:14px 0;text-align:center;border:1px dashed var(--main-border);border-radius:6px">No add-ons yet. Click + Add Add-on to create one.</div>';
+  } else {
+    h+='<div id="svc-addons-list" style="display:flex;flex-direction:column;gap:6px">';
+    addons.forEach(function(a){
+      var dur=parseInt(a.duration_add)||0;
+      var price=parseFloat(a.price)||0;
+      h+='<div class="svc-addon-row" data-id="'+esc(a.id)+'" draggable="true" '
+        +'ondragstart="_addonDragStart(event,\''+esc(a.id)+'\')" '
+        +'ondragover="event.preventDefault()" '
+        +'ondrop="_addonDragDrop(event,\''+esc(serviceId)+'\',\''+esc(a.id)+'\')" '
+        +'style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px;cursor:move">'
+        +'<div style="font-size:14px;color:var(--main-text-muted);flex-shrink:0">\u2630</div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:12px;font-weight:600;color:var(--main-text)">'+esc(a.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--main-text-muted)">'+fmt$(price)+(dur?' &middot; +'+dur+' min':'')+(a.active===false?' &middot; Inactive':'')+(a.description?' &middot; '+esc(a.description):'')+'</div>'
+        +'</div>'
+        +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openAddonModal(\''+esc(serviceId)+'\',\''+esc(a.id)+'\')">Edit</button>'
+        +'</div>';
+    });
+    h+='</div>';
+  }
+  el.innerHTML=h;
+}
+
+function _addonDragStart(e,id){
+  e.dataTransfer.setData('text/plain',id);
+  e.dataTransfer.effectAllowed='move';
+}
+
+function _addonDragDrop(e,serviceId,targetId){
+  e.preventDefault();
+  var draggedId=e.dataTransfer.getData('text/plain');
+  if(!draggedId||draggedId===targetId)return;
+  var rows=Array.from(document.querySelectorAll('#svc-addons-list .svc-addon-row'));
+  var ids=rows.map(function(r){return r.getAttribute('data-id');});
+  var fromIdx=ids.indexOf(draggedId);
+  var toIdx=ids.indexOf(targetId);
+  if(fromIdx<0||toIdx<0)return;
+  ids.splice(fromIdx,1);
+  ids.splice(toIdx,0,draggedId);
+  // Optimistic local reorder, then persist.
+  ids.forEach(function(id,i){
+    var a=(db.serviceAddons||[]).find(function(x){return x.id===id;});
+    if(a)a.display_order=i;
+  });
+  renderServiceAddonsSection(serviceId);
+  fetch(apiUrl('/api/subaccount/service-addons-reorder'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({service_id:serviceId,ordered_ids:ids})
+  }).then(function(r){
+    if(!r.ok){toast('Reorder failed.','error');fetchFromServer();}
+  }).catch(function(){toast('Reorder failed.','error');fetchFromServer();});
+}
+
+function openAddonModal(serviceId,addonId){
+  var existing=addonId?(db.serviceAddons||[]).find(function(x){return x.id===addonId;}):null;
+  var title=existing?'Edit Add-on':'New Add-on';
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    +'<div class="form-group"><label>Name *</label><input id="ad-name" type="text" value="'+esc(existing?existing.name:'')+'" placeholder="Hot stones, essential oils..."></div>'
+    +'<div class="form-group"><label>Description</label><textarea id="ad-desc" rows="2" style="resize:vertical">'+esc(existing&&existing.description||'')+'</textarea></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Price *</label><input id="ad-price" type="number" step="0.01" min="0" value="'+(existing&&existing.price!=null?parseFloat(existing.price).toFixed(2):'0.00')+'"></div>'
+    +'<div class="form-group"><label>Extra Duration (min)</label><input id="ad-dur" type="number" min="0" step="5" value="'+(existing&&existing.duration_add!=null?parseInt(existing.duration_add):0)+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="ad-active" type="checkbox"'+((existing&&existing.active!==false)||!existing?' checked':'')+'>Active (available for selection)</label></div>'
+    +'</div>';
+  var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="confirmDeleteAddon(\''+serviceId+'\',\''+existing.id+'\')">Delete</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal();setTimeout(function(){openServiceModal(\''+serviceId+'\')},50)">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveAddon(\''+serviceId+'\','+(existing?'\''+existing.id+'\'':'null')+')">Save</button>';
+  openModal(title,body,footer);
+}
+
+function saveAddon(serviceId,addonId){
+  var name=(document.getElementById('ad-name').value||'').trim();
+  if(!name){toast('Name is required.','error');return;}
+  var price=parseFloat(document.getElementById('ad-price').value);
+  if(isNaN(price)||price<0){toast('Price must be 0 or greater.','error');return;}
+  var dur=parseInt(document.getElementById('ad-dur').value)||0;
+  var active=document.getElementById('ad-active').checked;
+  var desc=(document.getElementById('ad-desc').value||'').trim();
+
+  var existing=addonId?(db.serviceAddons||[]).find(function(x){return x.id===addonId;}):null;
+  var maxOrder=Math.max(-1,...(db.serviceAddons||[]).filter(function(a){return a.service_id===serviceId;}).map(function(a){return a.display_order||0;}));
+  var rec={
+    id:addonId||uid(),
+    service_id:serviceId,
+    name:name,
+    description:desc||null,
+    price:price,
+    duration_add:dur,
+    active:active,
+    display_order:existing?existing.display_order:maxOrder+1
+  };
+
+  fetch(apiUrl('/api/subaccount/service-addons-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(rec)
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res&&res.success){
+      // Update local cache
+      if(!db.serviceAddons)db.serviceAddons=[];
+      if(existing){Object.assign(existing,rec);existing.updated_at=new Date().toISOString();}
+      else{db.serviceAddons.push(Object.assign({},rec,{created_at:new Date().toISOString(),updated_at:new Date().toISOString()}));}
+      closeModal();
+      setTimeout(function(){
+        openServiceModal(serviceId);
+        setTimeout(function(){switchSvcTab('addons');},80);
+      },50);
+      toast(existing?'Add-on updated.':'Add-on created.','success');
+    } else {
+      toast((res&&res.error)||'Failed to save add-on.','error');
+    }
+  }).catch(function(){toast('Network error saving add-on.','error');});
+}
+
+function confirmDeleteAddon(serviceId,addonId){
+  var a=(db.serviceAddons||[]).find(function(x){return x.id===addonId;});
+  var name=a?a.name:'this add-on';
+  state.modal={type:'del-addon',id:addonId};
+  document.getElementById('modal-title').textContent='Delete Add-on';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+esc(name)+'</strong>? This cannot be undone. Existing appointments that use this add-on will keep their snapshot.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal();setTimeout(function(){openServiceModal(\''+serviceId+'\');setTimeout(function(){switchSvcTab(\'addons\');},80);},50)">Cancel</button>'
+    +'<button class="btn btn-danger" onclick="_doDeleteAddon(\''+serviceId+'\',\''+addonId+'\')">Delete</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function _doDeleteAddon(serviceId,addonId){
+  fetch(apiUrl('/api/subaccount/service-addons-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:addonId})
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res&&res.success){
+      db.serviceAddons=(db.serviceAddons||[]).filter(function(x){return x.id!==addonId;});
+      closeModal();
+      setTimeout(function(){
+        openServiceModal(serviceId);
+        setTimeout(function(){switchSvcTab('addons');},80);
+      },50);
+      toast('Add-on deleted.','success');
+    } else {
+      toast((res&&res.error)||'Failed to delete add-on.','error');
+    }
+  }).catch(function(){toast('Network error deleting add-on.','error');});
+}
+
+
 function saveService(id){
   var name=document.getElementById('svc-name').value.trim();
   if(!name){toast(document.getElementById('svc-type').value==='class'?'Class name is required.':'Service name is required.','error');return;}
@@ -13514,6 +13681,7 @@ function deleteService(id){
 
   db.services=(db.services||[]).filter(function(s){return s.id!==id;});
   db.serviceVariations=(db.serviceVariations||[]).filter(function(v){return v.service_id!==id;});
+  db.serviceAddons=(db.serviceAddons||[]).filter(function(a){return a.service_id!==id;});
   db.classSessions=(db.classSessions||[]).filter(function(cs){return cs.service_id!==id;});
   closeModal();renderServiceCal();
   fetch(apiUrl('/api/subaccount/services-delete'),{
