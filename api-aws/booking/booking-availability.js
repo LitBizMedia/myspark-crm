@@ -1,83 +1,69 @@
 // api/booking/booking-availability.js
 // GET /api/booking/availability?slug=SLUG&service_id=SID&staff_id=UID|any&date=YYYY-MM-DD
 // PUBLIC - no auth required
-// Returns available time slots for a given service/staff/date
+// Returns available time slots for a given service/staff/date.
 //
-// CHANGED 2026-05-07: TZ-aware lead time cutoff. The "is this date today, and
-// if so, what's the earliest bookable time" check now uses the subaccount's
-// timezone, not server UTC. Without this, customers in Eastern at 8pm could
-// see slots for the next day filtered by UTC's "today is tomorrow already".
+// CHANGED 2026-05-08: slot generation now uses lib/schedule.buildAvailableWindows
+// so that lunch breaks (schedule.hasLunch + lunchStart + lunchEnd) and
+// Hours Off / Work These Hours overrides are honored. Previously only the
+// outer day boundary and 'off' override type were considered.
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz, nowMinutesInTz } = require('./lib/timezone');
-
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-
-function timeToMins(t) {
-  const [h, m] = (t || '00:00').split(':').map(Number);
-  return h * 60 + m;
-}
+const { buildAvailableWindows, intersectWindows, timeToMins, dayKeyForDate } = require('./lib/schedule');
 
 function minsToTime(m) {
   return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 }
 
 function getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailability, strictAvailability, tz, slotIntervalMinutes) {
-  const dayKey = DAY_KEYS[new Date(date + 'T12:00:00').getDay()];
-  const schedule = staff.schedule || {};
-  const daySchedule = schedule[dayKey];
-  if (!daySchedule || !daySchedule.on) return [];
+  let windows = buildAvailableWindows(staff, date);
+  if (!windows.length) return [];
 
-  const override = (staff.dateOverrides || []).find(o => o.date === date);
-  if (override && override.type === 'off') return [];
-
-  let workStart = timeToMins(daySchedule.start || '08:00');
-  let workEnd   = timeToMins(daySchedule.end   || '17:00');
-
+  const dayKey = dayKeyForDate(date);
   const hasAnyAvail = serviceAvailability && Object.keys(serviceAvailability).length > 0;
   if (hasAnyAvail) {
     const sAvail = serviceAvailability[dayKey];
     if (!sAvail || !sAvail.on) {
       if (strictAvailability) return [];
     } else {
-      workStart = Math.max(workStart, timeToMins(sAvail.start || '08:00'));
-      workEnd   = Math.min(workEnd,   timeToMins(sAvail.end   || '17:00'));
+      const sStart = timeToMins(sAvail.start || '08:00');
+      const sEnd = timeToMins(sAvail.end || '17:00');
+      windows = intersectWindows(windows, sStart, sEnd);
+      if (!windows.length) return [];
     }
   }
 
-  if (workStart >= workEnd) return [];
-
-  // Lead time cutoff: if the requested date is "today" in the subaccount's
-  // timezone, the earliest bookable slot is now + leadTime. Otherwise no cutoff.
   const tzToday = todayInTz(tz);
   let cutoffMins = 0;
   if (date === tzToday) {
     cutoffMins = nowMinutesInTz(tz) + leadTimeHours * 60;
   }
 
-  const slots = [];
-  // Slot interval defaults to 15 minutes. Widget can override to 10/30/60.
-  // The interval is the GAP between slot start times, not the duration.
   const step = (slotIntervalMinutes && slotIntervalMinutes > 0) ? slotIntervalMinutes : 15;
-  for (let t = workStart; t + duration <= workEnd; t += step) {
-    if (t < cutoffMins) continue;
+  const slots = [];
 
-    const slotCalStart = t - bufBefore;
-    const slotCalEnd   = t + duration + bufAfter;
+  for (const [wStart, wEnd] of windows) {
+    for (let t = wStart; t + duration <= wEnd; t += step) {
+      if (t < cutoffMins) continue;
 
-    let conflict = false;
-    for (const appt of appts) {
-      if (appt.status === 'cancelled') continue;
-      const aStart    = timeToMins(appt.time || '00:00');
-      const aBufB     = parseInt(appt.buffer_before)  || 0;
-      const aBufA     = parseInt(appt.buffer_after)   || 0;
-      const aCalStart = aStart - aBufB;
-      const aCalEnd   = aStart + (parseInt(appt.duration) || 60) + aBufA;
-      if (slotCalStart < aCalEnd && slotCalEnd > aCalStart) { conflict = true; break; }
+      const slotCalStart = t - bufBefore;
+      const slotCalEnd = t + duration + bufAfter;
+
+      let conflict = false;
+      for (const appt of appts) {
+        if (appt.status === 'cancelled') continue;
+        const aStart = timeToMins(appt.time || '00:00');
+        const aBufB = parseInt(appt.buffer_before) || 0;
+        const aBufA = parseInt(appt.buffer_after) || 0;
+        const aCalStart = aStart - aBufB;
+        const aCalEnd = aStart + (parseInt(appt.duration) || 60) + aBufA;
+        if (slotCalStart < aCalEnd && slotCalEnd > aCalStart) { conflict = true; break; }
+      }
+
+      if (!conflict) slots.push({ time: minsToTime(t), staff_id: staff.id });
     }
-
-    if (!conflict) slots.push({ time: minsToTime(t), staff_id: staff.id });
   }
   return slots;
 }
@@ -166,8 +152,6 @@ async function handler(req, res) {
         }
       }
 
-      // Service-path widget config: load widget for lead/advance/buffer overrides.
-      // (For appointment-type path, widget was already loaded above.)
       if (widget_id) {
         const wExtraRes = await db.query(
           `SELECT booking_lead_time_hours, booking_advance_days,
@@ -180,7 +164,6 @@ async function handler(req, res) {
       }
     }
 
-    // Apply per-widget overrides (set after both branches resolved their defaults).
     if (widget) {
       if (widget.buffer_before_override != null) bufBefore = parseInt(widget.buffer_before_override) || 0;
       if (widget.buffer_after_override  != null) bufAfter  = parseInt(widget.buffer_after_override)  || 0;
@@ -189,8 +172,6 @@ async function handler(req, res) {
       }
     }
 
-    // Advance-days enforcement: if the requested date is past the window,
-    // return empty slots rather than erroring (cleaner UX in the calendar).
     if (widget && widget.booking_advance_days != null) {
       const maxDays = parseInt(widget.booking_advance_days) || 0;
       if (maxDays > 0) {
@@ -211,7 +192,6 @@ async function handler(req, res) {
     const settings = blob.settings || {};
     const subTz = settings.timezone || 'America/Chicago';
 
-    // Workspace-level blackout dates: no slots returned for these dates.
     const blackoutDates = Array.isArray(settings.blackoutDates) ? settings.blackoutDates : [];
     if (blackoutDates.some(b => b && b.date === date)) {
       return res.status(200).json({ slots: [], duration, date, blackout: true });
@@ -255,8 +235,6 @@ async function handler(req, res) {
       apptsByStaff[a.assigned_to].push(a);
     }
 
-    // Per-staff daily booking cap: filter out staff who've already hit it.
-    // schedule.maxBookingsPerDay is set in Edit Schedule. Excludes cancelled.
     const dayCounts = {};
     for (const a of apptResult.rows) {
       if (a.status === 'cancelled') continue;

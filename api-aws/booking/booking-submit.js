@@ -25,6 +25,7 @@ const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const resend = require('./lib/resend');
 const { getSquareCreds, squareHost, squareHeaders } = require('./lib/square');
+const { isTimeAvailable } = require('./lib/schedule');
 const crypto = require('crypto');
 
 // Generate a 32-byte hex random token (256 bits, URL-safe).
@@ -496,6 +497,29 @@ async function handler(req, res) {
       }
     }
     } // end else (non-class) staff resolution block
+
+    // 6.5 Schedule defense: validate that the requested time falls inside an
+    // available window for the assigned staff member, honoring the regular
+    // weekly schedule, daily lunch break (schedule.hasLunch + lunch start/end),
+    // and date overrides ('off', 'hoursOff', 'custom'). Skipped for class
+    // bookings since classes have their own time and the participant joins it.
+    if (!classSession && assignedStaffId && bookingDate && bookingTime) {
+      const schDbRes = await db.query(
+        `SELECT schedule, date_overrides FROM subaccount_users
+         WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
+        [assignedStaffId, subaccountId]
+      );
+      if (schDbRes.rows.length) {
+        const staffSched = {
+          schedule: schDbRes.rows[0].schedule || {},
+          dateOverrides: schDbRes.rows[0].date_overrides || []
+        };
+        const dur = parseInt(duration) || 60;
+        if (!isTimeAvailable(staffSched, bookingDate, bookingTime, dur)) {
+          return res.status(409).json({ error: 'The selected time is no longer within working hours. Please choose another time.' });
+        }
+      }
+    }
 
     // 7. Race condition check (slot still available?)
     // Skipped for class bookings - capacity is enforced inside the transaction

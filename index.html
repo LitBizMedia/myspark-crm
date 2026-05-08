@@ -7975,23 +7975,46 @@ function checkApptConflict(){
       return;
     }
   }
-  // Check if appointment time falls within working hours
+  // Check if appointment time falls within working hours (Set-based: catches
+  // lunch breaks and Hours Off override gaps, not just outer bounds).
   if(userId&&date&&time&&!apptOverride){
-    const schHrs=getCalHours(date,userId);
-    if(schHrs.length){
+    const hSet=getStaffAvailableHours(userId,date);
+    if(hSet.size>0){
       const apptHour=parseInt(time.split(':')[0]);
       const apptMin=parseInt(time.split(':')[1])||0;
       const apptStart=apptHour*60+apptMin;
       const apptEnd=apptStart+(parseInt(dur)||60);
-      const schedStart=schHrs[0]*60;
-      const schedEnd=(schHrs[schHrs.length-1]+1)*60;
-      const wb2=document.getElementById('appt-warn');
-      const btn2=document.getElementById('appt-save-btn');
-      if(apptStart<schedStart||apptEnd>schedEnd){
+      // Walk every 5-min slot the appointment occupies; if any falls in an
+      // unavailable hour, that's a conflict.
+      var conflictHour=null;
+      for(var tt=apptStart;tt<apptEnd;tt+=5){
+        var hh=Math.floor(tt/60);
+        if(!hSet.has(hh)){conflictHour=hh;break;}
+      }
+      if(conflictHour!==null){
         const u2=getUserById(userId);
-        const startLabel=fmtTime(String(schHrs[0]).padStart(2,'0')+':00');
-        const endLabel=fmtTime(String(schHrs[schHrs.length-1]+1).padStart(2,'0')+':00');
-        if(wb2){wb2.classList.remove('hidden');wb2.innerHTML='<strong>Outside working hours:</strong> '+esc(u2&&(u2.name||u2.username)||'Staff member')+' is scheduled '+startLabel+' to '+endLabel+' on this date.<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
+        const u2name=(u2&&(u2.name||u2.username))||'Staff member';
+        const sortedH=Array.from(hSet).sort(function(a,b){return a-b;});
+        const firstH=sortedH[0],lastH=sortedH[sortedH.length-1];
+        var msg;
+        if(conflictHour<firstH||conflictHour>lastH){
+          msg='<strong>Outside working hours:</strong> '+esc(u2name)+' is scheduled '+fmtTime(String(firstH).padStart(2,'0')+':00')+' to '+fmtTime(String(lastH+1).padStart(2,'0')+':00')+' on this date.';
+        }else{
+          // Identify the gap: lunch break or hoursOff override
+          const u2obj=getUserById(userId);
+          const ov=u2obj&&u2obj.dateOverrides&&u2obj.dateOverrides.find(function(o){return o.date===date;});
+          const sched=u2obj&&u2obj.schedule&&u2obj.schedule[getDK(date)];
+          var gapDesc='a scheduling gap';
+          if(ov&&ov.type==='hoursOff'&&ov.start&&ov.end&&parseInt(ov.start)<=conflictHour&&conflictHour<parseInt(ov.end)){
+            gapDesc='Hours Off ('+fmtTime(ov.start)+' \u2013 '+fmtTime(ov.end)+')'+(ov.note?': '+esc(ov.note):'');
+          }else if(sched&&sched.hasLunch&&sched.lunchStart&&sched.lunchEnd&&parseInt(sched.lunchStart)<=conflictHour&&conflictHour<parseInt(sched.lunchEnd)){
+            gapDesc='lunch break ('+fmtTime(sched.lunchStart)+' \u2013 '+fmtTime(sched.lunchEnd)+')';
+          }
+          msg='<strong>Conflict:</strong> '+esc(u2name)+' is unavailable at this time due to '+gapDesc+'.';
+        }
+        const wb2=document.getElementById('appt-warn');
+        const btn2=document.getElementById('appt-save-btn');
+        if(wb2){wb2.classList.remove('hidden');wb2.innerHTML=msg+'<div style="margin-top:6px"><button class="btn btn-sm" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4)" onclick="overrideAppt()">Schedule Anyway</button></div>';}
         if(btn2){btn2.disabled=true;btn2.style.opacity='.4';}
         return;
       }
