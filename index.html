@@ -487,23 +487,22 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
   color:var(--text);padding:4px 8px;font-size:12px;font-family:Lato,sans-serif;outline:none;width:120px}
 .bh-time:focus{border-color:var(--purple)}
 .bh-sep{font-size:11px;color:var(--text-muted)}
-/* Custom time SELECT used for business hours, staff schedule, and date overrides.
-   Always shows 12-hour AM/PM regardless of OS locale. Clock SVG replaces the
-   native chevron and sits inside the field as a click affordance. */
-.time-sel{background-color:var(--bg-input);border:1px solid var(--border);border-radius:6px;
-  color:var(--text);padding:5px 30px 5px 12px;font-size:12px;font-family:Lato,sans-serif;outline:none;
-  appearance:none;-webkit-appearance:none;-moz-appearance:none;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>");
-  background-repeat:no-repeat;background-position:right 8px center;background-size:14px;
-  cursor:pointer;width:130px}
-.time-sel:disabled{opacity:.45;cursor:not-allowed}
-.time-sel:focus{border-color:var(--purple)}
-/* Date input picker icon styling: same calendar SVG as our other date inputs.
-   onclick handler invokes input.showPicker() so the icon is reliably clickable
-   in Safari and Chrome. */
+/* Free-text time input with a clickable clock-icon picker button.
+   The text field accepts loose entry like "9", "9 am", "9:30pm", "21:00";
+   on blur the value is normalized and displayed as "9:00 AM". The clock
+   button opens the OS-native time picker via showPicker(). */
+.time-pair{display:inline-flex;align-items:stretch;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);overflow:hidden;height:30px;width:130px;position:relative}
+.time-pair:focus-within{border-color:var(--purple)}
+.time-pair.is-disabled{opacity:.45}
+.time-text{background:transparent;border:none;color:var(--text);padding:4px 6px 4px 10px;font-size:12px;font-family:Lato,sans-serif;outline:none;width:100%;min-width:0}
+.time-text.invalid{color:#f87171}
+.time-text:disabled{cursor:not-allowed}
+.time-clk-btn{background:transparent;border:none;border-left:1px solid var(--border);color:var(--text-muted);padding:0 7px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;width:28px}
+.time-clk-btn:hover:not(:disabled){color:var(--text);background:rgba(255,255,255,.04)}
+.time-clk-btn:disabled{cursor:not-allowed;opacity:.5}
+/* Date input picker icon styling */
 .date-pick{background-color:var(--bg-input);border:1px solid var(--border);border-radius:6px;
-  color:var(--text);padding:7px 32px 7px 10px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
-.date-pick::-webkit-calendar-picker-indicator{opacity:0;cursor:pointer}
+  color:var(--text);padding:7px 10px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
 .date-pick:focus{border-color:var(--purple)}
 .user-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)}
 .user-row:last-child{border-bottom:none}
@@ -2193,37 +2192,117 @@ function fmtTimeOnly(d, opts){
 const fmtDate=d=>d?fmtDateOnly(d+'T12:00:00'):'';
 function fmtTime(t){if(!t)return'';const[h,m]=t.split(':').map(Number);return`${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`}
 
-// Builds an HTML <select> with 15-minute time options always rendered as
-// 12-hour AM/PM. Used in place of <input type="time"> so that the displayed
-// format is consistent across operating system locales (some Macs default
-// to 24-hour, which hid the AM/PM affordance). The select also gets a clock
-// SVG background via the .time-sel CSS class and is fully clickable as a
-// time picker. Stored values stay in HH:MM (24-hour) for compatibility.
-function _timeSelHTML(id,value,disabled,extraStyle){
-  var opts=[];
-  for(var h=0;h<24;h++){
-    for(var m=0;m<60;m+=15){
-      var hh=String(h).padStart(2,'0');
-      var mm=String(m).padStart(2,'0');
-      var d12=h===0?12:(h>12?h-12:h);
-      var ampm=h<12?'AM':'PM';
-      opts.push({val:hh+':'+mm,lbl:d12+':'+mm+' '+ampm});
+// Parses a free-form time string into canonical HH:MM (24-hour). Accepts:
+// "9", "9:00", "9 AM", "9:30 PM", "9:30p", "21:00", "21". Returns null if
+// the input does not parse to a valid clock time.
+function _parseTimeText(s){
+  if(s==null)return null;
+  s=String(s).trim().toLowerCase().replace(/\./g,'');
+  if(!s)return null;
+  // Allow "9:30am", "9:30 am", "9 am", "9pm", "9", "21:00", "9:30"
+  var m=s.match(/^(\d{1,2})(?::(\d{1,2}))?\s*(am|pm|a|p)?$/);
+  if(!m)return null;
+  var h=parseInt(m[1],10);
+  var min=m[2]?parseInt(m[2],10):0;
+  var ampm=m[3]?m[3][0]:null;
+  if(isNaN(h)||isNaN(min)||min<0||min>59)return null;
+  if(ampm){
+    if(h<1||h>12)return null;
+    if(ampm==='p'&&h<12)h+=12;
+    if(ampm==='a'&&h===12)h=0;
+  }else{
+    if(h<0||h>23)return null;
+  }
+  return String(h).padStart(2,'0')+':'+String(min).padStart(2,'0');
+}
+
+// Converts canonical HH:MM (24-hour) to a friendly 12-hour display string
+// like "9:00 AM". Returns empty string for missing/invalid inputs.
+function _hhmmTo12(s){
+  if(!s)return'';
+  var p=String(s).split(':');
+  var h=parseInt(p[0],10);
+  var mm=p[1]||'00';
+  if(isNaN(h))return'';
+  var d12=h===0?12:(h>12?h-12:h);
+  var ampm=h<12?'AM':'PM';
+  return d12+':'+mm+' '+ampm;
+}
+
+// On blur of a time-text input: parse the typed value, store canonical HH:MM
+// in data-hhmm, and rewrite the visible value as "9:00 AM". Adds .invalid
+// class if the typed value cannot be parsed (caller decides what to do).
+function _normalizeTimeText(inp){
+  if(!inp)return;
+  var raw=inp.value||'';
+  var hhmm=_parseTimeText(raw);
+  if(hhmm){
+    inp.dataset.hhmm=hhmm;
+    inp.value=_hhmmTo12(hhmm);
+    inp.classList.remove('invalid');
+  }else if(raw.trim()){
+    inp.classList.add('invalid');
+  }else{
+    // Empty: revert to last known good value.
+    inp.value=_hhmmTo12(inp.dataset.hhmm||'');
+    inp.classList.remove('invalid');
+  }
+}
+
+// Opens the OS-native time picker for the time-text input identified by id.
+// Uses a transient <input type="time"> so that the picker appears even when
+// the visible field is type=text. The picker's onchange writes the canonical
+// HH:MM back into the visible field's data-hhmm and updates the displayed
+// 12-hour text. The transient input cleans itself up after change or blur.
+function _openTimePickerFor(id){
+  var inp=document.getElementById(id);
+  if(!inp||inp.disabled)return;
+  var hidden=document.createElement('input');
+  hidden.type='time';
+  hidden.value=inp.dataset.hhmm||_parseTimeText(inp.value)||'09:00';
+  hidden.style.cssText='position:absolute;top:0;left:0;opacity:0;width:1px;height:1px;pointer-events:none';
+  hidden.addEventListener('change',function(){
+    if(hidden.value){
+      inp.dataset.hhmm=hidden.value;
+      inp.value=_hhmmTo12(hidden.value);
+      inp.classList.remove('invalid');
     }
+    setTimeout(function(){if(hidden.parentNode)hidden.parentNode.removeChild(hidden);},120);
+  });
+  hidden.addEventListener('blur',function(){
+    setTimeout(function(){if(hidden.parentNode)hidden.parentNode.removeChild(hidden);},250);
+  });
+  inp.parentNode.appendChild(hidden);
+  if(typeof hidden.showPicker==='function'){
+    try{hidden.showPicker();}catch(e){hidden.focus();}
+  }else{
+    hidden.focus();
   }
-  var matched=opts.some(function(o){return o.val===value;});
-  var html='<select id="'+id+'" class="time-sel"'+(disabled?' disabled':'')+(extraStyle?' style="'+extraStyle+'"':'')+'>';
-  // If the saved value falls between 15-minute steps (legacy data), surface it
-  // as a custom option at the top so the user does not lose precision.
-  if(value && !matched){
-    var p=value.split(':');
-    var h2=parseInt(p[0])||0;
-    var d2=h2===0?12:(h2>12?h2-12:h2);
-    var a2=h2<12?'AM':'PM';
-    html+='<option value="'+value+'" selected>'+d2+':'+(p[1]||'00')+' '+a2+'</option>';
-  }
-  html+=opts.map(function(o){return '<option value="'+o.val+'"'+(o.val===value?' selected':'')+'>'+o.lbl+'</option>';}).join('');
-  html+='</select>';
-  return html;
+}
+
+// Toggles disabled state on a time-text input plus its wrapper and clock
+// button so the entire .time-pair visually reflects the disabled state.
+function _setTimeInputDisabled(id,disabled){
+  var inp=document.getElementById(id);
+  if(!inp)return;
+  inp.disabled=!!disabled;
+  var wrap=inp.closest('.time-pair');
+  if(wrap)wrap.classList.toggle('is-disabled',!!disabled);
+  var btn=wrap?wrap.querySelector('.time-clk-btn'):null;
+  if(btn)btn.disabled=!!disabled;
+}
+
+// Returns the markup for a free-text time input paired with a clickable
+// clock-icon button. Wrap is .time-pair, the visible input has class
+// .time-text and id={id}, and stores canonical HH:MM in data-hhmm. Read
+// the value back via _parseTimeText(inputElement.value).
+function _timeInputHTML(id,value,disabled){
+  var hhmm=_parseTimeText(value)||value||'';
+  var disp=_hhmmTo12(hhmm);
+  return'<span class="time-pair'+(disabled?' is-disabled':'')+'">'
+    +'<input type="text" class="time-text" id="'+id+'" value="'+esc(disp)+'" data-hhmm="'+esc(hhmm)+'" placeholder="9:00 AM" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+' onblur="_normalizeTimeText(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}">'
+    +'<button type="button" class="time-clk-btn" tabindex="-1" onclick="_openTimePickerFor(\''+id+'\')" '+(disabled?'disabled ':'')+'title="Pick time"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>'
+    +'</span>';
 }
 
 // Returns hours+minutes for "now" in subaccount TZ as {h, m, totalMinutes}.
@@ -5634,14 +5713,20 @@ function renderBH(){
     const d=bh[dk]||{open:false,start:'08:00',end:'17:00'};
     return'<div class="bh-row"><span class="bh-label">'+labels[i]+'</span>'
       +'<div class="bh-toggle'+(d.open?' on':'')+'" id="bht-'+dk+'" onclick="toggleBH(\''+dk+'\')"></div>'
-      +_timeSelHTML('bhs-'+dk,d.start,!d.open)
+      +_timeInputHTML('bhs-'+dk,d.start,!d.open)
       +'<span class="bh-sep">to</span>'
-      +_timeSelHTML('bhe-'+dk,d.end,!d.open)
+      +_timeInputHTML('bhe-'+dk,d.end,!d.open)
       +'</div>';
   }).join('');
 }
 
-function toggleBH(dk){const bh=db.settings.businessHours;bh[dk].open=!bh[dk].open;const t=document.getElementById('bht-'+dk);if(t)t.classList.toggle('on',bh[dk].open);const s=document.getElementById('bhs-'+dk),e=document.getElementById('bhe-'+dk);if(s)s.disabled=!bh[dk].open;if(e)e.disabled=!bh[dk].open}
+function toggleBH(dk){
+  const bh=db.settings.businessHours;
+  bh[dk].open=!bh[dk].open;
+  const t=document.getElementById('bht-'+dk);if(t)t.classList.toggle('on',bh[dk].open);
+  _setTimeInputDisabled('bhs-'+dk,!bh[dk].open);
+  _setTimeInputDisabled('bhe-'+dk,!bh[dk].open);
+}
 
 async function saveBH(){
   const bh=db.settings.businessHours;
@@ -5649,8 +5734,10 @@ async function saveBH(){
   const snapshot=JSON.parse(JSON.stringify(bh));
   ['mon','tue','wed','thu','fri','sat','sun'].forEach(function(dk){
     var sEl=document.getElementById('bhs-'+dk);var eEl=document.getElementById('bhe-'+dk);
-    if(sEl&&sEl.value)bh[dk].start=sEl.value;
-    if(eEl&&eEl.value)bh[dk].end=eEl.value;
+    var sVal=sEl?(_parseTimeText(sEl.value)||sEl.dataset.hhmm):null;
+    var eVal=eEl?(_parseTimeText(eEl.value)||eEl.dataset.hhmm):null;
+    if(sVal)bh[dk].start=sVal;
+    if(eVal)bh[dk].end=eVal;
   });
   try{localStorage.setItem(SK,JSON.stringify(db));}catch(e){}
   setSyncSt('syncing');
@@ -8186,16 +8273,16 @@ function buildSchedSection(standalone){
     const lS=ds.lunchStart||'12:00',lE=ds.lunchEnd||'13:00';
     return'<div class="sched-row-wrap"><div class="sched-row"><span class="sched-day">'+dLabels[i]+'</span>'
       +'<button type="button" class="sched-toggle'+(ds.on?' on':'')+'" id="st-'+dk+'" onclick="toggleSchedDay(\''+dk+'\')">'+(ds.on?'On':'Off')+'</button>'
-      +_timeSelHTML('ss-'+dk,ds.start,!ds.on)
+      +_timeInputHTML('ss-'+dk,ds.start,!ds.on)
       +'<span style="font-size:11px;color:var(--text-muted)">to</span>'
-      +_timeSelHTML('se-'+dk,ds.end,!ds.on)
+      +_timeInputHTML('se-'+dk,ds.end,!ds.on)
       +'<button type="button" class="sched-lunch-toggle'+(hasL?' on':'')+'" id="slt-'+dk+'" onclick="toggleLunch(\''+dk+'\')"'+(ds.on?'':' disabled')+' title="Daily lunch break">Lunch</button>'
       +'</div>'
       +'<div class="sched-lunch-row" id="slr-'+dk+'" style="display:'+(hasL?'flex':'none')+'">'
       +'<span class="sched-lunch-label">Out</span>'
-      +_timeSelHTML('sls-'+dk,lS,!(ds.on&&hasL))
+      +_timeInputHTML('sls-'+dk,lS,!(ds.on&&hasL))
       +'<span style="font-size:11px;color:var(--text-muted)">to</span>'
-      +_timeSelHTML('sle-'+dk,lE,!(ds.on&&hasL))
+      +_timeInputHTML('sle-'+dk,lE,!(ds.on&&hasL))
       +'</div></div>';
   }).join('');
   const ov='<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:7px">Date Overrides</div><div id="ov-list">'+renderOvList()+'</div>'
@@ -8215,11 +8302,11 @@ function buildSchedSection(standalone){
     +'<div id="ov-hrs" style="display:none;gap:6px;align-items:flex-end">'
       +'<div class="form-group" style="margin:0">'
         +'<label id="ov-start-lbl" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">From</label>'
-        +_timeSelHTML('ov-start','09:00',false)
+        +_timeInputHTML('ov-start','09:00',false)
       +'</div>'
       +'<div class="form-group" style="margin:0">'
         +'<label id="ov-end-lbl" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Until</label>'
-        +_timeSelHTML('ov-end','14:00',false)
+        +_timeInputHTML('ov-end','14:00',false)
       +'</div>'
     +'</div>'
     +'<div class="form-group" style="margin:0">'
@@ -8272,13 +8359,14 @@ function renderOvList(){
 function toggleSchedDay(dk){
   editSched[dk].on=!editSched[dk].on;
   const btn=document.getElementById('st-'+dk);if(btn){btn.classList.toggle('on',editSched[dk].on);btn.textContent=editSched[dk].on?'On':'Off'}
-  const s=document.getElementById('ss-'+dk),e=document.getElementById('se-'+dk);
-  if(s)s.disabled=!editSched[dk].on;if(e)e.disabled=!editSched[dk].on;
-  // Lunch toggle button: disabled when day is off; lunch fields disabled when day is off OR lunch is off.
+  _setTimeInputDisabled('ss-'+dk,!editSched[dk].on);
+  _setTimeInputDisabled('se-'+dk,!editSched[dk].on);
+  // Lunch toggle button: disabled when day is off.
   const lt=document.getElementById('slt-'+dk);if(lt)lt.disabled=!editSched[dk].on;
-  const ls=document.getElementById('sls-'+dk),le=document.getElementById('sle-'+dk);
+  // Lunch time inputs: disabled when day is off OR lunch is off.
   const lActive=editSched[dk].on&&!!editSched[dk].hasLunch;
-  if(ls)ls.disabled=!lActive;if(le)le.disabled=!lActive;
+  _setTimeInputDisabled('sls-'+dk,!lActive);
+  _setTimeInputDisabled('sle-'+dk,!lActive);
 }
 
 function toggleLunch(dk){
@@ -8290,8 +8378,8 @@ function toggleLunch(dk){
   }
   const btn=document.getElementById('slt-'+dk);if(btn)btn.classList.toggle('on',editSched[dk].hasLunch);
   const row=document.getElementById('slr-'+dk);if(row)row.style.display=editSched[dk].hasLunch?'flex':'none';
-  const ls=document.getElementById('sls-'+dk),le=document.getElementById('sle-'+dk);
-  if(ls)ls.disabled=!editSched[dk].hasLunch;if(le)le.disabled=!editSched[dk].hasLunch;
+  _setTimeInputDisabled('sls-'+dk,!editSched[dk].hasLunch);
+  _setTimeInputDisabled('sle-'+dk,!editSched[dk].hasLunch);
 }
 
 // Reads schedule field values out of the open Edit Schedule / Add User modal
@@ -8301,11 +8389,19 @@ function toggleLunch(dk){
 function _readSchedFromDOM(sched){
   ['mon','tue','wed','thu','fri','sat','sun'].forEach(function(dk){
     if(!sched[dk])sched[dk]={on:false,start:'08:00',end:'17:00'};
-    var s=document.getElementById('ss-'+dk);if(s&&s.value)sched[dk].start=s.value;
-    var e=document.getElementById('se-'+dk);if(e&&e.value)sched[dk].end=e.value;
+    var sEl=document.getElementById('ss-'+dk);
+    var eEl=document.getElementById('se-'+dk);
+    var sVal=sEl?(_parseTimeText(sEl.value)||sEl.dataset.hhmm):null;
+    var eVal=eEl?(_parseTimeText(eEl.value)||eEl.dataset.hhmm):null;
+    if(sVal)sched[dk].start=sVal;
+    if(eVal)sched[dk].end=eVal;
     if(sched[dk].hasLunch){
-      var ls=document.getElementById('sls-'+dk);if(ls&&ls.value)sched[dk].lunchStart=ls.value;
-      var le=document.getElementById('sle-'+dk);if(le&&le.value)sched[dk].lunchEnd=le.value;
+      var lsEl=document.getElementById('sls-'+dk);
+      var leEl=document.getElementById('sle-'+dk);
+      var lsVal=lsEl?(_parseTimeText(lsEl.value)||lsEl.dataset.hhmm):null;
+      var leVal=leEl?(_parseTimeText(leEl.value)||leEl.dataset.hhmm):null;
+      if(lsVal)sched[dk].lunchStart=lsVal;
+      if(leVal)sched[dk].lunchEnd=leVal;
     }else{
       delete sched[dk].lunchStart;delete sched[dk].lunchEnd;
     }
@@ -8318,8 +8414,12 @@ function addOv(){
   const type=document.getElementById('ov-type')&&document.getElementById('ov-type').value;
   const ov={date,type,note:document.getElementById('ov-note')&&document.getElementById('ov-note').value||''};
   if(type==='custom'||type==='hoursOff'){
-    ov.start=document.getElementById('ov-start')&&document.getElementById('ov-start').value||'09:00';
-    ov.end=document.getElementById('ov-end')&&document.getElementById('ov-end').value||'17:00';
+    var sEl=document.getElementById('ov-start');
+    var eEl=document.getElementById('ov-end');
+    var sVal=sEl?(_parseTimeText(sEl.value)||sEl.dataset.hhmm):null;
+    var eVal=eEl?(_parseTimeText(eEl.value)||eEl.dataset.hhmm):null;
+    if(!sVal||!eVal){toast('Enter valid start and end times.','error');return}
+    ov.start=sVal;ov.end=eVal;
     if(ov.end<=ov.start){toast('End time must be after start.','error');return}
   }
   userOvs=userOvs.filter(o=>o.date!==date);userOvs.push(ov);
