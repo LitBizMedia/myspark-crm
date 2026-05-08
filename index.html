@@ -12729,17 +12729,9 @@ function _svcPriceDisplay(s, vars){
 function openServiceDetail(id){
   var s=(db.services||[]).find(function(x){return x.id===id;});
   if(!s){toast('Service not found.','error');return;}
-  state.svcDetail={id:id,tab:'edit',sessionPage:0};
-
-  var body='<div id="svc-detail-tabs" style="display:flex;gap:0;border-bottom:1px solid var(--main-border);margin-bottom:18px">'
-    +'<button class="svc-detail-tab active" data-tab="edit" onclick="switchServiceDetailTab(\'edit\')">Edit</button>'
-    +(s.type==='class'?'<button class="svc-detail-tab" data-tab="sessions" onclick="switchServiceDetailTab(\'sessions\')">Upcoming Sessions</button>':'')
-    +'</div>'
-    +'<div id="svc-detail-content"></div>';
-
-  // Footer is empty on init; switchServiceDetailTab fills it based on tab.
-  openModal((s.type==='class'?'Class: ':'Service: ')+s.name, body, '', 'modal-lg');
-  switchServiceDetailTab('edit');
+  // Unified flow: openServiceModal handles tab structure for both new and edit.
+  // Sessions tab is added by openServiceModal when editing a class.
+  openServiceModal(id, s.type);
 }
 
 function switchServiceDetailTab(tab){
@@ -12993,28 +12985,93 @@ function openServiceModal(id, prefType){
   // Type defaults: editing uses existing, new uses prefType from catalog dropdown, fallback individual.
   var defaultType=s?s.type:(prefType==='class'?'class':'individual');
 
-  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+  // Tab structure. Variations and Add-ons hidden for class type.
+  // Default tab is always Details.
+  state.svcModalTab='details';
+  var showSubTabs=defaultType==='individual';
+
+  // Sessions tab only appears when editing a class (existing class has sessions to manage).
+  var showSessionsTab=defaultType==='class'&&!!s;
+
+  var tabsBar='<div class="pay-panel-tabs" style="margin:-22px -24px 18px">'
+    +'<button class="pay-panel-tab active" id="svc-tab-details" onclick="switchSvcTab(\'details\')">Details</button>'
+    +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-variations" onclick="switchSvcTab(\'variations\')">Variations</button>':'')
+    +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-addons" onclick="switchSvcTab(\'addons\')">Add-ons</button>':'')
+    +(showSessionsTab?'<button class="pay-panel-tab" id="svc-tab-sessions" onclick="switchSvcTab(\'sessions\')">Upcoming Sessions</button>':'')
+    +'</div>';
+
+  var detailsPane='<div id="svc-pane-details" class="svc-pane">'
+    +'<div style="display:flex;flex-direction:column;gap:14px">'
     +renderServiceCommonFields(s,defaultType)
     +'<div id="svc-type-section">'+renderServiceTypeFields(s,defaultType)+'</div>'
-    +'<div id="svc-var-wrap">'+(defaultType==='individual'&&s?'<div id="svc-var-section"></div>':'')+'</div>'
+    +'</div>'
     +'</div>';
+
+  var variationsPane=showSubTabs?('<div id="svc-pane-variations" class="svc-pane hidden">'
+    +(s?'<div id="svc-var-section"></div>':'<div style="font-size:13px;color:var(--text-muted);padding:14px 0;text-align:center">Save the service first, then add variations.</div>')
+    +'</div>'):'';
+
+  var addonsPane=showSubTabs?('<div id="svc-pane-addons" class="svc-pane hidden">'
+    +(s?'<div id="svc-addons-section"></div>':'<div style="font-size:13px;color:var(--text-muted);padding:14px 0;text-align:center">Save the service first, then add add-ons.</div>')
+    +'</div>'):'';
+
+  var sessionsPane=showSessionsTab?('<div id="svc-pane-sessions" class="svc-pane hidden">'
+    +'<div id="svc-sessions-section"></div>'
+    +'</div>'):'';
+
+  var body=tabsBar+detailsPane+variationsPane+addonsPane+sessionsPane;
 
   var footer=(s?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteService(\''+s.id+'\')">Delete</button>':'')
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="saveService('+(s?'\''+s.id+'\'':'null')+')">Save</button>';
 
-  // Title reflects type for clarity.
   var modalTitle;
   if(s)modalTitle=s.type==='class'?'Edit Class':'Edit Service';
   else modalTitle=defaultType==='class'?'New Class':'New Service';
 
   openModal(modalTitle,body,footer,'modal-lg');
 
-  // Post-render init: variations section for individual edits, recurrence handlers for class.
+  // Track currently-edited service id so switchSvcTab can lazy-render Sessions.
+  state.modal={type:'service',id:s?s.id:null};
+
   setTimeout(function(){
-    if(defaultType==='individual'&&s)renderVariationsSection(s.id);
+    if(defaultType==='individual'&&s){
+      renderVariationsSection(s.id);
+      if(typeof renderServiceAddonsSection==='function')renderServiceAddonsSection(s.id);
+    }
     initServiceModalAfterRender(defaultType);
   },50);
+}
+
+function switchSvcTab(tab){
+  state.svcModalTab=tab;
+  var tabs=['details','variations','addons','sessions'];
+  tabs.forEach(function(t){
+    var btn=document.getElementById('svc-tab-'+t);
+    var pane=document.getElementById('svc-pane-'+t);
+    if(btn)btn.classList.toggle('active',t===tab);
+    if(pane)pane.classList.toggle('hidden',t!==tab);
+  });
+  // Lazy-render sessions list when its tab is opened (avoids slow modal open).
+  if(tab==='sessions'&&state.modal&&state.modal.id){
+    var s=(db.services||[]).find(function(x){return x.id===state.modal.id;});
+    var el=document.getElementById('svc-sessions-section');
+    if(s&&el&&typeof _renderUpcomingSessionsTab==='function'){
+      el.innerHTML=_renderUpcomingSessionsTab(s);
+    }
+  }
+}
+
+function refreshSvcModalSubTabs(typeNow){
+  // Called when type select changes between individual/class.
+  // Show/hide Variations and Add-ons sub-tabs accordingly.
+  var show=typeNow==='individual';
+  ['variations','addons'].forEach(function(t){
+    var btn=document.getElementById('svc-tab-'+t);
+    if(btn)btn.style.display=show?'':'none';
+  });
+  // If switching to class while a sub-tab is active, snap back to details.
+  if(!show&&state.svcModalTab!=='details')switchSvcTab('details');
 }
 
 // Common fields visible in both Individual and Class modes. Type select drives the swap.
@@ -13187,18 +13244,19 @@ function onServiceTypeChange(){
   var newType=typeSel.value;
   var s=state.modal.id?(db.services||[]).find(function(x){return x.id===state.modal.id;}):null;
 
+  // Update sub-tab visibility for new type (Variations and Add-ons hidden for class).
+  refreshSvcModalSubTabs(newType);
+
+  // Re-render type-specific fields inside the Details pane.
   var typeSection=document.getElementById('svc-type-section');
   if(typeSection)typeSection.innerHTML=renderServiceTypeFields(s,newType);
 
-  // Variations section visibility: only individual + editing existing.
-  var varWrap=document.getElementById('svc-var-wrap');
-  if(varWrap){
-    if(newType==='individual'&&s){
-      varWrap.innerHTML='<div id="svc-var-section"></div>';
-      setTimeout(function(){renderVariationsSection(s.id);},30);
-    } else {
-      varWrap.innerHTML='';
-    }
+  // Variations section is now inside the Variations pane. Re-render if needed.
+  if(newType==='individual'&&s){
+    setTimeout(function(){
+      if(typeof renderVariationsSection==='function')renderVariationsSection(s.id);
+      if(typeof renderServiceAddonsSection==='function')renderServiceAddonsSection(s.id);
+    },30);
   }
 
   // Re-init type-specific UI (no-op for individual; recurrence handlers self-init via onchange).
