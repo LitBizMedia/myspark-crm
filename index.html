@@ -1149,25 +1149,26 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .swg-svc-add-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:var(--brand,#6b21ea);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
 .swg-svc-add-btn:hover{filter:brightness(1.1)}
 .swg-svc-add-wrap{position:relative}
-.swg-svc-add-pop{position:absolute;top:calc(100% + 4px);left:0;width:340px;max-width:calc(100vw - 32px);background:var(--main-card);border:1px solid var(--main-border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:600;overflow:hidden;display:flex;flex-direction:column;max-height:420px}
-.swg-svc-add-search{width:100%;border:none;border-bottom:1px solid var(--main-border);padding:9px 12px;background:transparent;color:var(--main-text);font-size:13px;outline:none;box-sizing:border-box;flex-shrink:0}
+.swg-svc-add-pop{position:absolute;top:calc(100% + 4px);left:0;width:340px;max-width:calc(100vw - 32px);background:var(--main-card);color:#1a1030;border:1px solid var(--main-border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:600;overflow:hidden;display:flex;flex-direction:column;max-height:420px}
+.swg-svc-add-search{width:100%;border:none;border-bottom:1px solid var(--main-border);padding:9px 12px;background:transparent;color:#1a1030;font-size:13px;outline:none;box-sizing:border-box;flex-shrink:0}
+.swg-svc-add-search::placeholder{color:#8a7fb0}
 .swg-svc-add-list{overflow-y:auto;flex:1;min-height:60px}
-.swg-svc-add-cathdr{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:var(--main-bg);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;z-index:1}
+.swg-svc-add-cathdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f4f1fb;font-size:11px;font-weight:700;color:#1a1030;text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;z-index:1;border-bottom:1px solid var(--main-border)}
 .swg-svc-add-catbtn{font-size:11px;font-weight:600;color:var(--brand,#6b21ea);background:none;border:none;cursor:pointer;text-transform:none;letter-spacing:0;padding:0}
 .swg-svc-add-catbtn:hover{text-decoration:underline}
-.swg-svc-add-row{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;font-size:13px;color:var(--main-text);border-bottom:1px solid rgba(0,0,0,.04)}
-.swg-svc-add-row:hover{background:var(--main-bg)}
+.swg-svc-add-row{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;font-size:13px;color:#1a1030;border-bottom:1px solid rgba(0,0,0,.04)}
+.swg-svc-add-row:hover{background:#f7f4fc}
 .swg-svc-add-row input[type=checkbox]{margin:0;flex-shrink:0;cursor:pointer}
 .swg-svc-add-row .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.swg-svc-add-empty{padding:20px 14px;text-align:center;font-size:12px;color:var(--text-muted)}
-.swg-svc-add-foot{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--main-bg);border-top:1px solid var(--main-border);flex-shrink:0;font-size:12px}
-.swg-svc-add-foot .ct{color:var(--text-muted)}
+.swg-svc-add-empty{padding:20px 14px;text-align:center;font-size:12px;color:#5a4d7a}
+.swg-svc-add-foot{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#f4f1fb;border-top:1px solid var(--main-border);flex-shrink:0;font-size:12px}
+.swg-svc-add-foot .ct{color:#1a1030;font-weight:600}
 .swg-svc-add-foot .acts{display:flex;gap:6px}
 .swg-svc-add-foot button{font-size:12px;font-weight:600;padding:5px 12px;border-radius:5px;border:none;cursor:pointer}
-.swg-svc-add-foot .cancel{background:transparent;color:var(--text-muted)}
+.swg-svc-add-foot .cancel{background:transparent;color:#5a4d7a}
 .swg-svc-add-foot .ok{background:var(--brand,#6b21ea);color:#fff}
 .swg-svc-add-foot .ok:disabled{opacity:.45;cursor:not-allowed}
-.swg-svc-list{display:flex;flex-direction:column;gap:6px;background:var(--main-bg);border-radius:8px;padding:8px;border:1px solid var(--main-border);min-height:80px}
+.swg-svc-list{display:flex;flex-direction:column;gap:6px;background:var(--main-bg);border-radius:8px;padding:8px;border:1px solid var(--main-border);min-height:280px}
 .swg-svc-list-empty{padding:28px 14px;text-align:center;font-size:12px;color:var(--text-muted);font-style:italic}
 .swg-svc-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--main-card);border:1px solid var(--main-border);border-radius:6px;transition:box-shadow .15s,opacity .15s}
 .swg-svc-row[draggable=true]{cursor:grab}
@@ -16197,12 +16198,6 @@ function openServiceWidgetEditor(w,isNew){
   // ── Settings tab (everything except service picker) ─────────────────────
   var settingsPane='<div class="swg-tab-pane active" data-pane="settings">'
     +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'"></div>'
-
-    // Staff inheritance note
-    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin-bottom:4px">Staff</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.5">Staff is inherited from the services in this widget. Patients see only staff who can perform the service they pick. To change which staff perform a service, edit the service.</div>'
-    +'</div>'
 
     +'<div class="form-row">'
     +'<div class="form-group"><label>Primary Color</label><input id="swg-color" type="color" value="'+(w&&w.primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
