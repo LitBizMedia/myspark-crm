@@ -240,7 +240,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .dash-grid-right{display:flex;flex-direction:column;gap:16px;min-width:0}
 .dash-card-fixed{display:flex;flex-direction:column;height:280px}
 .dash-card-fixed .dash-scroll-list{flex:1;overflow-y:auto}
-.dash-card-activity{display:flex;flex-direction:column;height:462px}
+.dash-card-activity{display:flex;flex-direction:column;height:280px}
 .dash-card-activity .dash-scroll-list{flex:1;overflow-y:auto}
 @media (max-width:900px){.dash-grid{grid-template-columns:1fr}}
 .dash-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;box-shadow:0 2px 12px rgba(107,33,234,.07)}
@@ -5131,23 +5131,26 @@ function renderMonthCal(){
           schedHTML='<div class="cal-sched-closed">Not scheduled</div>';
         }
       }else{
-        // All-staff month view: collect dot indicators per staff per override.
-        // Off (red), Hours Off (orange), Work These Hours / Custom (green).
-        var dots=[];
+        // All-staff month view: mini avatar pills per staff with override.
+        // Background = staff color, initial inside, border ring = override type.
+        var pills=[];
         allUsers().forEach(function(u){
           var ov=u.dateOverrides&&u.dateOverrides.find(function(o){return o.date===str;});
           if(!ov)return;
-          var color,title;
-          if(ov.type==='off'){color='#f87171';title=(u.name||u.username)+' \u2013 Day Off';}
-          else if(ov.type==='hoursOff'){color='#fb923c';title=(u.name||u.username)+' \u2013 Off '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end);}
-          else if(ov.type==='custom'){color='#34d399';title=(u.name||u.username)+' \u2013 Working '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end);}
+          var ringColor,typeLabel;
+          if(ov.type==='off'){ringColor='#f87171';typeLabel='Day Off';}
+          else if(ov.type==='hoursOff'){ringColor='#fb923c';typeLabel='Off '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end);}
+          else if(ov.type==='custom'){ringColor='#34d399';typeLabel='Working '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end);}
           else return;
-          dots.push({color:color,title:title});
+          var nm=u.name||u.username||'?';
+          var initial=nm.charAt(0).toUpperCase();
+          var staffColor=u.color||'#6b21ea';
+          pills.push({initial:initial,bg:staffColor,ring:ringColor,title:nm+', '+typeLabel});
         });
-        if(dots.length){
-          schedHTML='<div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:2px">'
-            +dots.slice(0,4).map(function(d){return'<span title="'+esc(d.title)+'" style="width:7px;height:7px;border-radius:50%;background:'+d.color+';display:inline-block;opacity:.85"></span>';}).join('')
-            +(dots.length>4?'<span style="font-size:9px;color:var(--text-dim)">+'+(dots.length-4)+'</span>':'')
+        if(pills.length){
+          schedHTML='<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:3px">'
+            +pills.slice(0,4).map(function(p){return'<span title="'+esc(p.title)+'" style="width:14px;height:14px;border-radius:50%;background:'+p.bg+';color:#fff;font-size:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid '+p.ring+';line-height:1;font-family:inherit;box-sizing:border-box">'+esc(p.initial)+'</span>';}).join('')
+            +(pills.length>4?'<span style="font-size:10px;color:var(--text-dim);align-self:center">+'+(pills.length-4)+'</span>':'')
             +'</div>';
         }
       }
