@@ -2543,6 +2543,30 @@ function getBusinessAvailableHours(dateStr){
   return out;
 }
 
+// Returns the set of hours considered AVAILABLE for the given week-view day
+// column. Honors:
+//   - business hours (column is closed if business is closed)
+//   - lunch breaks and overrides for each staff (when union mode kicks in)
+// In "all staff" mode, an hour is available when business is open AND at
+// least one staff member is working that hour. This makes lunch-break gaps
+// visible in week view even without filtering to a single staff member.
+// In single-staff filter mode, falls through to that staff's available hours.
+function getColAvailableHours(dateStr,calUser){
+  if(calUser&&calUser!=='all')return getStaffAvailableHours(calUser,dateStr);
+  var biz=getBusinessAvailableHours(dateStr);
+  if(biz.size===0)return new Set();
+  var staff=allUsers().filter(function(u){return u&&u.active!==false;});
+  if(staff.length===0)return biz;
+  var anyAvail=new Set();
+  staff.forEach(function(u){
+    var s=getStaffAvailableHours(u.id,dateStr);
+    s.forEach(function(h){anyAvail.add(h);});
+  });
+  var out=new Set();
+  biz.forEach(function(h){if(anyAvail.has(h))out.add(h);});
+  return out;
+}
+
 // Legacy array-returning interface. New code should prefer the Set helpers.
 function getCalHours(dateStr,userId){
   var setH;
@@ -5054,20 +5078,31 @@ function renderMonthCal(){
         const dayHrs=getCalHours(str,filtUid);
         if(dayOv&&dayOv.type==='off'){
           schedHTML='<div class="cal-sched-off">Off'+(dayOv.note?'\u00b7'+dayOv.note.slice(0,14):'')+'</div>';
+        }else if(dayOv&&dayOv.type==='hoursOff'){
+          schedHTML='<div class="cal-sched-off">Off '+fmtTime(dayOv.start)+'\u2013'+fmtTime(dayOv.end)+'</div>';
         }else if(dayOv&&dayOv.type==='custom'){
           schedHTML='<div class="cal-sched-custom">'+fmtTime(dayOv.start)+'\u2013'+fmtTime(dayOv.end)+'</div>';
         }else if(!dayHrs.length){
           schedHTML='<div class="cal-sched-closed">Not scheduled</div>';
         }
       }else{
-        const offUsers=allUsers().filter(function(u){
-          const ov=u.dateOverrides&&u.dateOverrides.find(function(o){return o.date===str;});
-          return ov&&ov.type==='off';
+        // All-staff month view: collect dot indicators per staff per override.
+        // Off (red), Hours Off (orange), Work These Hours / Custom (green).
+        var dots=[];
+        allUsers().forEach(function(u){
+          var ov=u.dateOverrides&&u.dateOverrides.find(function(o){return o.date===str;});
+          if(!ov)return;
+          var color,title;
+          if(ov.type==='off'){color='#f87171';title=(u.name||u.username)+' \u2013 Day Off';}
+          else if(ov.type==='hoursOff'){color='#fb923c';title=(u.name||u.username)+' \u2013 Off '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end);}
+          else if(ov.type==='custom'){color='#34d399';title=(u.name||u.username)+' \u2013 Working '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end);}
+          else return;
+          dots.push({color:color,title:title});
         });
-        if(offUsers.length){
+        if(dots.length){
           schedHTML='<div style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:2px">'
-            +offUsers.slice(0,4).map(function(u){return'<span title="'+esc(u.name||u.username)+' \u2013 Off" style="width:7px;height:7px;border-radius:50%;background:'+(u.color||'#f87171')+';display:inline-block;opacity:.75"></span>';}).join('')
-            +(offUsers.length>4?'<span style="font-size:9px;color:var(--text-dim)">+'+(offUsers.length-4)+'</span>':'')
+            +dots.slice(0,4).map(function(d){return'<span title="'+esc(d.title)+'" style="width:7px;height:7px;border-radius:50%;background:'+d.color+';display:inline-block;opacity:.85"></span>';}).join('')
+            +(dots.length>4?'<span style="font-size:9px;color:var(--text-dim)">+'+(dots.length-4)+'</span>':'')
             +'</div>';
         }
       }
@@ -5110,7 +5145,10 @@ function getOffBlocksForCol(dateStr){
 function buildTimedCol(dateStr,appts,allHours){
   var minH=allHours[0]||8;
   var maxH=(allHours[allHours.length-1]||18)+1;
-  var hours=getCalHours(dateStr,state.calUser==='all'?null:state.calUser);
+  // Set of hours considered "available" for this day column. In all-staff
+  // mode this is the union of staff schedules clipped to business hours,
+  // so lunch-break gaps and per-staff overrides surface in week view too.
+  var hoursSet=getColAvailableHours(dateStr,state.calUser);
   if(!allHours.length)return'<div style="min-height:200px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-style:italic">Closed</div>';
   var offBlocks=getOffBlocksForCol(dateStr);
   var totalH=(maxH-minH)*68;
@@ -5148,7 +5186,7 @@ function buildTimedCol(dateStr,appts,allHours){
       +'</div>';
   }).join('');
   var nowLine2='';if(dateStr===todayStr()){var nM=nowHM().totalMinutes;var nTop=Math.round((nM-(allHours[0]||8)*60)/60*68);nowLine2='<div class="cal-now-line" style="top:'+nTop+'px"><div class="cal-now-dot"></div></div>';}
-  return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'">'+allHours.map(function(h){return'<div class="tgrid-row'+(hours.includes(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';}).join('')+offHTML+eventsHTML+nowLine2+'</div>';
+  return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'">'+allHours.map(function(h){return'<div class="tgrid-row'+(hoursSet.has(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';}).join('')+offHTML+eventsHTML+nowLine2+'</div>';
 }
 
 function buildTimedColForUser(dateStr,appts,allHours,uid){
@@ -15244,14 +15282,17 @@ function hideAuthLoading(){
 // Boot check for embed mode
 document.addEventListener('DOMContentLoaded',async function(){
   // Global click handler for native date inputs: opens the OS picker via
-  // showPicker() on click anywhere in the field, including the calendar
-  // icon. Prevents the case where Safari does not respond to clicks on
-  // the indicator. No-op on browsers that lack showPicker.
+  // showPicker() when the click lands in the calendar-icon zone on the
+  // right side of the field. Leaves the text portion clickable for normal
+  // focus/typing. No-op on browsers that lack showPicker.
   document.addEventListener('click',function(e){
     var t=e.target;
     if(!t||!t.matches)return;
     if(t.matches('input[type="date"]:not([disabled])')&&typeof t.showPicker==='function'){
-      try{t.showPicker();}catch(err){}
+      var rect=t.getBoundingClientRect();
+      if(e.clientX>rect.right-32){
+        try{t.showPicker();}catch(err){}
+      }
     }
   });
   // Detect path-based routing
