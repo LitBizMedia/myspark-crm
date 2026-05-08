@@ -1913,9 +1913,14 @@ function bookingSummaryHtml(showTotal) {
   const itemName = S.appointment_type
     ? S.appointment_type.name
     : (S.service.name + (S.variation ? ` - ${S.variation.name}` : ''));
-  const subtotal = parseFloat(
+  const itemSubtotal = parseFloat(
     S.class_session?.price ?? S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0
   ) || 0;
+  // Add-ons inherit taxable from parent service. Snapshot prices were captured
+  // at selection time and live in S.addons; server reverifies on submit.
+  const addonsList = Array.isArray(S.addons) ? S.addons : [];
+  const addonsSubtotal = addonsList.reduce((sum, a) => sum + (parseFloat(a.price) || 0), 0);
+  const subtotal = itemSubtotal + addonsSubtotal;
   const tipAmt = S.tip || 0;
   const couponDiscount = S.coupon_discount || 0;
   const afterDiscount = Math.max(0, subtotal - couponDiscount);
@@ -1924,7 +1929,6 @@ function bookingSummaryHtml(showTotal) {
   const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
     ? Math.round(afterDiscount * taxSettings.rate) / 100
     : 0;
-  // Workspace-level additional fee, post-tax, NOT taxed itself
   const feeSettings = D.settings.additional_fee || { enabled:false, type:'flat', amount:0, label:'Additional Fee' };
   const feeAmount = (feeSettings.enabled && parseFloat(feeSettings.amount) > 0)
     ? (feeSettings.type === 'pct'
@@ -1934,8 +1938,10 @@ function bookingSummaryHtml(showTotal) {
   const total = afterDiscount + taxAmount + feeAmount + tipAmt;
 
   const itemLabel = S.appointment_type ? 'Appointment' : 'Service';
+  const addonLines = addonsList.map(a => `<div class="bw-summary-row"><span>+ ${esc(a.name)}</span><strong>$${(parseFloat(a.price)||0).toFixed(2)}</strong></div>`).join('');
   const breakdown = showTotal && subtotal > 0 ? `<hr class="bw-summary-divider">
-    <div class="bw-summary-row"><span>${itemLabel}</span><strong>$${subtotal.toFixed(2)}</strong></div>
+    <div class="bw-summary-row"><span>${itemLabel}</span><strong>$${itemSubtotal.toFixed(2)}</strong></div>
+    ${addonLines}
     ${couponDiscount > 0 ? `<div class="bw-summary-row" style="color:#10b981"><span>Coupon (${esc(S.coupon_code)})</span><strong>-$${couponDiscount.toFixed(2)}</strong></div>` : ''}
     ${taxAmount > 0 ? `<div class="bw-summary-row"><span>${esc(taxSettings.label||'Tax')}</span><strong>$${taxAmount.toFixed(2)}</strong></div>` : ''}
     ${feeAmount > 0 ? `<div class="bw-summary-row"><span>${esc(feeSettings.label||'Additional Fee')}</span><strong>$${feeAmount.toFixed(2)}</strong></div>` : ''}
@@ -1953,9 +1959,12 @@ function bookingSummaryHtml(showTotal) {
 // Compute total - mirrors the math in bookingSummaryHtml. Used by submit and payment step.
 function computeTotal() {
   const item = S.appointment_type || S.service;
-  const subtotal = parseFloat(
+  const itemSubtotal = parseFloat(
     S.class_session?.price ?? S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0
   ) || 0;
+  const addonsList = Array.isArray(S.addons) ? S.addons : [];
+  const addonsSubtotal = addonsList.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  const subtotal = itemSubtotal + addonsSubtotal;
   const tipAmt = S.tip || 0;
   const couponDiscount = S.coupon_discount || 0;
   const afterDiscount = Math.max(0, subtotal - couponDiscount);
@@ -1970,7 +1979,7 @@ function computeTotal() {
         ? Math.round(afterDiscount * parseFloat(feeSettings.amount)) / 100
         : Math.round(parseFloat(feeSettings.amount) * 100) / 100)
     : 0;
-  return { subtotal, couponDiscount, afterDiscount, taxAmount, feeAmount, tipAmt, total: afterDiscount + taxAmount + feeAmount + tipAmt };
+  return { subtotal, addonsSubtotal, itemSubtotal, couponDiscount, afterDiscount, taxAmount, feeAmount, tipAmt, total: afterDiscount + taxAmount + feeAmount + tipAmt };
 }
 
 function cancellationPolicyHtml() {
