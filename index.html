@@ -381,7 +381,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .time-col-head{min-height:56px;border-bottom:1px solid var(--main-border);flex-shrink:0}
 .time-col-allday{height:28px;border-bottom:1px solid var(--main-border);font-size:9px;color:var(--text-dim);display:flex;align-items:center;justify-content:flex-end;padding:0 6px;background:var(--main-bg);flex-shrink:0}
 .day-col-allday{min-height:28px;border-bottom:1px solid var(--main-border);padding:3px 5px;display:flex;flex-wrap:wrap;gap:3px;align-items:center;background:var(--main-card);flex-shrink:0}
-.cal-allday-chip{font-size:9px;font-weight:600;padding:1px 6px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cal-allday-chip{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;letter-spacing:.02em}
 .time-slot{height:68px;padding:3px 5px;font-size:10px;color:var(--main-text-muted);
   border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:flex-end;flex-shrink:0}
 .day-col{flex:1;min-width:88px;border-right:1px solid var(--main-border);display:flex;flex-direction:column}
@@ -484,7 +484,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
   border-radius:50%;background:#fff;transition:left .2s}
 .bh-toggle.on::after{left:21px}
 .bh-time{background:var(--bg-input);border:1px solid var(--border);border-radius:6px;
-  color:var(--text);padding:4px 8px;font-size:12px;font-family:Lato,sans-serif;outline:none;width:86px}
+  color:var(--text);padding:4px 8px;font-size:12px;font-family:Lato,sans-serif;outline:none;width:120px}
 .bh-time:focus{border-color:var(--purple)}
 .bh-sep{font-size:11px;color:var(--text-muted)}
 .user-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)}
@@ -503,13 +503,19 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .color-sw.selected{border-color:#fff}
 
 /* SCHEDULE */
-.sched-row{display:flex;align-items:center;gap:8px;padding:4px 0}
+.sched-row{display:flex;align-items:center;gap:8px;padding:4px 0;flex-wrap:wrap}
 .sched-day{width:40px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase}
 .sched-toggle{cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:6px;
   padding:3px 9px;font-size:11px;font-weight:600;color:var(--text-muted);font-family:Lato,sans-serif;transition:all .15s}
 .sched-toggle.on{background:var(--purple-dim);color:var(--purple-light);border-color:var(--purple-border)}
+.sched-lunch-toggle{cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:6px;
+  padding:3px 9px;font-size:11px;font-weight:600;color:var(--text-muted);font-family:Lato,sans-serif;transition:all .15s;margin-left:6px}
+.sched-lunch-toggle.on{background:rgba(245,158,11,.15);color:#d97706;border-color:rgba(245,158,11,.4)}
+.sched-lunch-toggle:disabled{opacity:.4;cursor:not-allowed}
+.sched-lunch-row{display:flex;align-items:center;gap:8px;padding:0 0 4px 48px;font-size:11px}
+.sched-lunch-label{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:.04em;min-width:32px}
 .sched-time{background:var(--bg-input);border:1px solid var(--border);border-radius:6px;
-  color:var(--text);padding:4px 7px;font-size:12px;font-family:Lato,sans-serif;outline:none;width:84px}
+  color:var(--text);padding:4px 7px;font-size:12px;font-family:Lato,sans-serif;outline:none;width:120px}
 .sched-time:focus{border-color:var(--purple)}
 .ov-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg-card);
   border-radius:var(--radius);margin-bottom:5px}
@@ -2242,30 +2248,82 @@ async function sha256(str){
 // =====================================================
 // CALENDAR HOURS
 // =====================================================
-function getCalHours(dateStr,userId){
-  if(userId&&userId!=='all'){
-    const u=getUserById(userId);
-    if(u&&u.schedule){
-      const ov=u.dateOverrides&&u.dateOverrides.find(o=>o.date===dateStr);
-      if(ov){
-        if(ov.type==='off')return[];
-        if(ov.type==='custom'){const s=parseInt(ov.start),e=parseInt(ov.end);return Array.from({length:e-s},(_,i)=>i+s)}
-      }
-      const dk=getDK(dateStr),ds=u.schedule[dk];
-      if(ds&&ds.on){const s=parseInt(ds.start),e=parseInt(ds.end);return Array.from({length:e-s},(_,i)=>i+s)}
-      return[];
-    }
+// Returns the set of hours (integers) a staff member is available on the given
+// date. Honors regular schedule, daily lunch break, and date overrides.
+// Override types:
+//   off       : entire day off (returns empty Set)
+//   hoursOff  : start-end is removed from the day's working hours
+//   custom    : start-end REPLACES the day's working hours
+// If the user has no schedule for the day (or override 'off'), returns empty Set.
+function getStaffAvailableHours(uid,dateStr){
+  var u=getUserById(uid);
+  if(!u||!u.schedule)return new Set();
+  var dk=getDK(dateStr);
+  var ds=u.schedule[dk]||{};
+  var ov=u.dateOverrides&&u.dateOverrides.find(function(o){return o.date===dateStr;});
+  var baseStart=null,baseEnd=null;
+  if(ov&&ov.type==='off')return new Set();
+  if(ov&&ov.type==='custom'){
+    baseStart=parseInt(ov.start);baseEnd=parseInt(ov.end);
+  }else if(ds.on){
+    baseStart=parseInt(ds.start);baseEnd=parseInt(ds.end);
+  }else{
+    return new Set();
   }
-  const bh=db.settings.businessHours||DEF_BH,dk=getDK(dateStr),d=bh[dk];
-  if(d&&d.open){const s=parseInt(d.start),e=parseInt(d.end);return Array.from({length:e-s},(_,i)=>i+s)}
-  return[];
+  if(isNaN(baseStart)||isNaN(baseEnd)||baseEnd<=baseStart)return new Set();
+  var avail=new Set();
+  for(var h=baseStart;h<baseEnd;h++)avail.add(h);
+  // Subtract regular lunch break (only when running on regular schedule, not custom override).
+  if(!(ov&&ov.type==='custom')&&ds.on&&ds.hasLunch&&ds.lunchStart&&ds.lunchEnd){
+    var lS=parseInt(ds.lunchStart),lE=parseInt(ds.lunchEnd);
+    if(!isNaN(lS)&&!isNaN(lE))for(var lh=lS;lh<lE;lh++)avail.delete(lh);
+  }
+  // Subtract hoursOff override range.
+  if(ov&&ov.type==='hoursOff'&&ov.start&&ov.end){
+    var oS=parseInt(ov.start),oE=parseInt(ov.end);
+    if(!isNaN(oS)&&!isNaN(oE))for(var oh=oS;oh<oE;oh++)avail.delete(oh);
+  }
+  return avail;
 }
 
+// Returns the set of hours (integers) the business is open on the given date,
+// based on db.settings.businessHours.
+function getBusinessAvailableHours(dateStr){
+  var bh=db.settings.businessHours||DEF_BH;
+  var dk=getDK(dateStr);
+  var d=bh[dk];
+  if(!d||!d.open)return new Set();
+  var s=parseInt(d.start),e=parseInt(d.end);
+  if(isNaN(s)||isNaN(e)||e<=s)return new Set();
+  var out=new Set();
+  for(var h=s;h<e;h++)out.add(h);
+  return out;
+}
+
+// Legacy array-returning interface. New code should prefer the Set helpers.
+function getCalHours(dateStr,userId){
+  var setH;
+  if(userId&&userId!=='all')setH=getStaffAvailableHours(userId,dateStr);
+  else setH=getBusinessAvailableHours(dateStr);
+  return Array.from(setH).sort(function(a,b){return a-b;});
+}
+
+// Calendar visible hour range. Uses the union of all open business days:
+// top = earliest opening across the week, bottom = latest closing. No baked-in
+// defaults that extend beyond the actual configured hours. Falls back to 9-17
+// only when no day is open at all.
 function globalCalHours(){
-  const bh=db.settings.businessHours||DEF_BH;
-  let min=8,max=18;
-  Object.values(bh).forEach(d=>{if(d.open){const s=parseInt(d.start),e=parseInt(d.end);if(s<min)min=s;if(e>max)max=e}});
-  return Array.from({length:max-min},(_,i)=>i+min);
+  var bh=db.settings.businessHours||DEF_BH;
+  var min=null,max=null;
+  Object.values(bh).forEach(function(d){
+    if(d&&d.open){
+      var s=parseInt(d.start),e=parseInt(d.end);
+      if(!isNaN(s)&&(min===null||s<min))min=s;
+      if(!isNaN(e)&&(max===null||e>max))max=e;
+    }
+  });
+  if(min===null||max===null||max<=min){min=9;max=17;}
+  return Array.from({length:max-min},function(_,i){return i+min;});
 }
 
 // Workspace-level blackout date lookup. Returns the matching {date, reason}
@@ -4794,11 +4852,13 @@ function getOffBlocksForCol(dateStr){
     var ov=u.dateOverrides&&u.dateOverrides.find(function(o){return o.date===dateStr;});
     var dk=getDK(dateStr);var ds=u.schedule&&u.schedule[dk];
     if(ov&&ov.type==='off'){
-      blocks.push({uid:u.id,name:u.name||u.username,color:u.color||'#f87171',reason:ov.note||'Day Off',fullDay:true});
+      blocks.push({uid:u.id,name:u.name||u.username,color:u.color||'#f87171',kind:'off',reason:ov.note||'Day Off',fullDay:true});
+    }else if(ov&&ov.type==='hoursOff'){
+      blocks.push({uid:u.id,name:u.name||u.username,color:u.color||'#f87171',kind:'hoursOff',reason:'Out '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end),fullDay:false});
     }else if(ov&&ov.type==='custom'){
-      blocks.push({uid:u.id,name:u.name||u.username,color:u.color||'#fbbf24',reason:'Custom: '+fmtTime(ov.start)+'–'+fmtTime(ov.end),fullDay:false});
+      blocks.push({uid:u.id,name:u.name||u.username,color:u.color||'#fbbf24',kind:'custom',reason:fmtTime(ov.start)+'\u2013'+fmtTime(ov.end),fullDay:false});
     }else if(!ds||!ds.on){
-      blocks.push({uid:u.id,name:u.name||u.username,color:u.color||'#888',reason:'Not scheduled',fullDay:true});
+      blocks.push({uid:u.id,name:u.name||u.username,color:u.color||'#888',kind:'notSched',reason:'Not scheduled',fullDay:true});
     }
   });
   return blocks;
@@ -4917,13 +4977,27 @@ function renderWeekCal(){
       }
     }
     var staffDots2='<div style="display:flex;gap:2px;justify-content:center;margin-top:3px;flex-wrap:wrap;min-height:16px">'+staffDots2Inner+'</div>';
-    var dOffChips=offBW.filter(function(b){return b.reason!=='Not scheduled';}).map(function(b){
-      var lbl=esc(b.name.split(' ')[0])+' – Day Off'+(b.reason&&b.reason!=='Day Off'?' ('+b.reason.slice(0,12)+')':'');
-      return'<span class="cal-allday-chip" style="background:'+b.color+'18;border:1px solid '+b.color+'44;color:'+b.color+'">'+lbl+'</span>';
+    var dOffChips=offBW.filter(function(b){return b.kind!=='notSched';}).map(function(b){
+      var firstName=esc(b.name.split(' ')[0]);
+      var lbl,bg,bd,fg;
+      if(b.kind==='off'){
+        lbl=firstName+' OFF'+(b.reason&&b.reason!=='Day Off'?' ('+esc(b.reason.slice(0,14))+')':'');
+        bg=b.color+'30';bd=b.color+'80';fg=b.color;
+      }else if(b.kind==='hoursOff'){
+        lbl=firstName+' '+esc(b.reason);
+        bg=b.color+'25';bd=b.color+'70';fg=b.color;
+      }else if(b.kind==='custom'){
+        lbl=firstName+' '+esc(b.reason);
+        bg=b.color+'25';bd=b.color+'70';fg=b.color;
+      }else{
+        lbl=firstName+' '+esc(b.reason);
+        bg=b.color+'18';bd=b.color+'44';fg=b.color;
+      }
+      return'<span class="cal-allday-chip" style="background:'+bg+';border:1px solid '+bd+';color:'+fg+'">'+lbl+'</span>';
     }).join('');
     var boW=isBlackoutDate(str);
     if(boW){
-      dOffChips='<span class="cal-allday-chip" style="background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.4);color:#f87171;font-weight:600">Blackout'+(boW.reason?': '+esc(boW.reason.slice(0,18)):'')+'</span>'+dOffChips;
+      dOffChips='<span class="cal-allday-chip" style="background:rgba(248,113,113,.18);border:1px solid rgba(248,113,113,.5);color:#f87171">Blackout'+(boW.reason?': '+esc(boW.reason.slice(0,18)):'')+'</span>'+dOffChips;
     }
     html+='<div class="day-col"'+(boW?' style="background:rgba(248,113,113,.04)"':'')+'><div class="day-col-head'+(str===td?' today':'')+'">'+DSHORT[day.getDay()]+' '+day.getDate()+staffDots2+'</div><div class="day-col-allday">'+dOffChips+'</div>'+banW+buildTimedCol(str,appts,allH)+'</div>';
   });
@@ -5502,8 +5576,9 @@ function renderSettings(){renderSquareCard();
 
 function renderBH(){
   const bh=db.settings.businessHours||DEF_BH,el=document.getElementById('bh-grid');if(!el)return;
-  const dayLabels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  el.innerHTML=DKEYS.map((dk,i)=>{const d=bh[dk]||{open:false,start:'08:00',end:'17:00'};return'<div class="bh-row"><span class="bh-label">'+dayLabels[i]+'</span><div class="bh-toggle'+(d.open?' on':'')+'" id="bht-'+dk+'" onclick="toggleBH(\''+dk+'\')"></div><input class="bh-time" type="time" id="bhs-'+dk+'" value="'+d.start+'"'+(d.open?'':' disabled')+' oninput="updateTimeFmt(this)"><span class="bh-time-fmt">'+fmtTime(d.start)+'</span><span class="bh-sep">to</span><input class="bh-time" type="time" id="bhe-'+dk+'" value="'+d.end+'"'+(d.open?'':' disabled')+' oninput="updateTimeFmt(this)"><span class="bh-time-fmt">'+fmtTime(d.end)+'</span></div>'}).join('');
+  const order=['mon','tue','wed','thu','fri','sat','sun'];
+  const labels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  el.innerHTML=order.map((dk,i)=>{const d=bh[dk]||{open:false,start:'08:00',end:'17:00'};return'<div class="bh-row"><span class="bh-label">'+labels[i]+'</span><div class="bh-toggle'+(d.open?' on':'')+'" id="bht-'+dk+'" onclick="toggleBH(\''+dk+'\')"></div><input class="bh-time" type="time" id="bhs-'+dk+'" value="'+d.start+'"'+(d.open?'':' disabled')+'><span class="bh-sep">to</span><input class="bh-time" type="time" id="bhe-'+dk+'" value="'+d.end+'"'+(d.open?'':' disabled')+'></div>'}).join('');
 }
 
 function toggleBH(dk){const bh=db.settings.businessHours;bh[dk].open=!bh[dk].open;const t=document.getElementById('bht-'+dk);if(t)t.classList.toggle('on',bh[dk].open);const s=document.getElementById('bhs-'+dk),e=document.getElementById('bhe-'+dk);if(s)s.disabled=!bh[dk].open;if(e)e.disabled=!bh[dk].open}
@@ -8001,12 +8076,32 @@ function buildUserBody(){
 }
 
 function buildSchedSection(standalone){
+  const order=['mon','tue','wed','thu','fri','sat','sun'];
   const dLabels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   // Max bookings per day. Stored in schedule.maxBookingsPerDay (no separate column).
   const maxBookingsVal=(editSched&&editSched.maxBookingsPerDay!=null)?String(editSched.maxBookingsPerDay):'';
   const maxBookingsInput='<div style="margin-bottom:14px;padding:10px 12px;background:rgba(107,33,234,.04);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;gap:10px;flex-wrap:wrap"><label style="font-size:12px;font-weight:600;color:var(--text);margin:0;flex-shrink:0">Maximum bookings per day</label><input type="number" min="0" step="1" id="sched-max-bookings" value="'+esc(maxBookingsVal)+'" placeholder="No limit" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:6px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:90px"><span style="font-size:11px;color:var(--text-muted)">Leave blank for no limit. Caps appointments per day across all booking sources.</span></div>';
-  const sg=DKEYS.map((dk,i)=>{const ds=editSched[dk]||{on:false,start:'08:00',end:'17:00'};return'<div class="sched-row"><span class="sched-day">'+dLabels[i]+'</span><button type="button" class="sched-toggle'+(ds.on?' on':'')+'" id="st-'+dk+'" onclick="toggleSchedDay(\''+dk+'\')">'+( ds.on?'On':'Off')+'</button><input class="sched-time" type="time" id="ss-'+dk+'" value="'+ds.start+'"'+(ds.on?'':' disabled')+' oninput="updateTimeFmt(this)"><span class="bh-time-fmt">'+fmtTime(ds.start)+'</span><span style="font-size:11px;color:var(--text-muted)">to</span><input class="sched-time" type="time" id="se-'+dk+'" value="'+ds.end+'"'+(ds.on?'':' disabled')+' oninput="updateTimeFmt(this)"><span class="bh-time-fmt">'+fmtTime(ds.end)+'</span></div>'}).join('');
-  const ov='<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:7px">Date Overrides</div><div id="ov-list">'+renderOvList()+'</div><div style="display:flex;gap:7px;align-items:flex-end;flex-wrap:wrap;margin-top:8px"><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Date</label><input type="date" id="ov-date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Type</label><select id="ov-type" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;height:36px" onchange="document.getElementById(\'ov-hrs\').style.display=this.value===\'custom\'?\'flex\':\'none\'"><option value="off">Day Off</option><option value="custom">Custom Hours</option></select></div><div id="ov-hrs" style="display:none;gap:6px;align-items:flex-end"><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Start</label><input type="time" id="ov-start" value="09:00" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 9px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">End</label><input type="time" id="ov-end" value="14:00" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 9px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Note</label><input type="text" id="ov-note" placeholder="Vacation, conf..." style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;width:130px"></div><button class="btn btn-ghost btn-sm" onclick="addOv()">Add</button></div></div>';
+  const sg=order.map((dk,i)=>{
+    const ds=editSched[dk]||{on:false,start:'08:00',end:'17:00'};
+    const hasL=!!ds.hasLunch;
+    const lS=ds.lunchStart||'12:00',lE=ds.lunchEnd||'13:00';
+    const dis=ds.on?'':' disabled';
+    const lDis=(ds.on&&hasL)?'':' disabled';
+    return'<div class="sched-row-wrap"><div class="sched-row"><span class="sched-day">'+dLabels[i]+'</span>'
+      +'<button type="button" class="sched-toggle'+(ds.on?' on':'')+'" id="st-'+dk+'" onclick="toggleSchedDay(\''+dk+'\')">'+(ds.on?'On':'Off')+'</button>'
+      +'<input class="sched-time" type="time" id="ss-'+dk+'" value="'+ds.start+'"'+dis+'>'
+      +'<span style="font-size:11px;color:var(--text-muted)">to</span>'
+      +'<input class="sched-time" type="time" id="se-'+dk+'" value="'+ds.end+'"'+dis+'>'
+      +'<button type="button" class="sched-lunch-toggle'+(hasL?' on':'')+'" id="slt-'+dk+'" onclick="toggleLunch(\''+dk+'\')"'+(ds.on?'':' disabled')+' title="Daily lunch break">Lunch</button>'
+      +'</div>'
+      +'<div class="sched-lunch-row" id="slr-'+dk+'" style="display:'+(hasL?'flex':'none')+'">'
+      +'<span class="sched-lunch-label">Out</span>'
+      +'<input class="sched-time" type="time" id="sls-'+dk+'" value="'+lS+'"'+lDis+'>'
+      +'<span style="font-size:11px;color:var(--text-muted)">to</span>'
+      +'<input class="sched-time" type="time" id="sle-'+dk+'" value="'+lE+'"'+lDis+'>'
+      +'</div></div>';
+  }).join('');
+  const ov='<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:7px">Date Overrides</div><div id="ov-list">'+renderOvList()+'</div><div style="display:flex;gap:7px;align-items:flex-end;flex-wrap:wrap;margin-top:8px"><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Date</label><input type="date" id="ov-date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Type</label><select id="ov-type" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;height:36px" onchange="document.getElementById(\'ov-hrs\').style.display=(this.value===\'custom\'||this.value===\'hoursOff\')?\'flex\':\'none\'"><option value="off">Day Off</option><option value="hoursOff">Hours Off</option><option value="custom">Work These Hours</option></select></div><div id="ov-hrs" style="display:none;gap:6px;align-items:flex-end"><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Start</label><input type="time" id="ov-start" value="09:00" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 9px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">End</label><input type="time" id="ov-end" value="14:00" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 9px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none"></div></div><div class="form-group" style="margin:0"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Note</label><input type="text" id="ov-note" placeholder="Vacation, conf..." style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;width:130px"></div><button class="btn btn-ghost btn-sm" onclick="addOv()">Add</button></div></div>';
   return maxBookingsInput+'<div style="display:grid;gap:5px">'+sg+'</div>'+ov;
 }
 
@@ -8016,7 +8111,15 @@ function renderOvList(){
   var today=new Date().toISOString().slice(0,10);
   var future=userOvs.map(function(ov,i){return {ov:ov,i:i};}).filter(function(x){return x.ov.date>=today;});
   if(!future.length)return'<div style="font-size:12px;color:var(--text-muted);padding:3px 0">No upcoming date overrides.</div>';
-  return future.sort(function(a,b){return a.ov.date.localeCompare(b.ov.date);}).map(function(x){var ov=x.ov,i=x.i;return'<div class="ov-item"><span class="ov-date">'+fmtDate(ov.date)+'</span><span class="ov-type" style="color:'+(ov.type==='off'?'#f87171':'#fbbf24')+'">'+(ov.type==='off'?'Day Off':'Custom: '+ov.start+'-'+ov.end)+'</span>'+(ov.note?'<span style="font-size:11px;color:var(--text-muted);flex:1">'+esc(ov.note)+'</span>':'')+'<button class="icon-btn-xs" onclick="rmOv('+i+')" style="margin-left:auto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';}).join('');
+  return future.sort(function(a,b){return a.ov.date.localeCompare(b.ov.date);}).map(function(x){
+    var ov=x.ov,i=x.i;
+    var lbl,col;
+    if(ov.type==='off'){lbl='Day Off';col='#f87171';}
+    else if(ov.type==='hoursOff'){lbl='Hours Off: '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end);col='#f87171';}
+    else if(ov.type==='custom'){lbl='Work These Hours: '+fmtTime(ov.start)+'\u2013'+fmtTime(ov.end);col='#fbbf24';}
+    else {lbl=ov.type;col='#888';}
+    return'<div class="ov-item"><span class="ov-date">'+fmtDate(ov.date)+'</span><span class="ov-type" style="color:'+col+'">'+esc(lbl)+'</span>'+(ov.note?'<span style="font-size:11px;color:var(--text-muted);flex:1">'+esc(ov.note)+'</span>':'')+'<button class="icon-btn-xs" onclick="rmOv('+i+')" style="margin-left:auto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+  }).join('');
 }
 
 function toggleSchedDay(dk){
@@ -8024,6 +8127,42 @@ function toggleSchedDay(dk){
   const btn=document.getElementById('st-'+dk);if(btn){btn.classList.toggle('on',editSched[dk].on);btn.textContent=editSched[dk].on?'On':'Off'}
   const s=document.getElementById('ss-'+dk),e=document.getElementById('se-'+dk);
   if(s)s.disabled=!editSched[dk].on;if(e)e.disabled=!editSched[dk].on;
+  // Lunch toggle button: disabled when day is off; lunch fields disabled when day is off OR lunch is off.
+  const lt=document.getElementById('slt-'+dk);if(lt)lt.disabled=!editSched[dk].on;
+  const ls=document.getElementById('sls-'+dk),le=document.getElementById('sle-'+dk);
+  const lActive=editSched[dk].on&&!!editSched[dk].hasLunch;
+  if(ls)ls.disabled=!lActive;if(le)le.disabled=!lActive;
+}
+
+function toggleLunch(dk){
+  if(!editSched[dk]||!editSched[dk].on)return;
+  editSched[dk].hasLunch=!editSched[dk].hasLunch;
+  if(editSched[dk].hasLunch){
+    if(!editSched[dk].lunchStart)editSched[dk].lunchStart='12:00';
+    if(!editSched[dk].lunchEnd)editSched[dk].lunchEnd='13:00';
+  }
+  const btn=document.getElementById('slt-'+dk);if(btn)btn.classList.toggle('on',editSched[dk].hasLunch);
+  const row=document.getElementById('slr-'+dk);if(row)row.style.display=editSched[dk].hasLunch?'flex':'none';
+  const ls=document.getElementById('sls-'+dk),le=document.getElementById('sle-'+dk);
+  if(ls)ls.disabled=!editSched[dk].hasLunch;if(le)le.disabled=!editSched[dk].hasLunch;
+}
+
+// Reads schedule field values out of the open Edit Schedule / Add User modal
+// and merges them into the given sched object. Leaves day-on/off and lunch
+// hasLunch flags as already toggled in editSched (those are mutated by the
+// toggle handlers directly). Only reads start/end times.
+function _readSchedFromDOM(sched){
+  ['mon','tue','wed','thu','fri','sat','sun'].forEach(function(dk){
+    if(!sched[dk])sched[dk]={on:false,start:'08:00',end:'17:00'};
+    var s=document.getElementById('ss-'+dk);if(s&&s.value)sched[dk].start=s.value;
+    var e=document.getElementById('se-'+dk);if(e&&e.value)sched[dk].end=e.value;
+    if(sched[dk].hasLunch){
+      var ls=document.getElementById('sls-'+dk);if(ls&&ls.value)sched[dk].lunchStart=ls.value;
+      var le=document.getElementById('sle-'+dk);if(le&&le.value)sched[dk].lunchEnd=le.value;
+    }else{
+      delete sched[dk].lunchStart;delete sched[dk].lunchEnd;
+    }
+  });
 }
 
 function addOv(){
@@ -8031,7 +8170,11 @@ function addOv(){
   if(!date){toast('Select a date.','error');return}
   const type=document.getElementById('ov-type')&&document.getElementById('ov-type').value;
   const ov={date,type,note:document.getElementById('ov-note')&&document.getElementById('ov-note').value||''};
-  if(type==='custom'){ov.start=document.getElementById('ov-start')&&document.getElementById('ov-start').value||'09:00';ov.end=document.getElementById('ov-end')&&document.getElementById('ov-end').value||'17:00'}
+  if(type==='custom'||type==='hoursOff'){
+    ov.start=document.getElementById('ov-start')&&document.getElementById('ov-start').value||'09:00';
+    ov.end=document.getElementById('ov-end')&&document.getElementById('ov-end').value||'17:00';
+    if(ov.end<=ov.start){toast('End time must be after start.','error');return}
+  }
   userOvs=userOvs.filter(o=>o.date!==date);userOvs.push(ov);
   const el=document.getElementById('ov-list');if(el)el.innerHTML=renderOvList();
 }
@@ -8048,7 +8191,7 @@ async function saveUser(){
   if(!username||!password){toast('Username and password required.','error');return}
   if(allUsers().find(u=>u.username===username)){toast('Username taken.','error');return}
   const sched=JSON.parse(JSON.stringify(editSched));
-  DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
+  _readSchedFromDOM(sched);
   // Max bookings per day. Empty/0 = no cap (delete the field).
   var mxEl=document.getElementById('sched-max-bookings');
   if(mxEl){
@@ -8108,7 +8251,7 @@ async function saveUser(){
 async function saveUserSched(){
   const uid=state.modal.id;
   const sched=JSON.parse(JSON.stringify(editSched));
-  DKEYS.forEach(dk=>{const s=document.getElementById('ss-'+dk)&&document.getElementById('ss-'+dk).value,e=document.getElementById('se-'+dk)&&document.getElementById('se-'+dk).value;if(s)sched[dk].start=s;if(e)sched[dk].end=e});
+  _readSchedFromDOM(sched);
   // Max bookings per day. Empty/0 = no cap (delete the field).
   var mxEl=document.getElementById('sched-max-bookings');
   if(mxEl){
