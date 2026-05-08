@@ -1,4 +1,7 @@
 // POST /api/subaccount/class-sessions-upsert
+// Phase A update: accepts series_id, is_override, and price columns.
+// These fields stay null/false unless explicitly provided. The recurrence
+// generator (Phase D) will populate series_id for generated sessions.
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
@@ -18,23 +21,42 @@ async function handler(req, res) {
 
   try {
     const existing = await db.query(
-      'SELECT id FROM class_sessions WHERE id=$1 AND subaccount_id=$2',
+      'SELECT id, series_id FROM class_sessions WHERE id=$1 AND subaccount_id=$2',
       [c.id, subaccountId]
     );
     const isNew = existing.rows.length === 0;
+    const existingRow = existing.rows[0];
+
+    // If updating an existing session that is part of a series, and the
+    // request did not explicitly set is_override, flip it to true automatically.
+    // This protects manually-edited sessions from being overwritten by future
+    // template regenerations. New sessions and explicit values pass through.
+    let isOverride = c.is_override === true;
+    if (!isNew && existingRow && existingRow.series_id && c.is_override === undefined) {
+      isOverride = true;
+    }
 
     await db.query(`
       INSERT INTO class_sessions (
         id, subaccount_id, service_id, instructor_id, title, date, time,
-        duration, capacity, location, notes, status, participants, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())
+        duration, capacity, location, notes, status, participants,
+        series_id, is_override, price,
+        created_at, updated_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+        $14,$15,$16,
+        NOW(),NOW()
+      )
       ON CONFLICT (id) DO UPDATE SET
         service_id=EXCLUDED.service_id,
         instructor_id=EXCLUDED.instructor_id,
         title=EXCLUDED.title, date=EXCLUDED.date, time=EXCLUDED.time,
         duration=EXCLUDED.duration, capacity=EXCLUDED.capacity,
         location=EXCLUDED.location, notes=EXCLUDED.notes,
-        status=EXCLUDED.status, updated_at=NOW()
+        status=EXCLUDED.status,
+        is_override=EXCLUDED.is_override,
+        price=EXCLUDED.price,
+        updated_at=NOW()
       WHERE class_sessions.subaccount_id=$2
     `, [
       c.id, subaccountId, c.service_id||null, c.instructor_id||null,
@@ -42,7 +64,10 @@ async function handler(req, res) {
       parseInt(c.duration)||60, parseInt(c.capacity)||10,
       c.location||null, c.notes||null,
       c.status||'scheduled',
-      JSON.stringify(c.participants||[])
+      JSON.stringify(c.participants||[]),
+      c.series_id || null,
+      isOverride,
+      c.price != null ? parseFloat(c.price) : null
     ]);
 
     await logAudit({
@@ -51,10 +76,10 @@ async function handler(req, res) {
       action: isNew ? 'subaccount.class_session.create' : 'subaccount.class_session.update',
       targetType:'class_session', targetId:c.id,
       targetSubaccountId:subaccountId,
-      metadata:{ title:c.title, date:c.date }
+      metadata:{ title:c.title, date:c.date, is_override: isOverride, has_series: !!c.series_id }
     });
 
-    return res.status(200).json({ success:true, id:c.id });
+    return res.status(200).json({ success:true, id:c.id, is_override: isOverride });
   } catch(e) {
     console.error('class-sessions-upsert error:', e.message);
     return res.status(500).json({ error:'Failed to save class session' });
