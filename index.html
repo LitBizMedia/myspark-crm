@@ -2250,17 +2250,22 @@ function _normalizeTimeText(inp){
 }
 
 // Opens the OS-native time picker for the time-text input identified by id.
-// Uses a transient <input type="time"> so that the picker appears even when
-// the visible field is type=text. The picker's onchange writes the canonical
-// HH:MM back into the visible field's data-hhmm and updates the displayed
-// 12-hour text. The transient input cleans itself up after change or blur.
+// Uses a transient <input type="time"> positioned at the visible field's
+// location (via fixed coordinates from getBoundingClientRect) so the picker
+// anchors correctly under the clock icon, not at the corner of the page.
+// The transient input is appended to <body> to escape any overflow-hidden
+// ancestors, and cleans itself up after change or blur.
 function _openTimePickerFor(id){
   var inp=document.getElementById(id);
   if(!inp||inp.disabled)return;
+  var rect=inp.getBoundingClientRect();
   var hidden=document.createElement('input');
   hidden.type='time';
   hidden.value=inp.dataset.hhmm||_parseTimeText(inp.value)||'09:00';
-  hidden.style.cssText='position:absolute;top:0;left:0;opacity:0;width:1px;height:1px;pointer-events:none';
+  hidden.style.cssText='position:fixed;'
+    +'top:'+(rect.top+rect.height-2)+'px;'
+    +'left:'+(rect.left+10)+'px;'
+    +'width:1px;height:1px;opacity:0;border:none;padding:0;margin:0;z-index:99999';
   hidden.addEventListener('change',function(){
     if(hidden.value){
       inp.dataset.hhmm=hidden.value;
@@ -2272,7 +2277,7 @@ function _openTimePickerFor(id){
   hidden.addEventListener('blur',function(){
     setTimeout(function(){if(hidden.parentNode)hidden.parentNode.removeChild(hidden);},250);
   });
-  inp.parentNode.appendChild(hidden);
+  document.body.appendChild(hidden);
   if(typeof hidden.showPicker==='function'){
     try{hidden.showPicker();}catch(e){hidden.focus();}
   }else{
