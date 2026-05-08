@@ -128,14 +128,22 @@ async function handler(req, res) {
         svcArgs = [subaccountId];
       }
     } else if (widgetServiceIds.length) {
+      // Service widget with explicit list. Exclude class-type rows defensively
+      // in case any class IDs slipped into the list before the dashboard
+      // picker started filtering them out.
       svcQuery = `SELECT * FROM services
                   WHERE subaccount_id = $1 AND active = true
                     AND id = ANY($2::text[])
+                    AND type IS DISTINCT FROM 'class'
                   ORDER BY name ASC`;
       svcArgs = [subaccountId, widgetServiceIds];
     } else {
+      // Service widget with no explicit list defaults to ALL services. Must
+      // exclude classes here too, otherwise classes show on a service widget
+      // whenever the admin leaves service_ids empty.
       svcQuery = `SELECT * FROM services
                   WHERE subaccount_id = $1 AND active = true
+                    AND type IS DISTINCT FROM 'class'
                   ORDER BY name ASC`;
       svcArgs = [subaccountId];
     }
