@@ -2352,6 +2352,8 @@ function _openTimePickerFor(id){
     inp.dataset.hhmm=hhmm;
     inp.value=_hhmmTo12(hhmm);
     inp.classList.remove('invalid');
+    // Fire change so any onchange handler attached to the field runs.
+    try{inp.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}
     pop.remove();
     document.removeEventListener('mousedown',outsideHandler,true);
     document.removeEventListener('keydown',keyHandler,true);
@@ -2380,7 +2382,6 @@ function _openTimePickerFor(id){
 }
 
 // Toggles disabled state on a time-text input plus its wrapper and clock
-// button so the entire .time-pair visually reflects the disabled state.
 function _setTimeInputDisabled(id,disabled){
   var inp=document.getElementById(id);
   if(!inp)return;
@@ -2391,15 +2392,27 @@ function _setTimeInputDisabled(id,disabled){
   if(btn)btn.disabled=!!disabled;
 }
 
+// Reads the canonical HH:MM (24-hour) value from a time-text input by id.
+// Falls back to data-hhmm if the displayed value is in transition. Returns
+// null if the field is missing or its value cannot be parsed.
+function _readTimeInput(id){
+  var el=document.getElementById(id);
+  if(!el)return null;
+  return _parseTimeText(el.value)||el.dataset.hhmm||null;
+}
+
 // Returns the markup for a free-text time input paired with a clickable
 // clock-icon button. Wrap is .time-pair, the visible input has class
 // .time-text and id={id}, and stores canonical HH:MM in data-hhmm. Read
-// the value back via _parseTimeText(inputElement.value).
-function _timeInputHTML(id,value,disabled){
+// the value back via _readTimeInput(id) which handles parsing. The optional
+// onchangeAttr is a JS string injected into the field's onchange attribute;
+// fires on blur after _normalizeTimeText runs and after the picker commits.
+function _timeInputHTML(id,value,disabled,onchangeAttr){
   var hhmm=_parseTimeText(value)||value||'';
   var disp=_hhmmTo12(hhmm);
+  var oc=onchangeAttr?' onchange="'+onchangeAttr.replace(/"/g,'&quot;')+'"':'';
   return'<span class="time-pair'+(disabled?' is-disabled':'')+'">'
-    +'<input type="text" class="time-text" id="'+id+'" value="'+esc(disp)+'" data-hhmm="'+esc(hhmm)+'" placeholder="9:00 AM" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+' onblur="_normalizeTimeText(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}">'
+    +'<input type="text" class="time-text" id="'+id+'" value="'+esc(disp)+'" data-hhmm="'+esc(hhmm)+'" placeholder="9:00 AM" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+oc+' onblur="_normalizeTimeText(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}">'
     +'<button type="button" class="time-clk-btn" tabindex="-1" onclick="_openTimePickerFor(\''+id+'\')" '+(disabled?'disabled ':'')+'title="Pick time"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>'
     +'</span>';
 }
@@ -6523,7 +6536,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     // Existing fields (unchanged)
     + '<div id="appt-warn" class="warn-box hidden"></div>'
     + '<div class="form-group"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
-    + '<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label><input id="af-time" type="time" value="'+esc(a&&a.time||prefTime||'09:00')+'" onchange="checkApptConflict()"></div></div>'
+    + '<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label>'+_timeInputHTML('af-time',a&&a.time||prefTime||'09:00',false,'checkApptConflict()')+'</div></div>'
     + '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
     + '<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
     + '<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','rescheduled','no-show','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
@@ -7878,7 +7891,7 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
 
 function checkApptConflict(){
   const date=document.getElementById('af-date')&&document.getElementById('af-date').value;
-  const time=document.getElementById('af-time')&&document.getElementById('af-time').value;
+  const time=_readTimeInput('af-time');
   const dur=document.getElementById('af-dur')&&document.getElementById('af-dur').value;
   const userId=document.getElementById('af-user')&&document.getElementById('af-user').value;
   // Workspace-level blackout date check. Trumps everything else when triggered.
@@ -8083,7 +8096,7 @@ function saveAppt(){
     variationId=(varSel&&varSel.value)||null;
     if(!serviceId){toast('Pick a service or switch to Custom mode.','error');return;}
   }
-  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:document.getElementById('af-time').value,duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0,service_id:serviceId,service_variation_id:variationId};
+  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:_readTimeInput('af-time'),duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0,service_id:serviceId,service_variation_id:variationId};
   var isNewAppt=!state.modal.id;
   var apptIdForAudit=state.modal.id||null;
   // Snapshot state for potential rollback if the server returns a 409 race conflict
@@ -12953,7 +12966,7 @@ function renderRecurrenceFields(s){
     +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Schedule</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Start Date *</label><input id="svc-rec-start" type="date" value="'+esc(startDate)+'"></div>'
-    +'<div class="form-group"><label>Start Time *</label><input id="svc-rec-time" type="time" value="'+esc(startTime)+'"></div>'
+    +'<div class="form-group"><label>Start Time *</label>'+_timeInputHTML('svc-rec-time',startTime,false)+'</div>'
     +'</div>'
     +'<div class="form-group"><label>Repeats</label><select id="svc-rec-repeats" onchange="onRecurrenceRepeatsChange()">'
     +'<option value="once"'+(repeats==='once'?' selected':'')+'>One time</option>'
@@ -13042,7 +13055,7 @@ function onRecurrenceEndTypeChange(){
 // Reads form fields and constructs the recurrence_rule JSONB object. Returns null on validation failure.
 function buildRecurrenceRuleFromForm(){
   var startDate=(document.getElementById('svc-rec-start')||{}).value;
-  var startTime=(document.getElementById('svc-rec-time')||{}).value;
+  var startTime=_readTimeInput('svc-rec-time');
   var repeats=(document.getElementById('svc-rec-repeats')||{}).value;
 
   if(!startDate){toast('Start date is required.','error');return null;}
@@ -13343,7 +13356,7 @@ function openClassSessionModal(id, svcId){
     +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Date *</label><input id="cs-date" type="date" value="'+(s?s.date:'')+'"></div>'
-    +'<div class="form-group"><label>Time</label><input id="cs-time" type="time" value="'+(s&&s.time||'')+'"></div>'
+    +'<div class="form-group"><label>Time</label>'+_timeInputHTML('cs-time',s&&s.time||'',false)+'</div>'
     +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Duration (min)</label><input id="cs-dur" type="number" min="5" step="5" value="'+(s&&s.duration||60)+'"></div>'
@@ -13375,7 +13388,7 @@ function saveClassSession(id){
     service_id:document.getElementById('cs-svc').value||null,
     instructor_id:document.getElementById('cs-inst').value||null,
     title:title,date:date,
-    time:document.getElementById('cs-time').value||null,
+    time:_readTimeInput('cs-time')||null,
     duration:parseInt(document.getElementById('cs-dur').value)||60,
     capacity:parseInt(document.getElementById('cs-cap').value)||10,
     location:document.getElementById('cs-loc').value.trim()||null,
@@ -15230,6 +15243,17 @@ function hideAuthLoading(){
 
 // Boot check for embed mode
 document.addEventListener('DOMContentLoaded',async function(){
+  // Global click handler for native date inputs: opens the OS picker via
+  // showPicker() on click anywhere in the field, including the calendar
+  // icon. Prevents the case where Safari does not respond to clicks on
+  // the indicator. No-op on browsers that lack showPicker.
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    if(!t||!t.matches)return;
+    if(t.matches('input[type="date"]:not([disabled])')&&typeof t.showPicker==='function'){
+      try{t.showPicker();}catch(err){}
+    }
+  });
   // Detect path-based routing
   var pathSlug=getPathSlug();
   state.subaccountSlug=pathSlug;
@@ -16359,9 +16383,9 @@ function renderApptWidgetAvailGrid(){
       +'<input type="checkbox"'+(on?' checked':'')+' onchange="apptAvailToggle(\''+d.key+'\',this.checked)" style="margin:0;flex-shrink:0">'
       +d.label
       +'</label>'
-      +'<input type="time" value="'+esc(v.start||'09:00')+'" onchange="apptAvailSetStart(\''+d.key+'\',this.value)" '+(on?'':'disabled')+' style="'+inputStyle+disabledStyle+'">'
+      +_timeInputHTML('swg-avail-start-'+d.key,v.start||'09:00',!on,'apptAvailSetStart(\''+d.key+'\',_readTimeInput(\'swg-avail-start-'+d.key+'\'))')
       +'<span style="font-size:12px;color:var(--text-muted);text-align:center">to</span>'
-      +'<input type="time" value="'+esc(v.end||'17:00')+'" onchange="apptAvailSetEnd(\''+d.key+'\',this.value)" '+(on?'':'disabled')+' style="'+inputStyle+disabledStyle+'">'
+      +_timeInputHTML('swg-avail-end-'+d.key,v.end||'17:00',!on,'apptAvailSetEnd(\''+d.key+'\',_readTimeInput(\'swg-avail-end-'+d.key+'\'))')
       +'</div>';
   }).join('');
 }
