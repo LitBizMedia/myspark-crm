@@ -6872,14 +6872,14 @@ function _apptAddonsPillHTML(appt){
     return (a.name||'Add-on')+': '+fmt$(parseFloat(a.price)||0)+(a.duration_add?' (+'+a.duration_add+' min)':'');
   }).join('\n');
   var tooltip='Add-ons:\n'+lines;
-  return '<span title="'+esc(tooltip)+'" style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:8px;background:#000;color:#fff;line-height:1.2;flex-shrink:0;margin-right:4px;letter-spacing:.02em">+'+n+'</span>';
+  return '<span title="'+esc(tooltip)+'" style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:8px;background:#000;color:#fff;line-height:1.2;flex-shrink:0;margin-left:6px;margin-right:4px;letter-spacing:.02em">+'+n+'</span>';
 }
 
 function _paymentPillHTML(status, compact){
   if(status==='no_price'||status==='no_participants')return '';
   if(compact){
-    if(status==='paid')return '<span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:6px;background:#4ade80;color:#0a1c0e;line-height:1.2;flex-shrink:0;margin-right:4px">PAID</span>';
-    if(status==='partial')return '<span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:6px;background:#fbbf24;color:#3a2a00;line-height:1.2;flex-shrink:0;margin-right:4px">PRT</span>';
+    if(status==='paid')return '<span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:6px;background:#4ade80;color:#0a1c0e;line-height:1.2;flex-shrink:0;margin-left:6px;margin-right:4px">PAID</span>';
+    if(status==='partial')return '<span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:6px;background:#fbbf24;color:#3a2a00;line-height:1.2;flex-shrink:0;margin-left:6px;margin-right:4px">PRT</span>';
     return '';
   }
   if(status==='paid')return '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.15);color:#4ade80;letter-spacing:.04em">PAID IN FULL</span>';
