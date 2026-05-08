@@ -500,6 +500,21 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .time-clk-btn{background:transparent;border:none;border-left:1px solid var(--border);color:var(--text-muted);padding:0 7px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;width:28px}
 .time-clk-btn:hover:not(:disabled){color:var(--text);background:rgba(255,255,255,.04)}
 .time-clk-btn:disabled{cursor:not-allowed;opacity:.5}
+/* Custom time picker popover (hour / minute / AM-PM columns + OK button). */
+.time-pop{position:fixed;z-index:99999;background:var(--main-card);border:1px solid var(--main-border);
+  border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:8px 8px 10px;width:208px;
+  font-family:Lato,sans-serif;color:var(--main-text)}
+.tp-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;height:200px}
+.tp-col{overflow-y:auto;text-align:center;scrollbar-width:thin}
+.tp-col::-webkit-scrollbar{width:5px}
+.tp-col::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:3px}
+.tp-opt{padding:8px 6px;font-size:14px;color:var(--main-text);cursor:pointer;border-radius:6px;
+  margin:1px 4px;transition:background .1s}
+.tp-opt:hover{background:rgba(107,33,234,.08)}
+.tp-opt.selected{background:rgba(107,33,234,.14);color:var(--purple);font-weight:700}
+.tp-ok{display:block;margin:8px auto 2px;padding:6px 26px;background:var(--purple);color:#fff;
+  border:none;border-radius:6px;font-weight:700;cursor:pointer;font-family:Lato,sans-serif;font-size:13px}
+.tp-ok:hover{background:#5b1bd1}
 /* Date input picker icon styling */
 .date-pick{background-color:var(--bg-input);border:1px solid var(--border);border-radius:6px;
   color:var(--text);padding:7px 10px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
@@ -2249,40 +2264,119 @@ function _normalizeTimeText(inp){
   }
 }
 
-// Opens the OS-native time picker for the time-text input identified by id.
-// Uses a transient <input type="time"> positioned at the visible field's
-// location (via fixed coordinates from getBoundingClientRect) so the picker
-// anchors correctly under the clock icon, not at the corner of the page.
-// The transient input is appended to <body> to escape any overflow-hidden
-// ancestors, and cleans itself up after change or blur.
+// Custom time picker popover. Three scrollable columns (hour, minute,
+// AM/PM) plus an OK button. Anchored under the clicked input via fixed
+// positioning, flips above when too close to the viewport bottom. Replaces
+// the native showPicker() approach which on macOS was anchoring poorly and
+// rendering inconsistently across browsers.
 function _openTimePickerFor(id){
   var inp=document.getElementById(id);
   if(!inp||inp.disabled)return;
+
+  var existing=document.getElementById('_time-picker-pop');
+  if(existing)existing.remove();
+
+  // Seed the picker with the input's current value, snapped to a 5-min step.
+  var seed=inp.dataset.hhmm||_parseTimeText(inp.value)||'09:00';
+  var sp=seed.split(':');
+  var h24=parseInt(sp[0],10);if(isNaN(h24))h24=9;
+  var mm=parseInt(sp[1]||'0',10);if(isNaN(mm))mm=0;
+  mm=Math.round(mm/5)*5;
+  if(mm===60){mm=0;h24=(h24+1)%24;}
+  var h12=h24===0?12:(h24>12?h24-12:h24);
+  var ampm=h24<12?'AM':'PM';
+  var pickState={h:h12,m:mm,ap:ampm};
+
   var rect=inp.getBoundingClientRect();
-  var hidden=document.createElement('input');
-  hidden.type='time';
-  hidden.value=inp.dataset.hhmm||_parseTimeText(inp.value)||'09:00';
-  hidden.style.cssText='position:fixed;'
-    +'top:'+(rect.top+rect.height-2)+'px;'
-    +'left:'+(rect.left+10)+'px;'
-    +'width:1px;height:1px;opacity:0;border:none;padding:0;margin:0;z-index:99999';
-  hidden.addEventListener('change',function(){
-    if(hidden.value){
-      inp.dataset.hhmm=hidden.value;
-      inp.value=_hhmmTo12(hidden.value);
-      inp.classList.remove('invalid');
-    }
-    setTimeout(function(){if(hidden.parentNode)hidden.parentNode.removeChild(hidden);},120);
-  });
-  hidden.addEventListener('blur',function(){
-    setTimeout(function(){if(hidden.parentNode)hidden.parentNode.removeChild(hidden);},250);
-  });
-  document.body.appendChild(hidden);
-  if(typeof hidden.showPicker==='function'){
-    try{hidden.showPicker();}catch(e){hidden.focus();}
-  }else{
-    hidden.focus();
+  var pop=document.createElement('div');
+  pop.id='_time-picker-pop';
+  pop.className='time-pop';
+
+  function colHTML(items,selected,kind,fmt){
+    return '<div class="tp-col" data-kind="'+kind+'">'
+      +items.map(function(v){
+        var lbl=fmt?fmt(v):String(v);
+        return '<div class="tp-opt'+(v===selected?' selected':'')+'" data-val="'+v+'">'+lbl+'</div>';
+      }).join('')
+      +'</div>';
   }
+
+  var hours=[];for(var i=1;i<=12;i++)hours.push(i);
+  var minutes=[];for(var j=0;j<60;j+=5)minutes.push(j);
+  var pad2=function(n){return String(n).padStart(2,'0');};
+
+  pop.innerHTML='<div class="tp-cols">'
+    +colHTML(hours,pickState.h,'h',pad2)
+    +colHTML(minutes,pickState.m,'m',pad2)
+    +'<div class="tp-col" data-kind="ap">'
+      +'<div class="tp-opt'+(pickState.ap==='AM'?' selected':'')+'" data-val="AM">AM</div>'
+      +'<div class="tp-opt'+(pickState.ap==='PM'?' selected':'')+'" data-val="PM">PM</div>'
+    +'</div>'
+    +'</div>'
+    +'<button type="button" class="tp-ok">OK</button>';
+
+  document.body.appendChild(pop);
+
+  // Position: prefer below; flip above if it would go off the bottom.
+  var popH=pop.offsetHeight,popW=pop.offsetWidth;
+  var top=rect.bottom+6;
+  if(top+popH>window.innerHeight-8)top=Math.max(8,rect.top-popH-6);
+  var left=rect.left;
+  if(left+popW>window.innerWidth-8)left=Math.max(8,window.innerWidth-popW-8);
+  pop.style.top=top+'px';
+  pop.style.left=left+'px';
+
+  // Scroll selected items into view inside their columns.
+  pop.querySelectorAll('.tp-col').forEach(function(col){
+    var sel=col.querySelector('.tp-opt.selected');
+    if(sel){col.scrollTop=Math.max(0,sel.offsetTop-col.clientHeight/2+sel.offsetHeight/2);}
+  });
+
+  // Option click: toggles selection within the column.
+  pop.querySelectorAll('.tp-col').forEach(function(col){
+    col.addEventListener('click',function(e){
+      var opt=e.target.closest('.tp-opt');
+      if(!opt)return;
+      var kind=col.getAttribute('data-kind');
+      col.querySelectorAll('.tp-opt').forEach(function(o){o.classList.remove('selected');});
+      opt.classList.add('selected');
+      var raw=opt.getAttribute('data-val');
+      pickState[kind]= kind==='ap'?raw:parseInt(raw,10);
+    });
+  });
+
+  pop.querySelector('.tp-ok').addEventListener('click',function(){
+    var hOut=pickState.h%12;
+    if(pickState.ap==='PM')hOut+=12;
+    var hhmm=pad2(hOut)+':'+pad2(pickState.m);
+    inp.dataset.hhmm=hhmm;
+    inp.value=_hhmmTo12(hhmm);
+    inp.classList.remove('invalid');
+    pop.remove();
+    document.removeEventListener('mousedown',outsideHandler,true);
+    document.removeEventListener('keydown',keyHandler,true);
+  });
+
+  function outsideHandler(e){
+    if(pop.contains(e.target))return;
+    // Allow clicking the same clock button without it instantly reopening.
+    var btn=inp.parentNode&&inp.parentNode.querySelector('.time-clk-btn');
+    if(btn&&btn.contains(e.target))return;
+    pop.remove();
+    document.removeEventListener('mousedown',outsideHandler,true);
+    document.removeEventListener('keydown',keyHandler,true);
+  }
+  function keyHandler(e){
+    if(e.key==='Escape'){
+      pop.remove();
+      document.removeEventListener('mousedown',outsideHandler,true);
+      document.removeEventListener('keydown',keyHandler,true);
+    }
+  }
+  setTimeout(function(){
+    document.addEventListener('mousedown',outsideHandler,true);
+    document.addEventListener('keydown',keyHandler,true);
+  },10);
 }
 
 // Toggles disabled state on a time-text input plus its wrapper and clock
