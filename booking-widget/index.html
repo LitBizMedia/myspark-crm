@@ -1794,6 +1794,7 @@ async function submitBooking() {
     staff_id: staffId,
     date: S.date,
     time: S.time,
+    addons: (S.addons || []).map(a => ({ id: a.id })),
     client_info: S.client,
     square_nonce: squareNonce,
     tip_amount: S.tip || 0,

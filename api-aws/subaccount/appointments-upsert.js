@@ -114,13 +114,36 @@ async function handler(req, res) {
       }
     }
 
+    // Resolve addons server-side. Client sends array of {id} or {id,name,price,duration_add}.
+    // Server refetches from DB to get authoritative current data; client prices ignored.
+    let resolvedAddons = [];
+    if (Array.isArray(a.addons) && a.addons.length) {
+      const ids = a.addons.map(x => x && x.id).filter(x => typeof x === 'string' && x.length);
+      if (ids.length && a.service_id) {
+        const r = await db.query(
+          `SELECT id, name, description, price, duration_add
+           FROM service_addons
+           WHERE service_id = $1 AND subaccount_id = $2
+             AND id = ANY($3::text[])`,
+          [a.service_id, subaccountId, ids]
+        );
+        resolvedAddons = r.rows.map(x => ({
+          id: x.id,
+          name: x.name,
+          description: x.description || null,
+          price: parseFloat(x.price) || 0,
+          duration_add: parseInt(x.duration_add) || 0
+        }));
+      }
+    }
+
     await db.query(`
       INSERT INTO appointments (
         id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
-        status, location, notes, service_id, service_variation_id,
+        status, location, notes, service_id, service_variation_id, addons,
         created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
         contact_id = EXCLUDED.contact_id,
@@ -133,13 +156,14 @@ async function handler(req, res) {
         notes = EXCLUDED.notes,
         service_id = EXCLUDED.service_id,
         service_variation_id = EXCLUDED.service_variation_id,
+        addons = EXCLUDED.addons,
         updated_at = NOW()
       WHERE appointments.subaccount_id = $2
     `, [
       a.id, subaccountId, a.title, a.contactId || null, a.assignedTo || null,
       a.date, a.time || null, parseInt(a.duration) || 60,
       a.status || 'scheduled', a.location || null, a.notes || null,
-      a.service_id || null, a.service_variation_id || null
+      a.service_id || null, a.service_variation_id || null, JSON.stringify(resolvedAddons)
     ]);
 
     await logAudit({

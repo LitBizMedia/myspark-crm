@@ -107,6 +107,7 @@ async function handler(req, res) {
     widget_id,
     service_id,
     variation_id,
+    addons: addonIds,
     appointment_type_id,
     class_session_id,
     staff_id,
@@ -210,6 +211,7 @@ async function handler(req, res) {
     let basePrice = 0;
     let taxableFlag = true;
     let varName = '';
+    let resolvedAddons = []; // populated server-side from DB; client prices ignored
 
     if (class_session_id) {
       // Class widget path: session is the source of truth for date/time/duration/instructor.
@@ -289,6 +291,34 @@ async function handler(req, res) {
           varName   = v.name || '';
         }
       }
+
+      // Resolve add-ons from client-supplied IDs. Server fetches authoritative
+      // price/duration/name from DB. Client prices IGNORED to prevent tampering.
+      // Inactive or cross-subaccount IDs are silently dropped.
+      if (Array.isArray(addonIds) && addonIds.length) {
+        const ids = addonIds.filter(x => typeof x === 'string' && x.length);
+        if (ids.length) {
+          const addRes = await db.query(
+            `SELECT id, name, description, price, duration_add
+             FROM service_addons
+             WHERE service_id = $1 AND subaccount_id = $2 AND active = true
+               AND id = ANY($3::text[])`,
+            [service_id, subaccountId, ids]
+          );
+          resolvedAddons = addRes.rows.map(a => ({
+            id: a.id,
+            name: a.name,
+            description: a.description || null,
+            price: parseFloat(a.price) || 0,
+            duration_add: parseInt(a.duration_add) || 0
+          }));
+          for (const a of resolvedAddons) {
+            basePrice += a.price;
+            duration += a.duration_add;
+          }
+        }
+      }
+
 
       title = service.name + (varName ? ` - ${varName}` : '');
     }
@@ -794,15 +824,15 @@ async function handler(req, res) {
         INSERT INTO appointments (
           id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
           status, location, notes, service_id, service_variation_id, buffer_before, buffer_after,
-          booked_via, widget_id, price, appointment_type_id,
+          booked_via, widget_id, price, appointment_type_id, addons,
           created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW(),NOW())
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,NOW(),NOW())
       `, [
         apptId, subaccountId, title, contactId, assignedStaffId,
         bookingDate, bookingTime, duration,
         apptLocation, apptNotes,
         apptServiceId, apptVariationId, bufBefore, bufAfter,
-        'widget', widget_id || null, apptPrice, apptTypeId
+        'widget', widget_id || null, apptPrice, apptTypeId, JSON.stringify(resolvedAddons)
       ]);
     }
 
@@ -836,11 +866,17 @@ async function handler(req, res) {
         subaccount_id: subaccountId,
         contact_id: contactId,
         staff_id: assignedStaffId,
-        items: JSON.stringify([{
-          desc: title,
-          price: pmtSubtotal,
-          taxable: isDeposit ? false : taxableFlag
-        }]),
+        items: JSON.stringify((function(){
+          if (isDeposit) return [{ desc: title, price: pmtSubtotal, taxable: false }];
+          const lines = [];
+          const addonsTotal = (resolvedAddons || []).reduce(function(s,a){return s + (parseFloat(a.price)||0);}, 0);
+          const serviceLinePrice = r2(pmtSubtotal - addonsTotal);
+          lines.push({ desc: title, price: serviceLinePrice, taxable: taxableFlag });
+          for (const a of (resolvedAddons || [])) {
+            lines.push({ desc: a.name, price: parseFloat(a.price)||0, taxable: taxableFlag });
+          }
+          return lines;
+        })()),
         subtotal: pmtSubtotal,
         coupon_discount: pmtCouponDiscount,
         coupon_code: isDeposit ? '' : couponCode,
