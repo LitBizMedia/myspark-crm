@@ -200,7 +200,7 @@ async function handler(req, res) {
 
   try {
     const [
-      blobResult, servicesResult, variationsResult, classesResult,
+      blobResult, servicesResult, variationsResult, addonsResult, classesResult,
       usersResult, widgetsResult, paymentsResult, appointmentsResult,
       plansResult, subscriptionsResult, planCategoriesResult,
       subscriptionEventsResult
@@ -218,6 +218,14 @@ async function handler(req, res) {
          JOIN services s ON sv.service_id = s.id
          WHERE s.subaccount_id = $1
          ORDER BY sv.created_at ASC`,
+        [subaccountId]
+      ),
+      db.query(
+        `SELECT id, service_id, subaccount_id, name, description, price,
+                duration_add, active, display_order, created_at, updated_at
+         FROM service_addons
+         WHERE subaccount_id = $1
+         ORDER BY service_id ASC, display_order ASC, name ASC`,
         [subaccountId]
       ),
       db.query(
@@ -291,6 +299,7 @@ async function handler(req, res) {
       data: blobResult.rows[0]?.data || null,
       services: servicesResult.rows,
       serviceVariations: variationsResult.rows,
+      serviceAddons: addonsResult.rows,
       classSessions: classesResult.rows,
       users: usersResult.rows,
       serviceCategories: blobResult.rows[0]?.service_categories || [],
