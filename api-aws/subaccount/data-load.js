@@ -204,7 +204,7 @@ async function handler(req, res) {
       blobResult, servicesResult, variationsResult, addonsResult, classesResult,
       usersResult, widgetsResult, paymentsResult, appointmentsResult,
       plansResult, subscriptionsResult, planCategoriesResult,
-      subscriptionEventsResult, resourcesResult
+      subscriptionEventsResult, resourcesResult, groupsResult, groupMembersResult
     ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
@@ -282,6 +282,22 @@ async function handler(req, res) {
          WHERE subaccount_id = $1
          ORDER BY COALESCE(display_order, 9999), name`,
         [subaccountId]
+      ),
+      // Service resource groups
+      db.query(
+        `SELECT id, service_id, label, display_order
+         FROM service_resource_groups
+         WHERE subaccount_id = $1
+         ORDER BY service_id, display_order, id`,
+        [subaccountId]
+      ),
+      // Service resource group members - join to ensure we only get this subaccount's
+      db.query(
+        `SELECT m.group_id, m.resource_id
+         FROM service_resource_group_members m
+         JOIN service_resource_groups g ON m.group_id = g.id
+         WHERE g.subaccount_id = $1`,
+        [subaccountId]
       )]);
 
     // Group events by subscription_id and attach to each sub
@@ -311,6 +327,29 @@ async function handler(req, res) {
       serviceVariations: variationsResult.rows,
       serviceAddons: addonsResult.rows,
       resources: (resourcesResult && resourcesResult.rows) || [],
+      serviceResourceGroups: (function(){
+        // Bucket groups by service_id with their members nested.
+        var groups = (groupsResult && groupsResult.rows) || [];
+        var members = (groupMembersResult && groupMembersResult.rows) || [];
+        var byGroup = {};
+        for (var i = 0; i < members.length; i++) {
+          var m = members[i];
+          if (!byGroup[m.group_id]) byGroup[m.group_id] = [];
+          byGroup[m.group_id].push(m.resource_id);
+        }
+        var byService = {};
+        for (var j = 0; j < groups.length; j++) {
+          var g = groups[j];
+          if (!byService[g.service_id]) byService[g.service_id] = [];
+          byService[g.service_id].push({
+            id: g.id,
+            label: g.label || null,
+            display_order: g.display_order,
+            resource_ids: byGroup[g.id] || []
+          });
+        }
+        return byService;
+      })(),
       classSessions: classesResult.rows,
       users: usersResult.rows,
       serviceCategories: blobResult.rows[0]?.service_categories || [],
