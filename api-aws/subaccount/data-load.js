@@ -204,7 +204,7 @@ async function handler(req, res) {
       blobResult, servicesResult, variationsResult, addonsResult, classesResult,
       usersResult, widgetsResult, paymentsResult, appointmentsResult,
       plansResult, subscriptionsResult, planCategoriesResult,
-      subscriptionEventsResult, resourcesResult, serviceResourcesResult
+      subscriptionEventsResult, resourcesResult, groupsResult, groupMembersResult
     ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
@@ -283,12 +283,21 @@ async function handler(req, res) {
          ORDER BY COALESCE(display_order, 9999), name`,
         [subaccountId]
       ),
-      // Service-resource links (flat)
+      // Service resource groups
       db.query(
-        `SELECT service_id, resource_id, display_order
-         FROM service_resources
+        `SELECT id, service_id, display_order
+         FROM service_resource_groups
          WHERE subaccount_id = $1
-         ORDER BY service_id, display_order`,
+         ORDER BY service_id, display_order, id`,
+        [subaccountId]
+      ),
+      // Members of each group
+      db.query(
+        `SELECT m.group_id, m.resource_id, m.display_order
+         FROM service_resource_group_members m
+         JOIN service_resource_groups g ON m.group_id = g.id
+         WHERE g.subaccount_id = $1
+         ORDER BY m.display_order`,
         [subaccountId]
       )]);
 
@@ -319,14 +328,25 @@ async function handler(req, res) {
       serviceVariations: variationsResult.rows,
       serviceAddons: addonsResult.rows,
       resources: (resourcesResult && resourcesResult.rows) || [],
-      serviceResources: (function(){
-        // Bucket resource_ids by service_id.
-        var rows = (serviceResourcesResult && serviceResourcesResult.rows) || [];
+      serviceResourceGroups: (function(){
+        // Bucket groups by service_id with their resource_ids nested.
+        var groups = (groupsResult && groupsResult.rows) || [];
+        var members = (groupMembersResult && groupMembersResult.rows) || [];
+        var byGroup = {};
+        for (var i = 0; i < members.length; i++) {
+          var m = members[i];
+          if (!byGroup[m.group_id]) byGroup[m.group_id] = [];
+          byGroup[m.group_id].push(m.resource_id);
+        }
         var byService = {};
-        for (var i = 0; i < rows.length; i++) {
-          var row = rows[i];
-          if (!byService[row.service_id]) byService[row.service_id] = [];
-          byService[row.service_id].push(row.resource_id);
+        for (var j = 0; j < groups.length; j++) {
+          var g = groups[j];
+          if (!byService[g.service_id]) byService[g.service_id] = [];
+          byService[g.service_id].push({
+            id: g.id,
+            display_order: g.display_order,
+            resource_ids: byGroup[g.id] || []
+          });
         }
         return byService;
       })(),
