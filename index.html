@@ -13182,7 +13182,7 @@ function renderServiceResourcesSection(serviceId){
   var available=allResources.filter(function(r){return w.resource_ids.indexOf(r.id)<0;});
   var addControl='';
   if(available.length){
-    addControl='<select onchange="if(this.value){_svcResAdd(this.value);this.value=\'\';}" style="height:32px;font-size:12px;padding:0 10px;border:1px dashed var(--border);background:transparent;border-radius:6px">'
+    addControl='<select class="filter-sel" onchange="if(this.value){_svcResAdd(this.value);this.value=\'\';}" style="height:34px;font-size:12px;padding:0 10px;min-width:180px">'
       +'<option value="">+ Add resource...</option>'
       +available.map(function(r){
         var t=r.type==='room'?'Room':r.type==='equipment'?'Equipment':r.type;
