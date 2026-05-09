@@ -9264,7 +9264,7 @@ async function fetchFromServer(){
       if(result.services)db.services=result.services;
       if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
       if(result.resources)db.resources=result.resources;
-      if(result.serviceResources)db.serviceResources=result.serviceResources;
+      if(result.serviceResourceGroups)db.serviceResourceGroups=result.serviceResourceGroups;
       if(result.serviceAddons)db.serviceAddons=result.serviceAddons;
       if(result.classSessions)db.classSessions=result.classSessions;
       // Migrated out of blob into dedicated column/table. Override anything
@@ -13133,18 +13133,21 @@ function _saveServiceCategories(nextCategories, renameFrom, renameTo, onComplete
 }
 
 // ── Service Resources Section (inside service edit modal) ────────────────────
-// Simple flat resource picker: pick the resources this service needs.
-// All selected resources are required for booking; if any is busy, booking fails.
+// Box-based picker. Each box is a requirement (AND between boxes).
+// Within a box, resources are alternatives (OR within a box).
+// state.svcResWorking shape:
+//   { serviceId, groups: [{id, resource_ids:[...]}, ...], dirty }
 function renderServiceResourcesSection(serviceId){
   var el=document.getElementById('svc-resources-section');
   if(!el)return;
-  // Initialize working state from db cache. Separate working copy so user can
-  // cancel without persisting.
+
+  // Initialize working state from db cache. Separate working copy lets user
+  // cancel without persisting partial changes.
   if(!state.svcResWorking||state.svcResWorking.serviceId!==serviceId){
-    var existingIds=(db.serviceResources&&db.serviceResources[serviceId])||[];
+    var existing=(db.serviceResourceGroups&&db.serviceResourceGroups[serviceId])||[];
     state.svcResWorking={
       serviceId:serviceId,
-      resource_ids:existingIds.slice(),
+      groups:existing.map(function(g){return {id:g.id, resource_ids:(g.resource_ids||[]).slice()};}),
       dirty:false
     };
   }
@@ -13152,84 +13155,158 @@ function renderServiceResourcesSection(serviceId){
   var allResources=(db.resources||[]).filter(function(r){return r.active!==false;});
   if(!allResources.length){
     el.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:24px;text-align:center;border:1px dashed var(--border);border-radius:6px">'
-      +'No resources defined yet. Click "Manage Resources" on the Service Calendars page to create some, then come back here.'
+      +'No resources defined yet. Click Manage Resources on the Service Calendars page to create some, then come back here.'
       +'</div>';
     return;
   }
 
   var w=state.svcResWorking;
 
-  var intro='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">'
-    +'Pick the rooms or equipment this service needs. When booked, each selected resource is reserved for the appointment. '
-    +'If any one is busy, the booking is blocked.'
+  var intro='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.5">'
+    +'Each box is a requirement. All boxes must be satisfied. Within a box, any one resource is enough.'
     +'</div>';
 
-  var chips=w.resource_ids.map(function(rid){
-    var r=allResources.find(function(x){return x.id===rid;});
-    if(!r){
-      return '<span style="display:inline-flex;align-items:center;gap:5px;padding:6px 10px;background:rgba(248,113,113,.12);color:#f87171;border-radius:14px;font-size:12px">deleted resource'
-        +'<button onclick="_svcResRemove(\''+esc(rid)+'\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0;line-height:1">&times;</button></span>';
-    }
-    var typeLabel=r.type==='room'?'Room':r.type==='equipment'?'Equipment':r.type;
-    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--brand-light,rgba(107,33,234,.1));border:1px solid var(--brand-mid,rgba(107,33,234,.3));border-radius:14px;font-size:12px;color:var(--brand,#6b21ea)">'
-      +'<strong>'+esc(r.name)+'</strong>'
-      +'<span style="font-size:10px;opacity:.75">'+esc(typeLabel)+'</span>'
-      +'<button onclick="_svcResRemove(\''+esc(rid)+'\')" style="background:none;border:none;color:var(--brand,#6b21ea);cursor:pointer;font-size:14px;padding:0;line-height:1;margin-left:2px">&times;</button>'
-      +'</span>';
-  }).join(' ');
-
-  // Build add dropdown excluding already-selected.
-  var available=allResources.filter(function(r){return w.resource_ids.indexOf(r.id)<0;});
-  var addControl='';
-  if(available.length){
-    addControl='<select class="filter-sel" onchange="if(this.value){_svcResAdd(this.value);this.value=\'\';}" style="height:34px;font-size:12px;padding:0 10px;min-width:180px">'
-      +'<option value="">+ Add resource...</option>'
-      +available.map(function(r){
-        var t=r.type==='room'?'Room':r.type==='equipment'?'Equipment':r.type;
-        return '<option value="'+esc(r.id)+'">'+esc(r.name)+' ('+esc(t)+')</option>';
-      }).join('')
-      +'</select>';
+  var boxesHTML='';
+  if(!w.groups.length){
+    boxesHTML='<div style="color:var(--text-muted);font-size:12px;padding:18px 0;text-align:center;border:1px dashed var(--border);border-radius:6px;margin-bottom:12px">'
+      +'No requirements yet. This service can be booked without any resource constraints.'
+      +'</div>';
   } else {
-    addControl='<span style="font-size:12px;color:var(--text-muted)">All resources added</span>';
+    boxesHTML=w.groups.map(function(g, idx){
+      var chips=g.resource_ids.map(function(rid, chipIdx){
+        var r=allResources.find(function(x){return x.id===rid;});
+        var orSep=chipIdx>0
+          ? '<span style="font-size:11px;color:var(--text-muted);font-weight:500;letter-spacing:.04em;align-self:center">or</span>'
+          : '';
+        if(!r){
+          return orSep+'<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:14px;font-size:12px;color:#f87171"><strong>deleted</strong>'
+            +'<button onclick="_svcResRemoveChip('+idx+',\''+esc(rid)+'\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0;line-height:1">&times;</button></span>';
+        }
+        var typeLabel=r.type==='room'?'Room':r.type==='equipment'?'Equipment':r.type;
+        return orSep+'<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(107,33,234,.18);border:1px solid rgba(167,139,250,.4);border-radius:14px;font-size:12px;color:#c4b5fd">'
+          +'<strong>'+esc(r.name)+'</strong>'
+          +'<span style="font-size:10px;opacity:.7">'+esc(typeLabel)+'</span>'
+          +'<button onclick="_svcResRemoveChip('+idx+',\''+esc(rid)+'\')" style="background:none;border:none;color:#c4b5fd;cursor:pointer;font-size:14px;padding:0;line-height:1;margin-left:2px">&times;</button>'
+          +'</span>';
+      }).join(' ');
+
+      // Add dropdown excluding resources already in THIS box.
+      var available=allResources.filter(function(r){return g.resource_ids.indexOf(r.id)<0;});
+      var addControl='';
+      if(available.length){
+        addControl='<select class="filter-sel" onchange="if(this.value){_svcResAddChip('+idx+',this.value);this.value=\'\';}" style="height:28px;font-size:11px;padding:0 8px;min-width:160px;align-self:center">'
+          +'<option value="">+ Add resource...</option>'
+          +available.map(function(r){
+            var t=r.type==='room'?'Room':r.type==='equipment'?'Equipment':r.type;
+            return '<option value="'+esc(r.id)+'">'+esc(r.name)+' ('+esc(t)+')</option>';
+          }).join('')
+          +'</select>';
+      } else {
+        addControl='<span style="font-size:11px;color:var(--text-muted);align-self:center">All resources in this box</span>';
+      }
+
+      var chipsRow=g.resource_ids.length
+        ? chips
+        : '<span style="font-size:11px;color:var(--text-muted)">Empty box. Add a resource or remove the box.</span>';
+
+      var removeBoxBtn='<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px;color:#f87171;flex-shrink:0;align-self:center" onclick="_svcResRemoveBox('+idx+')">Remove box</button>';
+
+      var box='<div style="border:1px solid rgba(167,139,250,.3);background:rgba(107,33,234,.06);border-radius:8px;padding:10px 12px">'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+        +chipsRow
+        +addControl
+        +removeBoxBtn
+        +'</div>'
+        +'</div>';
+
+      var andLabel=idx>0
+        ? '<div style="text-align:center;font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.08em;margin:8px 0">AND</div>'
+        : '';
+
+      return andLabel+box;
+    }).join('');
   }
 
-  var chipsBox=w.resource_ids.length
-    ? '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+chips+'</div>'
-    : '<div style="font-size:12px;color:var(--text-muted);padding:14px 0;text-align:center;border:1px dashed var(--border);border-radius:6px;margin-bottom:10px">No resources required. This service can be booked without resource constraints.</div>';
+  var addBoxBtn='<button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="_svcResAddBox()">+ Add another requirement (AND)</button>';
+  var saveBtn=w.dirty
+    ? '<button class="btn btn-primary btn-sm" onclick="_svcResSave()" style="font-size:12px">Save</button>'
+    : '<span style="font-size:11px;color:var(--text-muted)">Saved</span>';
 
-  var actions='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'
-    +addControl
-    +(w.dirty?'<button class="btn btn-primary btn-sm" onclick="_svcResSave()" style="font-size:12px">Save</button>':'<span style="font-size:11px;color:var(--text-muted)">Saved</span>')
+  var actions='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px">'
+    +addBoxBtn
+    +saveBtn
     +'</div>';
 
-  el.innerHTML=intro+chipsBox+actions;
+  // Live preview of constraint logic.
+  var preview='';
+  var nonEmpty=w.groups.filter(function(g){return g.resource_ids.length>0;});
+  if(nonEmpty.length){
+    var parts=nonEmpty.map(function(g){
+      var names=g.resource_ids.map(function(rid){
+        var r=allResources.find(function(x){return x.id===rid;});
+        return r?r.name:'(deleted)';
+      });
+      return names.length===1 ? names[0] : ('any of ['+names.join(', ')+']');
+    });
+    preview='<div style="margin-top:14px;padding:10px 12px;background:rgba(107,33,234,.05);border:1px solid var(--border);border-radius:6px;font-size:12px">'
+      +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">Booking requires</div>'
+      +parts.join(' AND ')
+      +'</div>';
+  }
+
+  el.innerHTML=intro+boxesHTML+actions+preview;
 }
 
-function _svcResAdd(resourceId){
-  if(!resourceId)return;
+function _svcResAddBox(){
   var w=state.svcResWorking;
   if(!w)return;
-  if(w.resource_ids.indexOf(resourceId)>=0)return;  // silent dedupe
-  w.resource_ids.push(resourceId);
+  w.groups.push({id:null, resource_ids:[]});
   w.dirty=true;
   renderServiceResourcesSection(w.serviceId);
 }
 
-function _svcResRemove(resourceId){
+function _svcResRemoveBox(idx){
   var w=state.svcResWorking;
   if(!w)return;
-  w.resource_ids=w.resource_ids.filter(function(x){return x!==resourceId;});
+  w.groups.splice(idx,1);
   w.dirty=true;
+  renderServiceResourcesSection(w.serviceId);
+}
+
+function _svcResAddChip(boxIdx, resourceId){
+  var w=state.svcResWorking;
+  if(!w)return;
+  var box=w.groups[boxIdx];
+  if(!box)return;
+  if(box.resource_ids.indexOf(resourceId)>=0)return;  // silent dedupe per spec
+  box.resource_ids.push(resourceId);
+  w.dirty=true;
+  renderServiceResourcesSection(w.serviceId);
+}
+
+function _svcResRemoveChip(boxIdx, resourceId){
+  var w=state.svcResWorking;
+  if(!w)return;
+  var box=w.groups[boxIdx];
+  if(!box)return;
+  box.resource_ids=box.resource_ids.filter(function(x){return x!==resourceId;});
+  w.dirty=true;
+  // Empty box stays visible per spec; user explicitly removes it.
   renderServiceResourcesSection(w.serviceId);
 }
 
 function _svcResSave(){
   var w=state.svcResWorking;
   if(!w||!w.serviceId)return;
-  fetch(apiUrl('/api/subaccount/service-resources-upsert'),{
+  // Skip empty boxes silently on save (server also dedupes/skips, defense in depth).
+  var validGroups=w.groups.filter(function(g){return g.resource_ids.length>0;});
+  fetch(apiUrl('/api/subaccount/service-resource-groups-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({service_id:w.serviceId, resource_ids:w.resource_ids})
+    body:JSON.stringify({
+      service_id:w.serviceId,
+      groups:validGroups.map(function(g){return {id:g.id||null, resource_ids:g.resource_ids};})
+    })
   }).then(function(r){return r.json();}).then(function(res){
     if(res&&res.success){
       fetchFromServer().then(function(){
