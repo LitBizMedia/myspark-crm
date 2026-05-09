@@ -9264,7 +9264,7 @@ async function fetchFromServer(){
       if(result.services)db.services=result.services;
       if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
       if(result.resources)db.resources=result.resources;
-      if(result.serviceResourceGroups)db.serviceResourceGroups=result.serviceResourceGroups;
+      if(result.serviceResources)db.serviceResources=result.serviceResources;
       if(result.serviceAddons)db.serviceAddons=result.serviceAddons;
       if(result.classSessions)db.classSessions=result.classSessions;
       // Migrated out of blob into dedicated column/table. Override anything
@@ -13133,16 +13133,18 @@ function _saveServiceCategories(nextCategories, renameFrom, renameTo, onComplete
 }
 
 // ── Service Resources Section (inside service edit modal) ────────────────────
+// Simple flat resource picker: pick the resources this service needs.
+// All selected resources are required for booking; if any is busy, booking fails.
 function renderServiceResourcesSection(serviceId){
   var el=document.getElementById('svc-resources-section');
   if(!el)return;
-  // Initialize working state from db cache. Keep a separate working copy
-  // so user can cancel without persisting partial changes.
+  // Initialize working state from db cache. Separate working copy so user can
+  // cancel without persisting.
   if(!state.svcResWorking||state.svcResWorking.serviceId!==serviceId){
-    var existing=(db.serviceResourceGroups&&db.serviceResourceGroups[serviceId])||[];
+    var existingIds=(db.serviceResources&&db.serviceResources[serviceId])||[];
     state.svcResWorking={
       serviceId:serviceId,
-      groups:existing.map(function(g){return {id:g.id, label:g.label||'', resource_ids:(g.resource_ids||[]).slice()};}),
+      resource_ids:existingIds.slice(),
       dirty:false
     };
   }
@@ -13155,148 +13157,90 @@ function renderServiceResourcesSection(serviceId){
     return;
   }
 
-  var intro='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">'
-    +'Define which resources this service needs. Each group is a requirement. '
-    +'A booking succeeds only when every group can be satisfied by at least one free resource. '
-    +'Multiple groups = AND. Multiple resources within a group = OR.'
-    +'</div>';
-
   var w=state.svcResWorking;
-  var groupsHTML;
-  if(!w.groups.length){
-    groupsHTML='<div style="color:var(--text-muted);font-size:13px;padding:18px 0;text-align:center;border:1px dashed var(--border);border-radius:6px;margin-bottom:14px">'
-      +'No resource requirements yet. This service will book without any resource constraints.'
-      +'</div>';
-  } else {
-    groupsHTML=w.groups.map(function(g, idx){
-      var labelInp='<input type="text" placeholder="Group label (optional, e.g. Treatment Room)" value="'+esc(g.label||'')+'" oninput="_svcResUpdateLabel('+idx+',this.value)" style="flex:1;height:34px;font-size:12px">';
-      var chips=g.resource_ids.map(function(rid){
-        var r=allResources.find(function(x){return x.id===rid;});
-        if(!r){
-          // Resource was deleted; show as warning chip
-          return '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:rgba(248,113,113,.12);color:#f87171;border-radius:12px;font-size:11px">deleted '
-            +'<button onclick="_svcResRemoveMember('+idx+',\''+esc(rid)+'\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0;line-height:1">&times;</button></span>';
-        }
-        return '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--brand-light,rgba(107,33,234,.1));border:1px solid var(--brand-mid,rgba(107,33,234,.3));border-radius:12px;font-size:11px;color:var(--brand,#6b21ea)">'
-          +esc(r.name)
-          +'<button onclick="_svcResRemoveMember('+idx+',\''+esc(rid)+'\')" style="background:none;border:none;color:var(--brand,#6b21ea);cursor:pointer;font-size:14px;padding:0;line-height:1">&times;</button></span>';
-      }).join(' ');
 
-      // Build add-resource dropdown excluding ones already in this group.
-      var availableForGroup=allResources.filter(function(r){return g.resource_ids.indexOf(r.id)<0;});
-      var addDropdown='';
-      if(availableForGroup.length){
-        addDropdown='<select onchange="if(this.value){_svcResAddMember('+idx+',this.value);this.value=\'\';}" style="height:30px;font-size:11px;padding:0 8px;border:1px dashed var(--border);background:transparent">'
-          +'<option value="">+ Add resource...</option>'
-          +availableForGroup.map(function(r){return '<option value="'+esc(r.id)+'">'+esc(r.name)+' ('+(r.type||'')+')</option>';}).join('')
-          +'</select>';
-      } else {
-        addDropdown='<span style="font-size:11px;color:var(--text-muted)">All resources added</span>';
-      }
-
-      return '<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px;background:var(--main-bg)">'
-        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
-        +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);flex-shrink:0">Group '+(idx+1)+'</div>'
-        +labelInp
-        +'<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 8px;color:#f87171;flex-shrink:0" onclick="_svcResRemoveGroup('+idx+')">Remove</button>'
-        +'</div>'
-        +'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-        +chips
-        +addDropdown
-        +'</div>'
-        +'</div>';
-    }).join('');
-  }
-
-  var addBtn='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px">'
-    +'<button class="btn btn-ghost btn-sm" onclick="_svcResAddGroup()" style="font-size:12px">+ Add Group</button>'
-    +(w.dirty?'<button class="btn btn-primary btn-sm" onclick="_svcResSave()" style="font-size:12px">Save Resource Groups</button>':'<span style="font-size:11px;color:var(--text-muted)">Saved</span>')
+  var intro='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">'
+    +'Pick the rooms or equipment this service needs. When booked, each selected resource is reserved for the appointment. '
+    +'If any one is busy, the booking is blocked.'
     +'</div>';
 
-  // Live preview of constraint logic
-  var preview='';
-  if(w.groups.length){
-    var parts=w.groups.map(function(g){
-      var names=g.resource_ids.map(function(rid){
-        var r=allResources.find(function(x){return x.id===rid;});
-        return r?r.name:'(deleted)';
-      });
-      if(!names.length)return null;
-      return names.length===1?names[0]:('any of ['+names.join(', ')+']');
-    }).filter(Boolean);
-    if(parts.length){
-      preview='<div style="margin-top:14px;padding:10px 12px;background:rgba(107,33,234,.04);border:1px solid var(--border-subtle,var(--border));border-radius:6px;font-size:12px;color:var(--main-text)">'
-        +'<strong style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Booking requires</strong>'
-        +parts.join(' AND ')
-        +'</div>';
+  var chips=w.resource_ids.map(function(rid){
+    var r=allResources.find(function(x){return x.id===rid;});
+    if(!r){
+      return '<span style="display:inline-flex;align-items:center;gap:5px;padding:6px 10px;background:rgba(248,113,113,.12);color:#f87171;border-radius:14px;font-size:12px">deleted resource'
+        +'<button onclick="_svcResRemove(\''+esc(rid)+'\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0;line-height:1">&times;</button></span>';
     }
+    var typeLabel=r.type==='room'?'Room':r.type==='equipment'?'Equipment':r.type;
+    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--brand-light,rgba(107,33,234,.1));border:1px solid var(--brand-mid,rgba(107,33,234,.3));border-radius:14px;font-size:12px;color:var(--brand,#6b21ea)">'
+      +'<strong>'+esc(r.name)+'</strong>'
+      +'<span style="font-size:10px;opacity:.75">'+esc(typeLabel)+'</span>'
+      +'<button onclick="_svcResRemove(\''+esc(rid)+'\')" style="background:none;border:none;color:var(--brand,#6b21ea);cursor:pointer;font-size:14px;padding:0;line-height:1;margin-left:2px">&times;</button>'
+      +'</span>';
+  }).join(' ');
+
+  // Build add dropdown excluding already-selected.
+  var available=allResources.filter(function(r){return w.resource_ids.indexOf(r.id)<0;});
+  var addControl='';
+  if(available.length){
+    addControl='<select onchange="if(this.value){_svcResAdd(this.value);this.value=\'\';}" style="height:32px;font-size:12px;padding:0 10px;border:1px dashed var(--border);background:transparent;border-radius:6px">'
+      +'<option value="">+ Add resource...</option>'
+      +available.map(function(r){
+        var t=r.type==='room'?'Room':r.type==='equipment'?'Equipment':r.type;
+        return '<option value="'+esc(r.id)+'">'+esc(r.name)+' ('+esc(t)+')</option>';
+      }).join('')
+      +'</select>';
+  } else {
+    addControl='<span style="font-size:12px;color:var(--text-muted)">All resources added</span>';
   }
 
-  el.innerHTML=intro+groupsHTML+addBtn+preview;
+  var chipsBox=w.resource_ids.length
+    ? '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+chips+'</div>'
+    : '<div style="font-size:12px;color:var(--text-muted);padding:14px 0;text-align:center;border:1px dashed var(--border);border-radius:6px;margin-bottom:10px">No resources required. This service can be booked without resource constraints.</div>';
+
+  var actions='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'
+    +addControl
+    +(w.dirty?'<button class="btn btn-primary btn-sm" onclick="_svcResSave()" style="font-size:12px">Save</button>':'<span style="font-size:11px;color:var(--text-muted)">Saved</span>')
+    +'</div>';
+
+  el.innerHTML=intro+chipsBox+actions;
 }
 
-function _svcResAddGroup(){
-  state.svcResWorking.groups.push({id:null, label:'', resource_ids:[]});
-  state.svcResWorking.dirty=true;
-  renderServiceResourcesSection(state.svcResWorking.serviceId);
-}
-
-function _svcResRemoveGroup(idx){
-  state.svcResWorking.groups.splice(idx,1);
-  state.svcResWorking.dirty=true;
-  renderServiceResourcesSection(state.svcResWorking.serviceId);
-}
-
-function _svcResUpdateLabel(idx, val){
-  state.svcResWorking.groups[idx].label=val;
-  state.svcResWorking.dirty=true;
-  // Don't re-render on every keystroke; just mark dirty and update Save button visibility on next render.
-}
-
-function _svcResAddMember(groupIdx, resourceId){
+function _svcResAdd(resourceId){
   if(!resourceId)return;
-  var grp=state.svcResWorking.groups[groupIdx];
-  if(!grp)return;
-  // Silent dedupe per spec
-  if(grp.resource_ids.indexOf(resourceId)>=0)return;
-  grp.resource_ids.push(resourceId);
-  state.svcResWorking.dirty=true;
-  renderServiceResourcesSection(state.svcResWorking.serviceId);
+  var w=state.svcResWorking;
+  if(!w)return;
+  if(w.resource_ids.indexOf(resourceId)>=0)return;  // silent dedupe
+  w.resource_ids.push(resourceId);
+  w.dirty=true;
+  renderServiceResourcesSection(w.serviceId);
 }
 
-function _svcResRemoveMember(groupIdx, resourceId){
-  var grp=state.svcResWorking.groups[groupIdx];
-  if(!grp)return;
-  grp.resource_ids=grp.resource_ids.filter(function(x){return x!==resourceId;});
-  state.svcResWorking.dirty=true;
-  renderServiceResourcesSection(state.svcResWorking.serviceId);
+function _svcResRemove(resourceId){
+  var w=state.svcResWorking;
+  if(!w)return;
+  w.resource_ids=w.resource_ids.filter(function(x){return x!==resourceId;});
+  w.dirty=true;
+  renderServiceResourcesSection(w.serviceId);
 }
 
 function _svcResSave(){
   var w=state.svcResWorking;
   if(!w||!w.serviceId)return;
-  // Validate: empty groups (no resources) get filtered out silently.
-  var validGroups=w.groups.filter(function(g){return g.resource_ids.length>0;});
-  fetch(apiUrl('/api/subaccount/service-resource-groups-upsert'),{
+  fetch(apiUrl('/api/subaccount/service-resources-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      service_id:w.serviceId,
-      groups:validGroups.map(function(g){return {id:g.id||null, label:g.label||null, resource_ids:g.resource_ids};})
-    })
+    body:JSON.stringify({service_id:w.serviceId, resource_ids:w.resource_ids})
   }).then(function(r){return r.json();}).then(function(res){
     if(res&&res.success){
-      // Update local cache. Simplest: refetch from server.
       fetchFromServer().then(function(){
-        // Reset working state so re-render reads fresh data.
         state.svcResWorking=null;
         renderServiceResourcesSection(w.serviceId);
-        toast('Resource groups saved.','success');
+        toast('Resources saved.','success');
       });
     } else {
-      toast((res&&res.error)||'Failed to save resource groups.','error');
+      toast((res&&res.error)||'Failed to save resources.','error');
     }
-  }).catch(function(){toast('Network error saving resource groups.','error');});
+  }).catch(function(){toast('Network error saving resources.','error');});
 }
 
 // ── Resources Modal ───────────────────────────────────────────────────────────
