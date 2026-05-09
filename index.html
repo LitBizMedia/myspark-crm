@@ -9263,6 +9263,7 @@ async function fetchFromServer(){
       db={...db,...rem,settings:{...db.settings,...rem.settings}};
       if(result.services)db.services=result.services;
       if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
+      if(result.resources)db.resources=result.resources;
       if(result.serviceAddons)db.serviceAddons=result.serviceAddons;
       if(result.classSessions)db.classSessions=result.classSessions;
       // Migrated out of blob into dedicated column/table. Override anything
@@ -12773,6 +12774,7 @@ function renderServiceCal(){
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+total+' of '+totalAll+' service'+(totalAll!==1?'s':'')+(hasActiveFilter?' (filtered)':'')+'</div></div>'
     +'<div style="display:flex;gap:8px">'
     +'<button class="btn btn-ghost btn-sm" onclick="openCategoriesModal()">Manage Categories</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="openResourcesModal()">Manage Resources</button>'
     +'<button class="btn btn-primary" onclick="openCatalogAddMenu(this)">+ Add</button>'
     +'</div></div>';
 
@@ -13127,6 +13129,200 @@ function _saveServiceCategories(nextCategories, renameFrom, renameTo, onComplete
       if(typeof onComplete==='function')onComplete();
     });
   }).catch(function(){toast('Network error saving categories.','error');});
+}
+
+// ── Resources Modal ───────────────────────────────────────────────────────────
+function openResourcesModal(){
+  state.resModal={editingId:null};
+  openModal('Manage Resources', '<div id="res-modal-content"></div>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Done</button>', 'modal-lg');
+  _renderResourcesModalContent();
+}
+
+function _renderResourcesModalContent(){
+  var el=document.getElementById('res-modal-content');
+  if(!el)return;
+  var resources=(db.resources||[]).slice().sort(function(a,b){
+    var ao=a.display_order!=null?a.display_order:9999;
+    var bo=b.display_order!=null?b.display_order:9999;
+    if(ao!==bo)return ao-bo;
+    return(a.name||'').localeCompare(b.name||'');
+  });
+
+  var intro='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">'
+    +'Resources are physical rooms or equipment that gate booking availability. '
+    +'A booking can be blocked if the resource is already in use, even if staff is free. '
+    +'Stage 1: define resources here. Stage 2 will let you link them to services.'
+    +'</div>';
+
+  var rows;
+  if(!resources.length){
+    rows='<div style="color:var(--text-muted);font-size:13px;padding:24px 0;text-align:center;border:1px dashed var(--border);border-radius:6px;margin-bottom:14px">No resources yet. Click "+ Add Resource" below.</div>';
+  } else {
+    rows='<div id="res-modal-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px">'
+      +resources.map(function(r){
+        var typeLabel=r.type==='room'?'Room':r.type==='equipment'?'Equipment':'Other';
+        var typeBg=r.type==='room'?'rgba(107,33,234,.12)':r.type==='equipment'?'rgba(251,191,36,.12)':'rgba(120,120,120,.12)';
+        var typeColor=r.type==='room'?'#a78bfa':r.type==='equipment'?'#fbbf24':'#888';
+        var inactiveStyle=r.active===false?'opacity:.55;':'';
+        var capLabel=parseInt(r.capacity)>1?' · cap '+r.capacity:'';
+        var bufLabel=parseInt(r.buffer_after)>0?' · +'+r.buffer_after+' min cleanup':'';
+        return '<div class="svc-addon-row" data-id="'+esc(r.id)+'" draggable="true" '
+          +'ondragstart="_resDragStart(event,\''+esc(r.id)+'\')" '
+          +'ondragover="event.preventDefault()" '
+          +'ondrop="_resDragDrop(event,\''+esc(r.id)+'\')" '
+          +'style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px;cursor:move;'+inactiveStyle+'">'
+          +'<div style="font-size:14px;color:var(--text-muted);flex-shrink:0">\u2630</div>'
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
+          +'<span style="font-size:13px;font-weight:600;color:var(--main-text)">'+esc(r.name)+'</span>'
+          +'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:'+typeBg+';color:'+typeColor+'">'+typeLabel+'</span>'
+          +(r.active===false?'<span style="font-size:10px;color:#f87171">Inactive</span>':'')
+          +'</div>'
+          +'<div style="font-size:11px;color:var(--main-text-muted)">'+(r.notes?esc(r.notes):'No notes')+capLabel+bufLabel+'</div>'
+          +'</div>'
+          +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px" onclick="_openEditResource(\''+esc(r.id)+'\')">Edit</button>'
+          +'</div>';
+      }).join('')
+      +'</div>';
+  }
+
+  var addBtn='<div style="border-top:1px solid var(--main-border);padding-top:14px;display:flex;justify-content:flex-end">'
+    +'<button class="btn btn-primary btn-sm" onclick="_openEditResource(null)">+ Add Resource</button>'
+    +'</div>';
+
+  el.innerHTML=intro+rows+addBtn;
+}
+
+function _openEditResource(resId){
+  var existing=resId?(db.resources||[]).find(function(r){return r.id===resId;}):null;
+  var title=existing?'Edit Resource':'New Resource';
+  var t=existing?existing.type:'room';
+  var body='<div style="display:flex;flex-direction:column;gap:14px">'
+    +'<div class="form-group"><label>Name *</label><input id="res-name" type="text" value="'+esc(existing?existing.name:'')+'" placeholder="Sauna, Treatment Room A, Hydrafacial Machine..."></div>'
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Type</label><select id="res-type">'
+    +'<option value="room"'+(t==='room'?' selected':'')+'>Room</option>'
+    +'<option value="equipment"'+(t==='equipment'?' selected':'')+'>Equipment</option>'
+    +'<option value="other"'+(t==='other'?' selected':'')+'>Other</option>'
+    +'</select></div>'
+    +'<div class="form-group"><label>Capacity</label><input id="res-cap" type="number" min="1" step="1" value="'+(existing?parseInt(existing.capacity)||1:1)+'"></div>'
+    +'<div class="form-group"><label>Cleanup Time (min)</label><input id="res-buf" type="number" min="0" step="5" value="'+(existing?parseInt(existing.buffer_after)||0:0)+'"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>Notes</label><textarea id="res-notes" rows="2" style="resize:vertical">'+esc(existing&&existing.notes||'')+'</textarea></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="res-active" type="checkbox"'+((existing&&existing.active!==false)||!existing?' checked':'')+'>Active (available for booking)</label></div>'
+    +'</div>';
+  var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="_confirmDeleteResource(\''+existing.id+'\')">Delete</button>':'')
+    +'<button class="btn btn-ghost" onclick="closeModal();setTimeout(openResourcesModal,50)">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="_saveResource('+(existing?'\''+existing.id+'\'':'null')+')">Save</button>';
+  openModal(title, body, footer);
+}
+
+function _saveResource(resId){
+  var name=(document.getElementById('res-name').value||'').trim();
+  if(!name){toast('Name is required.','error');return;}
+  var type=document.getElementById('res-type').value||'room';
+  var capacity=Math.max(1, parseInt(document.getElementById('res-cap').value)||1);
+  var bufferAfter=Math.max(0, parseInt(document.getElementById('res-buf').value)||0);
+  var notes=(document.getElementById('res-notes').value||'').trim()||null;
+  var active=document.getElementById('res-active').checked;
+
+  var existing=resId?(db.resources||[]).find(function(r){return r.id===resId;}):null;
+  var maxOrder=Math.max(-1, ...((db.resources||[]).map(function(r){return r.display_order||0;})));
+  var rec={
+    id:resId||uid(),
+    name:name,
+    type:type,
+    capacity:capacity,
+    buffer_after:bufferAfter,
+    active:active,
+    notes:notes,
+    display_order:existing?existing.display_order:maxOrder+1
+  };
+
+  fetch(apiUrl('/api/subaccount/resources-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(rec)
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res&&res.success){
+      if(!db.resources)db.resources=[];
+      if(existing){
+        Object.assign(existing, rec);
+        existing.updated_at=new Date().toISOString();
+      } else {
+        db.resources.push(Object.assign({},rec,{
+          subaccount_id:state.subaccountId||null,
+          created_at:new Date().toISOString(),
+          updated_at:new Date().toISOString()
+        }));
+      }
+      closeModal();
+      setTimeout(openResourcesModal,50);
+      toast(existing?'Resource updated.':'Resource created.','success');
+    } else {
+      toast((res&&res.error)||'Failed to save resource.','error');
+    }
+  }).catch(function(){toast('Network error saving resource.','error');});
+}
+
+function _confirmDeleteResource(resId){
+  var r=(db.resources||[]).find(function(x){return x.id===resId;});
+  var name=r?r.name:'this resource';
+  state.modal={type:'del-res',id:resId};
+  document.getElementById('modal-title').textContent='Delete Resource';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+esc(name)+'</strong>? Existing appointments using this resource will keep their claim, but new bookings cannot use it.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal();setTimeout(function(){_openEditResource(\''+resId+'\')},50)">Cancel</button>'
+    +'<button class="btn btn-danger" onclick="_doDeleteResource(\''+resId+'\')">Delete</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function _doDeleteResource(resId){
+  fetch(apiUrl('/api/subaccount/resources-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:resId})
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res&&res.success){
+      db.resources=(db.resources||[]).filter(function(x){return x.id!==resId;});
+      closeModal();
+      setTimeout(openResourcesModal,50);
+      toast('Resource deleted.','success');
+    } else {
+      toast((res&&res.error)||'Failed to delete resource.','error');
+    }
+  }).catch(function(){toast('Network error deleting resource.','error');});
+}
+
+function _resDragStart(e, id){
+  e.dataTransfer.setData('text/plain', id);
+  e.dataTransfer.effectAllowed='move';
+}
+
+function _resDragDrop(e, targetId){
+  e.preventDefault();
+  var draggedId=e.dataTransfer.getData('text/plain');
+  if(!draggedId||draggedId===targetId)return;
+  var rows=Array.from(document.querySelectorAll('#res-modal-list .svc-addon-row'));
+  var ids=rows.map(function(r){return r.getAttribute('data-id');});
+  var fromIdx=ids.indexOf(draggedId);
+  var toIdx=ids.indexOf(targetId);
+  if(fromIdx<0||toIdx<0)return;
+  ids.splice(fromIdx,1);
+  ids.splice(toIdx,0,draggedId);
+  ids.forEach(function(id,i){
+    var r=(db.resources||[]).find(function(x){return x.id===id;});
+    if(r)r.display_order=i;
+  });
+  _renderResourcesModalContent();
+  fetch(apiUrl('/api/subaccount/resources-reorder'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ordered_ids:ids})
+  }).then(function(r){
+    if(!r.ok){toast('Reorder failed.','error');fetchFromServer();}
+  }).catch(function(){toast('Reorder failed.','error');fetchFromServer();});
 }
 
 function openServiceModal(id, prefType){
