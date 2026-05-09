@@ -204,7 +204,7 @@ async function handler(req, res) {
       blobResult, servicesResult, variationsResult, addonsResult, classesResult,
       usersResult, widgetsResult, paymentsResult, appointmentsResult,
       plansResult, subscriptionsResult, planCategoriesResult,
-      subscriptionEventsResult
+      subscriptionEventsResult, resourcesResult
     ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
@@ -273,7 +273,16 @@ async function handler(req, res) {
          ORDER BY created_at ASC`,
         [subaccountId]
       )
-    ]);
+    ,
+      // Resources for this subaccount, ordered by display_order then name.
+      db.query(
+        `SELECT id, subaccount_id, name, type, capacity, buffer_after,
+                active, display_order, notes, created_at, updated_at
+         FROM resources
+         WHERE subaccount_id = $1
+         ORDER BY COALESCE(display_order, 9999), name`,
+        [subaccountId]
+      )]);
 
     // Group events by subscription_id and attach to each sub
     const eventsBySubId = {};
@@ -301,6 +310,7 @@ async function handler(req, res) {
       services: servicesResult.rows,
       serviceVariations: variationsResult.rows,
       serviceAddons: addonsResult.rows,
+      resources: (resourcesResult && resourcesResult.rows) || [],
       classSessions: classesResult.rows,
       users: usersResult.rows,
       serviceCategories: blobResult.rows[0]?.service_categories || [],
