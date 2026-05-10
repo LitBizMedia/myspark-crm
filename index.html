@@ -14016,12 +14016,12 @@ function renderServiceAddonsSection(serviceId){
       return(a.name||'').localeCompare(b.name||'');
     });
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-    +'<div><div style="font-size:13px;font-weight:700;color:var(--main-text)">Add-ons</div>'
-    +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">Optional extras patients can add. Inherits tax setting from this service.</div></div>'
+    +'<div><div style="font-size:13px;font-weight:700;color:var(--text)">Add-ons</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Optional extras patients can add. Inherits tax setting from this service.</div></div>'
     +'<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="openAddonModal(\''+serviceId+'\',null)">+ Add Add-on</button>'
     +'</div>';
   if(!addons.length){
-    h+='<div style="font-size:12px;color:var(--main-text-muted);padding:14px 0;text-align:center;border:1px dashed var(--main-border);border-radius:6px">No add-ons yet. Click + Add Add-on to create one.</div>';
+    h+='<div style="font-size:12px;color:var(--text-muted);padding:14px 0;text-align:center;border:1px dashed var(--main-border);border-radius:6px">No add-ons yet. Click + Add Add-on to create one.</div>';
   } else {
     h+='<div id="svc-addons-list" style="display:flex;flex-direction:column;gap:6px">';
     addons.forEach(function(a){
@@ -14032,10 +14032,10 @@ function renderServiceAddonsSection(serviceId){
         +'ondragover="event.preventDefault()" '
         +'ondrop="_addonDragDrop(event,\''+esc(serviceId)+'\',\''+esc(a.id)+'\')" '
         +'style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px;cursor:move">'
-        +'<div style="font-size:14px;color:var(--main-text-muted);flex-shrink:0">\u2630</div>'
+        +'<div style="font-size:14px;color:var(--text-muted);flex-shrink:0">\u2630</div>'
         +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:12px;font-weight:600;color:var(--main-text)">'+esc(a.name)+'</div>'
-        +'<div style="font-size:11px;color:var(--main-text-muted)">'+fmt$(price)+(dur?' &middot; +'+dur+' min':'')+(a.active===false?' &middot; Inactive':'')+(a.description?' &middot; '+esc(a.description):'')+'</div>'
+        +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(a.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--text-muted)">'+fmt$(price)+(dur?' &middot; +'+dur+' min':'')+(a.active===false?' &middot; Inactive':'')+(a.description?' &middot; '+esc(a.description):'')+'</div>'
         +'</div>'
         +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openAddonModal(\''+esc(serviceId)+'\',\''+esc(a.id)+'\')">Edit</button>'
         +'</div>';
