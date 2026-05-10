@@ -13336,6 +13336,9 @@ function _svcGrpSave(){
   var validity=_svcGrpValidate(w);
   if(!validity.ok){toast(validity.message,'error');return;}
 
+  // Mirror the group eligible pool into assigned_staff so legacy code paths
+  // reading assigned_staff still see the right list. When group is disabled,
+  // leave assigned_staff alone (it was set in the Details tab originally).
   var updated=Object.assign({},s,{
     group_capable:w.group_capable,
     group_staff_count:w.group_capable?w.group_staff_count:null,
@@ -13344,6 +13347,10 @@ function _svcGrpSave(){
     group_resource_mode:w.group_capable?w.group_resource_mode:null,
     group_eligible_staff:w.group_capable?w.group_eligible_staff:[]
   });
+  if(w.group_capable){
+    updated.assigned_staff=w.group_eligible_staff.slice();
+    updated.allow_client_choose_staff=false;
+  }
 
   fetch(apiUrl('/api/subaccount/services-upsert'),{
     method:'POST',credentials:'include',
@@ -13911,17 +13918,26 @@ function renderServiceIndividualFields(s){
     +'<div class="form-group"><label>Buffer Before</label>'+_svcBufSel('svc-buf-before',s&&s.buffer_before||0)+'</div>'
     +'<div class="form-group"><label>Buffer After</label>'+_svcBufSel('svc-buf-after',s&&s.buffer_after||0)+'</div>'
     +'</div>'
-    +'<div class="form-group"><label>Assigned Staff</label>'
-    +'<div class="svc-ms-wrap" id="svc-staff-ms">'
-    +'<div class="svc-ms-display" onclick="svcMsOpen(event)">'
-    +'<div class="svc-ms-chips" id="svc-ms-chips-area">'
-    +(_selStaff.length?_selStaff.map(function(uid){var u=users.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();svcMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join(''):'<span style="color:var(--text-muted);font-size:12px">Select staff...</span>')
-    +'</div><span class="svc-ms-arrow">&#9660;</span></div>'
-    +'<div class="svc-ms-dd hidden" id="svc-ms-dd">'
-    +'<input type="text" class="svc-ms-search" placeholder="Search staff..." oninput="svcMsFilter(this)">'
-    +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
-    +'</div></div></div>'
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-choose-staff" type="checkbox"'+((s&&s.allow_client_choose_staff!==false)||!s?' checked':'')+'>Allow client to choose staff member</label></div>';
+    // When group_capable, both fields below are managed by the Group Booking tab.
+    // Render a deferral notice instead of the regular staff config to avoid
+    // having two places that configure overlapping data.
+    +(s&&s.group_capable
+      ? '<div class="form-group"><label>Assigned Staff</label>'
+        +'<div style="padding:14px 16px;background:rgba(107,33,234,.08);border:1px solid rgba(167,139,250,.3);border-radius:6px;font-size:13px;color:var(--text-muted);line-height:1.6">'
+        +'Staff and client-choose settings are managed in the <strong style="color:#c4b5fd">Group Booking</strong> tab for this service. '
+        +'Group bookings auto-assign from the eligible pool.'
+        +'</div></div>'
+      : ('<div class="form-group"><label>Assigned Staff</label>'
+        +'<div class="svc-ms-wrap" id="svc-staff-ms">'
+        +'<div class="svc-ms-display" onclick="svcMsOpen(event)">'
+        +'<div class="svc-ms-chips" id="svc-ms-chips-area">'
+        +(_selStaff.length?_selStaff.map(function(uid){var u=users.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();svcMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join(''):'<span style="color:var(--text-muted);font-size:12px">Select staff...</span>')
+        +'</div><span class="svc-ms-arrow">&#9660;</span></div>'
+        +'<div class="svc-ms-dd hidden" id="svc-ms-dd">'
+        +'<input type="text" class="svc-ms-search" placeholder="Search staff..." oninput="svcMsFilter(this)">'
+        +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
+        +'</div></div></div>'
+        +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-choose-staff" type="checkbox"'+((s&&s.allow_client_choose_staff!==false)||!s?' checked':'')+'>Allow client to choose staff member</label></div>'));
 }
 
 // Class fields: instructor, capacity, location, price-per-session, drop-in toggle, recurrence schedule.
@@ -14355,8 +14371,21 @@ function saveService(id){
   };
 
   if(type==='individual'){
-    var staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
-    if(!staffChks.length){toast('Assign at least one staff member.','error');return;}
+    var existingSvc=id?(db.services||[]).find(function(x){return x.id===id;}):null;
+    var isGroupCapable=existingSvc&&existingSvc.group_capable;
+    var staffChks;
+
+    if(isGroupCapable){
+      // Group mode: pull staff list from group_eligible_staff. Details tab
+      // does not show a staff picker for group services.
+      staffChks=(existingSvc.group_eligible_staff||[]).slice();
+      if(!staffChks.length){
+        toast('Configure eligible staff in the Group Booking tab.','error');return;
+      }
+    } else {
+      staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
+      if(!staffChks.length){toast('Assign at least one staff member.','error');return;}
+    }
 
     Object.assign(svc,{
       price:document.getElementById('svc-price').value!==''?parseFloat(document.getElementById('svc-price').value):null,
@@ -14364,8 +14393,21 @@ function saveService(id){
       buffer_before:parseInt(document.getElementById('svc-buf-before').value)||0,
       buffer_after:parseInt(document.getElementById('svc-buf-after').value)||0,
       assigned_staff:staffChks,
-      allow_client_choose_staff:document.getElementById('svc-choose-staff').checked
+      // Group bookings auto-assign; client-choose is implicitly false.
+      allow_client_choose_staff:isGroupCapable?false:document.getElementById('svc-choose-staff').checked
     });
+
+    // Carry over group config when present so Details-tab save doesn't wipe it.
+    if(isGroupCapable){
+      Object.assign(svc,{
+        group_capable:true,
+        group_staff_count:existingSvc.group_staff_count,
+        group_size_min:existingSvc.group_size_min,
+        group_size_max:existingSvc.group_size_max,
+        group_resource_mode:existingSvc.group_resource_mode,
+        group_eligible_staff:existingSvc.group_eligible_staff||[]
+      });
+    }
   } else {
     // Class type: validate instructor, capacity, and recurrence rule.
     var instructorId=(document.getElementById('svc-instructor')||{}).value;
