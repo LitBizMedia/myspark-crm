@@ -6,6 +6,7 @@ const db = require('./lib/db');
 exports.handler = async () => {
   try {
     await db.query(`ALTER TABLE services DROP COLUMN IF EXISTS group_eligible_staff`);
+    await db.query(`ALTER TABLE services DROP COLUMN IF EXISTS group_price`);
     await db.query(`ALTER TABLE services DROP COLUMN IF EXISTS group_resource_mode`);
     const remaining = await db.query(`
       SELECT column_name FROM information_schema.columns

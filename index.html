@@ -14192,6 +14192,9 @@ function saveService(id){
   };
 
   if(type==='individual'){
+    var staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
+    if(!staffChks.length){toast('Assign at least one staff member.','error');return;}
+
     // Group booking inline config
     var groupCapableEl=document.getElementById('svc-group-capable');
     var groupCapable=!!(groupCapableEl&&groupCapableEl.checked);
