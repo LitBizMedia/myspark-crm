@@ -178,25 +178,5 @@ async function replaceClaims(opts) {
   await persistClaims({ dbClient, appointmentId, claims });
 }
 
-// Format conflicts for the frontend's existing apptConflicts shape.
-function formatConflictForFrontend(conflicts) {
-  // Aggregate into a single resource_unavailable conflict for the panel.
-  const resourceLabels = [];
-  for (const c of conflicts) {
-    const tried = (c.attempted || []).map(a => a.name).filter(Boolean);
-    if (tried.length === 0) {
-      resourceLabels.push('group with no active resources');
-    } else if (tried.length === 1) {
-      resourceLabels.push(tried[0]);
-    } else {
-      resourceLabels.push('any of [' + tried.join(', ') + ']');
-    }
-  }
-  return {
-    type: 'resource_unavailable',
-    label: 'Resource conflict',
-    message: 'Required ' + resourceLabels.join(' AND ') + ' not available at this time.'
-  };
-}
 
-module.exports = { resolveResourceClaims, persistClaims, replaceClaims, formatConflictForFrontend };
+module.exports = { resolveResourceClaims, persistClaims, replaceClaims };

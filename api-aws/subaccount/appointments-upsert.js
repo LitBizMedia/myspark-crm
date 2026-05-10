@@ -8,7 +8,7 @@
 // continue to work unchanged.
 
 const db = require('./lib/db');
-const { resolveResourceClaims, replaceClaims, formatConflictForFrontend } = require('./lib/resource-allocation');
+const { resolveResourceClaims, replaceClaims } = require('./lib/resource-allocation');
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
