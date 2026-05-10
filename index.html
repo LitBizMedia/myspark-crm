@@ -8402,7 +8402,13 @@ function syncAppointment(appt, deleted, override){
   }).then(function(r){
     if(r.ok)return {ok:true};
     if(r.status===409){
-      return r.json().then(function(j){return {ok:false,conflict:j.conflict||null};}).catch(function(){return {ok:false};});
+      return r.json().then(function(j){
+        // Resource hard-block has its own shape (error: 'resource_unavailable')
+        if(j && j.error==='resource_unavailable'){
+          return {ok:false, resource_blocked:{message:j.message, blocked_resources:j.blocked_resources||[]}};
+        }
+        return {ok:false,conflict:j.conflict||null};
+      }).catch(function(){return {ok:false};});
     }
     return {ok:false,error:'http_'+r.status};
   }).catch(function(){return {ok:false,error:'network'};});
@@ -8462,6 +8468,17 @@ function saveAppt(){
         targetType: 'appointment',
         metadata: auditMeta
       });
+      return;
+    }
+    if(res && res.resource_blocked){
+      // Server hard-blocked due to resource conflict. Roll back the optimistic
+      // local update; show the reason; do NOT offer override (resources are hard).
+      _rollbackAppt(rollback);
+      saveData();
+      if(state.panel==='calendar')renderCal();
+      typeof renderApptList==='function'&&renderApptList();
+      var msg=res.resource_blocked.message||'A required resource is not available at this time.';
+      toast(msg,'error',8000);
       return;
     }
     if(res && res.conflict){

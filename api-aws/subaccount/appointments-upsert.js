@@ -8,6 +8,7 @@
 // continue to work unchanged.
 
 const db = require('./lib/db');
+const { resolveResourceClaims, replaceClaims, formatConflictForFrontend } = require('./lib/resource-allocation');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
@@ -114,6 +115,44 @@ async function handler(req, res) {
       }
     }
 
+    // Resource availability check. Hard block: resources cannot double-book.
+    // The override flag only bypasses time/staff/lead-time conflicts, never
+    // resources. If a required resource is busy, the save is rejected with a
+    // clear reason so the user can pick a different time or different service.
+    let resourceClaims = [];
+    if (a.service_id && a.date && a.time) {
+      try {
+        const dur = parseInt(a.duration) || 60;
+        const result = await resolveResourceClaims({
+          serviceId: a.service_id,
+          subaccountId,
+          date: a.date,
+          time: a.time,
+          duration: dur,
+          ignoreAppointmentId: a.id,
+          dbClient: db
+        });
+        if (!result.ok) {
+          // Build a human-readable reason listing each blocked group.
+          const reasons = (result.conflicts || []).map(c => {
+            const tried = (c.attempted || []).map(x => x.name).filter(Boolean);
+            if (!tried.length) return 'a required resource group has no active members';
+            if (tried.length === 1) return tried[0] + ' is booked';
+            return 'all of [' + tried.join(', ') + '] are booked';
+          });
+          return res.status(409).json({
+            error: 'resource_unavailable',
+            message: 'Cannot save: ' + reasons.join(', and ') + ' at this time. Pick another time or remove the resource requirement on this service.',
+            blocked_resources: result.conflicts
+          });
+        }
+        resourceClaims = result.claims;
+      } catch (resErr) {
+        console.warn('[resource-check] skipped due to error:', resErr.message, resErr.stack);
+        // Fail-open on system errors. Audit log will show the warning.
+      }
+    }
+
     // Resolve addons server-side. Client sends array of {id} or {id,name,price,duration_add}.
     // Server refetches from DB to get authoritative current data; client prices ignored.
     let resolvedAddons = [];
@@ -165,6 +204,19 @@ async function handler(req, res) {
       a.status || 'scheduled', a.location || null, a.notes || null,
       a.service_id || null, a.service_variation_id || null, JSON.stringify(resolvedAddons)
     ]);
+
+    // Persist resource claims for this appointment (replaces any existing claims).
+    try {
+      console.log('[resource-check] persisting', resourceClaims.length, 'claims for appt=', a.id);
+      await replaceClaims({
+        dbClient: db,
+        appointmentId: a.id,
+        claims: resourceClaims
+      });
+      console.log('[resource-check] persist OK');
+    } catch (claimErr) {
+      console.warn('[resource-check] persist failed:', claimErr.message);
+    }
 
     await logAudit({
       req,

@@ -21,6 +21,7 @@
 // Stage 4 will add: round robin staff selection, intake form responses, reschedule/cancel.
 
 const db = require('./lib/db');
+const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocation');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const resend = require('./lib/resend');
@@ -569,6 +570,39 @@ async function handler(req, res) {
       }
     }
 
+    // 7b. Resource availability check. Hard block: resources cannot double-book.
+    let resourceClaims = [];
+    if (!classSession && service && service.id) {
+      try {
+        const dur = parseInt(service.duration) || 60;
+        const result = await resolveResourceClaims({
+          serviceId: service.id,
+          subaccountId,
+          date: bookingDate,
+          time: bookingTime,
+          duration: dur,
+          ignoreAppointmentId: null,
+          dbClient: db
+        });
+        if (!result.ok) {
+          const reasons = (result.conflicts || []).map(c => {
+            const tried = (c.attempted || []).map(x => x.name).filter(Boolean);
+            if (!tried.length) return 'a required resource is unavailable';
+            if (tried.length === 1) return tried[0] + ' is already booked';
+            return 'all of [' + tried.join(', ') + '] are already booked';
+          });
+          return res.status(409).json({
+            error: 'resource_unavailable',
+            message: 'This time is no longer available: ' + reasons.join(', and ') + '. Please choose another time.',
+            blocked_resources: result.conflicts
+          });
+        }
+        resourceClaims = result.claims;
+      } catch (resErr) {
+        console.warn('[booking-submit][resource-check] skipped:', resErr.message);
+      }
+    }
+
     // 8. Coupon validation
     let couponDiscount = 0;
     let couponCode = '';
@@ -837,6 +871,18 @@ async function handler(req, res) {
         apptServiceId, apptVariationId, bufBefore, bufAfter,
         'widget', widget_id || null, apptPrice, apptTypeId, JSON.stringify(resolvedAddons)
       ]);
+
+    // Persist resource claims for this appointment (atomic with INSERT above).
+    try {
+      await persistClaims({
+        dbClient: db,
+        appointmentId: appointmentId,
+        claims: resourceClaims
+      });
+    } catch (claimErr) {
+      console.warn('[booking-submit] claim persist failed:', claimErr.message);
+    }
+
     }
 
     // 13. Create payment record - only when actual money changed hands.
