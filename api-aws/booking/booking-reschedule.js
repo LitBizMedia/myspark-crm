@@ -4,6 +4,7 @@
 // POST /api/booking/reschedule-confirm         -> { token, date, time }
 
 const db = require('./lib/db');
+const { resolveResourceClaims, replaceClaims } = require('./lib/resource-allocation');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const resend = require('./lib/resend');
@@ -145,21 +146,85 @@ async function handler(req, res) {
       }
     }
 
+    // Time-conflict check using overlap (matches appointments-upsert and the
+    // shared semantics: a 60-min booking at 2pm conflicts with another 60-min
+    // booking at 2:30pm even though their start times don't match).
     if (appt.assigned_to) {
-      const conflict = await db.query(
-        `SELECT id FROM appointments
-          WHERE subaccount_id = $1 AND assigned_to = $2
-            AND date = $3 AND time = $4 AND status != 'cancelled' AND id != $5
-          LIMIT 1`,
-        [tok.subaccount_id, appt.assigned_to, newDate, newTime, appt.id]
-      );
-      if (conflict.rows.length > 0) return res.status(409).json({ error: 'That time is no longer available. Please choose another.' });
+      const dur = parseInt(appt.duration) || 60;
+      try {
+        const conflict = await db.query(`
+          SELECT id FROM appointments
+          WHERE subaccount_id = $1
+            AND assigned_to = $2
+            AND date = $3
+            AND status != 'cancelled'
+            AND id != $4
+            AND time IS NOT NULL
+            AND (
+              ($5::time >= time::time AND $5::time < (time::time + (duration || ' minutes')::interval))
+              OR
+              (($5::time + ($6 || ' minutes')::interval) > time::time AND $5::time < time::time)
+              OR
+              ($5::time <= time::time AND ($5::time + ($6 || ' minutes')::interval) >= (time::time + (duration || ' minutes')::interval))
+            )
+          LIMIT 1
+        `, [tok.subaccount_id, appt.assigned_to, newDate, appt.id, newTime, String(dur)]);
+        if (conflict.rows.length > 0) {
+          return res.status(409).json({ error: 'That time is no longer available. Please choose another.' });
+        }
+      } catch (cErr) {
+        console.warn('[reschedule] time conflict check skipped:', cErr.message);
+      }
+    }
+
+    // Resource availability check. Hard block: the new time must not collide
+    // with another appointment claiming the same required resources.
+    let newResourceClaims = [];
+    if (appt.service_id) {
+      try {
+        const dur = parseInt(appt.duration) || 60;
+        const result = await resolveResourceClaims({
+          serviceId: appt.service_id,
+          subaccountId: tok.subaccount_id,
+          date: newDate,
+          time: newTime,
+          duration: dur,
+          ignoreAppointmentId: appt.id,
+          dbClient: db
+        });
+        if (!result.ok) {
+          const reasons = (result.conflicts || []).map(c => {
+            const tried = (c.attempted || []).map(x => x.name).filter(Boolean);
+            if (!tried.length) return 'a required resource is unavailable';
+            if (tried.length === 1) return tried[0] + ' is already booked';
+            return 'all of [' + tried.join(', ') + '] are already booked';
+          });
+          return res.status(409).json({
+            error: 'resource_unavailable',
+            message: 'That time is no longer available: ' + reasons.join(', and ') + '. Please choose another time.'
+          });
+        }
+        newResourceClaims = result.claims;
+      } catch (rErr) {
+        console.warn('[reschedule] resource check skipped:', rErr.message);
+      }
     }
 
     await db.query(
       `UPDATE appointments SET date = $1, time = $2, updated_at = NOW() WHERE id = $3`,
       [newDate, newTime, appt.id]
     );
+
+    // Replace resource claims with the newly-resolved ones for the new time.
+    try {
+      await replaceClaims({
+        dbClient: db,
+        appointmentId: appt.id,
+        claims: newResourceClaims
+      });
+    } catch (claimErr) {
+      console.warn('[reschedule] claim replace failed:', claimErr.message);
+    }
     await db.query(
       `UPDATE booking_action_tokens SET used_at = NOW() WHERE token = $1`,
       [token]

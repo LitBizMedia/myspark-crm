@@ -12,6 +12,7 @@ const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz, nowMinutesInTz } = require('./lib/timezone');
 const { buildAvailableWindows, intersectWindows, timeToMins, dayKeyForDate } = require('./lib/schedule');
+const { resolveResourceClaims } = require('./lib/resource-allocation');
 
 function minsToTime(m) {
   return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
@@ -260,10 +261,37 @@ async function handler(req, res) {
       }
     }
 
-    const slots = Object.keys(slotMap).sort().map(time => ({
+    let slots = Object.keys(slotMap).sort().map(time => ({
       time,
       available_staff: slotMap[time]
     }));
+
+    // Resource availability filter. If the service has resource groups, only
+    // include slots where ALL groups can be satisfied. Runs in parallel across
+    // slots for performance. Falls open on errors (slot stays in result).
+    if (service && service.id) {
+      try {
+        const checks = await Promise.all(slots.map(async (s) => {
+          try {
+            const r = await resolveResourceClaims({
+              serviceId: service.id,
+              subaccountId,
+              date,
+              time: s.time,
+              duration,
+              ignoreAppointmentId: null,
+              dbClient: db
+            });
+            return { slot: s, ok: r.ok };
+          } catch (e) {
+            return { slot: s, ok: true };  // fail-open
+          }
+        }));
+        slots = checks.filter(x => x.ok).map(x => x.slot);
+      } catch (e) {
+        console.warn('[booking-availability] resource filter skipped:', e.message);
+      }
+    }
 
     return res.status(200).json({ slots, duration, date });
   } catch (e) {

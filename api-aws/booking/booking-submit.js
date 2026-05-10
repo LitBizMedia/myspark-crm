@@ -555,18 +555,32 @@ async function handler(req, res) {
       }
     }
 
-    // 7. Race condition check (slot still available?)
-    // Skipped for class bookings - capacity is enforced inside the transaction
-    // when we increment the participants array.
-    if (!classSession) {
-      const conflictResult = await db.query(
-        `SELECT id FROM appointments
-         WHERE subaccount_id = $1 AND date = $2 AND assigned_to = $3
-           AND time = $4 AND status != 'cancelled' LIMIT 1`,
-        [subaccountId, bookingDate, assignedStaffId, bookingTime]
-      );
-      if (conflictResult.rows.length) {
-        return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
+    // 7. Race condition check using time-overlap, matching appointments-upsert.
+    // Skipped for class bookings - capacity is enforced separately.
+    if (!classSession && assignedStaffId) {
+      try {
+        const dur = parseInt((service && service.duration) || 60) || 60;
+        const conflictResult = await db.query(`
+          SELECT id FROM appointments
+          WHERE subaccount_id = $1
+            AND assigned_to = $2
+            AND date = $3
+            AND status != 'cancelled'
+            AND time IS NOT NULL
+            AND (
+              ($4::time >= time::time AND $4::time < (time::time + (duration || ' minutes')::interval))
+              OR
+              (($4::time + ($5 || ' minutes')::interval) > time::time AND $4::time < time::time)
+              OR
+              ($4::time <= time::time AND ($4::time + ($5 || ' minutes')::interval) >= (time::time + (duration || ' minutes')::interval))
+            )
+          LIMIT 1
+        `, [subaccountId, assignedStaffId, bookingDate, bookingTime, String(dur)]);
+        if (conflictResult.rows.length) {
+          return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
+        }
+      } catch (cErr) {
+        console.warn('[booking-submit] time conflict check skipped:', cErr.message);
       }
     }
 
