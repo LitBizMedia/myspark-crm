@@ -19,14 +19,17 @@ A group booking is specifically: ad-hoc, multiple staff serving multiple clients
 ## Scope decisions (locked May 10, 2026)
 
 1. Group bookings are flagged at the service level via `group_capable = true`
-2. Each group-capable service has min/max participant counts and a single group price
-3. The booking is ONE appointment record with multi-client and multi-staff associations
-4. Staff auto-assigns based on availability; clients are not paired with specific staff
-5. Resources auto-assign based on service config (capacity mode OR separate resources mode)
-6. Cancellation and reschedule are atomic across the group
-7. Single payment from primary booker
-8. Email confirmation to each client
-9. Internal calendar shows booking on every assigned staff's column
+2. Each group-capable service has min/max client counts and an exact staff count
+3. Service has an eligible-staff pool; bookings can only assign from that pool
+4. Staff count is EXACT (booking must have exactly that many staff, not more, not less)
+5. Client count uses min/max range (e.g., couples massage min=2, max=2; group consult 1-4)
+6. The booking is ONE appointment record with multi-client and multi-staff associations
+7. Staff auto-assigns from the eligible pool based on availability; clients are not paired with specific staff
+8. Resources auto-assign based on service config (capacity mode OR separate resources mode)
+9. Cancellation and reschedule are atomic across the group
+10. Single payment from primary booker, single group price
+11. Email confirmation to each client
+12. Internal calendar shows booking on every assigned staff's column with group icon
 
 ## Data Model
 
@@ -34,6 +37,8 @@ A group booking is specifically: ad-hoc, multiple staff serving multiple clients
 
 ```sql
 ALTER TABLE services ADD COLUMN group_capable BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE services ADD COLUMN group_staff_count INT;
+ALTER TABLE services ADD COLUMN group_eligible_staff JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE services ADD COLUMN group_size_min INT;
 ALTER TABLE services ADD COLUMN group_size_max INT;
 ALTER TABLE services ADD COLUMN group_price NUMERIC(10,2);
@@ -42,12 +47,14 @@ ALTER TABLE services ADD COLUMN group_resource_mode TEXT
 ```
 
 - `group_capable`: turns this service into a group bookable service
-- `group_size_min`: min clients required to book (e.g., 2 for couples)
+- `group_staff_count`: EXACT number of staff required per booking (e.g., 2 for couples massage)
+- `group_eligible_staff`: array of staff IDs that can be assigned to this service. The system picks from this pool only.
+- `group_size_min`: min clients required (e.g., 2 for couples; 1 for "doctor + nurse w/ patient")
 - `group_size_max`: max clients allowed
-- `group_price`: single price for the entire group; overrides per-person price
+- `group_price`: single price for the entire group
 - `group_resource_mode`:
   - `'capacity'`: claim ONE resource with `capacity >= group_size`
-  - `'separate'`: claim N DIFFERENT resources from the linked resource group(s)
+  - `'separate'`: claim group_size_at_booking DIFFERENT resources from the linked resource group(s)
 
 When `group_capable = false`, the other group columns are ignored.
 
@@ -96,23 +103,26 @@ This keeps old reads working unchanged. New reads can JOIN to the new tables to 
 1. Staff opens "+ New Appointment" modal
 2. Picks a service from the dropdown
 3. If service is group_capable, the form expands:
-   - Shows N client slots (N = group_size_max), with first being required
-   - Shows M staff slots (number = TBD per service config), required count = N
+   - Multi-select chip picker for clients (min = group_size_min, max = group_size_max)
+   - Multi-select chip picker for staff (must = group_staff_count exactly, only shows eligible_staff pool)
    - Resource auto-assignment shown as read-only display
-4. Staff fills in primary booker's contact, optionally adds more clients
-5. Auto-assignment runs as staff types, suggesting available staff for each slot
+   - Save button disabled until both client count and staff count meet requirements
+4. Staff fills in primary booker's contact (first chip), optionally adds more clients
+5. Staff selects exactly group_staff_count staff from the eligible pool
 6. On save: create appointment, populate appointment_clients + appointment_staff, claim resources, log audit
 
 ### Widget booking
 
 1. Patient picks a group-capable service from the widget catalog
-2. Widget shows count selector ("How many people?" min to max)
-3. Patient picks date and time; backend filters slots where N staff are simultaneously free
-4. Patient enters info for self, then "+ Add another person" for each additional client
+2. Widget shows count selector ("How many people?" min=group_size_min, max=group_size_max)
+3. Patient picks date and time; backend filters slots where exactly group_staff_count staff from eligible_staff pool are simultaneously free
+4. Patient enters info for self (primary booker), then "+ Add another person" for each additional client up to selected count
 5. All clients see contact form with name + email + phone
-6. Patient pays the group price (single charge from the primary booker)
-7. On submit: appointment created, all clients linked, staff auto-assigned, resources claimed
+6. Patient pays the group price (single charge from primary booker)
+7. On submit: appointment created, all clients linked, staff auto-assigned from eligible pool, resources claimed
 8. Each client gets a confirmation email
+
+If the eligible_staff pool doesn't have group_staff_count members free at any time on the chosen date, the widget shows no slots. No fallback to non-eligible staff.
 
 ## Calendar Rendering
 
@@ -174,12 +184,22 @@ For payroll, the business divides as they see fit. We don't auto-split tips or r
 - Extend `resolveResourceClaims` for capacity vs separate mode (already supports capacity, add multi-pick)
 - Update data-load to return appointment_clients + appointment_staff joined to appointments
 
-### Stage 2: Service config UI (~1.5 hours)
-- New "Group Booking" tab in service edit modal (or inline in Details for group_capable services)
+### Stage 2: Service config UI (~2 hours)
+- New "Group Booking" tab in service edit modal (visible only when toggle is on)
 - Toggle: group_capable
-- Fields: group_size_min, group_size_max, group_price, group_resource_mode
-- Validation: require resource group(s) before allowing save
-- Save endpoint: existing services-upsert extended (no new Lambda)
+- Fields:
+  - group_staff_count (number input, default 2, min 2)
+  - group_eligible_staff (multi-select chip picker from active staff)
+  - group_size_min (number input, default 2)
+  - group_size_max (number input, default 2)
+  - group_price (numeric)
+  - group_resource_mode (radio: capacity OR separate)
+- Validation:
+  - group_staff_count >= 2
+  - eligible_staff list has at least group_staff_count members
+  - group_size_min <= group_size_max
+  - group_size_min >= 1
+- Save endpoint: existing services-upsert extended
 
 ### Stage 3: Internal booking (~3 hours)
 - Appointment modal detects group_capable service, shows multi-client and multi-staff slots
