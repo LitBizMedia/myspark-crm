@@ -66,14 +66,11 @@ async function handler(req, res) {
       const sc = parseInt(s.group_staff_count);
       const smin = parseInt(s.group_size_min);
       const smax = parseInt(s.group_size_max);
-      const eligible = Array.isArray(s.group_eligible_staff) ? s.group_eligible_staff : [];
+      const assigned = Array.isArray(s.assigned_staff) ? s.assigned_staff : [];
       if (!sc || sc < 2) return res.status(400).json({ error: 'Group services need at least 2 staff' });
       if (!smin || smin < 1) return res.status(400).json({ error: 'Group size min must be at least 1' });
       if (!smax || smax < smin) return res.status(400).json({ error: 'Group size max must be at least min' });
-      if (eligible.length < sc) return res.status(400).json({ error: 'Eligible staff list must have at least ' + sc + ' members' });
-      if (!s.group_resource_mode || (s.group_resource_mode !== 'capacity' && s.group_resource_mode !== 'separate')) {
-        return res.status(400).json({ error: 'Resource mode must be capacity or separate' });
-      }
+      if (assigned.length < sc) return res.status(400).json({ error: 'Assigned staff list needs at least ' + sc + ' members for this group service' });
     }
 
     // Compute last_generated_through. Set to horizon for class+recurrence saves.
@@ -90,13 +87,13 @@ async function handler(req, res) {
         booking_lead_time_hours, booking_advance_days, active,
         instructor_id, capacity, location, drop_in_allowed,
         recurrence_rule, last_generated_through, taxable,
-        group_capable, group_staff_count, group_eligible_staff,
-        group_size_min, group_size_max, group_resource_mode,
+        group_capable, group_staff_count,
+        group_size_min, group_size_max,
         created_at, updated_at
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
         $16,$17,$18,$19,$20,$21,$22,
-        $23,$24,$25,$26,$27,$28,
+        $23,$24,$25,$26,
         NOW(),NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -118,10 +115,8 @@ async function handler(req, res) {
         taxable=EXCLUDED.taxable,
         group_capable=EXCLUDED.group_capable,
         group_staff_count=EXCLUDED.group_staff_count,
-        group_eligible_staff=EXCLUDED.group_eligible_staff,
         group_size_min=EXCLUDED.group_size_min,
         group_size_max=EXCLUDED.group_size_max,
-        group_resource_mode=EXCLUDED.group_resource_mode,
         updated_at=NOW()
       WHERE services.subaccount_id=$2
     `, [
@@ -144,10 +139,8 @@ async function handler(req, res) {
       // Group booking config (Stage 2 of group feature)
       !!s.group_capable,
       s.group_capable && s.group_staff_count != null ? parseInt(s.group_staff_count) : null,
-      JSON.stringify(Array.isArray(s.group_eligible_staff) ? s.group_eligible_staff : []),
       s.group_capable && s.group_size_min != null ? parseInt(s.group_size_min) : null,
-      s.group_capable && s.group_size_max != null ? parseInt(s.group_size_max) : null,
-      s.group_capable && s.group_resource_mode ? String(s.group_resource_mode) : null
+      s.group_capable && s.group_size_max != null ? parseInt(s.group_size_max) : null
     ]);
 
     // Class session handling: generate, regenerate, or propagate.
