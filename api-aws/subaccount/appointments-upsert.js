@@ -207,13 +207,11 @@ async function handler(req, res) {
 
     // Persist resource claims for this appointment (replaces any existing claims).
     try {
-      console.log('[resource-check] persisting', resourceClaims.length, 'claims for appt=', a.id);
       await replaceClaims({
         dbClient: db,
         appointmentId: a.id,
         claims: resourceClaims
       });
-      console.log('[resource-check] persist OK');
     } catch (claimErr) {
       console.warn('[resource-check] persist failed:', claimErr.message);
     }

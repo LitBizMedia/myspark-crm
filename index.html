@@ -8327,11 +8327,11 @@ function toggleApptOverride(type, checked){
   renderApptConflictPanel();
 }
 
-// Legacy shim: _reopenWithOverride path uses this to skip server race check
-// after a 409. Sets a synthetic 'race' override so syncAppointment will pass
-// the override flag to the server.
+// Sets the time_slot override so syncAppointment will tell the server to skip
+// its race check on next save. Used after a 409 race conflict has been
+// dismissed by the user.
 function overrideAppt(){
-  apptOverrides['_legacy_race']=true;
+  apptOverrides['time_slot']=true;
   toast('Race condition acknowledged. Save when ready.','warn');
 }
 
@@ -8558,16 +8558,13 @@ function _showApptConflictRecovery(message, data, isNew, editingId){
   document.getElementById('modal-body').innerHTML='<div class="warn-box">'+message+'</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Dismiss</button><button class="btn btn-primary" onclick="_reopenWithOverride(\''+(editingId||'')+'\')">Reopen and Override</button>';
   document.getElementById('modal-overlay').classList.add('open');
-  // Stash the form data so we could re-prefill if needed (currently just reopens)
-  state._pendingApptData=data;
-  state._pendingApptEditId=editingId;
 }
 function _reopenWithOverride(editingId){
   closeModal();
   openApptModal(null, editingId||null);
-  // Pre-set the legacy race override so the server-side race check is skipped.
-  // The user already saw and dismissed the conflict prompt before re-opening.
-  setTimeout(function(){apptOverrides['_legacy_race']=true;checkApptConflict();},100);
+  // Pre-set the time_slot override so the server-side race check is skipped on
+  // the next save. The user has already seen and dismissed the conflict.
+  setTimeout(function(){apptOverrides['time_slot']=true;checkApptConflict();},100);
 }
 
 function delAppt(id){
