@@ -5,6 +5,7 @@
 
 const db = require('./lib/db');
 const { resolveResourceClaims, replaceClaims } = require('./lib/resource-allocation');
+const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const resend = require('./lib/resend');
@@ -146,30 +147,19 @@ async function handler(req, res) {
       }
     }
 
-    // Time-conflict check using overlap (matches appointments-upsert and the
-    // shared semantics: a 60-min booking at 2pm conflicts with another 60-min
-    // booking at 2:30pm even though their start times don't match).
+    // Time-conflict check via shared helper.
     if (appt.assigned_to) {
-      const dur = parseInt(appt.duration) || 60;
       try {
-        const conflict = await db.query(`
-          SELECT id FROM appointments
-          WHERE subaccount_id = $1
-            AND assigned_to = $2
-            AND date = $3
-            AND status != 'cancelled'
-            AND id != $4
-            AND time IS NOT NULL
-            AND (
-              ($5::time >= time::time AND $5::time < (time::time + (duration || ' minutes')::interval))
-              OR
-              (($5::time + ($6 || ' minutes')::interval) > time::time AND $5::time < time::time)
-              OR
-              ($5::time <= time::time AND ($5::time + ($6 || ' minutes')::interval) >= (time::time + (duration || ' minutes')::interval))
-            )
-          LIMIT 1
-        `, [tok.subaccount_id, appt.assigned_to, newDate, appt.id, newTime, String(dur)]);
-        if (conflict.rows.length > 0) {
+        const result = await checkStaffConflict({
+          staffId: appt.assigned_to,
+          subaccountId: tok.subaccount_id,
+          date: newDate,
+          time: newTime,
+          duration: appt.duration,
+          ignoreAppointmentId: appt.id,
+          dbClient: db
+        });
+        if (!result.ok) {
           return res.status(409).json({ error: 'That time is no longer available. Please choose another.' });
         }
       } catch (cErr) {

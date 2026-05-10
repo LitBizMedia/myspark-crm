@@ -22,6 +22,7 @@
 
 const db = require('./lib/db');
 const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocation');
+const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const resend = require('./lib/resend');
@@ -555,28 +556,20 @@ async function handler(req, res) {
       }
     }
 
-    // 7. Race condition check using time-overlap, matching appointments-upsert.
+    // 7. Race condition check using shared helper.
     // Skipped for class bookings - capacity is enforced separately.
     if (!classSession && assignedStaffId) {
       try {
-        const dur = parseInt((service && service.duration) || 60) || 60;
-        const conflictResult = await db.query(`
-          SELECT id FROM appointments
-          WHERE subaccount_id = $1
-            AND assigned_to = $2
-            AND date = $3
-            AND status != 'cancelled'
-            AND time IS NOT NULL
-            AND (
-              ($4::time >= time::time AND $4::time < (time::time + (duration || ' minutes')::interval))
-              OR
-              (($4::time + ($5 || ' minutes')::interval) > time::time AND $4::time < time::time)
-              OR
-              ($4::time <= time::time AND ($4::time + ($5 || ' minutes')::interval) >= (time::time + (duration || ' minutes')::interval))
-            )
-          LIMIT 1
-        `, [subaccountId, assignedStaffId, bookingDate, bookingTime, String(dur)]);
-        if (conflictResult.rows.length) {
+        const result = await checkStaffConflict({
+          staffId: assignedStaffId,
+          subaccountId,
+          date: bookingDate,
+          time: bookingTime,
+          duration: (service && service.duration) || 60,
+          ignoreAppointmentId: null,
+          dbClient: db
+        });
+        if (!result.ok) {
           return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
         }
       } catch (cErr) {
