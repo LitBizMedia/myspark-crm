@@ -13169,6 +13169,202 @@ function _saveServiceCategories(nextCategories, renameFrom, renameTo, onComplete
   }).catch(function(){toast('Network error saving categories.','error');});
 }
 
+// ── Service Group Booking Section (inside service edit modal) ────────────────
+// Configures whether a service is bookable as a group (couples massage, partner
+// consultations, etc.). When enabled, exact staff count + eligible staff pool +
+// client size range + group price + resource mode are all required.
+function renderServiceGroupSection(serviceId){
+  var el=document.getElementById('svc-group-section');
+  if(!el)return;
+  var s=(db.services||[]).find(function(x){return x.id===serviceId;});
+  if(!s){
+    el.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:14px 0;text-align:center">Save the service first.</div>';
+    return;
+  }
+
+  // Initialize working copy from service record.
+  if(!state.svcGroupWorking||state.svcGroupWorking.serviceId!==serviceId){
+    state.svcGroupWorking={
+      serviceId:serviceId,
+      group_capable:!!s.group_capable,
+      group_staff_count:s.group_staff_count!=null?parseInt(s.group_staff_count):2,
+      group_size_min:s.group_size_min!=null?parseInt(s.group_size_min):2,
+      group_size_max:s.group_size_max!=null?parseInt(s.group_size_max):2,
+      group_price:s.group_price!=null?parseFloat(s.group_price):0,
+      group_resource_mode:s.group_resource_mode||'capacity',
+      group_eligible_staff:Array.isArray(s.group_eligible_staff)?s.group_eligible_staff.slice():[],
+      dirty:false
+    };
+  }
+
+  var w=state.svcGroupWorking;
+  var allStaff=(db.users||[]).filter(function(u){return u.active!==false;});
+
+  var intro='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">'
+    +'Enable group booking when this service is performed by multiple staff for one or more clients at the same time. '
+    +'Examples: couples massage (2 staff, 2 clients), partner consultation (2 staff, 1-2 clients).'
+    +'</div>';
+
+  var toggle='<div class="form-group" style="margin-bottom:18px"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
+    +'<input id="svcgrp-enabled" type="checkbox"'+(w.group_capable?' checked':'')+' onchange="_svcGrpToggle(this.checked)">'
+    +'<strong>Enable group booking for this service</strong></label></div>';
+
+  if(!w.group_capable){
+    el.innerHTML=intro+toggle
+      +(w.dirty?'<div style="margin-top:14px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="_svcGrpSave()">Save</button></div>':'');
+    return;
+  }
+
+  var fields='<div class="form-row">'
+    +'<div class="form-group"><label>Number of staff required *</label>'
+    +'<input id="svcgrp-staff-count" type="number" min="2" step="1" value="'+w.group_staff_count+'" oninput="_svcGrpUpdate(\'group_staff_count\',parseInt(this.value)||0)">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Exact number of staff per booking. Auto-assigned from eligible pool below.</div></div>'
+    +'<div class="form-group"><label>Group price ($) *</label>'
+    +'<input id="svcgrp-price" type="number" min="0" step="0.01" value="'+w.group_price+'" oninput="_svcGrpUpdate(\'group_price\',parseFloat(this.value)||0)">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Single charge for the entire group.</div></div>'
+    +'</div>'
+
+    +'<div class="form-row">'
+    +'<div class="form-group"><label>Min clients</label>'
+    +'<input id="svcgrp-min" type="number" min="1" step="1" value="'+w.group_size_min+'" oninput="_svcGrpUpdate(\'group_size_min\',parseInt(this.value)||0)">'
+    +'</div>'
+    +'<div class="form-group"><label>Max clients</label>'
+    +'<input id="svcgrp-max" type="number" min="1" step="1" value="'+w.group_size_max+'" oninput="_svcGrpUpdate(\'group_size_max\',parseInt(this.value)||0)">'
+    +'</div>'
+    +'</div>'
+
+    +'<div class="form-group" style="margin-bottom:18px"><label>Resource mode *</label>'
+    +'<div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">'
+    +'<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;flex:1;min-width:180px">'
+    +'<input type="radio" name="svcgrp-resmode" value="capacity"'+(w.group_resource_mode==='capacity'?' checked':'')+' onchange="_svcGrpUpdate(\'group_resource_mode\',this.value)">'
+    +'<span><strong>Capacity</strong><br><span style="font-size:11px;color:var(--text-muted)">One resource (e.g., couples suite) holds the whole group</span></span>'
+    +'</label>'
+    +'<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;flex:1;min-width:180px">'
+    +'<input type="radio" name="svcgrp-resmode" value="separate"'+(w.group_resource_mode==='separate'?' checked':'')+' onchange="_svcGrpUpdate(\'group_resource_mode\',this.value)">'
+    +'<span><strong>Separate</strong><br><span style="font-size:11px;color:var(--text-muted)">Different resource per person (e.g., 2 different rooms)</span></span>'
+    +'</label>'
+    +'</div></div>';
+
+  // Staff multi-select chip picker
+  var chips=w.group_eligible_staff.map(function(uid){
+    var u=allStaff.find(function(x){return x.id===uid;});
+    if(!u){
+      return '<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:14px;font-size:12px;color:#f87171">deleted'
+        +'<button onclick="_svcGrpRemoveStaff(\''+esc(uid)+'\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0;line-height:1">&times;</button></span>';
+    }
+    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(107,33,234,.18);border:1px solid rgba(167,139,250,.4);border-radius:14px;font-size:12px;color:#c4b5fd">'
+      +'<strong>'+esc(u.name||u.username)+'</strong>'
+      +'<button onclick="_svcGrpRemoveStaff(\''+esc(uid)+'\')" style="background:none;border:none;color:#c4b5fd;cursor:pointer;font-size:14px;padding:0;line-height:1;margin-left:2px">&times;</button>'
+      +'</span>';
+  }).join(' ');
+
+  var available=allStaff.filter(function(u){return w.group_eligible_staff.indexOf(u.id)<0;});
+  var addControl=available.length
+    ? '<select class="filter-sel" onchange="if(this.value){_svcGrpAddStaff(this.value);this.value=\'\';}" style="height:30px;font-size:12px;padding:0 8px;min-width:160px">'
+      +'<option value="">+ Add staff...</option>'
+      +available.map(function(u){return '<option value="'+esc(u.id)+'">'+esc(u.name||u.username)+'</option>';}).join('')
+      +'</select>'
+    : '<span style="font-size:11px;color:var(--text-muted)">All staff added</span>';
+
+  var staffBox='<div class="form-group"><label>Eligible staff pool * <span style="font-size:11px;color:var(--text-muted);font-weight:400">(at least '+w.group_staff_count+' required)</span></label>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px;min-height:50px">'
+    +(chips||'<span style="font-size:11px;color:var(--text-muted)">No staff selected</span>')
+    +addControl
+    +'</div></div>';
+
+  // Validation message + save button
+  var validity=_svcGrpValidate(w);
+  var validityMsg=validity.ok
+    ? '<div style="font-size:11px;color:#10b981;margin-top:4px">✓ Configuration valid</div>'
+    : '<div style="font-size:12px;color:#f87171;margin-top:4px">'+esc(validity.message)+'</div>';
+
+  var actions='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--main-border)">'
+    +validityMsg
+    +(w.dirty
+      ? '<button class="btn btn-primary btn-sm" onclick="_svcGrpSave()" '+(validity.ok?'':'disabled')+' style="font-size:12px">Save</button>'
+      : '<span style="font-size:11px;color:var(--text-muted)">Saved</span>')
+    +'</div>';
+
+  el.innerHTML=intro+toggle+fields+staffBox+actions;
+}
+
+function _svcGrpValidate(w){
+  if(!w.group_capable)return {ok:true};
+  if(!w.group_staff_count||w.group_staff_count<2)return {ok:false,message:'Staff count must be at least 2'};
+  if(!w.group_size_min||w.group_size_min<1)return {ok:false,message:'Min clients must be at least 1'};
+  if(!w.group_size_max||w.group_size_max<w.group_size_min)return {ok:false,message:'Max must be greater than or equal to min'};
+  if(!w.group_price&&w.group_price!==0)return {ok:false,message:'Group price required'};
+  if(w.group_eligible_staff.length<w.group_staff_count)return {ok:false,message:'Need at least '+w.group_staff_count+' eligible staff'};
+  if(w.group_resource_mode!=='capacity'&&w.group_resource_mode!=='separate')return {ok:false,message:'Pick a resource mode'};
+  return {ok:true};
+}
+
+function _svcGrpToggle(enabled){
+  state.svcGroupWorking.group_capable=enabled;
+  state.svcGroupWorking.dirty=true;
+  renderServiceGroupSection(state.svcGroupWorking.serviceId);
+}
+
+function _svcGrpUpdate(field,val){
+  state.svcGroupWorking[field]=val;
+  state.svcGroupWorking.dirty=true;
+  // Re-render to update validation message + chip count display
+  renderServiceGroupSection(state.svcGroupWorking.serviceId);
+}
+
+function _svcGrpAddStaff(uid){
+  if(!uid)return;
+  var w=state.svcGroupWorking;
+  if(w.group_eligible_staff.indexOf(uid)>=0)return;
+  w.group_eligible_staff.push(uid);
+  w.dirty=true;
+  renderServiceGroupSection(w.serviceId);
+}
+
+function _svcGrpRemoveStaff(uid){
+  var w=state.svcGroupWorking;
+  w.group_eligible_staff=w.group_eligible_staff.filter(function(x){return x!==uid;});
+  w.dirty=true;
+  renderServiceGroupSection(w.serviceId);
+}
+
+function _svcGrpSave(){
+  var w=state.svcGroupWorking;
+  var s=(db.services||[]).find(function(x){return x.id===w.serviceId;});
+  if(!s){toast('Service not found.','error');return;}
+  var validity=_svcGrpValidate(w);
+  if(!validity.ok){toast(validity.message,'error');return;}
+
+  // Merge group fields into the service record + post to services-upsert.
+  var updated=Object.assign({},s,{
+    group_capable:w.group_capable,
+    group_staff_count:w.group_capable?w.group_staff_count:null,
+    group_size_min:w.group_capable?w.group_size_min:null,
+    group_size_max:w.group_capable?w.group_size_max:null,
+    group_price:w.group_capable?w.group_price:null,
+    group_resource_mode:w.group_capable?w.group_resource_mode:null,
+    group_eligible_staff:w.group_capable?w.group_eligible_staff:[]
+  });
+
+  fetch(apiUrl('/api/subaccount/services-upsert'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(updated)
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res&&!res.error){
+      Object.assign(s,updated);
+      saveData();
+      fetchFromServer().then(function(){
+        state.svcGroupWorking=null;
+        renderServiceGroupSection(w.serviceId);
+        toast('Group settings saved.','success');
+      });
+    } else {
+      toast((res&&res.error)||'Failed to save group settings.','error');
+    }
+  }).catch(function(){toast('Network error saving group settings.','error');});
+}
+
 // ── Service Resources Section (inside service edit modal) ────────────────────
 // Box-based picker. Each box is a requirement (AND between boxes).
 // Within a box, resources are alternatives (OR within a box).
@@ -13569,6 +13765,7 @@ function openServiceModal(id, prefType){
     +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-variations" onclick="switchSvcTab(\'variations\')">Variations</button>':'')
     +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-addons" onclick="switchSvcTab(\'addons\')">Add-ons</button>':'')
     +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-resources" onclick="switchSvcTab(\'resources\')">Resources</button>':'')
+    +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-group" onclick="switchSvcTab(\'group\')">Group Booking</button>':'')
     +(showSessionsTab?'<button class="pay-panel-tab" id="svc-tab-sessions" onclick="switchSvcTab(\'sessions\')">Upcoming Sessions</button>':'')
     +'</div>';
 
@@ -13591,11 +13788,15 @@ function openServiceModal(id, prefType){
     +(s?'<div id="svc-resources-section"></div>':'<div style="font-size:13px;color:var(--text-muted);padding:14px 0;text-align:center">Save the service first, then link resources.</div>')
     +'</div>'):'';
 
+  var groupPane=showSubTabs?('<div id="svc-pane-group" class="svc-pane hidden">'
+    +'<div id="svc-group-section"></div>'
+    +'</div>'):'';
+
   var sessionsPane=showSessionsTab?('<div id="svc-pane-sessions" class="svc-pane hidden">'
     +'<div id="svc-sessions-section"></div>'
     +'</div>'):'';
 
-  var body=tabsBar+detailsPane+variationsPane+addonsPane+resourcesPane+sessionsPane;
+  var body=tabsBar+detailsPane+variationsPane+addonsPane+resourcesPane+groupPane+sessionsPane;
 
   var footer=(s?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteService(\''+s.id+'\')">Delete</button>':'')
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
@@ -13621,7 +13822,7 @@ function openServiceModal(id, prefType){
 
 function switchSvcTab(tab){
   state.svcModalTab=tab;
-  var tabs=['details','variations','addons','resources','sessions'];
+  var tabs=['details','variations','addons','resources','group','sessions'];
   tabs.forEach(function(t){
     var btn=document.getElementById('svc-tab-'+t);
     var pane=document.getElementById('svc-pane-'+t);
@@ -13642,13 +13843,19 @@ function switchSvcTab(tab){
       renderServiceResourcesSection(state.modal.id);
     }
   }
+  // Lazy-render group booking section
+  if(tab==='group'&&state.modal&&state.modal.id){
+    if(typeof renderServiceGroupSection==='function'){
+      renderServiceGroupSection(state.modal.id);
+    }
+  }
 }
 
 function refreshSvcModalSubTabs(typeNow){
   // Called when type select changes between individual/class.
   // Show/hide Variations and Add-ons sub-tabs accordingly.
   var show=typeNow==='individual';
-  ['variations','addons','resources'].forEach(function(t){
+  ['variations','addons','resources','group'].forEach(function(t){
     var btn=document.getElementById('svc-tab-'+t);
     if(btn)btn.style.display=show?'':'none';
   });
