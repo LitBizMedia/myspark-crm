@@ -8468,17 +8468,24 @@ function saveAppt(){
         targetType: 'appointment',
         metadata: auditMeta
       });
+      // Success: close modal, refresh views, toast.
+      saveData();
+      closeModal();
+      if(state.panel==='calendar')renderCal();
+      if(state.drawer)renderDrawer();
+      updateNotifBadge();
+      toast(isNewAppt?'Appointment saved.':'Appointment updated.','success');
       return;
     }
     if(res && res.resource_blocked){
       // Server hard-blocked due to resource conflict. Roll back the optimistic
-      // local update; show the reason; do NOT offer override (resources are hard).
+      // local update. Modal stays OPEN so user keeps their entered data.
       _rollbackAppt(rollback);
       saveData();
       if(state.panel==='calendar')renderCal();
       typeof renderApptList==='function'&&renderApptList();
       var msg=res.resource_blocked.message||'A required resource is not available at this time.';
-      toast(msg,'error',8000);
+      _showResourceBlockBanner(msg);
       return;
     }
     if(res && res.conflict){
@@ -8509,8 +8516,24 @@ function saveAppt(){
     typeof renderApptList==='function'&&renderApptList();
     toast('Could not save appointment. Check your connection and try again.','error');
   });
-  saveData();closeModal();if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();updateNotifBadge();
-  toast(isNewAppt?'Appointment saved.':'Appointment updated.','success');
+}
+
+// Render an inline error banner inside the appointment modal.
+function _showResourceBlockBanner(msg){
+  var existing=document.getElementById('appt-resource-banner');
+  if(existing)existing.remove();
+  var modalBody=document.getElementById('modal-body');
+  if(!modalBody){
+    toast(msg,'error',8000);
+    return;
+  }
+  var banner=document.createElement('div');
+  banner.id='appt-resource-banner';
+  banner.style.cssText='background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.4);border-radius:6px;padding:10px 14px;margin-bottom:14px;color:#fca5a5;font-size:13px;line-height:1.5';
+  var dismissBtn='<button onclick="var b=document.getElementById(\'appt-resource-banner\');if(b)b.remove()" style="float:right;background:none;border:none;color:#fca5a5;cursor:pointer;font-size:18px;padding:0;line-height:1;margin-left:10px" aria-label="Dismiss">&times;</button>';
+  banner.innerHTML='<strong style="color:#fca5a5;font-weight:600">Cannot save:</strong> '+esc(msg)+dismissBtn;
+  modalBody.insertBefore(banner, modalBody.firstChild);
+  modalBody.scrollTop=0;
 }
 
 // Roll back an optimistic save. Used when the server returns 409 conflict.
