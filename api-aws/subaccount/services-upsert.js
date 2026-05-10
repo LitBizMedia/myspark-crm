@@ -71,9 +71,6 @@ async function handler(req, res) {
       if (!smin || smin < 1) return res.status(400).json({ error: 'Group size min must be at least 1' });
       if (!smax || smax < smin) return res.status(400).json({ error: 'Group size max must be at least min' });
       if (eligible.length < sc) return res.status(400).json({ error: 'Eligible staff list must have at least ' + sc + ' members' });
-      if (s.group_price == null || isNaN(parseFloat(s.group_price))) {
-        return res.status(400).json({ error: 'Group price is required' });
-      }
       if (!s.group_resource_mode || (s.group_resource_mode !== 'capacity' && s.group_resource_mode !== 'separate')) {
         return res.status(400).json({ error: 'Resource mode must be capacity or separate' });
       }
@@ -94,12 +91,12 @@ async function handler(req, res) {
         instructor_id, capacity, location, drop_in_allowed,
         recurrence_rule, last_generated_through, taxable,
         group_capable, group_staff_count, group_eligible_staff,
-        group_size_min, group_size_max, group_price, group_resource_mode,
+        group_size_min, group_size_max, group_resource_mode,
         created_at, updated_at
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
         $16,$17,$18,$19,$20,$21,$22,
-        $23,$24,$25,$26,$27,$28,$29,
+        $23,$24,$25,$26,$27,$28,
         NOW(),NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -124,7 +121,6 @@ async function handler(req, res) {
         group_eligible_staff=EXCLUDED.group_eligible_staff,
         group_size_min=EXCLUDED.group_size_min,
         group_size_max=EXCLUDED.group_size_max,
-        group_price=EXCLUDED.group_price,
         group_resource_mode=EXCLUDED.group_resource_mode,
         updated_at=NOW()
       WHERE services.subaccount_id=$2
@@ -151,7 +147,6 @@ async function handler(req, res) {
       JSON.stringify(Array.isArray(s.group_eligible_staff) ? s.group_eligible_staff : []),
       s.group_capable && s.group_size_min != null ? parseInt(s.group_size_min) : null,
       s.group_capable && s.group_size_max != null ? parseInt(s.group_size_max) : null,
-      s.group_capable && s.group_price != null ? parseFloat(s.group_price) : null,
       s.group_capable && s.group_resource_mode ? String(s.group_resource_mode) : null
     ]);
 
