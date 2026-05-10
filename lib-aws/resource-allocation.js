@@ -157,6 +157,172 @@ async function resolveResourceClaims(opts) {
   return { ok: true, claims };
 }
 
+// Resolve resource claims for a GROUP booking. Same as resolveResourceClaims
+// but supports two modes:
+//   mode='capacity': the service's resource group has a single resource with
+//     capacity >= count. Claim that one resource (capacity check accounts for count).
+//   mode='separate': claim COUNT different free resources from each group.
+//
+// Used for couples-massage-style bookings where N clients/staff need N rooms
+// (or one room with capacity for N).
+async function resolveMultipleResourceClaims(opts) {
+  const {
+    serviceId,
+    subaccountId,
+    date,
+    time,
+    duration,
+    ignoreAppointmentId,
+    count,           // how many clients/people in the group
+    mode,            // 'capacity' | 'separate'
+    dbClient
+  } = opts;
+
+  if (!serviceId || !subaccountId || !date || !time || !duration || !count) {
+    return { ok: true, claims: [], note: 'missing required fields - skipping' };
+  }
+
+  if (mode !== 'capacity' && mode !== 'separate') {
+    return { ok: false, conflicts: [{ reason: 'invalid resource mode: ' + mode, attempted: [] }] };
+  }
+
+  // 1. Load resource groups for this service
+  const groupsRes = await dbClient.query(
+    `SELECT id, display_order
+     FROM service_resource_groups
+     WHERE service_id = $1 AND subaccount_id = $2
+     ORDER BY display_order, id`,
+    [serviceId, subaccountId]
+  );
+
+  if (!groupsRes.rows.length) {
+    return { ok: true, claims: [] };
+  }
+
+  const groupIds = groupsRes.rows.map(g => g.id);
+
+  // 2. Load all members
+  const membersRes = await dbClient.query(
+    `SELECT m.group_id, m.resource_id, m.display_order AS member_order,
+            r.name, r.capacity, r.buffer_after, r.active
+     FROM service_resource_group_members m
+     JOIN resources r ON r.id = m.resource_id
+     WHERE m.group_id = ANY($1::text[])
+       AND r.subaccount_id = $2
+     ORDER BY m.group_id, m.display_order, r.name`,
+    [groupIds, subaccountId]
+  );
+
+  const membersByGroup = {};
+  for (const m of membersRes.rows) {
+    if (!membersByGroup[m.group_id]) membersByGroup[m.group_id] = [];
+    membersByGroup[m.group_id].push(m);
+  }
+
+  // 3. For each group, pick claims based on mode
+  const claims = [];
+  const conflicts = [];
+
+  for (const group of groupsRes.rows) {
+    const members = (membersByGroup[group.id] || []).filter(m => m.active !== false);
+    if (!members.length) {
+      conflicts.push({ group_id: group.id, attempted: [], reason: 'no active resources in group' });
+      continue;
+    }
+
+    if (mode === 'capacity') {
+      // Find a single resource with capacity >= count and free room.
+      let claimedResource = null;
+      const attempted = [];
+      for (const m of members) {
+        const cap = parseInt(m.capacity) || 1;
+        if (cap < count) {
+          attempted.push({ resource_id: m.resource_id, name: m.name, capacity: cap, available: false, reason: 'capacity ' + cap + ' < group of ' + count });
+          continue;
+        }
+        const busyRes = await dbClient.query(
+          `SELECT COUNT(*)::int AS busy FROM appointment_resources ar
+           JOIN appointments a ON a.id = ar.appointment_id
+           WHERE ar.resource_id = $1
+             AND a.subaccount_id = $2
+             AND a.date = $3
+             AND a.status != 'cancelled'
+             AND ($4::text IS NULL OR a.id != $4)
+             AND a.time IS NOT NULL
+             AND (
+               ($5::time >= a.time::time AND $5::time < (a.time::time + ((a.duration::int + $7::int) || ' minutes')::interval))
+               OR
+               (($5::time + ($6 || ' minutes')::interval) > a.time::time AND $5::time < a.time::time)
+               OR
+               ($5::time <= a.time::time AND ($5::time + ($6 || ' minutes')::interval) >= (a.time::time + (a.duration::int || ' minutes')::interval))
+             )`,
+          [m.resource_id, subaccountId, date, ignoreAppointmentId || null,
+           time, String(duration), parseInt(m.buffer_after) || 0]
+        );
+        const busy = parseInt(busyRes.rows[0].busy) || 0;
+        const available = (busy + count) <= cap;
+        attempted.push({ resource_id: m.resource_id, name: m.name, capacity: cap, busy_count: busy, available });
+        if (available) {
+          claimedResource = { group_id: group.id, resource_id: m.resource_id, name: m.name, count };
+          break;
+        }
+      }
+      if (claimedResource) {
+        claims.push(claimedResource);
+      } else {
+        conflicts.push({ group_id: group.id, attempted, reason: 'no resource has free capacity for group of ' + count });
+      }
+
+    } else {
+      // 'separate' mode: pick N different free resources from this group
+      const claimed = [];
+      const attempted = [];
+      for (const m of members) {
+        if (claimed.length >= count) break;
+        const busyRes = await dbClient.query(
+          `SELECT 1 FROM appointment_resources ar
+           JOIN appointments a ON a.id = ar.appointment_id
+           WHERE ar.resource_id = $1
+             AND a.subaccount_id = $2
+             AND a.date = $3
+             AND a.status != 'cancelled'
+             AND ($4::text IS NULL OR a.id != $4)
+             AND a.time IS NOT NULL
+             AND (
+               ($5::time >= a.time::time AND $5::time < (a.time::time + ((a.duration::int + $7::int) || ' minutes')::interval))
+               OR
+               (($5::time + ($6 || ' minutes')::interval) > a.time::time AND $5::time < a.time::time)
+               OR
+               ($5::time <= a.time::time AND ($5::time + ($6 || ' minutes')::interval) >= (a.time::time + (a.duration::int || ' minutes')::interval))
+             )
+           LIMIT 1`,
+          [m.resource_id, subaccountId, date, ignoreAppointmentId || null,
+           time, String(duration), parseInt(m.buffer_after) || 0]
+        );
+        const isAvailable = busyRes.rows.length === 0;
+        attempted.push({ resource_id: m.resource_id, name: m.name, available: isAvailable });
+        if (isAvailable) {
+          claimed.push({ group_id: group.id, resource_id: m.resource_id, name: m.name });
+        }
+      }
+      if (claimed.length === count) {
+        for (const c of claimed) claims.push(c);
+      } else {
+        conflicts.push({
+          group_id: group.id,
+          attempted,
+          reason: 'only ' + claimed.length + ' free of ' + count + ' needed'
+        });
+      }
+    }
+  }
+
+  if (conflicts.length) {
+    return { ok: false, conflicts, partial_claims: claims };
+  }
+  return { ok: true, claims };
+}
+
 // Insert claims into appointment_resources. Caller controls the transaction.
 async function persistClaims(opts) {
   const { dbClient, appointmentId, claims } = opts;
@@ -179,4 +345,4 @@ async function replaceClaims(opts) {
 }
 
 
-module.exports = { resolveResourceClaims, persistClaims, replaceClaims };
+module.exports = { resolveResourceClaims, resolveMultipleResourceClaims, persistClaims, replaceClaims };

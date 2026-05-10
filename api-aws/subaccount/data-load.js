@@ -202,7 +202,7 @@ async function handler(req, res) {
   try {
     const [
       blobResult, servicesResult, variationsResult, addonsResult, classesResult,
-      usersResult, widgetsResult, paymentsResult, appointmentsResult,
+      usersResult, widgetsResult, paymentsResult, appointmentsResult, apptClientsResult, apptStaffResult,
       plansResult, subscriptionsResult, planCategoriesResult,
       subscriptionEventsResult, resourcesResult, groupsResult, groupMembersResult
     ] = await Promise.all([
@@ -252,6 +252,23 @@ async function handler(req, res) {
       ),
       db.query(
         'SELECT * FROM appointments WHERE subaccount_id = $1 ORDER BY date ASC, time ASC',
+        [subaccountId]
+      ),
+      // Group booking: clients per appointment (for multi-client appointments)
+      db.query(
+        `SELECT ac.appointment_id, ac.contact_id, ac.is_primary
+         FROM appointment_clients ac
+         JOIN appointments a ON a.id = ac.appointment_id
+         WHERE a.subaccount_id = $1`,
+        [subaccountId]
+      ),
+      // Group booking: staff per appointment (for multi-staff appointments)
+      db.query(
+        `SELECT ast.appointment_id, ast.staff_id, ast.display_order
+         FROM appointment_staff ast
+         JOIN appointments a ON a.id = ast.appointment_id
+         WHERE a.subaccount_id = $1
+         ORDER BY ast.display_order`,
         [subaccountId]
       ),
       db.query(
@@ -355,7 +372,29 @@ async function handler(req, res) {
       serviceCategories: blobResult.rows[0]?.service_categories || [],
       serviceWidgets: widgetsResult.rows,
       payments: paymentsResult.rows.map(paymentToFrontend),
-      appointments: appointmentsResult.rows.map(appointmentToFrontend),
+      appointments: (function(){
+        // Bucket clients and staff by appointment_id for joining.
+        var clientRows = (apptClientsResult && apptClientsResult.rows) || [];
+        var staffRows = (apptStaffResult && apptStaffResult.rows) || [];
+        var clientsByAppt = {};
+        for (var i = 0; i < clientRows.length; i++) {
+          var c = clientRows[i];
+          if (!clientsByAppt[c.appointment_id]) clientsByAppt[c.appointment_id] = [];
+          clientsByAppt[c.appointment_id].push({ contact_id: c.contact_id, is_primary: c.is_primary });
+        }
+        var staffByAppt = {};
+        for (var j = 0; j < staffRows.length; j++) {
+          var s = staffRows[j];
+          if (!staffByAppt[s.appointment_id]) staffByAppt[s.appointment_id] = [];
+          staffByAppt[s.appointment_id].push({ staff_id: s.staff_id, display_order: s.display_order });
+        }
+        return appointmentsResult.rows.map(function(row){
+          var appt = appointmentToFrontend(row);
+          appt.clients = clientsByAppt[row.id] || [];
+          appt.staff = staffByAppt[row.id] || [];
+          return appt;
+        });
+      })(),
       subscriptionPlans: plansResult.rows.map(planToFrontend),
       subscriptions: subscriptionsWithEvents,
       subscriptionPlanCategories: planCategoriesResult.rows.map(planCategoryToFrontend)
