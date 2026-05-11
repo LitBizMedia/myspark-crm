@@ -6400,7 +6400,10 @@ function openEnrollInClassModal(){
       return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
     }).join('');
 
-  var body = '<div style="display:flex;flex-direction:column;gap:14px">'
+  // min-height keeps the contact search-select dropdown visible without
+  // scrolling. The dropdown renders absolute-positioned, and a tighter modal
+  // would clip it inside the body's overflow:auto.
+  var body = '<div style="display:flex;flex-direction:column;gap:14px;min-height:480px">'
     + '<div class="form-group"><label>Class *</label><select id="enroll-class" onchange="enrollOnClassChange()">' + classOpts + '</select></div>'
     + '<div class="form-group" id="enroll-session-wrap" style="display:none"><label>Session *</label><select id="enroll-session" onchange="enrollOnSessionChange()"></select></div>'
     + '<div class="form-group" id="enroll-contact-wrap" style="display:none"><label>Contact *</label>' + ssHTML('enroll-cw','enroll-ci','enroll-cv','enroll-cd','Search contact...','') + '</div>'
