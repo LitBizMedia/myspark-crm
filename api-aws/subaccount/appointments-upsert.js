@@ -32,7 +32,7 @@ async function handler(req, res) {
     // service's bookable window. Service.availability is { enabled, schedule:
     // {mon:{open,start,end}, ...} }. When null/disabled, fall back to business
     // hours from settings. If the booking falls outside, reject 409.
-    if (a.service_id && a.date && a.time) {
+    if (a.service_id && a.date && a.time && !req.body.override) {
       try {
         const svcRow = await db.query(
           'SELECT availability FROM services WHERE id=$1 AND subaccount_id=$2',
