@@ -9,7 +9,7 @@
 //   - payments -> payments table (via /payments-create and /payments-update)
 //   - subscriptionPlans -> subscription_plans table (via /subscription-plans-* endpoints)
 //   - subscriptions -> subscriptions table (via /subscriptions-* endpoints)
-//   - settings.adminProfile, settings.supabaseUrl, settings.supabaseKey -> dead, not used
+//   - settings.adminProfile -> dead, not used
 // Anything still being sent in the blob is treated as legacy noise and dropped.
 
 const db = require('./lib/db');
@@ -25,7 +25,7 @@ const STRIPPED_TOP_LEVEL = [
   'subscriptions',
   'subscriptionPlans'
 ];
-const STRIPPED_SETTINGS = ['adminProfile', 'supabaseUrl', 'supabaseKey'];
+const STRIPPED_SETTINGS = ['adminProfile'];
 
 function sanitize(data) {
   const out = { ...data };

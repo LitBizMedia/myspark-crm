@@ -1488,8 +1488,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Classes</div>
               <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="classes-list-sub">Upcoming class sessions</div>
             </div>
-            <button class="btn btn-primary" onclick="openScheduleMenu(this)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Schedule
+            <button class="btn btn-primary" onclick="openEnrollInClassModal()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add to Class
             </button>
           </div>
           <div class="toolbar" style="margin-bottom:14px">
@@ -6365,12 +6365,10 @@ function closeDropdownMenu(){
 }
 
 // +Schedule dropdown on calendar and appointments list views.
+// Opens the unified appointment modal. The modal itself handles Service vs
+// Custom mode via internal tabs (see _renderApptModeTabs).
 function openScheduleMenu(btnEl){
-  openDropdownMenu(btnEl, [
-    { label: 'Appointment', onClick: function(){ openApptModal(null, null, null, null, null, null, 'custom'); } },
-    { label: 'Service',     onClick: function(){ openApptModal(null, null, null, null, null, null, 'service'); } },
-    { label: 'Add to Class', onClick: function(){ openEnrollInClassModal(); } }
-  ]);
+  openApptModal(null, null, null, null, null, null, null);
 }
 
 // +Add dropdown on the catalog (Service Calendars tab).
@@ -6545,8 +6543,12 @@ function apptOnServiceChange(){
   if (!svc) return;
 
   // Prefill title, duration, buffers (overwrite at pick time per spec).
-  var titleInp = document.getElementById('af-title');
+  // Write to af-title-svc when present (new bookings dual-block); else af-title.
+  var titleInp = document.getElementById('af-title-svc') || document.getElementById('af-title');
   if (titleInp) titleInp.value = svc.name || '';
+  // Also sync the hidden af-title if both exist (dual-block case).
+  var hiddenTitle = document.getElementById('af-title');
+  if (hiddenTitle && hiddenTitle !== titleInp) hiddenTitle.value = svc.name || '';
   var durInp = document.getElementById('af-dur');
   if (durInp) durInp.value = svc.duration_default || 60;
   var bufBefore = document.getElementById('af-buf-before');
@@ -6606,8 +6608,10 @@ function apptOnVariationChange(){
   if (!svc) return;
   if (!variationId) {
     // Reset to service defaults.
-    var titleInp = document.getElementById('af-title');
+    var titleInp = document.getElementById('af-title-svc') || document.getElementById('af-title');
     if (titleInp) titleInp.value = svc.name || '';
+    var hiddenT = document.getElementById('af-title');
+    if (hiddenT && hiddenT !== titleInp) hiddenT.value = svc.name || '';
     var durInp = document.getElementById('af-dur');
     if (durInp) durInp.value = svc.duration_default || 60;
     checkApptConflict();
@@ -6615,8 +6619,10 @@ function apptOnVariationChange(){
   }
   var variation = (db.serviceVariations || []).find(function(v){ return v.id === variationId; });
   if (!variation) return;
-  var titleInp2 = document.getElementById('af-title');
+  var titleInp2 = document.getElementById('af-title-svc') || document.getElementById('af-title');
   if (titleInp2) titleInp2.value = svc.name + ' - ' + variation.name;
+  var hiddenT2 = document.getElementById('af-title');
+  if (hiddenT2 && hiddenT2 !== titleInp2) hiddenT2.value = svc.name + ' - ' + variation.name;
   var durInp2 = document.getElementById('af-dur');
   if (durInp2) durInp2.value = variation.duration || svc.duration_default || 60;
   var bufBefore2 = document.getElementById('af-buf-before');
@@ -6986,6 +6992,41 @@ function _expandedAppointmentsForCalendar(){
   return out;
 }
 
+// Switches between Service and Custom mode in the appointment modal for NEW
+// bookings. Edits keep their original mode (no toggle shown).
+// Also syncs the af-title hidden input from whichever block is active so
+// saveAppt reads the right title regardless of mode.
+function _switchApptMode(mode){
+  state.apptMode = mode;
+  var svcWrap = document.getElementById('apt-mode-service-wrap');
+  var custWrap = document.getElementById('apt-mode-custom-wrap');
+  if(svcWrap)  svcWrap.style.display  = (mode === 'service' ? 'block' : 'none');
+  if(custWrap) custWrap.style.display = (mode === 'custom'  ? 'block' : 'none');
+  document.querySelectorAll('[data-mode]').forEach(function(t){
+    t.classList.toggle('active', t.getAttribute('data-mode') === mode);
+  });
+  // Update modal title
+  var titleEl = document.getElementById('modal-title');
+  if(titleEl && !state.modal.id) titleEl.textContent = mode === 'service' ? 'Book Service' : 'Book Appointment';
+  // Sync af-title hidden input from the active block's title field.
+  _syncApptTitleField();
+}
+
+// Keeps af-title (the hidden input that saveAppt reads) in sync with the
+// active mode's title source. Service mode: af-title-svc (set when service
+// is picked). Custom mode: af-title-cust (user types).
+function _syncApptTitleField(){
+  var hidden = document.getElementById('af-title');
+  if(!hidden) return;
+  if(state.apptMode === 'service'){
+    var svcTitleSrc = document.getElementById('af-title-svc');
+    if(svcTitleSrc) hidden.value = svcTitleSrc.value;
+  } else {
+    var custTitle = document.getElementById('af-title-cust');
+    if(custTitle) hidden.value = custTitle.value;
+  }
+}
+
 function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefServiceId,prefMode){
   // Audit: viewing existing appointment (PHI)
   if (apptId) {
@@ -7018,8 +7059,13 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var initialMode;
   if (prefMode === 'service' || prefMode === 'custom') {
     initialMode = prefMode;
+  } else if (initialServiceId) {
+    initialMode = 'service';
   } else {
-    initialMode = initialServiceId ? 'service' : 'custom';
+    // New bookings default to Service mode when active services exist, else
+    // Custom. Tabs let the user flip inside the modal.
+    var hasActiveServices = (db.services||[]).some(function(s){ return s.active !== false && s.type !== 'class'; });
+    initialMode = hasActiveServices ? 'service' : 'custom';
   }
   state.apptMode = initialMode;
 
@@ -7083,23 +7129,41 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
       + '</div>';
   }
 
-  const b = widgetBanner + addonsSection +
-    // Service section: visible only in Service mode. Mode is set at open time
-    // by the +Schedule menu choice, no in-modal switching.
-    (initialMode === 'service'
-      ? '<div id="apt-svc-section">'
-        + '<div class="form-group"><label>Service *</label>' + svcSsHTML('af-svc-wrap','af-svc-inp','af-service','af-svc-drop','Search services...', initialServiceId || '') + '</div>'
-        + '<div class="form-group" id="apt-var-wrap" style="display:' + (initialVarHTML ? 'block' : 'none') + '"><label>Variation</label><select id="af-variation" onchange="apptOnVariationChange()">' + initialVarHTML + '</select></div>'
-        + '<div class="form-group" id="apt-addons-wrap" style="display:none"><label>Add-ons</label><div id="apt-addons-list"></div></div>'
-        + '</div>'
-      : '')
+  // Tab bar shown only on NEW appointments. When editing, mode is locked.
+  var modeTabsHTML = '';
+  if (!a) {
+    modeTabsHTML = '<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px">'
+      + '<button class="svc-detail-tab' + (initialMode === 'service' ? ' active' : '') + '" data-mode="service" onclick="_switchApptMode(\'service\')">Service</button>'
+      + '<button class="svc-detail-tab' + (initialMode === 'custom' ? ' active' : '') + '" data-mode="custom" onclick="_switchApptMode(\'custom\')">Custom</button>'
+      + '</div>';
+  }
 
-    // Title field: visible in Custom mode only. In Service mode it is set
-    // programmatically when the service is picked, but kept as a hidden input
-    // so saveAppt can read it the same way.
-    + (initialMode === 'service'
-      ? '<input type="hidden" id="af-title" value="'+esc(a&&a.title||'')+'">'
-      : '<div class="form-group"><label>Title *</label><input id="af-title" type="text" value="'+esc(a&&a.title||'')+'" placeholder="Discovery call, follow-up..."></div>')
+  // Always render both Service and Custom blocks. Tabs toggle visibility.
+  // For edit flows (a !== null) only the original mode renders (legacy).
+  var serviceBlockHTML = '<div id="apt-svc-section">'
+    + '<div class="form-group"><label>Service *</label>' + svcSsHTML('af-svc-wrap','af-svc-inp','af-service','af-svc-drop','Search services...', initialServiceId || '') + '</div>'
+    + '<div class="form-group" id="apt-var-wrap" style="display:' + (initialVarHTML ? 'block' : 'none') + '"><label>Variation</label><select id="af-variation" onchange="apptOnVariationChange()">' + initialVarHTML + '</select></div>'
+    + '<div class="form-group" id="apt-addons-wrap" style="display:none"><label>Add-ons</label><div id="apt-addons-list"></div></div>'
+    + '<input type="hidden" id="af-title-svc" value="'+esc(a&&a.title||'')+'">'
+    + '</div>';
+  var customBlockHTML = '<div class="form-group"><label>Title *</label><input id="af-title-cust" type="text" value="'+esc(a&&a.title||'')+'" placeholder="Discovery call, follow-up..." oninput="_syncApptTitleField()"></div>';
+
+  // For edit flows, render only the locked mode. For new bookings, render both
+  // wrapped in containers we can flip.
+  var modeBlocksHTML;
+  if (a) {
+    modeBlocksHTML = (initialMode === 'service'
+      ? serviceBlockHTML + '<input type="hidden" id="af-title" value="'+esc(a.title||'')+'">'
+      : customBlockHTML.replace('id="af-title-cust"', 'id="af-title"'));
+  } else {
+    modeBlocksHTML =
+      '<div id="apt-mode-service-wrap" style="display:'+(initialMode==='service'?'block':'none')+'">' + serviceBlockHTML + '</div>'
+      + '<div id="apt-mode-custom-wrap" style="display:'+(initialMode==='custom'?'block':'none')+'">' + customBlockHTML + '</div>'
+      // af-title is dynamically read from the active mode's title field via getter.
+      + '<input type="hidden" id="af-title" value="'+esc(a&&a.title||'')+'">';
+  }
+
+  const b = widgetBanner + addonsSection + modeTabsHTML + modeBlocksHTML
 
     // Existing fields (unchanged)
     + '<div id="appt-warn" class="warn-box hidden"></div>'

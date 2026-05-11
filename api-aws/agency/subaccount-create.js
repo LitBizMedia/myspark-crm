@@ -23,7 +23,7 @@ const { wrap } = require('./lib/lambda-adapter');
 
 // Mirror data-save Lambda's strip list. The blob never holds user data.
 const STRIPPED_TOP_LEVEL = ['users', '_subaccountAdmin'];
-const STRIPPED_SETTINGS = ['adminProfile', 'supabaseUrl', 'supabaseKey'];
+const STRIPPED_SETTINGS = ['adminProfile'];
 
 function sanitizeBlob(data) {
   const out = { ...data };
