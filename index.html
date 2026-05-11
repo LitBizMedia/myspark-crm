@@ -9937,6 +9937,27 @@ function loadData(){
   try{
     const r=localStorage.getItem(SK);
     if(r){const p=JSON.parse(r);
+      // Self-heal: strip dead legacy keys that may exist in cached
+      // localStorage from older app versions. Run silently every boot.
+      // Once all browsers have refreshed past this, this block is a no-op.
+      var DEAD_TOP_KEYS = [
+        'users','_subaccountAdmin','serviceCategories','serviceWidgets','payments',
+        'subscriptions','subscriptionPlans','services','appointments','classSessions',
+        'serviceAddons','serviceVariations','serviceResourceGroups','resources',
+        'subscriptionPlanCategories','serviceResources'
+      ];
+      var DEAD_SETTINGS_KEYS = [
+        'adminProfile','supabaseUrl','supabaseKey','gistId','gistToken'
+      ];
+      var _heal = false;
+      DEAD_TOP_KEYS.forEach(function(k){ if (k in p) { delete p[k]; _heal = true; } });
+      if (p.settings && typeof p.settings === 'object') {
+        DEAD_SETTINGS_KEYS.forEach(function(k){ if (k in p.settings) { delete p.settings[k]; _heal = true; } });
+      }
+      if (_heal) {
+        try { localStorage.setItem(SK, JSON.stringify(p)); } catch(e){}
+      }
+
       db={...db,...p,
         tags:p.tags&&p.tags.length?p.tags:db.tags,
         users:p.users||[],payments:p.payments||[],
