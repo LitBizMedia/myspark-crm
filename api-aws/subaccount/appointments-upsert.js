@@ -327,23 +327,22 @@ async function handler(req, res) {
           await client.query(`
             INSERT INTO appointments (
               id, subaccount_id, title, date, time, duration,
-              contact_id, assigned_to, color, notes, status, status_reason,
-              status_reason_other, status_changed_at, status_changed_by,
+              contact_id, assigned_to, notes, status, location,
+              buffer_before, buffer_after,
               service_id, service_variation_id, addons, price,
               created_at, updated_at
             ) VALUES (
-              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
               NOW(),NOW()
             )
             ON CONFLICT (id) DO UPDATE SET
               title=EXCLUDED.title, date=EXCLUDED.date, time=EXCLUDED.time,
               duration=EXCLUDED.duration, contact_id=EXCLUDED.contact_id,
-              assigned_to=EXCLUDED.assigned_to, color=EXCLUDED.color,
+              assigned_to=EXCLUDED.assigned_to,
               notes=EXCLUDED.notes, status=EXCLUDED.status,
-              status_reason=EXCLUDED.status_reason,
-              status_reason_other=EXCLUDED.status_reason_other,
-              status_changed_at=EXCLUDED.status_changed_at,
-              status_changed_by=EXCLUDED.status_changed_by,
+              location=EXCLUDED.location,
+              buffer_before=EXCLUDED.buffer_before,
+              buffer_after=EXCLUDED.buffer_after,
               service_id=EXCLUDED.service_id,
               service_variation_id=EXCLUDED.service_variation_id,
               addons=EXCLUDED.addons,
@@ -354,10 +353,11 @@ async function handler(req, res) {
             a.id, subaccountId, a.title, a.date, a.time || null,
             parseInt(a.duration) || null,
             primaryContactId, firstStaffId,
-            a.color || null, a.notes || null,
+            a.notes || null,
             a.status || 'scheduled',
-            a.status_reason || null, a.status_reason_other || null,
-            a.status_changed_at || null, a.status_changed_by || null,
+            a.location || null,
+            parseInt(a.buffer_before) || 0,
+            parseInt(a.buffer_after) || 0,
             a.service_id || null, a.service_variation_id || null,
             a.addons ? JSON.stringify(a.addons) : null,
             a.price != null ? parseFloat(a.price) : null
