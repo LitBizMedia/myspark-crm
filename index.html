@@ -6760,13 +6760,11 @@ function _apptGroupDeactivate(){
 function _apptGroupRerender(){
   var clientsEl = document.getElementById('apt-group-clients-wrap');
   var staffEl   = document.getElementById('apt-group-staff-wrap');
-  var previewEl = document.getElementById('apt-group-preview-wrap');
   var soloContactEl = document.getElementById('apt-cv-wrap');
   var soloStaffEl   = document.getElementById('apt-user-wrap');
   if(!state.apptGroup || !state.apptGroup.active){
     if(clientsEl) clientsEl.style.display = 'none';
     if(staffEl)   staffEl.style.display   = 'none';
-    if(previewEl) previewEl.style.display = 'none';
     if(soloContactEl) soloContactEl.style.display = '';
     if(soloStaffEl)   soloStaffEl.style.display   = '';
     return;
@@ -6781,10 +6779,6 @@ function _apptGroupRerender(){
   if(staffEl){
     staffEl.style.display = '';
     staffEl.innerHTML = _apptGroupStaffHTML();
-  }
-  if(previewEl){
-    previewEl.style.display = '';
-    previewEl.innerHTML = _apptGroupPreviewHTML();
   }
 }
 
@@ -6876,39 +6870,6 @@ function _apptGroupStaffHTML(){
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--bg-input);border:1px solid var(--main-input-border);border-radius:var(--radius);min-height:44px">'
     + chips
     + (canAdd ? '<div style="flex:1;min-width:160px">' + addControl + '</div>' : addControl)
-    + '</div></div>';
-}
-
-function _apptGroupPreviewHTML(){
-  var g = state.apptGroup;
-  if(!g.clients.length) return '';
-  // Best-effort client-side preview. Final assignment confirmed at save.
-  var svc = g.service;
-  var groups = (db.serviceResourceGroups||[]).filter(function(rg){
-    return rg.service_id === svc.id;
-  });
-  var resPreview;
-  if(!groups.length){
-    resPreview = '<span style="color:var(--text-muted);font-size:11px">No resources required for this service.</span>';
-  } else {
-    // Show what'd be claimed: just list resource names from groups.
-    var lines = groups.map(function(rg){
-      var members = (db.serviceResourceGroupMembers||[]).filter(function(m){return m.group_id === rg.id;});
-      var names = members.map(function(m){
-        var r = (db.resources||[]).find(function(x){return x.id === m.resource_id;});
-        return r ? r.name : 'unknown';
-      });
-      return names.length === 1
-        ? '<strong style="color:var(--text)">'+esc(names[0])+'</strong>'
-        : '<strong style="color:var(--text)">'+esc(names.join(' or '))+'</strong>';
-    });
-    resPreview = lines.join(' AND ');
-  }
-
-  return '<div class="form-group"><label>Resource Preview</label>'
-    + '<div style="padding:10px 12px;background:rgba(107,33,234,.04);border:1px solid rgba(167,139,250,.2);border-radius:6px;font-size:12px;line-height:1.6;color:var(--text-muted)">'
-    + resPreview
-    + '<div style="font-size:10px;margin-top:6px;color:var(--text-muted)">Auto-assignment confirmed on save.</div>'
     + '</div></div>';
 }
 
@@ -7147,7 +7108,6 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     + '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
     + '<div id="apt-group-clients-wrap" style="display:none"></div>'
     + '<div id="apt-group-staff-wrap" style="display:none"></div>'
-    + '<div id="apt-group-preview-wrap" style="display:none"></div>'
     + '<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
     + '<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','rescheduled','no-show','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
     + '<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
@@ -9096,12 +9056,8 @@ function confirmDelAppt(){
   saveData();closeModal();
   if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();
   typeof renderApptList==='function'&&renderApptList();
-  // Audit
-  logSubaccountAudit('subaccount.appointment.delete', {
-    targetId: id,
-    targetType: 'appointment',
-    metadata: { title: appt ? appt.title : null, date: appt ? appt.date : null, time: appt ? appt.time : null, contact_id: appt ? appt.contactId : null }
-  });
+  // Audit log is handled by the backend Lambda after successful delete.
+  // Don't double-log from the frontend.
   toast('Appointment removed.','success');
 }
 
