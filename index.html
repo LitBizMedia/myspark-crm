@@ -14273,7 +14273,8 @@ function renderServiceCommonFields(s,type){
     +'<div class="form-group"><label>Booking Lead Time (hours)</label><input id="svc-lead" type="number" min="0" value="'+(s&&s.booking_lead_time_hours||0)+'"></div>'
     +'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>'
     +'</div>'
-    +'<div class="form-group" style="display:flex;gap:18px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-taxable" type="checkbox"'+((s&&s.taxable!==false)||!s?' checked':'')+'>Charge tax on this '+(type==='class'?'class':'service')+'</label></div>';
+    +'<div class="form-group" style="display:flex;gap:18px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-taxable" type="checkbox"'+((s&&s.taxable!==false)||!s?' checked':'')+'>Charge tax on this '+(type==='class'?'class':'service')+'</label></div>'
+    +renderSvcAvailabilityFields(s);
 }
 
 // Dispatcher: renders Individual or Class field set based on type.
