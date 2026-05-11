@@ -6805,7 +6805,7 @@ function _apptGroupClientsHTML(){
     // Search-select pattern: type-to-search input + dropdown of contacts.
     // Mirrors the ssHTML pattern used for the regular contact picker so the
     // UX is consistent. _apptGroupClientFilter renders the dropdown.
-    addControl = '<div class="ss-wrap" id="apt-gc-wrap" style="min-width:180px">'
+    addControl = '<div class="ss-wrap" id="apt-gc-wrap" style="width:100%">'
       + '<input class="ss-inp" id="apt-gc-inp" type="text" placeholder="+ Add client..." autocomplete="off" oninput="_apptGroupClientFilter(this.value)" onclick="_apptGroupClientFilter(this.value)">'
       + '<div class="ss-drop hidden" id="apt-gc-drop"></div>'
       + '</div>';
@@ -6819,9 +6819,9 @@ function _apptGroupClientsHTML(){
     : '<span style="color:#10b981">&#10003; '+g.clients.length+' of '+cMax+'</span>';
 
   return '<div class="form-group"><label>Clients ('+range+') &middot; '+status+'</label>'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--main-bg);border:1px solid var(--border);border-radius:6px;min-height:50px">'
-    + (chips || '<span style="font-size:11px;color:var(--text-muted)">No clients selected</span>')
-    + addControl
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--bg-input);border:1px solid var(--main-input-border);border-radius:var(--radius);min-height:44px">'
+    + chips
+    + (canAdd ? '<div style="flex:1;min-width:160px">' + addControl + '</div>' : addControl)
     + '</div></div>';
 }
 
@@ -6849,7 +6849,7 @@ function _apptGroupStaffHTML(){
       return pool.indexOf(u.id) >= 0 && g.staff.indexOf(u.id) < 0;
     });
     if(available.length){
-      addControl = '<div class="ss-wrap" id="apt-gs-wrap" style="min-width:180px">'
+      addControl = '<div class="ss-wrap" id="apt-gs-wrap" style="width:100%">'
         + '<input class="ss-inp" id="apt-gs-inp" type="text" placeholder="+ Add staff..." autocomplete="off" oninput="_apptGroupStaffFilter(this.value)" onclick="_apptGroupStaffFilter(this.value)">'
         + '<div class="ss-drop hidden" id="apt-gs-drop"></div>'
         + '</div>';
@@ -6865,9 +6865,9 @@ function _apptGroupStaffHTML(){
     : '<span style="color:#f87171">Need '+sCount+', have '+g.staff.length+'</span>';
 
   return '<div class="form-group"><label>Staff (exactly '+sCount+') &middot; '+status+'</label>'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--main-bg);border:1px solid var(--border);border-radius:6px;min-height:50px">'
-    + (chips || '<span style="font-size:11px;color:var(--text-muted)">No staff selected</span>')
-    + addControl
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--bg-input);border:1px solid var(--main-input-border);border-radius:var(--radius);min-height:44px">'
+    + chips
+    + (canAdd ? '<div style="flex:1;min-width:160px">' + addControl + '</div>' : addControl)
     + '</div></div>';
 }
 
