@@ -8706,6 +8706,34 @@ function checkApptConflict(){
             });
           }
         }
+        // Per-service availability window check.
+        var svcHours = getServiceAvailableHours(svcC, date);
+        if(svcHours && svcHours.size === 0){
+          conflicts.push({
+            type:'service_unavailable_day',
+            label:'Service unavailable',
+            message:esc(svcC.name)+' is not offered on this day.'
+          });
+        } else if(svcHours){
+          var bookHour = parseInt(time.split(':')[0], 10);
+          var bookMin  = parseInt(time.split(':')[1], 10) || 0;
+          var bookStart = bookHour*60 + bookMin;
+          var bookEnd   = bookStart + (parseInt(dur)||60);
+          var conflictHourSvc = null;
+          for(var bt = bookStart; bt < bookEnd; bt += 5){
+            var bh = Math.floor(bt / 60);
+            if(!svcHours.has(bh)){ conflictHourSvc = bh; break; }
+          }
+          if(conflictHourSvc !== null){
+            var sortedSvcH = Array.from(svcHours).sort(function(a,b){return a-b;});
+            var firstSvcH = sortedSvcH[0], lastSvcH = sortedSvcH[sortedSvcH.length-1];
+            conflicts.push({
+              type:'service_unavailable_time',
+              label:'Outside service hours',
+              message: esc(svcC.name) + ' is bookable ' + fmtTime(String(firstSvcH).padStart(2,'0')+':00') + ' to ' + fmtTime(String(lastSvcH+1).padStart(2,'0')+':00') + ' on this day.'
+            });
+          }
+        }
       }
     }
   }
