@@ -2638,6 +2638,37 @@ function globalCalHours(){
   return Array.from({length:max-min},function(_,i){return i+min;});
 }
 
+
+// Extends a base hour range (from globalCalHours) to include any appointments
+// that fall outside business hours on the given date(s). Used by day and week
+// views so an overridden 7 PM booking doesn't disappear off the visible grid.
+// dateStrs: array of 'YYYY-MM-DD' strings to scan. baseHours: array from
+// globalCalHours(). Returns a new array of hour integers covering the union.
+function _calHoursExtended(dateStrs, baseHours){
+  if(!baseHours.length) return baseHours;
+  var min = baseHours[0];
+  var max = baseHours[baseHours.length - 1] + 1;
+  (dateStrs || []).forEach(function(ds){
+    if(!ds) return;
+    var appts = getCalAppts('all', ds);
+    appts.forEach(function(a){
+      if(!a.time || a.status === 'cancelled') return;
+      var parts = a.time.split(':');
+      var startH = parseInt(parts[0], 10);
+      var startM = parseInt(parts[1], 10) || 0;
+      var endMin = startH * 60 + startM + (parseInt(a.duration, 10) || 60);
+      var endH = Math.ceil(endMin / 60);
+      if(!isNaN(startH) && startH < min) min = startH;
+      if(!isNaN(endH) && endH > max) max = endH;
+    });
+  });
+  // Safety: clamp to 0-24 just in case
+  if(min < 0) min = 0;
+  if(max > 24) max = 24;
+  if(max <= min) return baseHours;
+  return Array.from({length: max - min}, function(_, i){ return i + min; });
+}
+
 // Workspace-level blackout date lookup. Returns the matching {date, reason}
 // object if dateStr is a blackout day, null otherwise. Blackouts apply to
 // both the public booking widget and the internal calendar.
@@ -5286,7 +5317,7 @@ function renderWeekCal(){
   document.getElementById('cal-period').textContent=MONTHS[ws.getMonth()]+' '+ws.getDate()+' - '+we.getDate()+', '+we.getFullYear();
   document.getElementById('cal-big-month').textContent=MONTHS[ws.getMonth()].slice(0,3);
   const cols=Array.from({length:7},(_,i)=>{const dd=new Date(ws.getTime()+i*86400000);const s=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');return{day:dd,str:s}});
-  const td=todayStr(),allH=globalCalHours();
+  const td=todayStr(),allH=_calHoursExtended(cols.map(function(c){return c.str;}), globalCalHours());
   let html='<div class="cal-timed"><div class="time-col"><div class="time-col-head"></div><div class="time-col-allday">All-day</div>'+allH.map(h=>'<div class="time-slot">'+(h===12?'12 PM':h<12?h+' AM':(h-12)+' PM')+'</div>').join('')+'</div>';
   cols.forEach(({day,str})=>{
     var appts=getCalAppts(state.calUser,str);
@@ -5348,7 +5379,7 @@ function renderDayCal(){
   var str=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   document.getElementById('cal-period').textContent=DFULL[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
   document.getElementById('cal-big-month').textContent=MONTHS[d.getMonth()].slice(0,3);
-  var allH=globalCalHours();
+  var allH = _calHoursExtended([str], globalCalHours());
   var staffCols=getSelectedDayStaff();
   var boD=isBlackoutDate(str);
   var html='';
