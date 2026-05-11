@@ -14185,39 +14185,41 @@ function getServiceAvailableHours(svc, dateStr){
   var sched = svc.availability.schedule || {};
   var d = sched[dk];
   if(!d || !d.open) return new Set();
-  var start = parseInt(d.start), end = parseInt(d.end);
+  // Schedule values are HH:MM strings (matches business hours format).
+  // parseInt('09:00') correctly returns 9 since parseInt stops at the colon.
+  var start = parseInt(d.start, 10);
+  var end   = parseInt(d.end,   10);
   if(isNaN(start) || isNaN(end) || end <= start) return new Set();
   var out = new Set();
   for(var h = start; h < end; h++) out.add(h);
   return out;
 }
 
-// Renders the foldable per-service availability section. Default collapsed.
-// Toggle reveals 7-day schedule editor. When toggle is OFF, service uses
-// business hours from settings.
+// Renders the foldable per-service availability section. Mirrors the business
+// hours editor (bh-row + bh-toggle + _timeInputHTML). Default collapsed.
+// Toggle reveals 7-day schedule editor. When OFF, service uses business hours.
 function renderSvcAvailabilityFields(s){
   var av = (s && s.availability) || { enabled: false, schedule: {} };
   var enabled = !!av.enabled;
   var sched = av.schedule || {};
-  var days = [
-    {k:'mon', label:'Monday'}, {k:'tue', label:'Tuesday'}, {k:'wed', label:'Wednesday'},
-    {k:'thu', label:'Thursday'}, {k:'fri', label:'Friday'}, {k:'sat', label:'Saturday'},
-    {k:'sun', label:'Sunday'}
-  ];
+  var order = ['mon','tue','wed','thu','fri','sat','sun'];
+  var labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var bh = (db.settings && db.settings.businessHours) || DEF_BH;
-  var rows = days.map(function(d){
-    var src = sched[d.k] || bh[d.k] || {open:true, start:'09', end:'17'};
+
+  var rows = order.map(function(dk, i){
+    var src = sched[dk] || bh[dk] || {open:true, start:'09:00', end:'17:00'};
     var isOpen = (typeof src.open === 'boolean') ? src.open : true;
-    var start = src.start != null ? String(src.start).padStart(2,'0') : '09';
-    var end   = src.end   != null ? String(src.end).padStart(2,'0')   : '17';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0">'
-      + '<label style="min-width:110px;display:flex;align-items:center;gap:8px;cursor:pointer">'
-      +   '<input type="checkbox" class="svc-av-open" data-day="'+d.k+'"'+(isOpen?' checked':'')+'>'
-      +   '<span>'+d.label+'</span>'
-      + '</label>'
-      + '<input type="number" class="svc-av-start" data-day="'+d.k+'" min="0" max="23" value="'+start+'" style="width:60px" placeholder="9">'
-      + '<span style="color:var(--text-muted)">to</span>'
-      + '<input type="number" class="svc-av-end" data-day="'+d.k+'" min="1" max="24" value="'+end+'" style="width:60px" placeholder="17">'
+    // Accept both '09:00' and integer '9'. Normalize.
+    var start = String(src.start || '09:00');
+    var end   = String(src.end   || '17:00');
+    if(!start.includes(':')) start = String(start).padStart(2,'0') + ':00';
+    if(!end.includes(':'))   end   = String(end).padStart(2,'0') + ':00';
+    return '<div class="bh-row">'
+      + '<span class="bh-label">' + labels[i] + '</span>'
+      + '<div class="bh-toggle' + (isOpen ? ' on' : '') + '" id="svct-' + dk + '" onclick="_toggleSvcAv(\'' + dk + '\')"></div>'
+      + _timeInputHTML('svcs-' + dk, start, !isOpen)
+      + '<span class="bh-sep">to</span>'
+      + _timeInputHTML('svce-' + dk, end, !isOpen)
       + '</div>';
   }).join('');
 
@@ -14225,31 +14227,52 @@ function renderSvcAvailabilityFields(s){
     + '<summary style="cursor:pointer;font-weight:600;color:var(--text)">Custom availability</summary>'
     + '<div style="margin-top:12px">'
     +   '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">'
-    +     '<input type="checkbox" id="svc-av-enabled"'+(enabled?' checked':'')+'>'
+    +     '<input type="checkbox" id="svc-av-enabled" onchange="_toggleSvcAvMaster(this.checked)"'+(enabled?' checked':'')+'>'
     +     '<span>Use custom hours for this service (otherwise uses business hours)</span>'
     +   '</label>'
-    +   '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Hours as 24-hour numbers (e.g. 9 to 17 means 9am to 5pm)</div>'
-    +   '<div id="svc-av-grid">' + rows + '</div>'
+    +   '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Click a day toggle to mark closed. Set open and close times for each open day.</div>'
+    +   '<div id="svc-av-grid" style="opacity:'+(enabled?'1':'.45')+';pointer-events:'+(enabled?'auto':'none')+'">' + rows + '</div>'
     + '</div>'
     + '</details>';
 }
 
+// Toggles a single day's open/closed state in the service availability grid.
+// Mirrors toggleBH but writes nothing to db (reading happens at save time).
+function _toggleSvcAv(dk){
+  var t = document.getElementById('svct-' + dk);
+  if(!t) return;
+  var nowOn = !t.classList.contains('on');
+  t.classList.toggle('on', nowOn);
+  _setTimeInputDisabled('svcs-' + dk, !nowOn);
+  _setTimeInputDisabled('svce-' + dk, !nowOn);
+}
+
+// Toggles the master "use custom hours" checkbox; visually disables the day
+// grid when unchecked.
+function _toggleSvcAvMaster(checked){
+  var grid = document.getElementById('svc-av-grid');
+  if(!grid) return;
+  grid.style.opacity = checked ? '1' : '.45';
+  grid.style.pointerEvents = checked ? 'auto' : 'none';
+}
+
 // Reads the availability fields from the modal back into a JSON object.
 // Returns null when toggle is off (so we store null in db, not a stale schedule).
+// Schedule values are HH:MM strings ('09:00', '17:00') to match the BH editor.
 function readSvcAvailabilityFields(){
   var enabledEl = document.getElementById('svc-av-enabled');
   if(!enabledEl) return null;
   if(!enabledEl.checked) return { enabled: false };
   var sched = {};
   ['mon','tue','wed','thu','fri','sat','sun'].forEach(function(dk){
-    var openEl  = document.querySelector('.svc-av-open[data-day="'+dk+'"]');
-    var startEl = document.querySelector('.svc-av-start[data-day="'+dk+'"]');
-    var endEl   = document.querySelector('.svc-av-end[data-day="'+dk+'"]');
-    if(!openEl || !startEl || !endEl) return;
+    var toggleEl = document.getElementById('svct-' + dk);
+    var startEl  = document.getElementById('svcs-' + dk);
+    var endEl    = document.getElementById('svce-' + dk);
+    if(!toggleEl || !startEl || !endEl) return;
     sched[dk] = {
-      open: openEl.checked,
-      start: parseInt(startEl.value, 10) || 9,
-      end:   parseInt(endEl.value,   10) || 17
+      open: toggleEl.classList.contains('on'),
+      start: startEl.getAttribute('data-hhmm') || startEl.value || '09:00',
+      end:   endEl.getAttribute('data-hhmm')   || endEl.value   || '17:00'
     };
   });
   return { enabled: true, schedule: sched };
