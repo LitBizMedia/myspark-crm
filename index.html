@@ -6618,6 +6618,99 @@ function apptOnVariationChange(){
   checkApptConflict();
 }
 
+// Search filter for the group client add input. Filters db.contacts by
+// name/email/company, omits already-selected clients, renders dropdown
+// matching the ss-opt pattern.
+function _apptGroupClientFilter(v){
+  var dd = document.getElementById('apt-gc-drop');
+  if(!dd) return;
+  var g = state.apptGroup;
+  if(!g) return;
+  var existingIds = g.clients.map(function(c){return c.contact_id;});
+  var query = (v||'').toLowerCase();
+  var matches = (db.contacts||[])
+    .filter(function(c){
+      if(c.archived) return false;
+      if(existingIds.indexOf(c.id) >= 0) return false;
+      if(!query) return true;
+      return (c.name||'').toLowerCase().indexOf(query) >= 0
+        || (c.email||'').toLowerCase().indexOf(query) >= 0
+        || (c.company||'').toLowerCase().indexOf(query) >= 0;
+    })
+    .slice(0, 8);
+  if(!matches.length){
+    dd.innerHTML = '<div class="ss-empty">No contacts found</div>';
+  } else {
+    dd.innerHTML = matches.map(function(c){
+      var meta = c.email || c.company || '';
+      return '<div class="ss-opt" onclick="_apptGroupClientPick(\''+c.id+'\')">'
+        + '<div style="font-weight:600">' + esc(c.name||'Unknown') + '</div>'
+        + (meta ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(meta) + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+  dd.classList.remove('hidden');
+  setTimeout(function(){
+    document.addEventListener('click', function f(){
+      var stillThere = document.getElementById('apt-gc-drop');
+      if(stillThere) stillThere.classList.add('hidden');
+      document.removeEventListener('click', f);
+    }, {capture: true});
+  }, 10);
+}
+
+function _apptGroupClientPick(contactId){
+  _apptGroupAddClient(contactId);
+  // _apptGroupAddClient calls _apptGroupRerender, which rebuilds the whole
+  // chip area. The dropdown will be gone, no further cleanup needed.
+}
+
+// Search filter for the group staff add input. Filters by eligible pool +
+// not-already-selected, matches by name/username.
+function _apptGroupStaffFilter(v){
+  var dd = document.getElementById('apt-gs-drop');
+  if(!dd) return;
+  var g = state.apptGroup;
+  if(!g || !g.service) return;
+  var pool = Array.isArray(g.service.assigned_staff) ? g.service.assigned_staff : [];
+  var query = (v||'').toLowerCase();
+  var matches = (db.users||[])
+    .filter(function(u){
+      if(u.active === false) return false;
+      if(pool.indexOf(u.id) < 0) return false;
+      if(g.staff.indexOf(u.id) >= 0) return false;
+      if(!query) return true;
+      var nm = (u.name||u.username||'').toLowerCase();
+      return nm.indexOf(query) >= 0;
+    })
+    .slice(0, 8);
+  if(!matches.length){
+    dd.innerHTML = '<div class="ss-empty">No eligible staff available</div>';
+  } else {
+    dd.innerHTML = matches.map(function(u){
+      var nm = u.name || u.username || 'Staff';
+      var col = u.color || '#6b21ea';
+      return '<div class="ss-opt" onclick="_apptGroupStaffPick(\''+u.id+'\')">'
+        + '<div style="display:flex;align-items:center;gap:8px">'
+        + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+col+'"></span>'
+        + '<span style="font-weight:600">' + esc(nm) + '</span>'
+        + '</div></div>';
+    }).join('');
+  }
+  dd.classList.remove('hidden');
+  setTimeout(function(){
+    document.addEventListener('click', function f(){
+      var stillThere = document.getElementById('apt-gs-drop');
+      if(stillThere) stillThere.classList.add('hidden');
+      document.removeEventListener('click', f);
+    }, {capture: true});
+  }, 10);
+}
+
+function _apptGroupStaffPick(staffId){
+  _apptGroupAddStaff(staffId);
+}
+
 // ── Group Booking helpers (appointment modal) ───────────────────────────────
 // state.apptGroup tracks the multi-client/multi-staff chip pickers when the
 // selected service is group_capable. Activated by apptOnServiceChange.
@@ -6709,16 +6802,13 @@ function _apptGroupClientsHTML(){
 
   var addControl;
   if(canAdd){
-    var existingIds = g.clients.map(function(c){return c.contact_id;});
-    var options = (db.contacts||[])
-      .filter(function(c){return !c.archived && existingIds.indexOf(c.id) < 0;})
-      .sort(function(a,b){return (a.name||'').localeCompare(b.name||'');})
-      .map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name||c.email||'Unknown')+'</option>';})
-      .join('');
-    addControl = '<select onchange="if(this.value){_apptGroupAddClient(this.value);this.value=\'\';}" style="height:30px;font-size:12px;padding:0 8px;min-width:160px;background:var(--main-bg);color:var(--text);border:1px solid var(--border);border-radius:6px">'
-      + '<option value="">+ Add client...</option>'
-      + options
-      + '</select>';
+    // Search-select pattern: type-to-search input + dropdown of contacts.
+    // Mirrors the ssHTML pattern used for the regular contact picker so the
+    // UX is consistent. _apptGroupClientFilter renders the dropdown.
+    addControl = '<div class="ss-wrap" id="apt-gc-wrap" style="min-width:180px">'
+      + '<input class="ss-inp" id="apt-gc-inp" type="text" placeholder="+ Add client..." autocomplete="off" oninput="_apptGroupClientFilter(this.value)" onclick="_apptGroupClientFilter(this.value)">'
+      + '<div class="ss-drop hidden" id="apt-gc-drop"></div>'
+      + '</div>';
   } else {
     addControl = '<span style="font-size:11px;color:var(--text-muted)">Max '+cMax+' clients</span>';
   }
@@ -6759,10 +6849,10 @@ function _apptGroupStaffHTML(){
       return pool.indexOf(u.id) >= 0 && g.staff.indexOf(u.id) < 0;
     });
     if(available.length){
-      addControl = '<select onchange="if(this.value){_apptGroupAddStaff(this.value);this.value=\'\';}" style="height:30px;font-size:12px;padding:0 8px;min-width:160px;background:var(--main-bg);color:var(--text);border:1px solid var(--border);border-radius:6px">'
-        + '<option value="">+ Add staff...</option>'
-        + available.map(function(u){return '<option value="'+esc(u.id)+'">'+esc(u.name||u.username)+'</option>';}).join('')
-        + '</select>';
+      addControl = '<div class="ss-wrap" id="apt-gs-wrap" style="min-width:180px">'
+        + '<input class="ss-inp" id="apt-gs-inp" type="text" placeholder="+ Add staff..." autocomplete="off" oninput="_apptGroupStaffFilter(this.value)" onclick="_apptGroupStaffFilter(this.value)">'
+        + '<div class="ss-drop hidden" id="apt-gs-drop"></div>'
+        + '</div>';
     } else {
       addControl = '<span style="font-size:11px;color:var(--text-muted)">No eligible staff free</span>';
     }
