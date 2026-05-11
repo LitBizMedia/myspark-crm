@@ -7036,6 +7036,11 @@ function _switchApptMode(mode){
   var custWrap = document.getElementById('apt-mode-custom-wrap');
   if(svcWrap)  svcWrap.style.display  = (mode === 'service' ? 'block' : 'none');
   if(custWrap) custWrap.style.display = (mode === 'custom'  ? 'block' : 'none');
+  // Duration field (Service) vs End Time picker (Custom) toggle.
+  var durWrap = document.getElementById('apt-dur-wrap');
+  var endWrap = document.getElementById('apt-end-wrap');
+  if(durWrap) durWrap.style.display = (mode === 'custom' ? 'none' : 'block');
+  if(endWrap) endWrap.style.display = (mode === 'custom' ? 'block' : 'none');
   document.querySelectorAll('[data-mode]').forEach(function(t){
     t.classList.toggle('active', t.getAttribute('data-mode') === mode);
   });
@@ -7074,6 +7079,29 @@ function _computeDefaultEndTime(start, durMin){
   var eh = Math.floor(total / 60);
   var em = total % 60;
   return String(eh).padStart(2,'0') + ':' + String(em).padStart(2,'0');
+}
+
+// Fires when Duration (min) changes in Service mode. Also keeps the End Time
+// picker in sync if the user flips to Custom mode later.
+function onApptDurationChange(){
+  var durEl = document.getElementById('af-dur');
+  var timeEl = document.getElementById('af-time');
+  var endEl = document.getElementById('af-end');
+  if(durEl && timeEl && endEl){
+    var startHH = _parseTimeText(timeEl.value) || timeEl.getAttribute('data-hhmm') || '';
+    if(startHH){
+      var parts = startHH.split(':');
+      var sMin = (parseInt(parts[0],10) || 0) * 60 + (parseInt(parts[1],10) || 0);
+      var newEndMin = sMin + (parseInt(durEl.value,10) || 60);
+      if(newEndMin >= 24*60) newEndMin = 24*60 - 1;
+      var eh = Math.floor(newEndMin/60);
+      var em = newEndMin % 60;
+      var newEndHH = String(eh).padStart(2,'0') + ':' + String(em).padStart(2,'0');
+      endEl.setAttribute('data-hhmm', newEndHH);
+      endEl.value = _hhmmTo12(newEndHH);
+    }
+  }
+  checkApptConflict();
 }
 
 // Fires when the user changes the End Time in Custom mode. Recomputes the
@@ -7264,16 +7292,21 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     + '<div id="appt-warn" class="warn-box hidden"></div>'
     + '<div class="form-group" id="apt-cv-wrap"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
     + '<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label>'+_timeInputHTML('af-time',a&&a.time||prefTime||'9:00 AM',false,'onApptStartTimeChange()')+'</div></div>'
-    + (initialMode==='custom'
-        ? '<div class="form-row">'
-            + '<div class="form-group"><label>End Time</label>'
-              + _timeInputHTML('af-end', _computeDefaultEndTime(a&&a.time||prefTime||'9:00 AM', a&&a.duration||60), false, 'onApptEndTimeChange()')
-              + '<input type="hidden" id="af-dur" value="'+(a&&a.duration||60)+'">'
-            + '</div>'
-            + '<div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div>'
-          + '</div>'
-        : '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
-      )
+    // Render BOTH a Duration (Service mode) and End Time (Custom mode) field.
+    // Show only one at a time via display toggling; mode tab clicks flip them.
+    // af-dur stays the single source of truth for duration; End Time updates
+    // it via onApptEndTimeChange.
+    + '<div class="form-row">'
+      + '<div class="form-group" id="apt-dur-wrap" style="display:'+(initialMode==='custom'?'none':'block')+'">'
+        + '<label>Duration (min)</label>'
+        + '<input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="onApptDurationChange()">'
+      + '</div>'
+      + '<div class="form-group" id="apt-end-wrap" style="display:'+(initialMode==='custom'?'block':'none')+'">'
+        + '<label>End Time</label>'
+        + _timeInputHTML('af-end', _computeDefaultEndTime(a&&a.time||prefTime||'9:00 AM', a&&a.duration||60), false, 'onApptEndTimeChange()')
+      + '</div>'
+      + '<div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div>'
+    + '</div>'
     + '<div id="apt-group-clients-wrap" style="display:none"></div>'
     + '<div id="apt-group-staff-wrap" style="display:none"></div>'
     + '<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
