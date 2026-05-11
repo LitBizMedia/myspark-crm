@@ -7061,6 +7061,67 @@ function _syncApptTitleField(){
   }
 }
 
+// Computes a default end time string (HH:MM) given a start time (HH:MM or
+// h:mm AM/PM) and a duration in minutes. Used to seed the End Time picker
+// when opening Custom appointment modal.
+function _computeDefaultEndTime(start, durMin){
+  var hhmm = _parseTimeText(start) || start || '09:00';
+  var parts = hhmm.split(':');
+  var sh = parseInt(parts[0], 10) || 9;
+  var sm = parseInt(parts[1], 10) || 0;
+  var total = sh * 60 + sm + (parseInt(durMin, 10) || 60);
+  if(total >= 24*60) total = 24*60 - 1;
+  var eh = Math.floor(total / 60);
+  var em = total % 60;
+  return String(eh).padStart(2,'0') + ':' + String(em).padStart(2,'0');
+}
+
+// Fires when the user changes the End Time in Custom mode. Recomputes the
+// hidden af-dur from (end - start) so save logic still finds a duration.
+function onApptEndTimeChange(){
+  var endEl = document.getElementById('af-end');
+  var timeEl = document.getElementById('af-time');
+  var durEl = document.getElementById('af-dur');
+  if(!endEl || !timeEl || !durEl) return;
+  var startHH = _parseTimeText(timeEl.value) || timeEl.getAttribute('data-hhmm') || '';
+  var endHH   = _parseTimeText(endEl.value)  || endEl.getAttribute('data-hhmm')  || '';
+  if(!startHH || !endHH) return;
+  var sParts = startHH.split(':');
+  var eParts = endHH.split(':');
+  var sMin = (parseInt(sParts[0],10) || 0) * 60 + (parseInt(sParts[1],10) || 0);
+  var eMin = (parseInt(eParts[0],10) || 0) * 60 + (parseInt(eParts[1],10) || 0);
+  var dur = eMin - sMin;
+  if(dur < 5) dur = 5;  // sanity floor; can't end before start
+  durEl.value = dur;
+  checkApptConflict();
+}
+
+// When start time changes in Custom mode, shift end time by the same delta
+// to preserve current duration. Hook into existing start-time onchange.
+function onApptStartTimeChange(){
+  if(state.apptMode !== 'custom') {
+    checkApptConflict();
+    return;
+  }
+  var timeEl = document.getElementById('af-time');
+  var endEl  = document.getElementById('af-end');
+  var durEl  = document.getElementById('af-dur');
+  if(!timeEl || !endEl || !durEl) { checkApptConflict(); return; }
+  var startHH = _parseTimeText(timeEl.value) || timeEl.getAttribute('data-hhmm') || '';
+  if(!startHH) { checkApptConflict(); return; }
+  var sParts = startHH.split(':');
+  var sMin = (parseInt(sParts[0],10) || 0) * 60 + (parseInt(sParts[1],10) || 0);
+  var newEndMin = sMin + (parseInt(durEl.value, 10) || 60);
+  if(newEndMin >= 24*60) newEndMin = 24*60 - 1;
+  var eh = Math.floor(newEndMin / 60);
+  var em = newEndMin % 60;
+  var newEndHH = String(eh).padStart(2,'0') + ':' + String(em).padStart(2,'0');
+  // Write into the End picker's hidden hhmm + visible 12hr label
+  endEl.setAttribute('data-hhmm', newEndHH);
+  endEl.value = _hhmmTo12(newEndHH);
+  checkApptConflict();
+}
+
 function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefServiceId,prefMode){
   // Audit: viewing existing appointment (PHI)
   if (apptId) {
@@ -7202,8 +7263,17 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     // Existing fields (unchanged)
     + '<div id="appt-warn" class="warn-box hidden"></div>'
     + '<div class="form-group" id="apt-cv-wrap"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
-    + '<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label>'+_timeInputHTML('af-time',a&&a.time||prefTime||'09:00',false,'checkApptConflict()')+'</div></div>'
-    + '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
+    + '<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label>'+\1onApptStartTimeChange()\2+'</div></div>'
+    + (initialMode==='custom'
+        ? '<div class="form-row">'
+            + '<div class="form-group"><label>End Time</label>'
+              + _timeInputHTML('af-end', _computeDefaultEndTime(a&&a.time||prefTime||'9:00 AM', a&&a.duration||60), false, 'onApptEndTimeChange()')
+              + '<input type="hidden" id="af-dur" value="'+(a&&a.duration||60)+'">'
+            + '</div>'
+            + '<div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div>'
+          + '</div>'
+        : '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
+      )
     + '<div id="apt-group-clients-wrap" style="display:none"></div>'
     + '<div id="apt-group-staff-wrap" style="display:none"></div>'
     + '<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
@@ -17267,10 +17337,18 @@ function _renderSvcWidgetsTab(){
     var svcCount=(w.service_ids||[]).length;
     var apptTypeCount=Array.isArray(w.appointment_types)?w.appointment_types.length:0;
     var staffCount=Array.isArray(w.staff_ids)?w.staff_ids.length:0;
-    var typeLabel=widgetType==='appointment'?'Appointment':'Service';
-    var typeBg=widgetType==='appointment'?'rgba(96,165,250,.15)':'rgba(167,139,250,.15)';
-    var typeColor=widgetType==='appointment'?'#60a5fa':'#a78bfa';
-    var typeBorder=widgetType==='appointment'?'rgba(96,165,250,.3)':'rgba(167,139,250,.3)';
+    var typeLabel = widgetType==='appointment' ? 'Appointment'
+                  : widgetType==='class'       ? 'Class'
+                  : 'Service';
+    var typeBg = widgetType==='appointment' ? 'rgba(96,165,250,.15)'
+              : widgetType==='class'       ? 'rgba(74,222,128,.15)'
+              : 'rgba(167,139,250,.15)';
+    var typeColor = widgetType==='appointment' ? '#60a5fa'
+                 : widgetType==='class'       ? '#4ade80'
+                 : '#a78bfa';
+    var typeBorder = widgetType==='appointment' ? 'rgba(96,165,250,.3)'
+                  : widgetType==='class'       ? 'rgba(74,222,128,.3)'
+                  : 'rgba(167,139,250,.3)';
     var contentLabel=widgetType==='appointment'
       ?(apptTypeCount+' appt type'+(apptTypeCount!==1?'s':'')+' · '+staffCount+' provider'+(staffCount!==1?'s':''))
       :(svcCount?(svcCount+' service'+(svcCount!==1?'s':'')):'All services');
