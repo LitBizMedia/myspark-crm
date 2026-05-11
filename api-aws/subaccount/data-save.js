@@ -17,34 +17,13 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 
-const STRIPPED_TOP_LEVEL = [
-  // Pre-existing (Path A migration):
-  'users',
-  '_subaccountAdmin',
-  'serviceCategories',
-  'serviceWidgets',
-  'payments',
-  'subscriptions',
-  'subscriptionPlans',
-  // Pass #4 (May 11, 2026): blob duplicates of tables that already exist
-  'services',
-  'appointments',
-  'classSessions',
-  'serviceAddons',
-  'serviceVariations',
-  'serviceResourceGroups',
-  'resources',
-  'subscriptionPlanCategories',
-  // Dead: zero code refs, fossil from pre-resource_groups schema
-  'serviceResources'
-];
-const STRIPPED_SETTINGS = [
-  'adminProfile',     // Dead, removed from frontend
-  'supabaseUrl',      // Legacy Supabase, project deleted May 2026
-  'supabaseKey',
-  'gistId',           // Legacy gist-based sync, dead since Path A
-  'gistToken'
-];
+// Frontend uses _buildBlobPayload() allowlist + self-healing localStorage to
+// ensure only legitimate TIER 2/TIER 3 keys are sent. This server-side strip
+// is empty by design. If keys start showing up here, something on the
+// frontend regressed.
+const STRIPPED_TOP_LEVEL = [];
+// Settings keys are managed by frontend allowlist + self-heal. Empty by design.
+const STRIPPED_SETTINGS = [];
 
 function sanitize(data) {
   const out = { ...data };
