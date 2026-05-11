@@ -9,6 +9,7 @@
 
 const db = require('./lib/db');
 const { resolveResourceClaims, resolveMultipleResourceClaims, replaceClaims, persistClaims } = require('./lib/resource-allocation');
+const { sendAppointmentConfirmations } = require('./lib/appointment-emails');
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
@@ -430,9 +431,82 @@ async function handler(req, res) {
         service_variation_id: a.service_variation_id || null,
         group_booking: isGroupBooking || false,
         group_client_count: isGroupBooking ? a.clients.length : null,
-        group_staff_count: isGroupBooking ? a.staff.length : null
+        group_staff_count: isGroupBooking ? a.staff.length : null,
+        // Full participant IDs for compliance/audit traceability
+        group_client_ids: isGroupBooking
+          ? a.clients.map(function(c){ return c.contact_id || c; })
+          : null,
+        group_staff_ids: isGroupBooking
+          ? a.staff.map(function(s){ return s.staff_id || s; })
+          : null,
+        group_primary_contact_id: isGroupBooking
+          ? (a.clients.find(function(c){ return c.is_primary; }) || a.clients[0] || {}).contact_id || null
+          : null
       }
     });
+
+    // Send confirmation emails (new appointments only, matches existing solo
+    // behavior). Skipped on edits to avoid spam. Non-blocking; failures logged
+    // but don't break the booking response.
+    if (isNew) {
+      try {
+        // Build recipients list. For group bookings, fetch all client emails
+        // from contacts. For solo bookings, fetch the primary contact only.
+        const contactIds = isGroupBooking
+          ? a.clients.map(function(c){ return c.contact_id || c; })
+          : (a.contactId ? [a.contactId] : []);
+
+        if (contactIds.length) {
+          const cRes = await db.query(
+            'SELECT id, name, email FROM contacts WHERE id = ANY($1::text[]) AND subaccount_id = $2',
+            [contactIds, subaccountId]
+          );
+          const recipients = cRes.rows.map(function(r){
+            return { contact_id: r.id, name: r.name, email: r.email };
+          });
+
+          // Look up service name + business name + staff name for email body.
+          let serviceName = a.title;
+          if (a.service_id) {
+            const svcRes = await db.query('SELECT name FROM services WHERE id=$1', [a.service_id]);
+            if (svcRes.rows.length) serviceName = svcRes.rows[0].name;
+          }
+
+          let staffName = '';
+          if (!isGroupBooking && a.assignedTo) {
+            const sRes = await db.query(
+              'SELECT display_name, username FROM subaccount_users WHERE id=$1',
+              [a.assignedTo]
+            );
+            if (sRes.rows.length) {
+              staffName = sRes.rows[0].display_name || sRes.rows[0].username || '';
+            }
+          }
+
+          const sRes = await db.query(
+            'SELECT slug, business_name FROM subaccounts WHERE id=$1',
+            [subaccountId]
+          );
+          const slug = sRes.rows.length ? sRes.rows[0].slug : null;
+          const businessName = sRes.rows.length ? sRes.rows[0].business_name : 'MySpark+';
+
+          if (slug) {
+            await sendAppointmentConfirmations({
+              subaccountSlug: slug,
+              appointmentTitle: serviceName || a.title,
+              appointmentDate: a.date,
+              appointmentTime: a.time,
+              location: a.location,
+              recipients,
+              staffName,
+              businessName
+            });
+          }
+        }
+      } catch (emailErr) {
+        console.warn('appointment confirmation email failed (non-fatal):', emailErr.message);
+      }
+    }
 
     return res.status(200).json({ success: true, id: a.id });
   } catch (e) {

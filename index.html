@@ -8771,6 +8771,11 @@ function overrideAppt(){
 }
 
 function sendApptConfirmation(data){
+  // Backend now sends confirmation emails after successful save (more reliable
+  // than the old frontend-fire-and-forget which sent before the save was
+  // confirmed). Kept as a no-op to preserve existing call sites.
+  return;
+  // Legacy code below intentionally unreachable; left for reference.
   if(!data.contactId)return;
   const contact=getContact(data.contactId);
   if(!contact||!contact.email)return;
