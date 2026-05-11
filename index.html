@@ -6604,6 +6604,315 @@ function apptOnVariationChange(){
   checkApptConflict();
 }
 
+// ── Group Booking helpers (appointment modal) ───────────────────────────────
+// state.apptGroup tracks the multi-client/multi-staff chip pickers when the
+// selected service is group_capable. Activated by apptOnServiceChange.
+//
+// Shape:
+//   state.apptGroup = {
+//     active: bool,
+//     clients: [{contact_id, is_primary}],
+//     staff: [staff_id, ...],
+//     service: <service object>
+//   }
+
+function _apptGroupReset(){
+  state.apptGroup = {active:false, clients:[], staff:[], service:null};
+}
+
+// Called from apptOnServiceChange. Returns true if mode flipped to active.
+function _apptDetectGroupMode(svc){
+  if(!svc || !svc.group_capable) return false;
+  if(!state.apptGroup) _apptGroupReset();
+  state.apptGroup.active = true;
+  state.apptGroup.service = svc;
+  // Seed: empty arrays for new bookings. Edit flow populates separately.
+  if(!state.apptGroup.clients.length){
+    // For new bookings, if there's a contactId already selected in the modal,
+    // promote it to the primary client.
+    var existingContactInput = document.getElementById('af-cv');
+    if(existingContactInput && existingContactInput.value){
+      state.apptGroup.clients.push({contact_id: existingContactInput.value, is_primary: true});
+    }
+  }
+  return true;
+}
+
+function _apptGroupDeactivate(){
+  if(state.apptGroup) state.apptGroup.active = false;
+}
+
+function _apptGroupRerender(){
+  var clientsEl = document.getElementById('apt-group-clients-wrap');
+  var staffEl   = document.getElementById('apt-group-staff-wrap');
+  var previewEl = document.getElementById('apt-group-preview-wrap');
+  var soloContactEl = document.getElementById('apt-cv-wrap');
+  var soloStaffEl   = document.getElementById('apt-user-wrap');
+  if(!state.apptGroup || !state.apptGroup.active){
+    if(clientsEl) clientsEl.style.display = 'none';
+    if(staffEl)   staffEl.style.display   = 'none';
+    if(previewEl) previewEl.style.display = 'none';
+    if(soloContactEl) soloContactEl.style.display = '';
+    if(soloStaffEl)   soloStaffEl.style.display   = '';
+    return;
+  }
+  // Active: show group UIs, hide solo fields
+  if(soloContactEl) soloContactEl.style.display = 'none';
+  if(soloStaffEl)   soloStaffEl.style.display   = 'none';
+  if(clientsEl){
+    clientsEl.style.display = '';
+    clientsEl.innerHTML = _apptGroupClientsHTML();
+  }
+  if(staffEl){
+    staffEl.style.display = '';
+    staffEl.innerHTML = _apptGroupStaffHTML();
+  }
+  if(previewEl){
+    previewEl.style.display = '';
+    previewEl.innerHTML = _apptGroupPreviewHTML();
+  }
+}
+
+function _apptGroupClientsHTML(){
+  var g = state.apptGroup;
+  var svc = g.service;
+  var cMin = parseInt(svc.group_size_min) || 1;
+  var cMax = parseInt(svc.group_size_max) || cMin;
+  var canAdd = g.clients.length < cMax;
+
+  var chips = g.clients.map(function(c, idx){
+    var contact = getContact(c.contact_id);
+    var nm = contact ? (contact.name || contact.email || 'Unknown') : 'Unknown';
+    var star = c.is_primary
+      ? '<span title="Primary booker" style="color:#fbbf24;font-size:13px;line-height:1">&#9733;</span>'
+      : '<span onclick="_apptGroupTogglePrimary('+idx+')" title="Make primary" style="color:#6b7280;font-size:13px;cursor:pointer;line-height:1" onmouseover="this.style.color=\'#fbbf24\'" onmouseout="this.style.color=\'#6b7280\'">&#9734;</span>';
+    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:#6b21ea;border:1px solid #5b1fc7;border-radius:14px;font-size:12px;color:#fff;font-weight:600">'
+      + star
+      + esc(nm)
+      + '<button onclick="_apptGroupRemoveClient('+idx+')" style="background:none;border:none;color:#fff;cursor:pointer;font-size:14px;padding:0;line-height:1;margin-left:2px;opacity:.85">&times;</button>'
+      + '</span>';
+  }).join(' ');
+
+  var addControl;
+  if(canAdd){
+    var existingIds = g.clients.map(function(c){return c.contact_id;});
+    var options = (db.contacts||[])
+      .filter(function(c){return !c.archived && existingIds.indexOf(c.id) < 0;})
+      .sort(function(a,b){return (a.name||'').localeCompare(b.name||'');})
+      .map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name||c.email||'Unknown')+'</option>';})
+      .join('');
+    addControl = '<select onchange="if(this.value){_apptGroupAddClient(this.value);this.value=\'\';}" style="height:30px;font-size:12px;padding:0 8px;min-width:160px;background:var(--main-bg);color:var(--text);border:1px solid var(--border);border-radius:6px">'
+      + '<option value="">+ Add client...</option>'
+      + options
+      + '</select>';
+  } else {
+    addControl = '<span style="font-size:11px;color:var(--text-muted)">Max '+cMax+' clients</span>';
+  }
+
+  var range = cMin === cMax ? cMin + ' client'+(cMin>1?'s':'') : cMin+' to '+cMax+' clients';
+  var status = g.clients.length < cMin
+    ? '<span style="color:#f87171">Need at least '+(cMin-g.clients.length)+' more</span>'
+    : '<span style="color:#10b981">&#10003; '+g.clients.length+' of '+cMax+'</span>';
+
+  return '<div class="form-group"><label>Clients ('+range+') &middot; '+status+'</label>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--main-bg);border:1px solid var(--border);border-radius:6px;min-height:50px">'
+    + (chips || '<span style="font-size:11px;color:var(--text-muted)">No clients selected</span>')
+    + addControl
+    + '</div></div>';
+}
+
+function _apptGroupStaffHTML(){
+  var g = state.apptGroup;
+  var svc = g.service;
+  var sCount = parseInt(svc.group_staff_count) || 2;
+  var pool = Array.isArray(svc.assigned_staff) ? svc.assigned_staff : [];
+  var allUsers = (db.users||[]).filter(function(u){return u.active !== false;});
+  var canAdd = g.staff.length < sCount;
+
+  var chips = g.staff.map(function(uid, idx){
+    var u = allUsers.find(function(x){return x.id === uid;});
+    var nm = u ? (u.name || u.username || 'Staff') : 'Staff';
+    var col = u ? (u.color || '#6b21ea') : '#6b21ea';
+    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:'+col+';border-radius:14px;font-size:12px;color:'+chipTextColor(col)+';font-weight:600">'
+      + esc(nm)
+      + '<button onclick="_apptGroupRemoveStaff('+idx+')" style="background:none;border:none;color:'+chipTextColor(col)+';cursor:pointer;font-size:14px;padding:0;line-height:1;margin-left:2px;opacity:.85">&times;</button>'
+      + '</span>';
+  }).join(' ');
+
+  var addControl;
+  if(canAdd){
+    var available = allUsers.filter(function(u){
+      return pool.indexOf(u.id) >= 0 && g.staff.indexOf(u.id) < 0;
+    });
+    if(available.length){
+      addControl = '<select onchange="if(this.value){_apptGroupAddStaff(this.value);this.value=\'\';}" style="height:30px;font-size:12px;padding:0 8px;min-width:160px;background:var(--main-bg);color:var(--text);border:1px solid var(--border);border-radius:6px">'
+        + '<option value="">+ Add staff...</option>'
+        + available.map(function(u){return '<option value="'+esc(u.id)+'">'+esc(u.name||u.username)+'</option>';}).join('')
+        + '</select>';
+    } else {
+      addControl = '<span style="font-size:11px;color:var(--text-muted)">No eligible staff free</span>';
+    }
+  } else {
+    addControl = '<span style="font-size:11px;color:var(--text-muted)">Reached '+sCount+' staff</span>';
+  }
+
+  var status = g.staff.length === sCount
+    ? '<span style="color:#10b981">&#10003; '+sCount+' of '+sCount+'</span>'
+    : '<span style="color:#f87171">Need '+sCount+', have '+g.staff.length+'</span>';
+
+  return '<div class="form-group"><label>Staff (exactly '+sCount+') &middot; '+status+'</label>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--main-bg);border:1px solid var(--border);border-radius:6px;min-height:50px">'
+    + (chips || '<span style="font-size:11px;color:var(--text-muted)">No staff selected</span>')
+    + addControl
+    + '</div></div>';
+}
+
+function _apptGroupPreviewHTML(){
+  var g = state.apptGroup;
+  if(!g.clients.length) return '';
+  // Best-effort client-side preview. Final assignment confirmed at save.
+  var svc = g.service;
+  var groups = (db.serviceResourceGroups||[]).filter(function(rg){
+    return rg.service_id === svc.id;
+  });
+  var resPreview;
+  if(!groups.length){
+    resPreview = '<span style="color:var(--text-muted);font-size:11px">No resources required for this service.</span>';
+  } else {
+    // Show what'd be claimed: just list resource names from groups.
+    var lines = groups.map(function(rg){
+      var members = (db.serviceResourceGroupMembers||[]).filter(function(m){return m.group_id === rg.id;});
+      var names = members.map(function(m){
+        var r = (db.resources||[]).find(function(x){return x.id === m.resource_id;});
+        return r ? r.name : 'unknown';
+      });
+      return names.length === 1
+        ? '<strong style="color:var(--text)">'+esc(names[0])+'</strong>'
+        : '<strong style="color:var(--text)">'+esc(names.join(' or '))+'</strong>';
+    });
+    resPreview = lines.join(' AND ');
+  }
+
+  return '<div class="form-group"><label>Resource Preview</label>'
+    + '<div style="padding:10px 12px;background:rgba(107,33,234,.04);border:1px solid rgba(167,139,250,.2);border-radius:6px;font-size:12px;line-height:1.6;color:var(--text-muted)">'
+    + resPreview
+    + '<div style="font-size:10px;margin-top:6px;color:var(--text-muted)">Auto-assignment confirmed on save.</div>'
+    + '</div></div>';
+}
+
+function _apptGroupAddClient(contactId){
+  if(!contactId) return;
+  if(!state.apptGroup) _apptGroupReset();
+  var g = state.apptGroup;
+  if(g.clients.some(function(c){return c.contact_id === contactId;})) return;
+  // First client added becomes primary by default.
+  var isPrimary = g.clients.length === 0;
+  g.clients.push({contact_id: contactId, is_primary: isPrimary});
+  _apptGroupRerender();
+}
+
+function _apptGroupRemoveClient(idx){
+  var g = state.apptGroup;
+  if(!g || !g.clients[idx]) return;
+  var wasPrimary = g.clients[idx].is_primary;
+  g.clients.splice(idx, 1);
+  // If we removed the primary, make the first remaining client primary.
+  if(wasPrimary && g.clients.length){
+    g.clients[0].is_primary = true;
+  }
+  _apptGroupRerender();
+}
+
+function _apptGroupTogglePrimary(idx){
+  var g = state.apptGroup;
+  if(!g || !g.clients[idx]) return;
+  g.clients.forEach(function(c, i){c.is_primary = (i === idx);});
+  _apptGroupRerender();
+}
+
+function _apptGroupAddStaff(staffId){
+  if(!staffId) return;
+  if(!state.apptGroup) _apptGroupReset();
+  var g = state.apptGroup;
+  var max = parseInt(g.service.group_staff_count) || 2;
+  if(g.staff.length >= max) return;
+  if(g.staff.indexOf(staffId) >= 0) return;
+  g.staff.push(staffId);
+  _apptGroupRerender();
+}
+
+function _apptGroupRemoveStaff(idx){
+  var g = state.apptGroup;
+  if(!g || g.staff[idx] === undefined) return;
+  g.staff.splice(idx, 1);
+  _apptGroupRerender();
+}
+
+function _apptGroupValidate(){
+  var g = state.apptGroup;
+  if(!g || !g.active) return {ok: true};
+  var svc = g.service;
+  var cMin = parseInt(svc.group_size_min) || 1;
+  var cMax = parseInt(svc.group_size_max) || cMin;
+  var sCount = parseInt(svc.group_staff_count) || 2;
+  if(g.clients.length < cMin) return {ok:false, message:'Add at least '+cMin+' client'+(cMin>1?'s':'')+' for this group service.'};
+  if(g.clients.length > cMax) return {ok:false, message:'Maximum '+cMax+' clients for this group service.'};
+  if(g.staff.length !== sCount) return {ok:false, message:'Pick exactly '+sCount+' staff for this group service.'};
+  var primaries = g.clients.filter(function(c){return c.is_primary;});
+  if(primaries.length !== 1) return {ok:false, message:'Exactly one client must be marked primary.'};
+  return {ok: true};
+}
+
+// Populate state.apptGroup from an existing appointment that was loaded with
+// clients[] and staff[] arrays from data-load.js (Stage 1 join).
+function _apptGroupHydrateFromAppt(appt, svc){
+  if(!svc || !svc.group_capable) return false;
+  if(!appt) return false;
+  var clients = Array.isArray(appt.clients) ? appt.clients : [];
+  var staff   = Array.isArray(appt.staff)   ? appt.staff   : [];
+  if(!clients.length && !staff.length) return false;
+  _apptGroupReset();
+  state.apptGroup.active = true;
+  state.apptGroup.service = svc;
+  state.apptGroup.clients = clients.map(function(c){
+    return {contact_id: c.contact_id || c.contactId, is_primary: !!(c.is_primary || c.isPrimary)};
+  });
+  // If hydrated clients have no primary flag set, promote the first.
+  if(!state.apptGroup.clients.some(function(c){return c.is_primary;}) && state.apptGroup.clients.length){
+    state.apptGroup.clients[0].is_primary = true;
+  }
+  // Staff: sort by display_order
+  state.apptGroup.staff = staff
+    .slice()
+    .sort(function(a,b){return (a.display_order||0) - (b.display_order||0);})
+    .map(function(s){return s.staff_id || s.staffId || s;});
+  return true;
+}
+
+// ── Group booking calendar expansion ────────────────────────────────────────
+// Returns appointments with group bookings duplicated per assigned staff.
+// Each virtual entry has assignedTo set to that specific staff_id, plus a
+// _groupVirtual flag so renderers can show the group icon.
+function _expandedAppointmentsForCalendar(){
+  var src = db.appointments || [];
+  var out = [];
+  for(var i = 0; i < src.length; i++){
+    var a = src[i];
+    if(Array.isArray(a.staff) && a.staff.length > 1){
+      // Group booking: emit one virtual appt per assigned staff
+      for(var j = 0; j < a.staff.length; j++){
+        var s = a.staff[j];
+        var sid = s.staff_id || s.staffId || s;
+        var clone = Object.assign({}, a, {assignedTo: sid, _groupVirtual: true, _groupPrimary: (j === 0)});
+        out.push(clone);
+      }
+    } else {
+      out.push(a);
+    }
+  }
+  return out;
+}
+
 function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefServiceId,prefMode){
   // Audit: viewing existing appointment (PHI)
   if (apptId) {
@@ -6618,6 +6927,16 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   const a=apptId?getAppt(apptId):null,cid=a&&a.contactId||contactId;
   apptOverrides={};apptConflicts=[];state.modal={type:'appt',id:apptId||null,extra:cid};
   state.apptSelectedAddons = (a && Array.isArray(a.addons)) ? a.addons.map(function(x){return {id:x.id,name:x.name,price:parseFloat(x.price)||0,duration_add:parseInt(x.duration_add)||0};}) : [];
+
+  // Group booking hydrate: if the existing appointment has clients[]+staff[]
+  // arrays AND its service is group_capable, populate state.apptGroup.
+  _apptGroupReset();
+  if(a && a.service_id){
+    var _gSvc = (db.services||[]).find(function(x){return x.id === a.service_id;});
+    if(_gSvc && _gSvc.group_capable){
+      _apptGroupHydrateFromAppt(a, _gSvc);
+    }
+  }
 
   // Determine initial mode and service link.
   // Priority: explicit prefMode > existing service_id implies service > default custom.
@@ -6711,9 +7030,12 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
 
     // Existing fields (unchanged)
     + '<div id="appt-warn" class="warn-box hidden"></div>'
-    + '<div class="form-group"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
+    + '<div class="form-group" id="apt-cv-wrap"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
     + '<div class="form-row"><div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div><div class="form-group"><label>Time</label>'+_timeInputHTML('af-time',a&&a.time||prefTime||'09:00',false,'checkApptConflict()')+'</div></div>'
-    + '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
+    + '<div class="form-row"><div class="form-group"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="checkApptConflict()"></div><div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="checkApptConflict()">'+uOpts+'</select></div></div>'
+    + '<div id="apt-group-clients-wrap" style="display:none"></div>'
+    + '<div id="apt-group-staff-wrap" style="display:none"></div>'
+    + '<div id="apt-group-preview-wrap" style="display:none"></div>'
     + '<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
     + '<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','rescheduled','no-show','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
     + '<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
@@ -6743,6 +7065,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
   setTimeout(function(){
     if (typeof renderApptAddonsSection === 'function') renderApptAddonsSection();
+    if (typeof _apptGroupRerender === 'function') _apptGroupRerender();
     checkApptConflict();
   }, 80);
 }
@@ -8393,6 +8716,13 @@ function syncAppointment(appt, deleted, override){
     service_variation_id:appt.service_variation_id||null,
     addons:Array.isArray(appt.addons)?appt.addons.map(function(x){return {id:x.id};}):[]
   };
+  // Group booking: forward clients[] and staff[] when present on the appt.
+  if(Array.isArray(appt.clients) && appt.clients.length){
+    payload.clients = appt.clients;
+  }
+  if(Array.isArray(appt.staff) && appt.staff.length){
+    payload.staff = appt.staff;
+  }
   if(override)payload.override=true;
   return fetch(apiUrl('/api/subaccount/appointments-upsert'),{
     method:'POST',
@@ -8428,7 +8758,40 @@ function saveAppt(){
     if(!serviceId){toast('Pick a service or switch to Custom mode.','error');return;}
   }
   var apptAddons = (state.apptSelectedAddons || []).map(function(x){return {id:x.id};});
-  const data={title,contactId:document.getElementById('af-cv').value||null,date,time:_readTimeInput('af-time'),duration:parseInt(document.getElementById('af-dur').value)||60,assignedTo:document.getElementById('af-user').value||null,status:document.getElementById('af-status').value,location:document.getElementById('af-loc').value.trim(),notes:document.getElementById('af-notes').value.trim(),buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0,service_id:serviceId,service_variation_id:variationId,addons:apptAddons};
+  // Group booking validation: if active, pull clients+staff from state and
+  // override the contact/staff fields the legacy save flow expects.
+  var groupActive = !!(state.apptGroup && state.apptGroup.active);
+  var groupClients = null, groupStaff = null, primaryContactId = null, primaryStaffId = null;
+  if(groupActive){
+    var gValidity = _apptGroupValidate();
+    if(!gValidity.ok){toast(gValidity.message, 'error'); return;}
+    groupClients = state.apptGroup.clients.slice();
+    groupStaff = state.apptGroup.staff.slice();
+    var primary = groupClients.find(function(c){return c.is_primary;}) || groupClients[0];
+    primaryContactId = primary.contact_id;
+    primaryStaffId = groupStaff[0];
+  }
+
+  const data={
+    title,
+    contactId: groupActive ? primaryContactId : (document.getElementById('af-cv').value||null),
+    date,
+    time:_readTimeInput('af-time'),
+    duration:parseInt(document.getElementById('af-dur').value)||60,
+    assignedTo: groupActive ? primaryStaffId : (document.getElementById('af-user').value||null),
+    status:document.getElementById('af-status').value,
+    location:document.getElementById('af-loc').value.trim(),
+    notes:document.getElementById('af-notes').value.trim(),
+    buffer_before:parseInt((document.getElementById('af-buf-before')||{}).value)||0,
+    buffer_after:parseInt((document.getElementById('af-buf-after')||{}).value)||0,
+    service_id:serviceId,
+    service_variation_id:variationId,
+    addons:apptAddons
+  };
+  if(groupActive){
+    data.clients = groupClients;
+    data.staff = groupStaff.map(function(sid){return {staff_id: sid};});
+  }
   var isNewAppt=!state.modal.id;
   var apptIdForAudit=state.modal.id||null;
   // Snapshot state for potential rollback if the server returns a 409 race conflict
@@ -8439,10 +8802,22 @@ function saveAppt(){
       rollback={kind:'update',id:a.id,prev:JSON.parse(JSON.stringify(a))};
       Object.assign(a,data);
       a.addons = (state.apptSelectedAddons || []).map(function(x){return {id:x.id, name:x.name, price:parseFloat(x.price)||0, duration_add:parseInt(x.duration_add)||0};});
+      // Attach group arrays to local appt so syncAppointment forwards them.
+      if(groupActive){
+        a.clients = groupClients;
+        a.staff = groupStaff.map(function(sid){return {staff_id: sid};});
+      } else {
+        // Strip stale group state on edits that turned off group.
+        delete a.clients; delete a.staff;
+      }
     }
   } else {
     var newAppt={id:uid(),...data,createdAt:now_()};
     newAppt.addons = (state.apptSelectedAddons || []).map(function(x){return {id:x.id, name:x.name, price:parseFloat(x.price)||0, duration_add:parseInt(x.duration_add)||0};});
+    if(groupActive){
+      newAppt.clients = groupClients;
+      newAppt.staff = groupStaff.map(function(sid){return {staff_id: sid};});
+    }
     db.appointments.push(newAppt);
     apptIdForAudit=newAppt.id;
     rollback={kind:'create',id:newAppt.id};
