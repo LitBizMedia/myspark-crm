@@ -5981,7 +5981,7 @@ async function saveBH(){
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({data:db})
+      body:JSON.stringify({data:_buildBlobPayload()})
     });
     if(!r.ok){
       db.settings.businessHours=snapshot;
@@ -9963,6 +9963,32 @@ function loadData(){
 // =====================================================
 // SERVER DATA SYNC
 // =====================================================
+// Allowlist of top-level keys that legitimately live in the subaccount_data
+// blob. Everything else either has a dedicated table (services, appointments,
+// payments...) or has no business in the blob. Lambda strips anything outside
+// this list defensively. Keeping the save payload trimmed prevents network
+// bloat and makes audit-log payload_keys meaningful.
+//
+// TIER 3 (settings/UI state, stay in blob long-term):
+//   settings, paySettings, tags, readNotifs, customFields, customFieldCategories
+// TIER 2 (still in blob today, pending migration per docs/blob-migration-roadmap.md):
+//   contacts, tasks, forms, formSubmissions, coupons, products, productCategories,
+//   giftCards, giftCardProducts, sessionPacks, sessionPackTemplates
+var BLOB_ALLOWLIST = [
+  'settings','paySettings','tags','readNotifs','customFields','customFieldCategories',
+  'contacts','tasks','forms','formSubmissions','coupons','products','productCategories',
+  'giftCards','giftCardProducts','sessionPacks','sessionPackTemplates'
+];
+
+function _buildBlobPayload(){
+  var out = {};
+  for (var i = 0; i < BLOB_ALLOWLIST.length; i++) {
+    var k = BLOB_ALLOWLIST[i];
+    if (db[k] !== undefined) out[k] = db[k];
+  }
+  return out;
+}
+
 function schedSync(){clearTimeout(state.syncTimer);state.syncTimer=setTimeout(doSync,2200)}
 
 async function doSync(){
@@ -9977,7 +10003,7 @@ async function doSync(){
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({data:db})
+      body:JSON.stringify({data:_buildBlobPayload()})
     });
     if(!r.ok){setSyncSt('error');return;}
     setSyncSt('synced');
