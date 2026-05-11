@@ -6570,6 +6570,20 @@ function apptOnServiceChange(){
   renderApptAddonsSection();
 
   checkApptConflict();
+
+  // GROUP BOOKING: when picked service is group_capable, activate group mode.
+  // Triggers _apptGroupRerender which shows the chip pickers and hides the
+  // solo contact/staff fields.
+  try {
+    if (svc.group_capable) {
+      _apptDetectGroupMode(svc);
+    } else {
+      _apptGroupDeactivate();
+    }
+    _apptGroupRerender();
+  } catch (e) {
+    console.warn('group detect skipped:', e && e.message);
+  }
 }
 
 // Called when variation dropdown changes. Overrides title, duration, buffers
