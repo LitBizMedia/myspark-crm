@@ -7041,6 +7041,12 @@ function _switchApptMode(mode){
   var endWrap = document.getElementById('apt-end-wrap');
   if(durWrap) durWrap.style.display = (mode === 'custom' ? 'none' : 'block');
   if(endWrap) endWrap.style.display = (mode === 'custom' ? 'block' : 'none');
+  // Date/Time row uses 3 cols when End Time is shown, 2 cols otherwise.
+  var dtRow = document.getElementById('apt-datetime-row');
+  if(dtRow){
+    dtRow.classList.toggle('form-row-3', mode === 'custom');
+    dtRow.classList.toggle('form-row',  mode !== 'custom');
+  }
   document.querySelectorAll('[data-mode]').forEach(function(t){
     t.classList.toggle('active', t.getAttribute('data-mode') === mode);
   });
@@ -7291,7 +7297,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     // Existing fields (unchanged)
     + '<div id="appt-warn" class="warn-box hidden"></div>'
     + '<div class="form-group" id="apt-cv-wrap"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
-    + '<div class="form-row">'
+    + '<div id="apt-datetime-row" class="'+(initialMode==='custom'?'form-row-3':'form-row')+'">'
       + '<div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div>'
       + '<div class="form-group"><label>Time</label>'+_timeInputHTML('af-time',a&&a.time||prefTime||'9:00 AM',false,'onApptStartTimeChange()')+'</div>'
       + '<div class="form-group" id="apt-end-wrap" style="display:'+(initialMode==='custom'?'block':'none')+'">'
