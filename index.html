@@ -7193,6 +7193,11 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var initialMode;
   if (prefMode === 'service' || prefMode === 'custom') {
     initialMode = prefMode;
+  } else if (a) {
+    // Editing an existing appointment: lock to its saved mode. A custom
+    // appointment (no service_id) must edit as custom, not get forced into
+    // service mode just because services exist in the catalog.
+    initialMode = a.service_id ? 'service' : 'custom';
   } else if (initialServiceId) {
     initialMode = 'service';
   } else {
