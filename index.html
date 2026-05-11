@@ -2160,7 +2160,6 @@ let db={
   settings:{
     businessHours:JSON.parse(JSON.stringify(DEF_BH)),
     square:{appId:'',accessToken:'',locationId:'',sandbox:true},
-    adminProfile:{},
     notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24},
     timezone:'America/Chicago',
     bookingSettings:{
@@ -9951,7 +9950,6 @@ function loadData(){
         settings:{...db.settings,...p.settings,
           businessHours:p.settings&&p.settings.businessHours||JSON.parse(JSON.stringify(DEF_BH)),
           square:p.settings&&p.settings.square||{appId:'',accessToken:'',locationId:'',sandbox:true},
-          adminProfile:p.settings&&p.settings.adminProfile||{},
           notifSettings:p.settings&&p.settings.notifSettings||{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24}
         },
         paySettings:p.paySettings||{additionalFee:{enabled:false,label:'Additional Fee',type:'flat',amount:0}}
@@ -24611,9 +24609,8 @@ async function createSubaccount(){
   var passErr=checkPasswordStrength(adminPass);
   if(passErr){toast(passErr,'error');return;}
   var subId='sub-'+slug;
-  // Initial data blob. Excludes user-related fields (users, _subaccountAdmin,
-  // settings.adminProfile) since those live in
-  // subaccount_users and the data-save Lambda strips them anyway.
+  // Initial data blob. User-related fields (users, _subaccountAdmin) live
+  // in the subaccount_users table. settings.adminProfile is fully dead.
   var initData={
     contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],
     tags:[],subscriptions:[],forms:[],formSubmissions:[],
