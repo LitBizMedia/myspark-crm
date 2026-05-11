@@ -5294,10 +5294,11 @@ function renderWeekCal(){
     var banW='';
     var staffDots2Inner='';
     if(state.calUser==='all'&&appts.length){
-      var sLine=allUsers().filter(function(u){return appts.some(function(a){return a.assignedTo===u.id;});});
+      var _expandedAppts=_expandedAppointmentsForCalendar().filter(function(a){return appts.some(function(x){return x.id===a.id;});});
+      var sLine=allUsers().filter(function(u){return _expandedAppts.some(function(a){return a.assignedTo===u.id;});});
       if(sLine.length){
         staffDots2Inner+=sLine.slice(0,8).map(function(u){
-          var cnt=appts.filter(function(a){return a.assignedTo===u.id;}).length;
+          var cnt=_expandedAppts.filter(function(a){return a.assignedTo===u.id;}).length;
           var c=u.color||'#6b21ea';
           return'<span title="'+esc(u.name||u.username)+': '+cnt+' appt'+(cnt!==1?'s':'')
 +'" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:'+c+';font-size:8px;font-weight:700;color:#fff">'+esc(u.name||u.username).charAt(0)+'</span>';
@@ -5362,7 +5363,7 @@ function renderDayCal(){
   // Staff columns
   staffCols.forEach(function(u){
     var col=u.color||'#6b21ea';
-    var uAppts=db.appointments.filter(function(a){return a.date===str&&a.assignedTo===u.id&&a.status!=='cancelled';});
+    var uAppts=_expandedAppointmentsForCalendar().filter(function(a){return a.date===str&&a.assignedTo===u.id&&a.status!=='cancelled';});
     // Merge in class sessions where this user is the instructor.
     var uSessions=(db.classSessions||[]).filter(function(s){
       return s.date===str&&s.instructor_id===u.id&&s.status!=='cancelled';
