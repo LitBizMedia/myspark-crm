@@ -192,6 +192,57 @@ function subscriptionToFrontend(row) {
   };
 }
 
+// Maps a contacts row (snake_case) plus nested children to the camelCase
+// shape the frontend expects (matching the legacy blob shape).
+function contactToFrontend(row, notesByContact, warningsByContact, allergiesByContact, creditByContact) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    first_name: row.first_name,
+    last_name: row.last_name,
+    name: row.display_name,
+    display_name: row.display_name,
+    email: row.email,
+    phone: row.phone,
+    company: row.company,
+    title: row.title,
+    website: row.website,
+    date_of_birth: row.date_of_birth instanceof Date ?
+      (function(d){ var y=d.getUTCFullYear(),m=String(d.getUTCMonth()+1).padStart(2,'0'),da=String(d.getUTCDate()).padStart(2,'0'); return y+'-'+m+'-'+da; })(row.date_of_birth) :
+      row.date_of_birth,
+    gender: row.gender,
+    pronouns: row.pronouns,
+    preferred_language: row.preferred_language,
+    address_line1: row.address_line1,
+    address_line2: row.address_line2,
+    city: row.city,
+    state: row.state,
+    postal_code: row.postal_code,
+    country: row.country,
+    timezone: row.timezone,
+    emergency_contact_name: row.emergency_contact_name,
+    emergency_contact_phone: row.emergency_contact_phone,
+    emergency_contact_relationship: row.emergency_contact_relationship,
+    source: row.source,
+    type: row.type,
+    status: row.status,
+    archived: !!row.archived,
+    tags: row.tags || [],
+    customFieldValues: row.custom_field_values || {},
+    creditBalance: row.credit_balance != null ? parseFloat(row.credit_balance) : 0,
+    squareCustomerId: row.square_customer_id,
+    squareCards: row.square_cards || [],
+    notes: (notesByContact[row.id] || []),
+    warnings: (warningsByContact[row.id] || []),
+    allergies: (allergiesByContact[row.id] || []),
+    creditHistory: (creditByContact[row.id] || []),
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by
+  };
+}
+
 async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -205,7 +256,8 @@ async function handler(req, res) {
       blobResult, servicesResult, variationsResult, addonsResult, classesResult,
       usersResult, widgetsResult, paymentsResult, appointmentsResult, apptClientsResult, apptStaffResult,
       plansResult, subscriptionsResult, planCategoriesResult,
-      subscriptionEventsResult, resourcesResult, groupsResult, groupMembersResult
+      subscriptionEventsResult, resourcesResult, groupsResult, groupMembersResult,
+      contactsResult, contactNotesResult, contactWarningsResult, contactAllergiesResult, contactCreditLogResult
     ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
@@ -317,6 +369,60 @@ async function handler(req, res) {
          WHERE g.subaccount_id = $1
          ORDER BY m.display_order`,
         [subaccountId]
+      ),
+      // Contacts (migrated to RDS in Session 2 of contacts migration)
+      db.query(
+        `SELECT id, subaccount_id,
+                first_name, last_name, display_name,
+                email, phone, company, title, website,
+                date_of_birth, gender, pronouns, preferred_language,
+                address_line1, address_line2, city, state, postal_code, country, timezone,
+                emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+                source, type, status, archived,
+                tags, custom_field_values,
+                credit_balance,
+                square_customer_id, square_cards,
+                created_at, updated_at, created_by, updated_by
+         FROM contacts
+         WHERE subaccount_id = $1
+         ORDER BY created_at ASC`,
+        [subaccountId]
+      ),
+      // Contact notes
+      db.query(
+        `SELECT id, contact_id, text, author_id, author_name, created_at, updated_at
+         FROM contact_notes
+         WHERE subaccount_id = $1
+         ORDER BY created_at DESC`,
+        [subaccountId]
+      ),
+      // Contact warnings
+      db.query(
+        `SELECT id, contact_id, severity, text, created_at, created_by, updated_at, updated_by
+         FROM contact_warnings
+         WHERE subaccount_id = $1
+         ORDER BY
+           CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 WHEN 'info' THEN 2 ELSE 3 END,
+           created_at DESC`,
+        [subaccountId]
+      ),
+      // Contact allergies
+      db.query(
+        `SELECT id, contact_id, allergen, reaction, severity, notes, created_at, created_by, updated_at, updated_by
+         FROM contact_allergies
+         WHERE subaccount_id = $1
+         ORDER BY
+           CASE severity WHEN 'severe' THEN 0 WHEN 'moderate' THEN 1 WHEN 'mild' THEN 2 ELSE 3 END,
+           allergen ASC`,
+        [subaccountId]
+      ),
+      // Contact credit log
+      db.query(
+        `SELECT id, contact_id, amount, type, reason, payment_id, balance_after, created_at, created_by
+         FROM contact_credit_log
+         WHERE subaccount_id = $1
+         ORDER BY created_at DESC`,
+        [subaccountId]
       )]);
 
     // Group events by subscription_id and attach to each sub
@@ -353,7 +459,10 @@ async function handler(req, res) {
         targetType: 'bulk_data',
         targetSubaccountId: subaccountId,
         metadata: {
-          contact_count: ((blobResult.rows[0]?.data?.contacts) || []).length,
+          contact_count: contactsResult.rows.length,
+          contact_warning_count: contactWarningsResult.rows.length,
+          contact_allergy_count: contactAllergiesResult.rows.length,
+          contact_note_count: contactNotesResult.rows.length,
           appointment_count: appointmentsResult.rows.length,
           payment_count: paymentsResult.rows.length,
           service_count: servicesResult.rows.length
@@ -361,8 +470,75 @@ async function handler(req, res) {
       });
     } catch (e) { console.warn('audit log failed (data-load):', e.message); }
 
+    // Bucket contact children by contact_id for nesting
+    var notesByContact = {};
+    for (var ni = 0; ni < contactNotesResult.rows.length; ni++) {
+      var n = contactNotesResult.rows[ni];
+      if (!notesByContact[n.contact_id]) notesByContact[n.contact_id] = [];
+      notesByContact[n.contact_id].push({
+        id: n.id,
+        contact_id: n.contact_id,
+        text: n.text,
+        author_id: n.author_id,
+        author_name: n.author_name,
+        created_at: n.created_at instanceof Date ? n.created_at.toISOString() : n.created_at,
+        updated_at: n.updated_at instanceof Date ? n.updated_at.toISOString() : n.updated_at
+      });
+    }
+    var warningsByContact = {};
+    for (var wi = 0; wi < contactWarningsResult.rows.length; wi++) {
+      var w = contactWarningsResult.rows[wi];
+      if (!warningsByContact[w.contact_id]) warningsByContact[w.contact_id] = [];
+      warningsByContact[w.contact_id].push({
+        id: w.id,
+        contact_id: w.contact_id,
+        severity: w.severity,
+        text: w.text,
+        created_at: w.created_at instanceof Date ? w.created_at.toISOString() : w.created_at,
+        created_by: w.created_by,
+        updated_at: w.updated_at instanceof Date ? w.updated_at.toISOString() : w.updated_at,
+        updated_by: w.updated_by
+      });
+    }
+    var allergiesByContact = {};
+    for (var ai = 0; ai < contactAllergiesResult.rows.length; ai++) {
+      var a = contactAllergiesResult.rows[ai];
+      if (!allergiesByContact[a.contact_id]) allergiesByContact[a.contact_id] = [];
+      allergiesByContact[a.contact_id].push({
+        id: a.id,
+        contact_id: a.contact_id,
+        allergen: a.allergen,
+        reaction: a.reaction,
+        severity: a.severity,
+        notes: a.notes,
+        created_at: a.created_at instanceof Date ? a.created_at.toISOString() : a.created_at,
+        created_by: a.created_by,
+        updated_at: a.updated_at instanceof Date ? a.updated_at.toISOString() : a.updated_at,
+        updated_by: a.updated_by
+      });
+    }
+    var creditByContact = {};
+    for (var ci = 0; ci < contactCreditLogResult.rows.length; ci++) {
+      var cl = contactCreditLogResult.rows[ci];
+      if (!creditByContact[cl.contact_id]) creditByContact[cl.contact_id] = [];
+      creditByContact[cl.contact_id].push({
+        id: cl.id,
+        contact_id: cl.contact_id,
+        amount: parseFloat(cl.amount),
+        type: cl.type,
+        reason: cl.reason,
+        payment_id: cl.payment_id,
+        balance_after: parseFloat(cl.balance_after),
+        created_at: cl.created_at instanceof Date ? cl.created_at.toISOString() : cl.created_at,
+        created_by: cl.created_by
+      });
+    }
+
     return res.status(200).json({
       data: blobResult.rows[0]?.data || null,
+      contacts: contactsResult.rows.map(function(row){
+        return contactToFrontend(row, notesByContact, warningsByContact, allergiesByContact, creditByContact);
+      }),
       services: servicesResult.rows,
       serviceVariations: variationsResult.rows,
       serviceAddons: addonsResult.rows,
