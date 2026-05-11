@@ -17,13 +17,25 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 const STRIPPED_TOP_LEVEL = [
+  // Pre-existing (Path A migration):
   'users',
   '_subaccountAdmin',
   'serviceCategories',
   'serviceWidgets',
   'payments',
   'subscriptions',
-  'subscriptionPlans'
+  'subscriptionPlans',
+  // Pass #4 (May 11, 2026): blob duplicates of tables that already exist
+  'services',
+  'appointments',
+  'classSessions',
+  'serviceAddons',
+  'serviceVariations',
+  'serviceResourceGroups',
+  'resources',
+  'subscriptionPlanCategories',
+  // Dead: zero code refs, fossil from pre-resource_groups schema
+  'serviceResources'
 ];
 const STRIPPED_SETTINGS = ['adminProfile'];
 
