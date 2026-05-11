@@ -15,6 +15,7 @@
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
+const { logAudit } = require('./lib/audit');
 
 const STRIPPED_TOP_LEVEL = [
   // Pre-existing (Path A migration):
@@ -92,6 +93,25 @@ async function handler(req, res) {
         updated_at = NOW()
       WHERE subaccount_data.subaccount_id = $2
     `, [dataId, subaccountId, JSON.stringify(clean)]);
+
+    // Audit: bulk PHI write. Log stripped keys so we can spot frontend drift.
+    try {
+      await logAudit({
+        req,
+        actorType: 'subaccount',
+        actorId: auth.user_id,
+        actorUsername: auth.username,
+        actorRole: auth.role,
+        action: 'subaccount.data.bulk_save',
+        targetType: 'bulk_data',
+        targetSubaccountId: subaccountId,
+        metadata: {
+          contact_count: (clean.contacts || []).length,
+          stripped_keys: stripped,
+          payload_keys: Object.keys(clean)
+        }
+      });
+    } catch (e) { console.warn('audit log failed (data-save):', e.message); }
 
     return res.status(200).json({ success: true });
   } catch (e) {

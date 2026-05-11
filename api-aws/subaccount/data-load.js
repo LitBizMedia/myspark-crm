@@ -7,6 +7,7 @@
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
+const { logAudit } = require('./lib/audit');
 
 // Maps an appointments table row (snake_case + Date date) to the camelCase
 // shape the frontend expects (matching the legacy blob shape).
@@ -338,6 +339,27 @@ async function handler(req, res) {
       sub.events = eventsBySubId[sub.id] || [];
       return sub;
     });
+
+    // Audit: bulk PHI access. Log aggregate counts, not contents, to
+    // satisfy HIPAA observability without exploding audit_log volume.
+    try {
+      await logAudit({
+        req,
+        actorType: 'subaccount',
+        actorId: auth.user_id,
+        actorUsername: auth.username,
+        actorRole: auth.role,
+        action: 'subaccount.data.bulk_load',
+        targetType: 'bulk_data',
+        targetSubaccountId: subaccountId,
+        metadata: {
+          contact_count: ((blobResult.rows[0]?.data?.contacts) || []).length,
+          appointment_count: appointmentsResult.rows.length,
+          payment_count: paymentsResult.rows.length,
+          service_count: servicesResult.rows.length
+        }
+      });
+    } catch (e) { console.warn('audit log failed (data-load):', e.message); }
 
     return res.status(200).json({
       data: blobResult.rows[0]?.data || null,
