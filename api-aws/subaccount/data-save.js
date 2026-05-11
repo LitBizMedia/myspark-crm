@@ -38,7 +38,13 @@ const STRIPPED_TOP_LEVEL = [
   // Dead: zero code refs, fossil from pre-resource_groups schema
   'serviceResources'
 ];
-const STRIPPED_SETTINGS = ['adminProfile'];
+const STRIPPED_SETTINGS = [
+  'adminProfile',     // Dead, removed from frontend
+  'supabaseUrl',      // Legacy Supabase, project deleted May 2026
+  'supabaseKey',
+  'gistId',           // Legacy gist-based sync, dead since Path A
+  'gistToken'
+];
 
 function sanitize(data) {
   const out = { ...data };
