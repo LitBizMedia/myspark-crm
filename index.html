@@ -14174,6 +14174,87 @@ function refreshSvcModalSubTabs(typeNow){
 }
 
 // Common fields visible in both Individual and Class modes. Type select drives the swap.
+// Returns the set of hours (integers) this service is bookable on the given
+// date. When the service has custom availability enabled, uses its schedule.
+// Otherwise falls back to business hours.
+function getServiceAvailableHours(svc, dateStr){
+  if(!svc || !svc.availability || !svc.availability.enabled){
+    return getBusinessAvailableHours(dateStr);
+  }
+  var dk = getDK(dateStr);
+  var sched = svc.availability.schedule || {};
+  var d = sched[dk];
+  if(!d || !d.open) return new Set();
+  var start = parseInt(d.start), end = parseInt(d.end);
+  if(isNaN(start) || isNaN(end) || end <= start) return new Set();
+  var out = new Set();
+  for(var h = start; h < end; h++) out.add(h);
+  return out;
+}
+
+// Renders the foldable per-service availability section. Default collapsed.
+// Toggle reveals 7-day schedule editor. When toggle is OFF, service uses
+// business hours from settings.
+function renderSvcAvailabilityFields(s){
+  var av = (s && s.availability) || { enabled: false, schedule: {} };
+  var enabled = !!av.enabled;
+  var sched = av.schedule || {};
+  var days = [
+    {k:'mon', label:'Monday'}, {k:'tue', label:'Tuesday'}, {k:'wed', label:'Wednesday'},
+    {k:'thu', label:'Thursday'}, {k:'fri', label:'Friday'}, {k:'sat', label:'Saturday'},
+    {k:'sun', label:'Sunday'}
+  ];
+  var bh = (db.settings && db.settings.businessHours) || DEF_BH;
+  var rows = days.map(function(d){
+    var src = sched[d.k] || bh[d.k] || {open:true, start:'09', end:'17'};
+    var isOpen = (typeof src.open === 'boolean') ? src.open : true;
+    var start = src.start != null ? String(src.start).padStart(2,'0') : '09';
+    var end   = src.end   != null ? String(src.end).padStart(2,'0')   : '17';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0">'
+      + '<label style="min-width:110px;display:flex;align-items:center;gap:8px;cursor:pointer">'
+      +   '<input type="checkbox" class="svc-av-open" data-day="'+d.k+'"'+(isOpen?' checked':'')+'>'
+      +   '<span>'+d.label+'</span>'
+      + '</label>'
+      + '<input type="number" class="svc-av-start" data-day="'+d.k+'" min="0" max="23" value="'+start+'" style="width:60px" placeholder="9">'
+      + '<span style="color:var(--text-muted)">to</span>'
+      + '<input type="number" class="svc-av-end" data-day="'+d.k+'" min="1" max="24" value="'+end+'" style="width:60px" placeholder="17">'
+      + '</div>';
+  }).join('');
+
+  return '<details style="margin-top:14px;border:1px solid var(--border);border-radius:var(--radius);padding:12px"'+(enabled?' open':'')+'>'
+    + '<summary style="cursor:pointer;font-weight:600;color:var(--text)">Custom availability</summary>'
+    + '<div style="margin-top:12px">'
+    +   '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">'
+    +     '<input type="checkbox" id="svc-av-enabled"'+(enabled?' checked':'')+'>'
+    +     '<span>Use custom hours for this service (otherwise uses business hours)</span>'
+    +   '</label>'
+    +   '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Hours as 24-hour numbers (e.g. 9 to 17 means 9am to 5pm)</div>'
+    +   '<div id="svc-av-grid">' + rows + '</div>'
+    + '</div>'
+    + '</details>';
+}
+
+// Reads the availability fields from the modal back into a JSON object.
+// Returns null when toggle is off (so we store null in db, not a stale schedule).
+function readSvcAvailabilityFields(){
+  var enabledEl = document.getElementById('svc-av-enabled');
+  if(!enabledEl) return null;
+  if(!enabledEl.checked) return { enabled: false };
+  var sched = {};
+  ['mon','tue','wed','thu','fri','sat','sun'].forEach(function(dk){
+    var openEl  = document.querySelector('.svc-av-open[data-day="'+dk+'"]');
+    var startEl = document.querySelector('.svc-av-start[data-day="'+dk+'"]');
+    var endEl   = document.querySelector('.svc-av-end[data-day="'+dk+'"]');
+    if(!openEl || !startEl || !endEl) return;
+    sched[dk] = {
+      open: openEl.checked,
+      start: parseInt(startEl.value, 10) || 9,
+      end:   parseInt(endEl.value,   10) || 17
+    };
+  });
+  return { enabled: true, schedule: sched };
+}
+
 function renderServiceCommonFields(s,type){
   return '<div class="form-row">'
     +'<div class="form-group"><label>'+(type==='class'?'Class Name *':'Service Name *')+'</label><input id="svc-name" type="text" value="'+esc(s?s.name:'')+'"></div>'
@@ -14547,10 +14628,10 @@ function renderServiceAddonsSection(serviceId){
         +'ondragover="event.preventDefault()" '
         +'ondrop="_addonDragDrop(event,\''+esc(serviceId)+'\',\''+esc(a.id)+'\')" '
         +'style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px;cursor:move">'
-        +'<div style="font-size:14px;color:var(--text-muted);flex-shrink:0">\u2630</div>'
+        +'<div style="font-size:14px;color:var(--main-text-muted);flex-shrink:0">\u2630</div>'
         +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(a.name)+'</div>'
-        +'<div style="font-size:11px;color:var(--text-muted)">'+fmt$(price)+(dur?' &middot; +'+dur+' min':'')+(a.active===false?' &middot; Inactive':'')+(a.description?' &middot; '+esc(a.description):'')+'</div>'
+        +'<div style="font-size:12px;font-weight:600;color:var(--main-text)">'+esc(a.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--main-text-muted)">'+fmt$(price)+(dur?' &middot; +'+dur+' min':'')+(a.active===false?' &middot; Inactive':'')+(a.description?' &middot; '+esc(a.description):'')+'</div>'
         +'</div>'
         +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openAddonModal(\''+esc(serviceId)+'\',\''+esc(a.id)+'\')">Edit</button>'
         +'</div>';
