@@ -457,38 +457,55 @@ async function handler(req, res) {
           : (a.contactId ? [a.contactId] : []);
 
         if (contactIds.length) {
-          const cRes = await db.query(
-            'SELECT id, name, email FROM contacts WHERE id = ANY($1::text[]) AND subaccount_id = $2',
-            [contactIds, subaccountId]
+          // Contacts live in the subaccount_data blob, not a separate table.
+          // Load the blob, extract contacts array, match by id.
+          const blobRes = await db.query(
+            'SELECT data FROM subaccount_data WHERE subaccount_id = $1',
+            [subaccountId]
           );
-          const recipients = cRes.rows.map(function(r){
-            return { contact_id: r.id, name: r.name, email: r.email };
-          });
+          const blob = blobRes.rows.length ? blobRes.rows[0].data : {};
+          const allContacts = Array.isArray(blob && blob.contacts) ? blob.contacts : [];
+          const recipients = contactIds
+            .map(function(cid){ return allContacts.find(function(c){ return c && c.id === cid; }); })
+            .filter(Boolean)
+            .map(function(c){
+              return { contact_id: c.id, name: c.name || '', email: c.email || null };
+            });
 
-          // Look up service name + business name + staff name for email body.
+          // Service name: from services table
           let serviceName = a.title;
           if (a.service_id) {
             const svcRes = await db.query('SELECT name FROM services WHERE id=$1', [a.service_id]);
             if (svcRes.rows.length) serviceName = svcRes.rows[0].name;
           }
 
+          // Staff name for solo bookings only
           let staffName = '';
           if (!isGroupBooking && a.assignedTo) {
-            const sRes = await db.query(
+            const stRes = await db.query(
               'SELECT display_name, username FROM subaccount_users WHERE id=$1',
               [a.assignedTo]
             );
-            if (sRes.rows.length) {
-              staffName = sRes.rows[0].display_name || sRes.rows[0].username || '';
+            if (stRes.rows.length) {
+              staffName = stRes.rows[0].display_name || stRes.rows[0].username || '';
             }
           }
 
-          const sRes = await db.query(
-            'SELECT slug, business_name FROM subaccounts WHERE id=$1',
+          // Slug + business name from subaccounts. Business name comes from
+          // settings JSONB (key business_name or businessName), falling back
+          // to the subaccount's name column or 'MySpark+'.
+          const subRes = await db.query(
+            'SELECT slug, name, settings FROM subaccounts WHERE id=$1',
             [subaccountId]
           );
-          const slug = sRes.rows.length ? sRes.rows[0].slug : null;
-          const businessName = sRes.rows.length ? sRes.rows[0].business_name : 'MySpark+';
+          const subRow = subRes.rows[0] || null;
+          const slug = subRow ? subRow.slug : null;
+          const settings = subRow && subRow.settings
+            ? (typeof subRow.settings === 'string' ? JSON.parse(subRow.settings) : subRow.settings)
+            : {};
+          const businessName = (settings && (settings.business_name || settings.businessName))
+            || (subRow && subRow.name)
+            || 'MySpark+';
 
           if (slug) {
             await sendAppointmentConfirmations({
