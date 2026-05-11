@@ -14703,7 +14703,9 @@ function saveService(id){
     booking_lead_time_hours:parseInt(document.getElementById('svc-lead').value)||0,
     booking_advance_days:parseInt(document.getElementById('svc-adv').value)||60,
     active:document.getElementById('svc-active').checked,
-    taxable:!!(document.getElementById('svc-taxable')&&document.getElementById('svc-taxable').checked)
+    taxable:!!(document.getElementById('svc-taxable')&&document.getElementById('svc-taxable').checked),
+    // Per-service availability. null means use business hours (default).
+    availability:readSvcAvailabilityFields()
   };
 
   if(type==='individual'){

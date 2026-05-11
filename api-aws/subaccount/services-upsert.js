@@ -89,11 +89,13 @@ async function handler(req, res) {
         recurrence_rule, last_generated_through, taxable,
         group_capable, group_staff_count,
         group_size_min, group_size_max,
+        availability,
         created_at, updated_at
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
         $16,$17,$18,$19,$20,$21,$22,
         $23,$24,$25,$26,
+        $27,
         NOW(),NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -117,6 +119,7 @@ async function handler(req, res) {
         group_staff_count=EXCLUDED.group_staff_count,
         group_size_min=EXCLUDED.group_size_min,
         group_size_max=EXCLUDED.group_size_max,
+        availability=EXCLUDED.availability,
         updated_at=NOW()
       WHERE services.subaccount_id=$2
     `, [
@@ -140,7 +143,9 @@ async function handler(req, res) {
       !!s.group_capable,
       s.group_capable && s.group_staff_count != null ? parseInt(s.group_staff_count) : null,
       s.group_capable && s.group_size_min != null ? parseInt(s.group_size_min) : null,
-      s.group_capable && s.group_size_max != null ? parseInt(s.group_size_max) : null
+      s.group_capable && s.group_size_max != null ? parseInt(s.group_size_max) : null,
+      // Per-service availability JSONB. null when service uses business hours.
+      s.availability ? JSON.stringify(s.availability) : null
     ]);
 
     // Class session handling: generate, regenerate, or propagate.

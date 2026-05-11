@@ -28,6 +28,83 @@ async function handler(req, res) {
 
   const subaccountId = auth.subaccount_id;
 
+    // Per-service availability check. Validates booking time is within the
+    // service's bookable window. Service.availability is { enabled, schedule:
+    // {mon:{open,start,end}, ...} }. When null/disabled, fall back to business
+    // hours from settings. If the booking falls outside, reject 409.
+    if (a.service_id && a.date && a.time) {
+      try {
+        const svcRow = await db.query(
+          'SELECT availability FROM services WHERE id=$1 AND subaccount_id=$2',
+          [a.service_id, subaccountId]
+        );
+        if (svcRow.rows.length) {
+          const av = svcRow.rows[0].availability;
+          let avEnabled = false, avSchedule = null;
+          if (av) {
+            const parsed = typeof av === 'string' ? JSON.parse(av) : av;
+            avEnabled = !!parsed.enabled;
+            avSchedule = parsed.schedule || null;
+          }
+          // Compute the day's bookable hour range
+          const dayKey = (function(ds){
+            const dt = new Date(ds + 'T12:00:00Z');
+            return ['sun','mon','tue','wed','thu','fri','sat'][dt.getUTCDay()];
+          })(a.date);
+          let bookableStart = null, bookableEnd = null;
+          if (avEnabled && avSchedule && avSchedule[dayKey]) {
+            const d = avSchedule[dayKey];
+            if (!d.open) {
+              return res.status(409).json({
+                error: 'service_unavailable',
+                message: 'This service is not offered on that day.'
+              });
+            }
+            bookableStart = parseInt(d.start, 10);
+            bookableEnd   = parseInt(d.end, 10);
+          } else if (!avEnabled) {
+            // Fall back to business hours from settings.
+            const subRow = await db.query(
+              'SELECT settings FROM subaccounts WHERE id=$1',
+              [subaccountId]
+            );
+            const settings = subRow.rows[0] && subRow.rows[0].settings;
+            const parsedSet = settings ? (typeof settings === 'string' ? JSON.parse(settings) : settings) : {};
+            const bh = parsedSet.businessHours || {};
+            const d = bh[dayKey];
+            if (d) {
+              if (!d.open) {
+                return res.status(409).json({
+                  error: 'service_unavailable',
+                  message: 'Business is closed on that day.'
+                });
+              }
+              bookableStart = parseInt(d.start, 10);
+              bookableEnd   = parseInt(d.end, 10);
+            }
+          }
+          if (bookableStart != null && bookableEnd != null && !isNaN(bookableStart) && !isNaN(bookableEnd)) {
+            const [hh, mm] = a.time.split(':').map(Number);
+            const bookStart = hh * 60 + (mm || 0);
+            const bookEnd   = bookStart + (parseInt(a.duration, 10) || 60);
+            const windowStart = bookableStart * 60;
+            const windowEnd   = bookableEnd   * 60;
+            if (bookStart < windowStart || bookEnd > windowEnd) {
+              return res.status(409).json({
+                error: 'service_unavailable',
+                message: 'Booking falls outside the service\'s bookable hours that day.'
+              });
+            }
+          }
+        }
+      } catch (avErr) {
+        console.warn('service availability check failed (non-fatal):', avErr.message);
+        // Don't block on lookup errors. Frontend already validates; backend
+        // is defense-in-depth.
+      }
+    }
+
+
   try {
     // Validate service_id belongs to this subaccount if provided.
     if (a.service_id) {
