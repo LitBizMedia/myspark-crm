@@ -8,6 +8,7 @@
 // continue to work unchanged.
 
 const db = require('./lib/db');
+const contactsLib = require('./lib/contacts');
 const { resolveResourceClaims, resolveMultipleResourceClaims, replaceClaims, persistClaims } = require('./lib/resource-allocation');
 const { sendAppointmentConfirmations } = require('./lib/appointment-emails');
 const { checkStaffConflict } = require('./lib/staff-conflict');
@@ -534,19 +535,13 @@ async function handler(req, res) {
           : (a.contactId ? [a.contactId] : []);
 
         if (contactIds.length) {
-          // Contacts live in the subaccount_data blob, not a separate table.
-          // Load the blob, extract contacts array, match by id.
-          const blobRes = await db.query(
-            'SELECT data FROM subaccount_data WHERE subaccount_id = $1',
-            [subaccountId]
+          const contactRows = await Promise.all(
+            contactIds.map(function(cid){ return contactsLib.getContactById(subaccountId, cid); })
           );
-          const blob = blobRes.rows.length ? blobRes.rows[0].data : {};
-          const allContacts = Array.isArray(blob && blob.contacts) ? blob.contacts : [];
-          const recipients = contactIds
-            .map(function(cid){ return allContacts.find(function(c){ return c && c.id === cid; }); })
+          const recipients = contactRows
             .filter(Boolean)
             .map(function(c){
-              return { contact_id: c.id, name: c.name || '', email: c.email || null };
+              return { contact_id: c.id, name: c.name || c.display_name || '', email: c.email || null };
             });
 
           // Service name: from services table

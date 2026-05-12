@@ -21,6 +21,7 @@
 // Stage 4 will add: round robin staff selection, intake form responses, reschedule/cancel.
 
 const db = require('./lib/db');
+const contactsLib = require('./lib/contacts');
 const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocation');
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
@@ -83,6 +84,8 @@ function calcTax(subtotal, taxableFlag, preTaxDiscount, taxSettings) {
 async function sendConfirmationEmail(slug, to, subject, html, bizName, contactId) {
   try {
     const result = await resend.sendEmail(slug, {
+      scope: 'subaccount',
+      source: 'widget',
       to, subject, html,
       fromName: bizName || 'MySpark+',
       templateType: 'booking-confirmation',
@@ -648,13 +651,9 @@ async function handler(req, res) {
     }
 
     // 8a. require_existing_patient: when true, the email must match an existing contact.
-    // Match by lowercased email against contacts blob (matches the Path D contact lookup logic).
     if (widget && widget.require_existing_patient === true) {
       const cleanEmailCheck = (client_info.email || '').toLowerCase().trim();
-      const contactsBlobCheck = Array.isArray(blob.contacts) ? blob.contacts : [];
-      const matched = contactsBlobCheck.find(c =>
-        c && c.email && String(c.email).toLowerCase().trim() === cleanEmailCheck
-      );
+      const matched = cleanEmailCheck ? await contactsLib.getContactByEmail(subaccountId, cleanEmailCheck) : null;
       if (!matched) {
         return res.status(403).json({
           error: 'Sorry, online booking is currently limited to existing patients. Please contact the office to schedule.'
@@ -754,36 +753,26 @@ async function handler(req, res) {
       chargeOccurred = true;
     }
 
-    // 11. Find or create contact.
-    //
-    // Note: Path D (contacts blob -> RDS table) hasn't migrated yet. Contacts live in the
-    // subaccount_data blob under blob.contacts. When Path D ships, this code will need to
-    // switch to writing/reading from the contacts table. For now, blob is the source of truth.
+    // 11. Find or create contact (RDS contacts table).
     let contactId;
     const cleanEmail = (client_info.email || '').toLowerCase().trim();
-    const contactsBlob = Array.isArray(blob.contacts) ? blob.contacts : [];
-
     let existing = null;
     if (cleanEmail) {
-      existing = contactsBlob.find(c =>
-        c && c.email && String(c.email).toLowerCase().trim() === cleanEmail
-      );
+      existing = await contactsLib.getContactByEmail(subaccountId, cleanEmail);
     }
-
     if (existing) {
       contactId = existing.id;
     } else {
-      contactId = uid();
-      contactsBlob.push({
-        id: contactId,
+      const created = await contactsLib.createContact(subaccountId, {
         name: client_info.name,
         email: cleanEmail,
         phone: client_info.phone || '',
-        createdAt: now_(),
-        tags: [],
         source: 'booking_widget'
       });
-      const updatedBlob = { ...blob, contacts: contactsBlob };
+      contactId = created.id;
+      // Legacy compat: ensure blob is up to date if older code reads it.
+      // Safe no-op once all readers use lib/contacts.
+      const updatedBlob = { ...blob };
       await db.query(
         'UPDATE subaccount_data SET data = $1 WHERE subaccount_id = $2',
         [JSON.stringify(updatedBlob), subaccountId]

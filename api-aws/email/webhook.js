@@ -39,14 +39,32 @@ async function verifySignature(rawBody, headers) {
   });
 }
 
-async function updateEmailLog(resendId, status, errorMessage) {
+// Update message status across the two destination tables.
+// conversation_messages uses external_id + status + error.
+// agency_email_log uses resend_email_id + status + error_message.
+// Try subaccount path first (most common), fall through to agency.
+async function updateMessageStatus(resendId, status, errorMessage) {
   if (!resendId) return;
-  const updates = { status };
-  if (errorMessage) updates.error_message = errorMessage;
   try {
-    await db.update('email_log', updates, { resend_email_id: resendId });
+    // Try conversation_messages
+    const cmResult = await db.update('conversation_messages',
+      { status, error: errorMessage || null },
+      { external_id: resendId }
+    );
+    // db.update may return { rowCount } depending on implementation; treat any non-zero as success
+    const cmRows = (cmResult && (cmResult.rowCount || cmResult.affectedRows || (Array.isArray(cmResult) ? cmResult.length : 0))) || 0;
+    if (cmRows > 0) return;
+
+    // Fall through to agency_email_log
+    const aglUpdates = { status };
+    if (errorMessage) aglUpdates.error_message = errorMessage;
+    const aglResult = await db.update('agency_email_log', aglUpdates, { resend_email_id: resendId });
+    const aglRows = (aglResult && (aglResult.rowCount || aglResult.affectedRows || (Array.isArray(aglResult) ? aglResult.length : 0))) || 0;
+    if (aglRows === 0) {
+      console.warn('updateMessageStatus: no matching message for resend_email_id=' + resendId);
+    }
   } catch (e) {
-    console.error('updateEmailLog error:', e.message);
+    console.error('updateMessageStatus error:', e.message);
   }
 }
 
@@ -126,7 +144,7 @@ exports.handler = async function (event, context) {
     ? evt.data.bounce.message
     : null;
 
-  await updateEmailLog(emailId, status, bounceMessage);
+  await updateMessageStatus(emailId, status, bounceMessage);
 
   return {
     statusCode: 200,

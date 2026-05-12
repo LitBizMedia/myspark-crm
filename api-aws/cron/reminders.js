@@ -256,6 +256,8 @@ async function runReminders() {
             + '</div>';
         }
         const result = await sendEmail(slug, {
+          scope: 'subaccount',
+          source: 'reminder',
           to: contact.email,
           subject: subject,
           html: html,

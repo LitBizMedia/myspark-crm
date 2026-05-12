@@ -87,6 +87,8 @@ async function sendAppointmentConfirmations(opts) {
     });
     try {
       const result = await sendEmail(subaccountSlug, {
+        scope: 'subaccount',
+        source: 'confirmation',
         to: r.email,
         subject: 'Appointment Confirmed: ' + appointmentTitle + ' on ' + dateStr,
         html,

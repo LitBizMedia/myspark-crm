@@ -16,6 +16,7 @@
 const db = require('./db');
 const { getSquareCreds, squareHost, squareHeaders } = require('./square');
 const { todayInTz, DEFAULT_TZ } = require('./timezone');
+const { getContactById } = require('./contacts');
 
 const SUSPEND_AFTER = 3;
 const SUSPEND_WINDOW_DAYS = 7;
@@ -278,9 +279,8 @@ async function processSub(sub, blob, options) {
       return result;
     }
 
-    const contacts = data.contacts || [];
-    const contact = contacts.find(c => c && c.id === sub.contact_id);
-    if (!contact) throw new Error('Contact not found in subaccount data');
+    const contact = await getContactById(sub.subaccount_id, sub.contact_id);
+    if (!contact) throw new Error('Contact not found');
     if (!contact.squareCustomerId) throw new Error('Contact has no Square customer ID');
     const card = (contact.squareCards || []).find(c => c && c.id === sub.card_id);
     if (!card) throw new Error('Card on file not found for this subscription');

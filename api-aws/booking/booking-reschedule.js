@@ -21,13 +21,9 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
+const { getContactById } = require('./lib/contacts');
 async function getContact(subaccountId, contactId) {
-  if (!contactId) return null;
-  try {
-    const r = await db.query(`SELECT data FROM subaccount_data WHERE subaccount_id = $1`, [subaccountId]);
-    const contacts = (r.rows[0] && r.rows[0].data && Array.isArray(r.rows[0].data.contacts)) ? r.rows[0].data.contacts : [];
-    return contacts.find(c => c && c.id === contactId) || null;
-  } catch (e) { return null; }
+  return getContactById(subaccountId, contactId);
 }
 
 async function getSubaccountInfo(subaccountId) {
@@ -278,9 +274,12 @@ async function handler(req, res) {
             <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
           </div>`;
         await resend.sendEmail(sub.slug, {
+          scope: 'subaccount',
+          source: 'confirmation',
           to: contact.email,
           subject: `Appointment Rescheduled - ${sub.bizName}`,
-          html
+          html,
+          contactId: appt.contact_id
         });
       }
     } catch (e) { console.error('Reschedule email/tokens failed:', e.message); }

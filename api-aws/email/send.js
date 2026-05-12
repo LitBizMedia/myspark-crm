@@ -38,7 +38,31 @@ async function handler(req, res) {
     return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
   }
 
-  const { slug, to, subject, html, text, fromName, templateType, contactId, vars } = req.body || {};
+  const { slug, to, subject, html, text, fromName, templateType, contactId, vars,
+          scope: bodyScope, source: bodySource } = req.body || {};
+
+  // Template-aware scope + source mapping.
+  // Caller may pass explicit scope/source to override.
+  // 'welcome' is the one known agency-scope templateType; everything else is subaccount.
+  function resolveScope() {
+    if (bodyScope === 'agency' || bodyScope === 'subaccount') return bodyScope;
+    if (templateType === 'welcome') return 'agency';
+    return 'subaccount';
+  }
+  function resolveSource() {
+    if (bodySource) return bodySource;
+    const map = {
+      'appt-reminder':         'reminder',
+      'appt-confirmation':     'confirmation',
+      'appt-cancellation':     'cancellation',
+      'class-confirmation':    'confirmation',
+      'class-cancellation':    'cancellation',
+      'booking-confirmation':  'widget'
+    };
+    return map[templateType] || 'manual';
+  }
+  const sendScope = resolveScope();
+  const sendSource = resolveSource();
 
   if (!slug) return res.status(400).json({ error: 'slug is required' });
 
@@ -67,7 +91,7 @@ async function handler(req, res) {
     });
   }
 
-  const result = await sendEmail(slug, { to, subject, html, text, fromName, templateType, contactId, vars });
+  const result = await sendEmail(slug, { scope: sendScope, source: sendSource, to, subject, html, text, fromName, templateType, contactId, vars });
 
   if (!result.ok) {
     return res.status(500).json({ error: result.error });

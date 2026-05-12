@@ -26,20 +26,21 @@
 const db = require('./db');
 const { logAudit } = require('./audit');
 const { agencySquareCall } = require('./agency-billing');
+const { getAllContacts } = require('./contacts');
 
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN  = process.env.TWILIO_AUTH_TOKEN;
 const RESEND_API_KEY     = process.env.RESEND_API_KEY;
 
 // Tables that have NO foreign-key cascade. Must be deleted explicitly.
+// Note: conversations + conversation_messages CASCADE via FK on subaccount_id.
+// agency_email_log is intentionally NOT deleted (cross-subaccount agency record retention).
 const NON_CASCADING_TABLES = [
   { table: 'appointments',              column: 'subaccount_id' },
   { table: 'appointment_reminders',     column: 'subaccount_id' },
-  { table: 'email_log',                 column: 'subaccount_id' },
   { table: 'email_templates',           column: 'subaccount_id' },
   { table: 'failed_login_attempts',     column: 'subaccount_id' },
   { table: 'sessions',                  column: 'subaccount_id' },
-  { table: 'sms_log',                   column: 'subaccount_id' },
   { table: 'sms_registration_requests', column: 'subaccount_id' },
   { table: 'sms_settings',              column: 'subaccount_id' },
   { table: 'subaccount_email_domains',  column: 'subaccount_id' }
@@ -167,12 +168,8 @@ async function deleteSubaccount(subaccountId, opts) {
   try {
     let totalCards = 0;
     let disabledCards = 0;
-    if (subaccountData && subaccountData.data) {
-      let dbBlob = subaccountData.data;
-      if (typeof dbBlob === 'string') {
-        try { dbBlob = JSON.parse(dbBlob); } catch(e) { dbBlob = null; }
-      }
-      const contacts = (dbBlob && dbBlob.contacts) || [];
+    {
+      const contacts = await getAllContacts(subaccountId);
       for (let i = 0; i < contacts.length; i++) {
         const c = contacts[i];
         const cards = (c && c.squareCards) || [];

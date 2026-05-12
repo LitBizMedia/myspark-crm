@@ -19,6 +19,7 @@
 // guarded by trial_reminder_sent_at column being non-null.
 
 const db = require('./lib/db');
+const contactsLib = require('./lib/contacts');
 const { processSub } = require('./lib/sub-charge');
 const { sendEmail } = require('./lib/resend');
 const { DEFAULT_TZ } = require('./lib/timezone');
@@ -81,8 +82,7 @@ async function runReminderScan(summary, dryRun) {
   for (const row of r.rows) {
     const blob = row.blob_data || {};
     const tz = (blob.settings && blob.settings.timezone) || DEFAULT_TZ;
-    const contacts = blob.contacts || [];
-    const contact = contacts.find(c => c && c.id === row.contact_id);
+    const contact = await contactsLib.getContactById(row.subaccount_id, row.contact_id);
 
     if (!contact || !contact.email) {
       summary.reminders_skipped = (summary.reminders_skipped || 0) + 1;
