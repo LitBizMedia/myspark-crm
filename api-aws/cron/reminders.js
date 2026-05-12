@@ -162,6 +162,40 @@ async function runReminders() {
     return cfgs;
   }
 
+  // Pre-fetch contacts and users referenced by this batch in one query each.
+  // Contacts and users moved to RDS; do not read them from the blob.
+  const contactIds = [...new Set(appointments.map(a => a.contact_id).filter(Boolean))];
+  const staffIds   = [...new Set(appointments.map(a => a.assigned_to).filter(Boolean))];
+
+  const contactMap = new Map();
+  if (contactIds.length) {
+    const cRes = await db.query(
+      `SELECT id, display_name, first_name, last_name, email, phone
+         FROM contacts
+        WHERE id = ANY($1::text[])`,
+      [contactIds]
+    );
+    for (const row of cRes.rows) {
+      const name = row.display_name
+        || [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
+        || '';
+      contactMap.set(row.id, { id: row.id, name, email: row.email, phone: row.phone });
+    }
+  }
+
+  const userMap = new Map();
+  if (staffIds.length) {
+    const uRes = await db.query(
+      `SELECT id::text AS id, display_name, username
+         FROM subaccount_users
+        WHERE id::text = ANY($1::text[])`,
+      [staffIds]
+    );
+    for (const row of uRes.rows) {
+      userMap.set(row.id, { id: row.id, name: row.display_name || '', username: row.username || '' });
+    }
+  }
+
   for (const appt of appointments) {
     const data = await getCachedSubData(appt.subaccount_id);
     if (!data) { skipped++; continue; }
@@ -206,13 +240,13 @@ async function runReminders() {
     if (alreadySent) { skipped++; continue; }
 
     const contact = appt.contact_id
-      ? (data.contacts || []).find(c => c.id === appt.contact_id)
+      ? (contactMap.get(appt.contact_id) || null)
       : null;
     if (!contact) { skipped++; continue; }
 
     const bizName = (data.settings && data.settings.businessName) || 'MySpark+';
     const staff = appt.assigned_to
-      ? (data.users || []).find(u => u.id === appt.assigned_to)
+      ? (userMap.get(appt.assigned_to) || null)
       : null;
     const staffName = staff ? (staff.name || staff.username) : '';
     const dateStr = fmtDate(appt.date);
