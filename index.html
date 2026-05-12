@@ -1948,10 +1948,12 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
               <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px">Merchant ID: <span id="sq-merchant-display" style="color:var(--text);font-family:monospace;font-size:11px"></span></div>
               <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Environment: <span id="sq-env-display" style="color:var(--text)"></span></div>
-              <div style="display:flex;gap:8px;margin-top:2px">
+              <div style="display:flex;gap:8px;margin-top:2px;flex-wrap:wrap">
+                <button class="btn btn-purple btn-sm" id="sync-contacts-btn" onclick="syncContactsToSquare()">Sync Contacts to Square</button>
                 <button class="btn btn-purple btn-sm" onclick="importFromSquare()">Sync Cards from Square</button>
                 <button class="btn btn-danger btn-sm" onclick="disconnectSquare()">Disconnect Square</button>
               </div>
+              <div id="sq-unlinked-status" style="font-size:11px;color:var(--text-muted);margin-top:8px"></div>
             </div>
             <div id="sq-connect-panel">
               <button class="btn btn-purple btn-sm" onclick="connectSquare()">Connect Square Account</button>
@@ -5977,7 +5979,7 @@ async function processCharge(){  // ── Gift Card payment path ──
 // =====================================================
 // SETTINGS
 // =====================================================
-function renderSettings(){renderSquareCard();
+function renderSettings(){renderSquareCard();_updateSquareUnlinkedStatus();
   renderUserList();renderTagMgr();renderBH();renderBlackoutList();
   const s=db.settings;
   if(s.square){
@@ -6267,7 +6269,16 @@ async function saveContact(){
     if(state.drawer) renderDrawer();
     updateNotifBadge();
     toast(isNew?'Contact added.':'Contact updated.','success');
-    if(isNew && state._newContactId){ linkContactToSquare(state._newContactId); }
+    if(isNew && state._newContactId){
+      linkContactToSquare(state._newContactId);
+    } else if(!isNew){
+      // Existing contact: try to link to Square if not already linked.
+      // Handles CSV-imported contacts and contacts created before Square was connected.
+      var existingC = db.contacts.find(function(x){return x.id===state.modal.id});
+      if(existingC && !existingC.squareCustomerId){
+        linkContactToSquare(state.modal.id);
+      }
+    }
   }catch(e){
     toast('Save failed: '+(e.message||'unknown'), 'error');
   }
@@ -6294,6 +6305,69 @@ async function linkContactToSquare(contactId){
       }
     }
   }catch(e){console.error('Square link error:',e);}
+}
+
+// Bulk sync: find all contacts missing a squareCustomerId and link them.
+// Used by the Sync Contacts to Square button on Settings.
+async function syncContactsToSquare(){
+  if(!sqIsConnected()){
+    toast('Connect Square first.','error');
+    return;
+  }
+  const unlinked=(db.contacts||[]).filter(function(c){
+    return !c.squareCustomerId && !c.archived && c.email;
+  });
+  if(!unlinked.length){
+    toast('All contacts with an email are already linked to Square.','success');
+    return;
+  }
+  const btn=document.getElementById('sync-contacts-btn');
+  const origLabel=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='Syncing 0 of '+unlinked.length+'...'; }
+  let linked=0, failed=0;
+  for(let i=0;i<unlinked.length;i++){
+    const c=unlinked[i];
+    if(btn){ btn.textContent='Syncing '+(i+1)+' of '+unlinked.length+'...'; }
+    try{
+      const r=await fetch(apiUrl('/api/square/find-or-create-customer'),{credentials:'include',
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({slug:state.subaccountSlug,name:c.name,email:c.email||'',phone:c.phone||''})
+      });
+      const d=await r.json();
+      if(d.customerId){
+        try{
+          await contactUpdate(c.id, {square_customer_id: d.customerId});
+          linked++;
+        }catch(e2){
+          failed++;
+          console.error('Persist failed for', c.id, e2);
+        }
+      } else {
+        failed++;
+        console.error('No customerId returned for', c.id);
+      }
+    }catch(e){
+      failed++;
+      console.error('Square link error for', c.id, e);
+    }
+  }
+  await fetchFromServer();
+  if(btn){ btn.disabled=false; btn.textContent=origLabel; }
+  renderSquareCard();
+  if(failed===0){
+    toast(linked+' contact'+(linked===1?'':'s')+' linked to Square.','success');
+  } else {
+    toast(linked+' linked, '+failed+' failed. Check console for details.','error');
+  }
+}
+
+// Returns count of contacts that could be synced (have email, not archived, no Square ID)
+function _unlinkedSquareContactCount(){
+  if(!sqIsConnected()) return 0;
+  return (db.contacts||[]).filter(function(c){
+    return !c.squareCustomerId && !c.archived && c.email;
+  }).length;
 }
 
 function confirmDelContact(id){
@@ -19821,6 +19895,18 @@ function handleSquareHash(){
   }else if(p.get('sq_error')){
     history.replaceState(null,'',window.location.pathname);
     toast('Square connection failed: '+decodeURIComponent(p.get('sq_error')),'error');
+  }
+}
+
+function _updateSquareUnlinkedStatus(){
+  const el=document.getElementById('sq-unlinked-status');
+  if(!el) return;
+  if(!sqIsConnected()){ el.textContent=''; return; }
+  const n=_unlinkedSquareContactCount();
+  if(n===0){
+    el.innerHTML='<span style="color:#34d399">\u2713 All contacts with email are linked to Square</span>';
+  } else {
+    el.innerHTML='<span style="color:#fbbf24">'+n+' contact'+(n===1?'':'s')+' with email not yet linked to Square. Click \'Sync Contacts to Square\' to link.</span>';
   }
 }
 
