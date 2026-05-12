@@ -20063,25 +20063,35 @@ function bulkDeletePermanent(){
   document.getElementById('modal-title').textContent='Delete Permanently';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML=
-    '<div class="warn-box">You are about to <strong>permanently delete '+n+' contact'+(n===1?'':'s')+'</strong>. This cannot be undone. All linked appointments and tasks will also be removed.</div>';
+    '<div class="warn-box">Archive <strong>'+n+' contact'+(n===1?'':'s')+'</strong>? Archived contacts are hidden from the main list but can be restored or permanently deleted later from the Archived view.</div>';
   document.getElementById('modal-foot').innerHTML=
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+
-    '<button class="btn btn-danger" onclick="confirmBulkDelete()">Delete '+n+' Contact'+(n===1?'':'s')+' Permanently</button>';
+    '<button class="btn btn-danger" onclick="confirmBulkDelete()">Archive '+n+' Contact'+(n===1?'':'s')+'</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
 
-function confirmBulkDelete(){
+async function confirmBulkDelete(){
   const ids=[...state.cSelected];
-  ids.forEach(function(id){
-    db.contacts=db.contacts.filter(function(c){return c.id!==id});
-    db.appointments=db.appointments.filter(function(a){return a.contactId!==id});
-    db.tasks=db.tasks.filter(function(t){return t.contactId!==id});
-  });
-  saveData();
-  state.cSelected.clear();
-  closeModal();
-  renderContacts();
-  toast(ids.length+' contact'+(ids.length===1?'':'s')+' permanently deleted.','success');
+  if(!ids.length){ closeModal(); return; }
+  let failed=0;
+  try{
+    // Sequential to avoid hammering the API; small N expected.
+    for(const id of ids){
+      try{ await contactArchive(id, false); }
+      catch(e){ failed++; console.error('Archive failed for', id, e); }
+    }
+    await fetchFromServer();
+    state.cSelected.clear();
+    closeModal();
+    renderContacts();
+    if(failed===0){
+      toast(ids.length+' contact'+(ids.length===1?'':'s')+' archived.','success');
+    } else {
+      toast((ids.length-failed)+' archived, '+failed+' failed. Refresh and retry.','error');
+    }
+  }catch(e){
+    toast('Archive failed: '+(e.message||'unknown'),'error');
+  }
 }
 
 // Toggle bulk bar buttons based on archive view
