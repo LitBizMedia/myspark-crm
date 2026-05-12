@@ -121,13 +121,8 @@ async function handler(req, res) {
 
   try {
     const cRes = await db.query(
-      `SELECT 1 FROM subaccount_data
-       WHERE subaccount_id = $1
-       AND EXISTS (
-         SELECT 1 FROM jsonb_array_elements(COALESCE(data->'contacts', '[]'::jsonb)) AS c
-         WHERE c->>'id' = $2
-       )`,
-      [subaccountId, contactId]
+      `SELECT 1 FROM contacts WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
+      [contactId, subaccountId]
     );
     if (!cRes.rows.length) return res.status(404).json({ error: 'Contact not found' });
 
