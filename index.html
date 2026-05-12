@@ -6297,20 +6297,53 @@ function _apptGroupBadgeHTML(a){
   return '<span title="Group booking ('+a.staff.length+' staff)" style="margin-left:4px;font-size:11px;line-height:1">\u{1F465}</span>';
 }
 
-// Warning badge on appointment cards. Only shows for critical warnings or severe
-// allergies (the high-stakes tier where staff must know before walking in).
+// Warning badge on appointment cards. Three tiers:
+//   Red triangle:   critical warning OR severe allergy (must-know-before-room)
+//   Amber triangle: warning-severity warning OR moderate allergy (heads up)
+//   Blue dot:       info-severity warning OR mild allergy (FYI)
+// Higher tier wins; only one icon shown per appointment.
 function _apptWarningBadgeHTML(a){
   if(!a || !a.contactId) return '';
   var c = (db.contacts||[]).find(function(x){return x.id===a.contactId;});
   if(!c) return '';
-  var criticalWarnings = Array.isArray(c.warnings) ? c.warnings.filter(function(w){return w.severity==='critical';}) : [];
-  var severeAllergies = Array.isArray(c.allergies) ? c.allergies.filter(function(al){return al.severity==='severe';}) : [];
-  if(!criticalWarnings.length && !severeAllergies.length) return '';
+  var warnings = Array.isArray(c.warnings) ? c.warnings : [];
+  var allergies = Array.isArray(c.allergies) ? c.allergies : [];
+
+  // Tally each tier
+  var crit = warnings.filter(function(w){return w.severity==='critical';}).length
+           + allergies.filter(function(al){return al.severity==='severe';}).length;
+  var warn = warnings.filter(function(w){return w.severity==='warning';}).length
+           + allergies.filter(function(al){return al.severity==='moderate';}).length;
+  var info = warnings.filter(function(w){return w.severity==='info';}).length
+           + allergies.filter(function(al){return al.severity==='mild';}).length;
+
+  if(!crit && !warn && !info) return '';
+
+  // Build tooltip with everything flagged, prefixed with contact name
   var bits = [];
-  if(criticalWarnings.length) bits.push(criticalWarnings.length+' critical warning'+(criticalWarnings.length===1?'':'s'));
-  if(severeAllergies.length) bits.push(severeAllergies.length+' severe allerg'+(severeAllergies.length===1?'y':'ies'));
+  var critW = warnings.filter(function(w){return w.severity==='critical';}).length;
+  var sevA  = allergies.filter(function(al){return al.severity==='severe';}).length;
+  var warnW = warnings.filter(function(w){return w.severity==='warning';}).length;
+  var modA  = allergies.filter(function(al){return al.severity==='moderate';}).length;
+  var infoW = warnings.filter(function(w){return w.severity==='info';}).length;
+  var mildA = allergies.filter(function(al){return al.severity==='mild';}).length;
+  if(critW) bits.push(critW+' critical warning'+(critW===1?'':'s'));
+  if(sevA)  bits.push(sevA+' severe allerg'+(sevA===1?'y':'ies'));
+  if(warnW) bits.push(warnW+' warning'+(warnW===1?'':'s'));
+  if(modA)  bits.push(modA+' moderate allerg'+(modA===1?'y':'ies'));
+  if(infoW) bits.push(infoW+' info note'+(infoW===1?'':'s'));
+  if(mildA) bits.push(mildA+' mild allerg'+(mildA===1?'y':'ies'));
   var title = esc(c.name||'Contact')+': '+bits.join(', ');
-  return '<span title="'+title+'" style="margin-left:4px;font-size:11px;line-height:1;color:#ef4444;font-weight:700">\u26a0</span>';
+
+  // Highest tier wins
+  if(crit){
+    return '<span title="'+title+'" style="margin-left:4px;font-size:11px;line-height:1;color:#ef4444;font-weight:700">\u26a0</span>';
+  }
+  if(warn){
+    return '<span title="'+title+'" style="margin-left:4px;font-size:11px;line-height:1;color:#f59e0b;font-weight:700">\u26a0</span>';
+  }
+  // Info tier: small blue dot
+  return '<span title="'+title+'" style="margin-left:4px;font-size:9px;line-height:1;color:#3b82f6;font-weight:700">\u25cf</span>';
 }
 
 // APPOINTMENT MODAL
