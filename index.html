@@ -2037,6 +2037,45 @@ function apiUrl(path) {
   return AWS_API_BASE + path;
 }
 
+// =====================================================
+// CONTACT API helpers (RDS-backed, May 2026 migration)
+// All contact mutations go through these. They handle auth, errors,
+// and the canonical refetch pattern. Callers do NOT mutate db.contacts
+// directly; they call the helper, await success, then await fetchFromServer().
+// =====================================================
+async function _contactApi(path, body){
+  try{
+    const r = await fetch(apiUrl('/api/subaccount/'+path), {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body||{})
+    });
+    const j = await r.json().catch(function(){return{};});
+    if(!r.ok){
+      const msg = (j && j.error) || ('Request failed: '+r.status);
+      throw new Error(msg);
+    }
+    return j;
+  }catch(e){
+    console.error('_contactApi error', path, e);
+    throw e;
+  }
+}
+function contactCreate(data){ return _contactApi('contact-create', data); }
+function contactUpdate(id, fields){ return _contactApi('contact-update', Object.assign({id:id}, fields||{})); }
+function contactArchive(id, unarchive){ return _contactApi('contact-archive', {id:id, unarchive: !!unarchive}); }
+function contactDelete(id){ return _contactApi('contact-delete', {id:id}); }
+function contactNoteCreate(contactId, text){ return _contactApi('contact-note-create', {contact_id:contactId, text:text}); }
+function contactNoteUpdate(id, text){ return _contactApi('contact-note-update', {id:id, text:text}); }
+function contactNoteDelete(id){ return _contactApi('contact-note-delete', {id:id}); }
+function contactWarningCreate(contactId, severity, text){ return _contactApi('contact-warning-create', {contact_id:contactId, severity:severity, text:text}); }
+function contactWarningUpdate(id, fields){ return _contactApi('contact-warning-update', Object.assign({id:id}, fields||{})); }
+function contactWarningDelete(id){ return _contactApi('contact-warning-delete', {id:id}); }
+function contactAllergyCreate(contactId, fields){ return _contactApi('contact-allergy-create', Object.assign({contact_id:contactId}, fields||{})); }
+function contactAllergyUpdate(id, fields){ return _contactApi('contact-allergy-update', Object.assign({id:id}, fields||{})); }
+function contactAllergyDelete(id){ return _contactApi('contact-allergy-delete', {id:id}); }
+function contactCreditAdd(contactId, type, amount, reason){ return _contactApi('contact-credit-add', {contact_id:contactId, type:type, amount:amount, reason:reason||null}); }
+
 // Persists a new payment to RDS via the payments-create endpoint.
 // Fire-and-forget: callers push the payment locally first for immediate UI,
 // this syncs to server asynchronously. On failure, surfaces a toast so the
@@ -6182,34 +6221,45 @@ async function saveContact(){
   const _ln=(document.getElementById('cf-lastname')||{}).value||'';
   if(_fn||_ln){const _auto=(_fn+' '+_ln).trim();const _nf=document.getElementById('cf-name');if(_nf&&(!_nf.value.trim()||_nf.getAttribute('data-auto')==='1')){_nf.value=_auto;_nf.setAttribute('data-auto','1');}}
   const name=document.getElementById('cf-name').value.trim();if(!name){toast('Name is required.','error');return}
-  const data={name,first_name:_fn.trim(),last_name:_ln.trim(),type:document.getElementById('cf-type').value,email:document.getElementById('cf-email').value.trim(),phone:document.getElementById('cf-phone').value.trim(),company:document.getElementById('cf-company').value.trim(),title:document.getElementById('cf-title').value.trim(),website:document.getElementById('cf-web').value.trim(),source:document.getElementById('cf-source').value.trim(),address_line1:document.getElementById('cf-addr1').value.trim(),address_line2:document.getElementById('cf-addr2').value.trim(),city:document.getElementById('cf-city').value.trim(),state:document.getElementById('cf-state').value.trim(),postal_code:document.getElementById('cf-zip').value.trim(),timezone:document.getElementById('cf-tz').value,status:document.getElementById('cf-status').value,tags:getSelTags()};
+  const data={
+    display_name: name,
+    name: name,
+    first_name:_fn.trim(),
+    last_name:_ln.trim(),
+    type:document.getElementById('cf-type').value,
+    email:document.getElementById('cf-email').value.trim(),
+    phone:document.getElementById('cf-phone').value.trim(),
+    company:document.getElementById('cf-company').value.trim(),
+    title:document.getElementById('cf-title').value.trim(),
+    website:document.getElementById('cf-web').value.trim(),
+    source:document.getElementById('cf-source').value.trim(),
+    address_line1:document.getElementById('cf-addr1').value.trim(),
+    address_line2:document.getElementById('cf-addr2').value.trim(),
+    city:document.getElementById('cf-city').value.trim(),
+    state:document.getElementById('cf-state').value.trim(),
+    postal_code:document.getElementById('cf-zip').value.trim(),
+    timezone:document.getElementById('cf-tz').value,
+    status:document.getElementById('cf-status').value,
+    tags:getSelTags()
+  };
   const isNew=!state.modal.id;
-  // Capture which fields are changing for the audit (not the values themselves - PHI)
-  var _changedFields=[];
-  if(!isNew){
-    var existing=getContact(state.modal.id);
-    if(existing){
-      for(var k in data){ if(JSON.stringify(existing[k])!==JSON.stringify(data[k])) _changedFields.push(k); }
+  try{
+    if(isNew){
+      const r = await contactCreate(data);
+      state._newContactId = r && r.id;
+    } else {
+      await contactUpdate(state.modal.id, data);
     }
+    await fetchFromServer();
+    closeModal();
+    renderContacts();
+    if(state.drawer) renderDrawer();
+    updateNotifBadge();
+    toast(isNew?'Contact added.':'Contact updated.','success');
+    if(isNew && state._newContactId){ linkContactToSquare(state._newContactId); }
+  }catch(e){
+    toast('Save failed: '+(e.message||'unknown'), 'error');
   }
-  if(!isNew){const c=getContact(state.modal.id);if(c){Object.assign(c,data,{updatedAt:now_()});delete c.address;}}
-  else{const nc={id:uid(),...data,notes:[],squareCards:[],createdAt:now_()};db.contacts.push(nc);state._newContactId=nc.id;}
-  saveData();closeModal();renderContacts();if(state.drawer)renderDrawer();updateNotifBadge();toast(isNew?'Contact added.':'Contact updated.','success');
-  // Audit
-  if(isNew){
-    logSubaccountAudit('subaccount.contact.create', {
-      targetId: state._newContactId,
-      targetType: 'contact',
-      metadata: { contact_name: data.name, contact_type: data.type }
-    });
-  } else {
-    logSubaccountAudit('subaccount.contact.update', {
-      targetId: state.modal.id,
-      targetType: 'contact',
-      metadata: { contact_name: data.name, fields_changed: _changedFields }
-    });
-  }
-  if(isNew){linkContactToSquare(state._newContactId);}
 }
 
 async function linkContactToSquare(contactId){
