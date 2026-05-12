@@ -5188,7 +5188,7 @@ function renderMonthCal(){
     const isToday=str===td;
     const appts=str?getCalAppts(state.calUser,str):[];
     const tasks_=str?db.tasks.filter(t=>t.dueDate===str&&t.status!=='done'):[];
-    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);var addonPill=_apptAddonsPillHTML(a);var groupPill=_apptGroupBadgeHTML(a);return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+addonPill+groupPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'}),
+    const shown=[...appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);var addonPill=_apptAddonsPillHTML(a);var groupPill=_apptGroupBadgeHTML(a);var warnPill=_apptWarningBadgeHTML(a);return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+addonPill+groupPill+warnPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'}),
       ...tasks_.slice(0,Math.max(0,2-appts.length)).map(t=>'<div class="cal-ev cal-ev-task" onclick="event.stopPropagation();openTaskModal(null,\''+t.id+'\')">'+esc(t.title)+'</div>')];
     const more=appts.length+tasks_.length-shown.length;
     let schedHTML='';
@@ -5305,7 +5305,7 @@ function buildTimedCol(dateStr,appts,allHours){
     var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
-      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+'</div>'
+      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+_apptWarningBadgeHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
       +'</div>';
@@ -5345,7 +5345,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
-      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+'</div>'
+      +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+_apptWarningBadgeHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
       +'</div>';
@@ -6295,6 +6295,22 @@ function confirmDelContact(id){
 function _apptGroupBadgeHTML(a){
   if(!a || !Array.isArray(a.staff) || a.staff.length < 2) return '';
   return '<span title="Group booking ('+a.staff.length+' staff)" style="margin-left:4px;font-size:11px;line-height:1">\u{1F465}</span>';
+}
+
+// Warning badge on appointment cards. Only shows for critical warnings or severe
+// allergies (the high-stakes tier where staff must know before walking in).
+function _apptWarningBadgeHTML(a){
+  if(!a || !a.contactId) return '';
+  var c = (db.contacts||[]).find(function(x){return x.id===a.contactId;});
+  if(!c) return '';
+  var criticalWarnings = Array.isArray(c.warnings) ? c.warnings.filter(function(w){return w.severity==='critical';}) : [];
+  var severeAllergies = Array.isArray(c.allergies) ? c.allergies.filter(function(al){return al.severity==='severe';}) : [];
+  if(!criticalWarnings.length && !severeAllergies.length) return '';
+  var bits = [];
+  if(criticalWarnings.length) bits.push(criticalWarnings.length+' critical warning'+(criticalWarnings.length===1?'':'s'));
+  if(severeAllergies.length) bits.push(severeAllergies.length+' severe allerg'+(severeAllergies.length===1?'y':'ies'));
+  var title = esc(c.name||'Contact')+': '+bits.join(', ');
+  return '<span title="'+title+'" style="margin-left:4px;font-size:11px;line-height:1;color:#ef4444;font-weight:700">\u26a0</span>';
 }
 
 // APPOINTMENT MODAL
