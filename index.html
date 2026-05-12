@@ -3746,7 +3746,7 @@ function renderContacts(){
   if(!slice.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><h3>No contacts found</h3><p>Add a contact or adjust filters.</p></div></td></tr>';document.getElementById('contacts-pg').innerHTML='';return}
   tbody.innerHTML=slice.map(c=>{
     const col_=avColor(c.name),tags=(c.tags||[]).slice(0,3).map(tid=>{const t=getTag(tid);return t?'<span class="tag-pill" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'</span>':''}).join('');
-    return'<tr onclick="openDrawer(\''+c.id+'\')">'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600">'+esc(c.name)+'</div></div></td>'+'<td style="font-size:13px">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.phone||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()"><button class="icon-btn-xs" onclick="openContactModal(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button></td></tr>';
+    return'<tr onclick="openDrawer(\''+c.id+'\')">'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600;display:flex;align-items:center">'+esc(c.name)+_contactRowWarningBadge(c)+'</div></div></td>'+'<td style="font-size:13px">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.phone||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()"><button class="icon-btn-xs" onclick="openContactModal(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button></td></tr>';
   }).join('');
   renderPg('contacts-pg',state.cPage,pages,'cPg');
   updateBulkBar();
@@ -3852,6 +3852,7 @@ function renderDrawer(){
       })()
       +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
       +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">Book Appointment</button>'
+      +renderContactWarningsSection(c.id)
       +cfRenderDrawerSections(c.id);
   }else if(state.dTab==='notes'){
     const notes=[...c.notes].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
@@ -3916,6 +3917,7 @@ function renderDrawer(){
   }
   document.getElementById('drawer-content').innerHTML=
     '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Archive</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
+    +renderContactWarningBanner(c.id)
     +'<div class="drawer-tabs">'+tabs.map(t=>'<button class="drawer-tab'+(state.dTab===t?' active':'')+'" onclick="switchDTab(\''+t+'\')">'+labels[t]+'</button>').join('')+'</div>'
     +'<div class="drawer-body" id="drawer-tab-body">'+body+'</div>';
   // Restore scroll position. Skip if user changed main tabs (different tab,
@@ -19179,6 +19181,163 @@ function renderDashWeek(){
   }
   h+='</div>';
   el.innerHTML=h;
+}
+
+// =====================================================
+// CONTACT WARNINGS
+// =====================================================
+// Severity meta. Order matters for sort and banner color picking.
+var WARNING_SEVERITY = {
+  critical: { label: 'Critical', color: '#ef4444', bg: '#fef2f2', border: '#fecaca', icon: '⚠', rank: 0 },
+  warning:  { label: 'Warning',  color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', icon: '⚠', rank: 1 },
+  info:     { label: 'Info',     color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ',  rank: 2 }
+};
+
+function _getContactWarnings(contactId){
+  var c = (db.contacts||[]).find(function(x){return x.id===contactId;});
+  if(!c || !Array.isArray(c.warnings)) return [];
+  // Sort by severity rank then most-recent first
+  return c.warnings.slice().sort(function(a,b){
+    var ra = (WARNING_SEVERITY[a.severity]||{rank:99}).rank;
+    var rb = (WARNING_SEVERITY[b.severity]||{rank:99}).rank;
+    if(ra!==rb) return ra-rb;
+    return (b.created_at||'').localeCompare(a.created_at||'');
+  });
+}
+
+function _highestWarningSeverity(warnings){
+  if(!warnings || !warnings.length) return null;
+  // warnings already sorted by severity rank ascending (critical first)
+  return warnings[0].severity;
+}
+
+// Renders the colored banner at the top of the drawer when warnings exist.
+function renderContactWarningBanner(contactId){
+  var warnings = _getContactWarnings(contactId);
+  if(!warnings.length) return '';
+  var topSev = _highestWarningSeverity(warnings);
+  var meta = WARNING_SEVERITY[topSev] || WARNING_SEVERITY.info;
+  // Show up to 3 inline, rest as "+N more"
+  var preview = warnings.slice(0,3);
+  var more = warnings.length - preview.length;
+  var items = preview.map(function(w){
+    var m = WARNING_SEVERITY[w.severity] || WARNING_SEVERITY.info;
+    return '<div style="display:flex;align-items:flex-start;gap:6px;padding:2px 0">'
+      + '<span style="color:'+m.color+';font-weight:700;flex-shrink:0">'+m.icon+'</span>'
+      + '<span style="font-size:12px;color:#1f2937;line-height:1.4">'+esc(w.text)+'</span>'
+      + '</div>';
+  }).join('');
+  var moreLink = more>0 ? '<div style="margin-top:4px;font-size:11px;color:'+meta.color+';font-weight:600">+'+more+' more on Info tab</div>' : '';
+  return '<div style="background:'+meta.bg+';border:1px solid '+meta.border+';border-left:4px solid '+meta.color+';padding:10px 12px;margin:0 0 10px">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:'+meta.color+';margin-bottom:6px">'+meta.label+'</div>'
+    + items
+    + moreLink
+    + '</div>';
+}
+
+// Renders the Warnings section for the Info tab (full list with edit/delete).
+function renderContactWarningsSection(contactId){
+  var warnings = _getContactWarnings(contactId);
+  var header = '<div class="sec-row" style="margin-top:14px"><div class="sec-label" style="margin-bottom:0">Warnings ('+warnings.length+')</div>'
+    + '<button class="btn btn-purple btn-sm" onclick="openWarningModal(\''+contactId+'\',null)">+ Add</button></div>';
+  if(!warnings.length){
+    return header + '<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No warnings.</div>';
+  }
+  var items = warnings.map(function(w){
+    var m = WARNING_SEVERITY[w.severity] || WARNING_SEVERITY.info;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:'+m.bg+';border-left:3px solid '+m.color+';border-radius:4px;margin-bottom:6px">'
+      + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;color:'+m.color+';flex-shrink:0;min-width:50px">'+m.label+'</span>'
+      + '<span style="flex:1;font-size:13px;color:var(--text)">'+esc(w.text)+'</span>'
+      + '<div style="display:flex;gap:3px;flex-shrink:0">'
+      +   '<button class="icon-btn-xs" onclick="openWarningModal(\''+contactId+'\',\''+w.id+'\')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+      +   '<button class="icon-btn-xs" onclick="delWarning(\''+w.id+'\')" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+  return header + '<div style="margin-top:8px">' + items + '</div>';
+}
+
+// Add/edit modal
+function openWarningModal(contactId, warningId){
+  var c = (db.contacts||[]).find(function(x){return x.id===contactId;});
+  if(!c){ toast('Contact not found.','error'); return; }
+  var existing = warningId ? (c.warnings||[]).find(function(w){return w.id===warningId;}) : null;
+  state.modal = { type: 'warning', id: warningId||null, extra: contactId };
+  var selSeverity = existing ? existing.severity : 'warning';
+  var selText = existing ? existing.text : '';
+  var sevOpts = ['critical','warning','info'].map(function(s){
+    var m = WARNING_SEVERITY[s];
+    return '<option value="'+s+'"'+(selSeverity===s?' selected':'')+' style="color:'+m.color+'">'+m.label+'</option>';
+  }).join('');
+  var body = '<div class="form-group"><label>Severity</label>'
+    + '<select id="wf-severity" style="width:100%;height:38px;padding:6px 10px;border:1px solid var(--main-border);border-radius:6px">'+sevOpts+'</select></div>'
+    + '<div class="form-group"><label>Text (max 200 chars)</label>'
+    + '<input id="wf-text" type="text" maxlength="200" placeholder="e.g. Allergic to penicillin" value="'+esc(selText)+'"></div>'
+    + '<div style="font-size:11px;color:var(--text-muted);margin-top:-6px">Examples: medication allergies, billing issues, behavioral notes</div>';
+  openModal(existing?'Edit Warning':'Add Warning', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveWarning()">Save</button>');
+}
+
+async function saveWarning(){
+  var contactId = state.modal && state.modal.extra;
+  var warningId = state.modal && state.modal.id;
+  var severity = (document.getElementById('wf-severity')||{}).value || 'warning';
+  var text = ((document.getElementById('wf-text')||{}).value || '').trim();
+  if(!text){ toast('Warning text required.','error'); return; }
+  if(text.length > 200){ toast('Warning exceeds 200 chars.','error'); return; }
+  try{
+    if(warningId){
+      await contactWarningUpdate(warningId, {severity:severity, text:text});
+    } else {
+      await contactWarningCreate(contactId, severity, text);
+    }
+    await fetchFromServer();
+    closeModal();
+    renderDrawer();
+    renderContacts();
+    toast(warningId?'Warning updated.':'Warning added.','success');
+  }catch(e){
+    toast('Save failed: '+(e.message||'unknown'),'error');
+  }
+}
+
+function delWarning(warningId){
+  state.modal = { type:'del-warning', id: warningId };
+  document.getElementById('modal-title').textContent = 'Delete Warning';
+  document.getElementById('modal-box').className = 'modal';
+  document.getElementById('modal-body').innerHTML = '<div class="warn-box">Delete this warning? This cannot be undone.</div>';
+  document.getElementById('modal-foot').innerHTML = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-danger" onclick="confirmDelWarning()">Delete</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function confirmDelWarning(){
+  var warningId = state.modal && state.modal.id;
+  if(!warningId) return;
+  try{
+    await contactWarningDelete(warningId);
+    await fetchFromServer();
+    closeModal();
+    renderDrawer();
+    renderContacts();
+    toast('Warning deleted.','success');
+  }catch(e){
+    toast('Delete failed: '+(e.message||'unknown'),'error');
+  }
+}
+
+// Small badge for contact list row: shows ⚠ in highest severity color when warnings exist
+function _contactRowWarningBadge(c){
+  if(!c || !Array.isArray(c.warnings) || !c.warnings.length) return '';
+  // Pick highest severity from raw array (don't re-sort)
+  var topRank = 99, topSev = null;
+  for(var i=0;i<c.warnings.length;i++){
+    var r = (WARNING_SEVERITY[c.warnings[i].severity]||{rank:99}).rank;
+    if(r<topRank){ topRank = r; topSev = c.warnings[i].severity; }
+  }
+  if(!topSev) return '';
+  var m = WARNING_SEVERITY[topSev];
+  return '<span title="'+c.warnings.length+' warning(s); highest: '+m.label+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:'+m.color+';color:#fff;font-size:11px;font-weight:700;margin-left:6px;flex-shrink:0">'+m.icon+'</span>';
 }
 
 // =====================================================
