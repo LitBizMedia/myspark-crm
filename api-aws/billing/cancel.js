@@ -98,7 +98,8 @@ async function handler(req, res) {
       if (sub && sub.admin_email) {
         await sendEmail(sub.admin_email, 'cancellation_confirmed', {
           subName: sub.name || subaccountId,
-          accessUntil: plan.next_billing_date || null
+          accessUntil: plan.next_billing_date || null,
+          subaccountId: subaccountId
         });
       }
     } catch (emailErr) {

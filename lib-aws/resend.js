@@ -204,7 +204,11 @@ async function sendEmail(slug, opts) {
     return { ok: false, error: 'Invalid scope: ' + scope };
   }
 
-  const subaccountId = 'sub-' + slug;
+  // Subaccount sends require slug. Agency sends may omit slug (use fallback domain).
+  if (scope === 'subaccount' && !slug) {
+    return { ok: false, error: 'slug is required for subaccount-scope sends' };
+  }
+  const subaccountId = slug ? ('sub-' + slug) : null;
 
   let subject = opts.subject;
   let html = opts.html;
@@ -221,7 +225,7 @@ async function sendEmail(slug, opts) {
     return { ok: false, error: 'subject and html are required (no saved template found)' };
   }
 
-  const domainRow = await getVerifiedDomain(subaccountId);
+  const domainRow = subaccountId ? await getVerifiedDomain(subaccountId) : null;
   const fromDomain = (domainRow && domainRow.domain) || FALLBACK_DOMAIN;
   const fromName = opts.fromName || 'MySpark+';
   const fromEmail = 'noreply@' + fromDomain;
@@ -265,7 +269,7 @@ async function sendEmail(slug, opts) {
       error,
       source: opts.source,
       sentByUserId: opts.sentByUserId,
-      subaccountId
+      subaccountId: subaccountId || opts.subaccountId || null
     };
   }
 

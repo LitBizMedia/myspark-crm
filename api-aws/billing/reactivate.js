@@ -91,7 +91,8 @@ async function handler(req, res) {
           await sendEmail(sub.admin_email, 'reactivation_no_charge', {
             subName: sub.name || subaccountId,
             nextBillingDate: plan.next_billing_date,
-            planTier: plan.plan_tier
+            planTier: plan.plan_tier,
+            subaccountId: subaccountId
           });
         }
       } catch (emailErr) {
@@ -219,7 +220,8 @@ async function handler(req, res) {
           subName: sub.name || subaccountId,
           dollars,
           nextBillingDate: nextDate,
-          planTier: plan.plan_tier
+          planTier: plan.plan_tier,
+          subaccountId: subaccountId
         });
       }
     } catch (emailErr) {

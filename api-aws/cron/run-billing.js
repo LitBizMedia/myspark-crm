@@ -107,7 +107,8 @@ async function processBilling(req, sub, summary) {
     if (adminEmail) {
       await sendEmail(adminEmail, 'receipt', {
         subName, dollars, nextBillingDate: nextDate,
-        planTier: sub.plan_tier, billingPeriod: sub.billing_period
+        planTier: sub.plan_tier, billingPeriod: sub.billing_period,
+        subaccountId: sub.subaccount_id
       });
     }
     await logAudit({
@@ -144,7 +145,7 @@ async function processBilling(req, sub, summary) {
         retry_count: newRetryCount
       });
       await db.update('subaccounts', { active: false }, { id: sub.subaccount_id });
-      if (adminEmail) await sendEmail(adminEmail, 'suspended', { subName, dollars });
+      if (adminEmail) await sendEmail(adminEmail, 'suspended', { subName, dollars, subaccountId: sub.subaccount_id });
 
       await logAudit({
         req, ...CRON_ACTOR,
@@ -168,7 +169,7 @@ async function processBilling(req, sub, summary) {
         retry_count: newRetryCount,
         next_billing_date: tomorrowLocal
       });
-      if (adminEmail) await sendEmail(adminEmail, 'past_due', { subName, dollars, retryCount: newRetryCount });
+      if (adminEmail) await sendEmail(adminEmail, 'past_due', { subName, dollars, retryCount: newRetryCount, subaccountId: sub.subaccount_id });
 
       await logAudit({
         req, ...CRON_ACTOR,
@@ -196,7 +197,8 @@ async function processBilling(req, sub, summary) {
           subName, dollars,
           retryCount: newRetryCount,
           maxRetries: MAX_RETRIES,
-          nextRetryDate: tomorrowLocal
+          nextRetryDate: tomorrowLocal,
+          subaccountId: sub.subaccount_id
         });
       }
       await logAudit({
@@ -309,7 +311,7 @@ async function sendTrialReminders(req) {
         const dollars     = (amountCents / 100).toFixed(2);
         const trialEndDate = sub.trial_ends_at ? sub.trial_ends_at.toISOString().slice(0, 10) : 'soon';
 
-        await sendEmail(adminEmail, 'trial_ending_soon', { subName, trialEndDate, dollars });
+        await sendEmail(adminEmail, 'trial_ending_soon', { subName, trialEndDate, dollars, subaccountId: sub.subaccount_id });
         console.log('trial-reminder sent to ' + adminEmail + ' for ' + sub.subaccount_id);
 
         await logAudit({

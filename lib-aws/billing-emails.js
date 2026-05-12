@@ -12,12 +12,17 @@
 //                 trial_ending_soon | cancellation_confirmed |
 //                 reactivation_confirmed | reactivation_no_charge
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_ADDRESS   = 'MySpark+ <noreply@mysparkplus.app>';
+const { sendEmail: resendSend } = require('./resend');
 
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
+//
+// Routes through lib/resend.js with scope='agency'. Emails land in
+// agency_email_log, not any subaccount's Conversations.
+//
+// Optional 3rd arg `data.subaccountId` populates agency_email_log.recipient_subaccount_id
+// for context (which workspace the email related to). Not required.
 
 async function sendEmail(to, type, data) {
   const template = getTemplate(type, data);
@@ -26,39 +31,22 @@ async function sendEmail(to, type, data) {
     return { success: false, error: 'unknown template type' };
   }
 
-  if (!RESEND_API_KEY) {
-    console.log('billing-emails [' + type + '] to=' + to + ' (RESEND_API_KEY not set, skipped)');
-    return { success: false, error: 'no RESEND_API_KEY' };
+  const result = await resendSend(null, {
+    scope: 'agency',
+    to,
+    subject: template.subject,
+    html: template.html,
+    fromName: 'MySpark+ Billing',
+    templateType: type,
+    subaccountId: data && data.subaccountId ? data.subaccountId : null
+  });
+
+  if (!result.ok) {
+    console.error('billing-emails: send failed [' + type + ']:', result.error);
+    return { success: false, error: result.error };
   }
-
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + RESEND_API_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to: [to],
-        subject: template.subject,
-        html: template.html
-      })
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('billing-emails: Resend error [' + type + ']:', errText);
-      return { success: false, error: errText };
-    }
-
-    console.log('billing-emails: sent [' + type + '] to ' + to);
-    return { success: true };
-
-  } catch (e) {
-    console.error('billing-emails: fetch error [' + type + ']:', e.message);
-    return { success: false, error: e.message };
-  }
+  console.log('billing-emails: sent [' + type + '] to ' + to);
+  return { success: true, id: result.id };
 }
 
 // ---------------------------------------------------------------------------
