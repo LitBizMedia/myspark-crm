@@ -2074,7 +2074,7 @@ function contactWarningDelete(id){ return _contactApi('contact-warning-delete', 
 function contactAllergyCreate(contactId, fields){ return _contactApi('contact-allergy-create', Object.assign({contact_id:contactId}, fields||{})); }
 function contactAllergyUpdate(id, fields){ return _contactApi('contact-allergy-update', Object.assign({id:id}, fields||{})); }
 function contactAllergyDelete(id){ return _contactApi('contact-allergy-delete', {id:id}); }
-function contactCreditAdd(contactId, type, amount, reason){ return _contactApi('contact-credit-add', {contact_id:contactId, type:type, amount:amount, reason:reason||null}); }
+function contactCreditAdd(contactId, type, amount, reason, paymentId){ return _contactApi('contact-credit-add', {contact_id:contactId, type:type, amount:amount, reason:reason||null, payment_id:paymentId||null}); }
 
 // Persists a new payment to RDS via the payments-create endpoint.
 // Fire-and-forget: callers push the payment locally first for immediate UI,
@@ -5947,14 +5947,13 @@ async function processCharge(){  // ── Gift Card payment path ──
       cpn.usageCount=(cpn.usageCount||0)+1;
     }
   }
-  // Deduct credits from contact balance
+  // Deduct credits from contact balance via RDS (May 2026 migration).
+  // Fire-and-forget; payment has already succeeded so a failure here is
+  // recoverable (admin can manually adjust). Surface error to console.
   if(cid&&creditApplied>0){
-    const cc=db.contacts.find(function(x){return x.id===cid;});
-    if(cc){
-      if(!cc.creditHistory)cc.creditHistory=[];
-      cc.creditBalance=Math.max(0,(cc.creditBalance||0)-creditApplied);
-      cc.creditHistory.unshift({id:uid(),type:'deduct',amount:creditApplied,note:'Applied to POS transaction',date:now_(),addedBy:state.user&&(state.user.name||state.user.username)||'POS'});
-    }
+    contactCreditAdd(cid, 'debit', creditApplied, 'Applied to POS transaction', payId)
+      .then(function(){ if(typeof fetchFromServer==='function') fetchFromServer(); })
+      .catch(function(e){ console.error('POS credit deduct failed:', e); toast('Credit deduction failed; please reconcile manually.','error'); });
   }
   saveData();closeModal();
   state.posItems=[];state.posCoupon=null;renderPosItems();calcTotals();
