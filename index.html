@@ -11371,6 +11371,7 @@ function renderEmailDomainSettings(){
       +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">'+esc(record.domain)+'</div>'
       +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px">Emails send from noreply@'+esc(record.domain)+'. Your DNS records are active.</div>'
       +recRows
+      +buildInboundSection(record)
       +'<button class="btn btn-ghost btn-sm" style="margin-top:16px" onclick="removeEmailDomain(\''+record.resend_domain_id+'\')">Remove Domain</button>'
       +'</div>';
     return;
@@ -11474,6 +11475,97 @@ async function confirmRemoveEmailDomain(){
     renderEmailDomainSettings();
     toast('Domain removed. Emails will send from mysparkplus.app.','success');
   }catch(e){toast('Error removing domain: '+e.message,'error');}
+}
+
+function buildInboundSection(record){
+  var ibs=record.inbound_status||'not_setup';
+  if(ibs==='pending_setup')ibs='not_setup';
+  var sub=record.inbound_subdomain||'reply';
+  var mxTarget=record.inbound_mx_target||'';
+  var rootDomain=record.domain||'';
+  var domainId=record.id;
+  if(ibs==='verified'){
+    return '<div style="margin-top:20px;padding:16px;background:rgba(40,167,69,0.08);border:1px solid rgba(40,167,69,0.25);border-radius:var(--radius)">'
+      +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:4px">Inbound replies are active</div>'
+      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:10px">Patient replies sent to your messages will appear in Conversations.</div>'
+      +'<div style="font-size:12px;color:var(--main-text-muted)">Reply address: '+esc(sub)+'.'+esc(rootDomain)+'</div>'
+      +'<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetInboundSetup(\''+domainId+'\')">Reconfigure</button>'
+      +'</div>';
+  }
+  if(ibs==='pending'){
+    return '<div style="margin-top:20px;padding:16px;background:rgba(247,184,1,0.08);border:1px solid rgba(247,184,1,0.3);border-radius:var(--radius)">'
+      +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:4px">Add MX record for inbound replies</div>'
+      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:12px;line-height:1.6">Add this MX record to '+esc(rootDomain)+' in your DNS provider. DNS can take 5 to 30 minutes to propagate.</div>'
+      +'<div style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);padding:12px;font-family:monospace;font-size:12px;line-height:1.8">'
+      +'<div><strong>Type:</strong> MX</div>'
+      +'<div><strong>Host:</strong> '+esc(sub)+'</div>'
+      +'<div><strong>Value:</strong> '+esc(mxTarget)+'</div>'
+      +'<div><strong>Priority:</strong> 10</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:10px;margin-top:12px">'
+      +'<button class="btn btn-primary btn-sm" onclick="verifyInboundMx(\''+domainId+'\')">Check MX</button>'
+      +'<button class="btn btn-ghost btn-sm" onclick="resetInboundSetup(\''+domainId+'\')">Cancel</button>'
+      +'</div>'
+      +'</div>';
+  }
+  return '<div style="margin-top:20px;padding:16px;background:rgba(107,33,234,0.04);border:1px solid var(--main-border);border-radius:var(--radius)">'
+    +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:4px">Enable inbound replies (optional)</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:12px;line-height:1.6">When patients reply to an email from your CRM, the reply lands in Conversations. Requires the agency to enable Inbound on '+esc(rootDomain)+' in Resend and provide the MX target.</div>'
+    +'<div style="font-size:12px;color:var(--main-text);font-weight:600;margin-bottom:4px">Reply subdomain</div>'
+    +'<input id="ib-sub-input" type="text" value="reply" placeholder="reply" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:8px 10px;font-size:13px;width:200px;box-sizing:border-box;margin-bottom:10px">'
+    +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:10px">Patients will reply to addresses like reply@'+esc(rootDomain)+'</div>'
+    +'<div style="font-size:12px;color:var(--main-text);font-weight:600;margin-bottom:4px">MX target (from Resend)</div>'
+    +'<input id="ib-mx-input" type="text" placeholder="inbound-smtp.us-east-1.amazonaws.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:8px 10px;font-size:13px;width:100%;box-sizing:border-box;margin-bottom:10px">'
+    +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:10px">Ask your agency for this value. They enable Inbound on your domain in Resend, copy the MX target Resend shows, and give it to you.</div>'
+    +'<button class="btn btn-primary btn-sm" onclick="submitInboundSetup(\''+domainId+'\')">Save</button>'
+    +'</div>';
+}
+
+async function submitInboundSetup(domainId){
+  var subInput=document.getElementById('ib-sub-input');
+  var mxInput=document.getElementById('ib-mx-input');
+  if(!subInput||!mxInput)return;
+  var inboundSubdomain=(subInput.value||'').trim().toLowerCase();
+  var mxTarget=(mxInput.value||'').trim().toLowerCase();
+  if(!mxTarget){toast('Enter the MX target from Resend.','warn');return;}
+  try{
+    var res=await fetch(apiUrl('/api/email/domains/inbound-setup'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domainId:domainId,mxTarget:mxTarget,inboundSubdomain:inboundSubdomain||'reply'})});
+    var data=await res.json();
+    if(!res.ok){toast(data.error||'Setup failed','error');return;}
+    if(state.emailDomain){
+      state.emailDomain.inbound_subdomain=data.inbound_subdomain;
+      state.emailDomain.inbound_mx_target=data.inbound_mx_target;
+      state.emailDomain.inbound_status=data.inbound_status;
+    }
+    renderEmailDomainSettings();
+    toast('Inbound config saved. Add the MX record to your DNS, then click Check MX.','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function verifyInboundMx(domainId){
+  try{
+    var res=await fetch(apiUrl('/api/email/domains/inbound-verify'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domainId:domainId})});
+    var data=await res.json();
+    if(!res.ok){toast(data.error||'Verify failed','error');return;}
+    if(data.verified){
+      if(state.emailDomain){state.emailDomain.inbound_status='verified';state.emailDomain.inbound_verified_at=new Date().toISOString();}
+      renderEmailDomainSettings();
+      toast('Inbound verified. Patient replies will now appear in Conversations.','success');
+    }else{
+      toast('MX record not found yet. DNS can take 5 to 30 minutes to propagate.','warn');
+    }
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function resetInboundSetup(domainId){
+  try{
+    if(state.emailDomain){
+      state.emailDomain.inbound_status='pending_setup';
+      state.emailDomain.inbound_mx_target=null;
+      state.emailDomain.inbound_verified_at=null;
+    }
+    renderEmailDomainSettings();
+  }catch(e){}
 }
 
 function renderNotifSettings(){

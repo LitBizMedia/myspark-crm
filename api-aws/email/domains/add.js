@@ -60,15 +60,21 @@ async function handler(req, res) {
     domain: domain,
     resend_domain_id: resendData.id,
     status: 'pending',
-    dkim_records: records
+    dkim_records: JSON.stringify(records)
   };
 
   try {
     const saved = await db.insertOne('subaccount_email_domains', row);
+    // saved row will have dkim_records as the parsed JSON; return frontend-friendly shape
     return res.status(200).json({ success: true, domain: saved || row, records });
   } catch (e) {
-    console.error('DB insert error:', e.message);
-    return res.status(200).json({ success: true, domain: row, records });
+    console.error('DB insert error after Resend create:', e.message);
+    // Resend already has the domain. Tell the frontend so they can recover.
+    return res.status(500).json({
+      error: 'Domain created in Resend but failed to save locally. Contact support.',
+      resend_domain_id: resendData.id,
+      detail: e.message
+    });
   }
 }
 

@@ -23,14 +23,9 @@ async function handler(req, res) {
 
   const subaccountId = 'sub-' + slug;
 
-  try {
-    await fetch('https://api.resend.com/domains/' + domainId + '/verify', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY }
-    });
-  } catch (e) {
-    console.error('Resend verify trigger error:', e.message);
-  }
+  // Skip the POST /verify trigger - it temporarily flips status to 'pending'
+  // for ~3s and causes the immediate GET below to return stale data.
+  // Resend continuously monitors DNS, so just reading current status is reliable.
 
   const domainRes = await fetch('https://api.resend.com/domains/' + domainId, {
     headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY }
