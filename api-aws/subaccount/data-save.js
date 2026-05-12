@@ -21,7 +21,7 @@ const { logAudit } = require('./lib/audit');
 // ensure only legitimate TIER 2/TIER 3 keys are sent. This server-side strip
 // is empty by design. If keys start showing up here, something on the
 // frontend regressed.
-const STRIPPED_TOP_LEVEL = [];
+const STRIPPED_TOP_LEVEL = ['contacts', 'creditBalance', 'creditHistory'];
 // Settings keys are managed by frontend allowlist + self-heal. Empty by design.
 const STRIPPED_SETTINGS = [];
 

@@ -9995,7 +9995,7 @@ function loadData(){
 //   giftCards, giftCardProducts, sessionPacks, sessionPackTemplates
 var BLOB_ALLOWLIST = [
   'settings','paySettings','tags','readNotifs','customFields','customFieldCategories',
-  'contacts','tasks','forms','formSubmissions','coupons','products','productCategories',
+  'tasks','forms','formSubmissions','coupons','products','productCategories',
   'giftCards','giftCardProducts','sessionPacks','sessionPackTemplates'
 ];
 
@@ -10050,6 +10050,8 @@ async function fetchFromServer(){
       if(Array.isArray(result.serviceWidgets))db.serviceWidgets=result.serviceWidgets;
       // Migrated to RDS payments table. Override blob payments during transition.
       if(Array.isArray(result.payments))db.payments=result.payments;
+      // Migrated to RDS contacts table (May 11, 2026). Override blob contacts.
+      if(Array.isArray(result.contacts))db.contacts=result.contacts;
       // Migrated to RDS appointments table. Override blob appointments during transition.
       // The booking widget writes here, so this is now the source of truth.
       if(Array.isArray(result.appointments))db.appointments=result.appointments;
