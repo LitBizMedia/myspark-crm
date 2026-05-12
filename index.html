@@ -9428,21 +9428,25 @@ function openNoteModal(cid,nid){
   state.modal={type:'note',id:nid||null,extra:cid};
   openModal(n?'Edit Note':'Add Note','<div class="form-group"><label>Note</label><textarea id="nf-text" rows="6">'+esc(n&&n.text||'')+'</textarea></div>','<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveNote()">Save</button>');
 }
-function saveNote(){
-  const text=document.getElementById('nf-text').value.trim();if(!text){toast('Note empty.','error');return}
-  const c=getContact(state.modal.extra);if(!c)return;
-  var isNewNote=!state.modal.id;
-  var noteId=state.modal.id||null;
-  if(state.modal.id){const n=c.notes.find(x=>x.id===state.modal.id);if(n){n.text=text;n.updatedAt=now_()}}
-  else { var newNote={id:uid(),text,createdAt:now_()}; c.notes.push(newNote); noteId=newNote.id; }
-  saveData();closeModal();renderDrawer();
-  // Audit: note creation/update (text content NOT logged - it's PHI)
-  logSubaccountAudit(isNewNote ? 'subaccount.contact.note.create' : 'subaccount.contact.note.update', {
-    targetId: c.id,
-    targetType: 'contact',
-    metadata: { contact_name: c.name, note_id: noteId, text_length: text.length }
-  });
-  toast(isNewNote?'Note added.':'Note updated.','success');
+async function saveNote(){
+  const text=document.getElementById('nf-text').value.trim();
+  if(!text){ toast('Note empty.','error'); return; }
+  const c=getContact(state.modal.extra);
+  if(!c){ toast('Contact not found.','error'); return; }
+  const isNewNote=!state.modal.id;
+  try{
+    if(isNewNote){
+      await contactNoteCreate(c.id, text);
+    } else {
+      await contactNoteUpdate(state.modal.id, text);
+    }
+    await fetchFromServer();
+    closeModal();
+    renderDrawer();
+    toast(isNewNote?'Note added.':'Note updated.','success');
+  }catch(e){
+    toast('Save failed: '+(e.message||'unknown'),'error');
+  }
 }
 function delNote(cid,nid){
   state.modal={type:'del-note',data:{cid,nid}};
@@ -9452,18 +9456,18 @@ function delNote(cid,nid){
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelNote()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelNote(){
-  const d=state.modal&&state.modal.data;if(!d)return;
-  const c=getContact(d.cid);
-  if(c){
-    c.notes=c.notes.filter(n=>n.id!==d.nid);
-    logSubaccountAudit('subaccount.contact.note.delete', {
-      targetId: d.cid,
-      targetType: 'contact',
-      metadata: { contact_name: c.name, note_id: d.nid }
-    });
+async function confirmDelNote(){
+  const d=state.modal&&state.modal.data;
+  if(!d) return;
+  try{
+    await contactNoteDelete(d.nid);
+    await fetchFromServer();
+    closeModal();
+    renderDrawer();
+    toast('Note removed.','success');
+  }catch(e){
+    toast('Delete failed: '+(e.message||'unknown'),'error');
   }
-  saveData();closeModal();renderDrawer();toast('Note removed.','success');
 }
 
 // USER MODAL
