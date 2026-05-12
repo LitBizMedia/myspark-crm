@@ -3853,6 +3853,7 @@ function renderDrawer(){
       +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
       +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">Book Appointment</button>'
       +renderContactWarningsSection(c.id)
+      +renderContactAllergiesSection(c.id)
       +cfRenderDrawerSections(c.id);
   }else if(state.dTab==='notes'){
     const notes=[...c.notes].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
@@ -19181,6 +19182,127 @@ function renderDashWeek(){
   }
   h+='</div>';
   el.innerHTML=h;
+}
+
+// =====================================================
+// CONTACT ALLERGIES
+// =====================================================
+var ALLERGY_SEVERITY = {
+  severe:   { label: 'Severe',   color: '#ef4444', bg: '#fef2f2', border: '#fecaca', icon: '⚠', rank: 0 },
+  moderate: { label: 'Moderate', color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', icon: '⚠', rank: 1 },
+  mild:     { label: 'Mild',     color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ',  rank: 2 }
+};
+
+function _getContactAllergies(contactId){
+  var c = (db.contacts||[]).find(function(x){return x.id===contactId;});
+  if(!c || !Array.isArray(c.allergies)) return [];
+  return c.allergies.slice().sort(function(a,b){
+    var ra = (ALLERGY_SEVERITY[a.severity]||{rank:99}).rank;
+    var rb = (ALLERGY_SEVERITY[b.severity]||{rank:99}).rank;
+    if(ra!==rb) return ra-rb;
+    return (a.allergen||'').localeCompare(b.allergen||'');
+  });
+}
+
+function renderContactAllergiesSection(contactId){
+  var allergies = _getContactAllergies(contactId);
+  var header = '<div class="sec-row" style="margin-top:14px"><div class="sec-label" style="margin-bottom:0">Allergies ('+allergies.length+')</div>'
+    + '<button class="btn btn-purple btn-sm" onclick="openAllergyModal(\''+contactId+'\',null)">+ Add</button></div>';
+  if(!allergies.length){
+    return header + '<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No known allergies.</div>';
+  }
+  var items = allergies.map(function(a){
+    var m = ALLERGY_SEVERITY[a.severity] || ALLERGY_SEVERITY.mild;
+    var details = [];
+    if(a.reaction) details.push('Reaction: '+esc(a.reaction));
+    if(a.notes) details.push(esc(a.notes));
+    var detailsHTML = details.length ? '<div style="font-size:11px;color:#4b5563;margin-top:3px">'+details.join(' · ')+'</div>' : '';
+    return '<div style="padding:8px 10px;background:'+m.bg+';border-left:3px solid '+m.color+';border-radius:4px;margin-bottom:6px">'
+      + '<div style="display:flex;align-items:center;gap:8px">'
+      +   '<span style="font-size:9px;font-weight:700;text-transform:uppercase;color:'+m.color+';flex-shrink:0;min-width:60px">'+m.label+'</span>'
+      +   '<span style="flex:1;font-size:13px;color:#1f2937;font-weight:600">'+esc(a.allergen)+'</span>'
+      +   '<div style="display:flex;gap:3px;flex-shrink:0">'
+      +     '<button class="icon-btn-xs" onclick="openAllergyModal(\''+contactId+'\',\''+a.id+'\')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+      +     '<button class="icon-btn-xs" onclick="delAllergy(\''+a.id+'\')" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>'
+      +   '</div>'
+      + '</div>'
+      + detailsHTML
+      + '</div>';
+  }).join('');
+  return header + '<div style="margin-top:8px">' + items + '</div>';
+}
+
+function openAllergyModal(contactId, allergyId){
+  var c = (db.contacts||[]).find(function(x){return x.id===contactId;});
+  if(!c){ toast('Contact not found.','error'); return; }
+  var existing = allergyId ? (c.allergies||[]).find(function(a){return a.id===allergyId;}) : null;
+  state.modal = { type:'allergy', id: allergyId||null, extra: contactId };
+  var selSev = existing ? existing.severity : 'moderate';
+  var sevOpts = ['severe','moderate','mild'].map(function(s){
+    var m = ALLERGY_SEVERITY[s];
+    return '<option value="'+s+'"'+(selSev===s?' selected':'')+'>'+m.label+'</option>';
+  }).join('');
+  var body = '<div class="form-group"><label>Allergen *</label>'
+    + '<input id="af-allergen" type="text" placeholder="e.g. Penicillin, peanuts, latex" value="'+esc(existing?existing.allergen:'')+'"></div>'
+    + '<div class="form-row">'
+    +   '<div class="form-group" style="flex:1"><label>Severity *</label>'
+    +     '<select id="af-severity" style="width:100%;height:38px;padding:6px 10px;border:1px solid var(--main-border);border-radius:6px">'+sevOpts+'</select></div>'
+    +   '<div class="form-group" style="flex:2"><label>Reaction</label>'
+    +     '<input id="af-reaction" type="text" placeholder="e.g. hives, anaphylaxis" value="'+esc(existing&&existing.reaction||'')+'"></div>'
+    + '</div>'
+    + '<div class="form-group"><label>Notes</label>'
+    + '<input id="af-notes" type="text" placeholder="Optional context" value="'+esc(existing&&existing.notes||'')+'"></div>';
+  openModal(existing?'Edit Allergy':'Add Allergy', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveAllergy()">Save</button>');
+}
+
+async function saveAllergy(){
+  var contactId = state.modal && state.modal.extra;
+  var allergyId = state.modal && state.modal.id;
+  var allergen = ((document.getElementById('af-allergen')||{}).value||'').trim();
+  var severity = (document.getElementById('af-severity')||{}).value || 'moderate';
+  var reaction = ((document.getElementById('af-reaction')||{}).value||'').trim() || null;
+  var notes = ((document.getElementById('af-notes')||{}).value||'').trim() || null;
+  if(!allergen){ toast('Allergen required.','error'); return; }
+  try{
+    if(allergyId){
+      await contactAllergyUpdate(allergyId, {allergen:allergen, severity:severity, reaction:reaction, notes:notes});
+    } else {
+      await contactAllergyCreate(contactId, {allergen:allergen, severity:severity, reaction:reaction, notes:notes});
+    }
+    await fetchFromServer();
+    closeModal();
+    renderDrawer();
+    renderContacts();
+    toast(allergyId?'Allergy updated.':'Allergy added.','success');
+  }catch(e){
+    toast('Save failed: '+(e.message||'unknown'),'error');
+  }
+}
+
+function delAllergy(allergyId){
+  state.modal = { type:'del-allergy', id: allergyId };
+  document.getElementById('modal-title').textContent = 'Delete Allergy';
+  document.getElementById('modal-box').className = 'modal';
+  document.getElementById('modal-body').innerHTML = '<div class="warn-box">Delete this allergy? This cannot be undone.</div>';
+  document.getElementById('modal-foot').innerHTML = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-danger" onclick="confirmDelAllergy()">Delete</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function confirmDelAllergy(){
+  var allergyId = state.modal && state.modal.id;
+  if(!allergyId) return;
+  try{
+    await contactAllergyDelete(allergyId);
+    await fetchFromServer();
+    closeModal();
+    renderDrawer();
+    renderContacts();
+    toast('Allergy deleted.','success');
+  }catch(e){
+    toast('Delete failed: '+(e.message||'unknown'),'error');
+  }
 }
 
 // =====================================================
