@@ -19185,19 +19185,21 @@ function openCreditModal(contactId,type){
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCredit(\''+contactId+'\',\''+type+'\')">Save</button>');
 }
 
-function saveCredit(contactId,type){
+async function saveCredit(contactId,type){
   const amt=parseFloat(document.getElementById('cred-amt').value)||0;
-  if(amt<=0){toast('Enter a valid amount.','error');return;}
-  const note=document.getElementById('cred-note').value.trim();
-  const c=db.contacts.find(function(x){return x.id===contactId;});if(!c)return;
-  if(!c.creditBalance)c.creditBalance=0;
-  if(!c.creditHistory)c.creditHistory=[];
-  const delta=type==='add'?amt:-amt;
-  c.creditBalance=Math.max(0,c.creditBalance+delta);
-  c.creditHistory.unshift({id:uid(),type,amount:amt,note,date:now_(),addedBy:state.user&&(state.user.name||state.user.username)||'Admin'});
-  saveData();closeModal();
-  if(state.drawer)renderDrawer();
-  toast((type==='add'?'$'+amt.toFixed(2)+' credits added.':'$'+amt.toFixed(2)+' credits deducted.'),'success');
+  if(amt<=0){ toast('Enter a valid amount.','error'); return; }
+  const note=document.getElementById('cred-note').value.trim()||null;
+  // Map UI 'add'/'deduct' to API 'credit'/'debit'
+  const apiType = type==='add' ? 'credit' : 'debit';
+  try{
+    await contactCreditAdd(contactId, apiType, amt, note);
+    await fetchFromServer();
+    closeModal();
+    if(state.drawer) renderDrawer();
+    toast((type==='add'?'$'+amt.toFixed(2)+' credits added.':'$'+amt.toFixed(2)+' credits deducted.'),'success');
+  }catch(e){
+    toast('Save failed: '+(e.message||'unknown'),'error');
+  }
 }
 
 function renderContactCredits(contactId){
