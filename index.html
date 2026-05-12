@@ -3746,7 +3746,16 @@ function renderContacts(){
   if(!slice.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><h3>No contacts found</h3><p>Add a contact or adjust filters.</p></div></td></tr>';document.getElementById('contacts-pg').innerHTML='';return}
   tbody.innerHTML=slice.map(c=>{
     const col_=avColor(c.name),tags=(c.tags||[]).slice(0,3).map(tid=>{const t=getTag(tid);return t?'<span class="tag-pill" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'</span>':''}).join('');
-    return'<tr onclick="openDrawer(\''+c.id+'\')">'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600;display:flex;align-items:center">'+esc(c.name)+_contactRowWarningBadge(c)+'</div></div></td>'+'<td style="font-size:13px">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.phone||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()"><button class="icon-btn-xs" onclick="openContactModal(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button></td></tr>';
+    var rowActions='';
+    if(state.cShowArchived){
+      // Archive view: restore + permanent delete icons
+      rowActions='<button class="icon-btn-xs" title="Restore" onclick="restoreOne(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/></svg></button>'
+        +'<button class="icon-btn-xs" title="Delete permanently" style="color:#dc2626" onclick="deleteOnePermanent(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>';
+    } else {
+      // Normal view: edit icon
+      rowActions='<button class="icon-btn-xs" onclick="openContactModal(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
+    }
+    return'<tr onclick="openDrawer(\''+c.id+'\')"'+(c.archived?' style="opacity:.65"':'')+'>'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600;display:flex;align-items:center">'+esc(c.name)+_contactRowWarningBadge(c)+'</div></div></td>'+'<td style="font-size:13px">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.phone||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()" style="white-space:nowrap">'+rowActions+'</td></tr>';
   }).join('');
   renderPg('contacts-pg',state.cPage,pages,'cPg');
   updateBulkBar();
@@ -20464,15 +20473,78 @@ function bulkExportCSV(){
 function bulkDeletePermanent(){
   const n=state.cSelected.size;
   if(!n)return;
-  state.modal={type:'bulk-delete'};
+  state.modal={type:'bulk-delete-perm'};
   document.getElementById('modal-title').textContent='Delete Permanently';
   document.getElementById('modal-box').className='modal';
   document.getElementById('modal-body').innerHTML=
-    '<div class="warn-box">Archive <strong>'+n+' contact'+(n===1?'':'s')+'</strong>? Archived contacts are hidden from the main list but can be restored or permanently deleted later from the Archived view.</div>';
+    '<div class="warn-box"><strong style="color:#dc2626">PERMANENTLY DELETE '+n+' contact'+(n===1?'':'s')+'?</strong><br><br>This action cannot be undone. All associated notes, warnings, allergies, and credit history will also be deleted. Appointments and payments will remain but with the contact link removed.</div>';
   document.getElementById('modal-foot').innerHTML=
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+
-    '<button class="btn btn-danger" onclick="confirmBulkDelete()">Archive '+n+' Contact'+(n===1?'':'s')+'</button>';
+    '<button class="btn btn-danger" onclick="confirmBulkDeletePermanent()">Delete '+n+' Permanently</button>';
   document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function confirmBulkDeletePermanent(){
+  const ids=[...state.cSelected];
+  if(!ids.length){ closeModal(); return; }
+  let failed=0;
+  for(const id of ids){
+    try{ await contactDelete(id); }
+    catch(e){ failed++; console.error('Permanent delete failed for', id, e); }
+  }
+  await fetchFromServer();
+  state.cSelected.clear();
+  closeModal();
+  renderContacts();
+  if(failed===0){
+    toast(ids.length+' contact'+(ids.length===1?'':'s')+' permanently deleted.','success');
+  } else {
+    toast((ids.length-failed)+' deleted, '+failed+' failed.','error');
+  }
+}
+
+// Single-contact restore from archive view
+async function restoreOne(id){
+  const c=db.contacts.find(x=>x.id===id);
+  if(!c) return;
+  try{
+    await contactArchive(id, true); // unarchive=true
+    await fetchFromServer();
+    renderContacts();
+    toast(esc(c.name)+' restored.','success');
+  }catch(e){
+    toast('Restore failed: '+(e.message||'unknown'),'error');
+  }
+}
+
+// Single-contact permanent delete with confirm
+function deleteOnePermanent(id){
+  const c=db.contacts.find(x=>x.id===id);
+  if(!c) return;
+  state.modal={type:'del-perm',id:id};
+  document.getElementById('modal-title').textContent='Delete Permanently';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML=
+    '<div class="warn-box"><strong style="color:#dc2626">PERMANENTLY DELETE '+esc(c.name)+'?</strong><br><br>This cannot be undone. All notes, warnings, allergies, and credit history will be deleted.</div>';
+  document.getElementById('modal-foot').innerHTML=
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn btn-danger" onclick="confirmDeleteOnePermanent()">Delete Permanently</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function confirmDeleteOnePermanent(){
+  const id=state.modal&&state.modal.id;
+  if(!id) return;
+  const c=db.contacts.find(x=>x.id===id);
+  try{
+    await contactDelete(id);
+    await fetchFromServer();
+    closeModal();
+    renderContacts();
+    toast((c?esc(c.name):'Contact')+' permanently deleted.','success');
+  }catch(e){
+    toast('Delete failed: '+(e.message||'unknown'),'error');
+  }
 }
 
 async function confirmBulkDelete(){
