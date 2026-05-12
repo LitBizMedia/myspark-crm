@@ -6277,8 +6277,13 @@ async function linkContactToSquare(contactId){
     });
     const d=await r.json();
     if(d.customerId){
-      c.squareCustomerId=d.customerId;
-      saveData();    }
+      try{
+        await contactUpdate(contactId, {square_customer_id: d.customerId});
+        await fetchFromServer();
+      }catch(e2){
+        console.error('Square link persist error:', e2);
+      }
+    }
   }catch(e){console.error('Square link error:',e);}
 }
 
@@ -9885,7 +9890,33 @@ function delTag(id){
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelTag()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDelTag(){const id=state.modal&&state.modal.id;if(!id)return;db.tags=db.tags.filter(t=>t.id!==id);db.contacts.forEach(c=>{c.tags=(c.tags||[]).filter(t=>t!==id)});saveData();closeModal();renderTagMgr();renderContacts();toast('Tag removed.','success')}
+async function confirmDelTag(){
+  const id=state.modal&&state.modal.id;
+  if(!id)return;
+  // Remove from tags catalog (still in blob per TIER 3 plan)
+  db.tags=db.tags.filter(t=>t.id!==id);
+  // Find contacts that have this tag, update each via API
+  const affected=(db.contacts||[]).filter(c=>Array.isArray(c.tags)&&c.tags.includes(id));
+  let failed=0;
+  if(affected.length){
+    toast('Removing tag from '+affected.length+' contact'+(affected.length===1?'':'s')+'...','info');
+    for(const c of affected){
+      const newTags=c.tags.filter(t=>t!==id);
+      try{ await contactUpdate(c.id, {tags:newTags}); }
+      catch(e){ failed++; console.error('Tag strip failed for', c.id, e); }
+    }
+    await fetchFromServer();
+  }
+  saveData(); // persist tags catalog change to blob
+  closeModal();
+  renderTagMgr();
+  renderContacts();
+  if(failed===0){
+    toast('Tag removed.','success');
+  } else {
+    toast('Tag removed, but '+failed+' contact update'+(failed===1?'':'s')+' failed.','error');
+  }
+}
 
 // =====================================================
 // PAGINATION
@@ -19900,18 +19931,23 @@ function removeCardFromContact(contactId,cardId){
   document.getElementById('modal-overlay').classList.add('open');
 }
 
-function confirmRemoveCard(){
+async function confirmRemoveCard(){
   const d=state.modal&&state.modal.data;
   if(!d)return;
   const c=db.contacts.find(function(x){return x.id===d.contactId});
   if(!c)return;
-  c.squareCards=(c.squareCards||[]).filter(function(x){return x.id!==d.cardId});
-  saveData();
-  closeModal();
-  if(state.drawer===d.contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
-    renderDrawer();
+  const newCards=(c.squareCards||[]).filter(function(x){return x.id!==d.cardId});
+  try{
+    await contactUpdate(d.contactId, {square_cards: newCards});
+    await fetchFromServer();
+    closeModal();
+    if(state.drawer===d.contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
+      renderDrawer();
+    }
+    toast('Card removed.','success');
+  }catch(e){
+    toast('Card removal failed: '+(e.message||'unknown'),'error');
   }
-  toast('Card removed.','success');
 }
 
 // =====================================================
