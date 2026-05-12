@@ -16506,7 +16506,7 @@ function fbAutoLinkSub(sub){
   }
 }
 
-function fbCreateContactFromSub(sub,form){
+async function fbCreateContactFromSub(sub,form){
   const fields=form.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]);
   const get=type=>fields.find(f=>f.type===type);
   const getV=type=>{const fd=get(type);return fd&&sub.data&&sub.data[fd.id]||'';};
@@ -16515,8 +16515,25 @@ function fbCreateContactFromSub(sub,form){
   const nameFd=get('name');
   let name='';
   if(nameFd&&sub.data){const v=sub.data[nameFd.id];name=v&&(v.first||'')+' '+(v.last||'');name=name.trim();}
-  const contact={id:uid(),name:name||email||'New Contact',email,phone:getV('phone'),company:getV('company'),type:'lead',status:'active',tags:form.settings.contactTags||[],notes:[],source:'Form: '+form.name,createdAt:now_()};
-  db.contacts.push(contact);sub.contactId=contact.id;saveData();toast('Contact created: '+contact.name,'success');
+  const data={
+    display_name: name||email||'New Contact',
+    name: name||email||'New Contact',
+    email: email,
+    phone: getV('phone'),
+    company: getV('company'),
+    type: 'lead',
+    status: 'active',
+    tags: form.settings.contactTags||[],
+    source: 'Form: '+form.name
+  };
+  try{
+    const r = await contactCreate(data);
+    sub.contactId = r && r.id;
+    await fetchFromServer();
+    toast('Contact created: '+data.name,'success');
+  }catch(e){
+    toast('Contact create failed: '+(e.message||'unknown'),'error');
+  }
 }
 
 // =====================================================
@@ -19954,17 +19971,24 @@ function bulkArchive(){
   document.getElementById('modal-overlay').classList.add('open');
 }
 
-function confirmBulkArchive(action){
+async function confirmBulkArchive(action){
   const ids=[...state.cSelected];
-  ids.forEach(function(id){
-    const c=getContact(id);
-    if(c)c.archived=action==='archive';
-  });
-  saveData();
+  if(!ids.length){ closeModal(); return; }
+  const unarchive = (action !== 'archive');
+  let failed=0;
+  for(const id of ids){
+    try{ await contactArchive(id, unarchive); }
+    catch(e){ failed++; console.error('Bulk '+action+' failed for', id, e); }
+  }
+  await fetchFromServer();
   state.cSelected.clear();
   closeModal();
   renderContacts();
-  toast(ids.length+' contact'+(ids.length===1?'':'s')+' '+(action==='archive'?'archived':'restored')+'.','success');
+  if(failed===0){
+    toast(ids.length+' contact'+(ids.length===1?'':'s')+' '+(action==='archive'?'archived':'restored')+'.','success');
+  } else {
+    toast((ids.length-failed)+' '+(action==='archive'?'archived':'restored')+', '+failed+' failed.','error');
+  }
 }
 
 function openBulkTypeModal(){
@@ -19979,10 +20003,20 @@ function openBulkTypeModal(){
   document.getElementById('modal-overlay').classList.add('open');
 }
 
-function bulkChangeType(type){
-  [...state.cSelected].forEach(function(id){const c=getContact(id);if(c)c.type=type;});
-  saveData();closeModal();state.cSelected.clear();renderContacts();
-  toast('Contact types updated.','success');
+async function bulkChangeType(type){
+  const ids=[...state.cSelected];
+  if(!ids.length){ closeModal(); return; }
+  let failed=0;
+  for(const id of ids){
+    try{ await contactUpdate(id, {type:type}); }
+    catch(e){ failed++; console.error('Type update failed for', id, e); }
+  }
+  await fetchFromServer();
+  closeModal();
+  state.cSelected.clear();
+  renderContacts();
+  if(failed===0){ toast('Contact types updated.','success'); }
+  else { toast((ids.length-failed)+' updated, '+failed+' failed.','error'); }
 }
 
 function openBulkStatusModal(){
@@ -19997,10 +20031,20 @@ function openBulkStatusModal(){
   document.getElementById('modal-overlay').classList.add('open');
 }
 
-function bulkChangeStatus(status){
-  [...state.cSelected].forEach(function(id){const c=getContact(id);if(c)c.status=status;});
-  saveData();closeModal();state.cSelected.clear();renderContacts();
-  toast('Contact statuses updated.','success');
+async function bulkChangeStatus(status){
+  const ids=[...state.cSelected];
+  if(!ids.length){ closeModal(); return; }
+  let failed=0;
+  for(const id of ids){
+    try{ await contactUpdate(id, {status:status}); }
+    catch(e){ failed++; console.error('Status update failed for', id, e); }
+  }
+  await fetchFromServer();
+  closeModal();
+  state.cSelected.clear();
+  renderContacts();
+  if(failed===0){ toast('Contact statuses updated.','success'); }
+  else { toast((ids.length-failed)+' updated, '+failed+' failed.','error'); }
 }
 
 function openBulkTagModal(){
@@ -20016,13 +20060,25 @@ function openBulkTagModal(){
   document.getElementById('modal-overlay').classList.add('open');
 }
 
-function bulkAddTag(tagId){
-  [...state.cSelected].forEach(function(id){
+async function bulkAddTag(tagId){
+  const ids=[...state.cSelected];
+  if(!ids.length){ closeModal(); return; }
+  let failed=0;
+  for(const id of ids){
     const c=getContact(id);
-    if(c){if(!c.tags)c.tags=[];if(!c.tags.includes(tagId))c.tags.push(tagId);}
-  });
-  saveData();closeModal();state.cSelected.clear();renderContacts();
-  toast('Tag added to selected contacts.','success');
+    if(!c) continue;
+    const existingTags = Array.isArray(c.tags) ? c.tags.slice() : [];
+    if(existingTags.includes(tagId)) continue;
+    existingTags.push(tagId);
+    try{ await contactUpdate(id, {tags:existingTags}); }
+    catch(e){ failed++; console.error('Tag add failed for', id, e); }
+  }
+  await fetchFromServer();
+  closeModal();
+  state.cSelected.clear();
+  renderContacts();
+  if(failed===0){ toast('Tag added to selected contacts.','success'); }
+  else { toast((ids.length-failed)+' updated, '+failed+' failed.','error'); }
 }
 
 function bulkExportCSV(){
@@ -26306,18 +26362,18 @@ function applyRolePermissions(){
 }
 
 
-function archiveContact(id){
+async function archiveContact(id){
   var contact=db.contacts.find(function(x){return x.id===id;});
-  if(!contact)return;
-  contact.archived=true;
-  saveData();closeDrawer();renderContacts();
-  // Audit: archive (soft delete) of contact
-  logSubaccountAudit('subaccount.contact.delete', {
-    targetId: id,
-    targetType: 'contact',
-    metadata: { contact_name: contact.name, action_subtype: 'archive' }
-  });
-  toast(esc(contact.name)+' archived.','success');
+  if(!contact){ toast('Contact not found.','error'); return; }
+  try{
+    await contactArchive(id, false);
+    await fetchFromServer();
+    closeDrawer();
+    renderContacts();
+    toast(esc(contact.name)+' archived.','success');
+  }catch(e){
+    toast('Archive failed: '+(e.message||'unknown'),'error');
+  }
 }
 // =====================================================
 // CONTACT CSV IMPORT
@@ -26507,48 +26563,63 @@ function importDoImport(){
   });
   if(!toImport.length){closeModal();toast('No contacts to import.','info');return;}
   var colorIdx=0,imported=0,overwritten=0;
-  toImport.forEach(function(m){
-    // Resolve or create tags
-    var tagIds=[];
-    if(m.tags){
-      m.tags.split(',').forEach(function(tName){
-        tName=tName.trim();if(!tName)return;
-        var found=db.tags.find(function(t){return t.name.toLowerCase()===tName.toLowerCase();});
-        if(found){tagIds.push(found.id);}
-        else{
-          var nt={id:'tag-'+uid(),name:tName,color:TAG_COLORS[colorIdx%TAG_COLORS.length]};
-          colorIdx++;db.tags.push(nt);tagIds.push(nt.id);
+  // Sequential async import. UI updates via toast at the end.
+  closeModal();
+  toast('Importing '+toImport.length+' contact'+(toImport.length!==1?'s':'')+'...','info');
+  (async function(){
+    let importedCount=0, overwrittenCount=0, failedCount=0;
+    for(const m of toImport){
+      // Resolve or create tags (local only, tags catalog stays in blob)
+      const tagIds=[];
+      if(m.tags){
+        m.tags.split(',').forEach(function(tName){
+          tName=tName.trim();if(!tName)return;
+          const found=db.tags.find(function(t){return t.name.toLowerCase()===tName.toLowerCase();});
+          if(found){tagIds.push(found.id);}
+          else{
+            const nt={id:'tag-'+uid(),name:tName,color:TAG_COLORS[colorIdx%TAG_COLORS.length]};
+            colorIdx++;db.tags.push(nt);tagIds.push(nt.id);
+          }
+        });
+      }
+      const existing=db.contacts.find(function(c){return c.email&&m.email&&c.email.toLowerCase()===m.email.toLowerCase();});
+      const data={
+        display_name: m.name||m.email||'Imported Contact',
+        name: m.name||m.email||'Imported Contact',
+        company: m.company||'',
+        email: m.email||'',
+        phone: m.phone||'',
+        address_line1: m.address_line1||'',
+        address_line2: m.address_line2||'',
+        city: m.city||'',
+        state: m.state||'',
+        postal_code: m.postal_code||'',
+        tags: tagIds,
+        type: m.type||'lead',
+        status: m.status||'active'
+      };
+      try{
+        if(existing){
+          await contactUpdate(existing.id, data);
+          overwrittenCount++;
+        } else {
+          await contactCreate(data);
+          importedCount++;
         }
-      });
+      }catch(e){
+        failedCount++;
+        console.error('CSV import row failed:', m.email, e);
+      }
     }
-    var existingIdx=db.contacts.findIndex(function(c){return c.email&&m.email&&c.email.toLowerCase()===m.email.toLowerCase();});
-    var contact={
-      id:existingIdx>=0?db.contacts[existingIdx].id:uid(),
-      name:m.name||m.email||'Imported Contact',
-      company:m.company||'',
-      email:m.email||'',
-      phone:m.phone||'',
-      address_line1:m.address_line1||'',
-      address_line2:m.address_line2||'',
-      city:m.city||'',
-      state:m.state||'',
-      postal_code:m.postal_code||'',
-      tags:tagIds,
-      type:m.type||'lead',
-      status:m.status||'active',
-      notes:[],
-      archived:false,
-      createdAt:m.createdAt?new Date(m.createdAt).toISOString():now_(),
-      squareCards:existingIdx>=0?(db.contacts[existingIdx].squareCards||[]):[],
-      squareCustomerId:existingIdx>=0?(db.contacts[existingIdx].squareCustomerId||null):null
-    };
-    if(existingIdx>=0){db.contacts[existingIdx]=contact;overwritten++;}
-    else{db.contacts.push(contact);imported++;}
-  });
-  saveData();closeModal();renderContacts();
-  var msg=imported+' contact'+(imported!==1?'s':'')+' imported';
-  if(overwritten>0)msg+=', '+overwritten+' overwritten';
-  toast(msg+'.','success');
+    // Refresh once after the batch
+    if(db.tags && db.tags.length){ saveData(); } // tags still in blob
+    await fetchFromServer();
+    renderContacts();
+    let msg=importedCount+' contact'+(importedCount!==1?'s':'')+' imported';
+    if(overwrittenCount>0) msg+=', '+overwrittenCount+' overwritten';
+    if(failedCount>0) msg+=', '+failedCount+' failed';
+    toast(msg+'.', failedCount>0?'error':'success');
+  })();
 }
 function cfUpdateName(){
   var fn=(document.getElementById('cf-firstname')||{}).value||'';
