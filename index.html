@@ -1922,7 +1922,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <button class="pay-tab hidden" id="pm-gc" onclick="setPM('gc')">Gift Card</button>
               </div>
               <div id="pm-card-fields">
-                <div id="pos-sq-card-container" class="sq-card-form" style="min-height:89px"></div>
+                <div id="pos-sq-card-container" class="sq-card-form" style="min-height:56px"></div>
                 <div id="pos-sq-card-errors" style="color:#f87171;font-size:12px;margin-top:4px;min-height:16px"></div>
                 <input id="pos-card-num" type="hidden"><input id="pos-exp" type="hidden"><input id="pos-cvv" type="hidden"><input id="pos-zip" type="hidden">
               </div>
@@ -5969,11 +5969,15 @@ async function reviewCharge(){
 }
 
 let posSqCard=null;
+let posSqCardInitInFlight=false;
 async function initPosSquareCardForm(){
   const errEl=document.getElementById('pos-sq-card-errors');
   const container=document.getElementById('pos-sq-card-container');
   if(!container){return;}
   if(posSqCard)return; // Already initialized, don't re-init
+  if(posSqCardInitInFlight)return; // Another init is already running, don't race
+  if(container.querySelector('iframe'))return; // Safety net: iframe already in DOM
+  posSqCardInitInFlight=true;
   container.innerHTML='';
   try{
     const cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
@@ -5986,6 +5990,8 @@ async function initPosSquareCardForm(){
   }catch(e){
     console.error('Square init error:',e);
     if(errEl)errEl.textContent='Could not load card form: '+e.message;
+  }finally{
+    posSqCardInitInFlight=false;
   }
 }
 
