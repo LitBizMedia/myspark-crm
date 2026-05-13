@@ -19590,13 +19590,15 @@ function renderDashWeek(){
   const u=userId?getUserById(userId):null;
   const now=new Date();
   const dow=now.getDay();
-  const td=todayStr();
+  // Local YYYY-MM-DD avoids toISOString UTC drift that shifted schedule lookup +1 day in the evening
+  function _localDS(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  const td=_localDS(now);
 
   let h='<div class="week-sched-grid">';
 
   for(var i=0;i<7;i++){
     const d=new Date(now);d.setDate(now.getDate()-dow+i);
-    const ds=d.toISOString().split('T')[0];
+    const ds=_localDS(d);
     const isToday=ds===td;
     const dayName=DSHORT[d.getDay()];
     const dayNum=d.getDate();
