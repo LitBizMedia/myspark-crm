@@ -6962,6 +6962,33 @@ function toggleApptAddon(addonId, checked){
   if (typeof checkApptConflict === 'function') checkApptConflict();
 }
 
+// Recompute appointment buffer fields from current service/variation and the
+// current set of assigned staff (group or single). Called after group chip
+// picker mutations so the prefill reflects the new staff set.
+function _apptRecomputeBufferFromCurrent(){
+  var svcSel=document.getElementById('af-service');
+  var svcId=svcSel&&svcSel.value;
+  if(!svcId)return;
+  var svc=(db.services||[]).find(function(s){return s.id===svcId;});
+  if(!svc)return;
+  var varSel=document.getElementById('af-variation');
+  var varId=varSel&&varSel.value;
+  var v=varId?(db.serviceVariations||[]).find(function(x){return x.id===varId;}):null;
+  var sb=parseInt(svc.buffer_before)||0;
+  var sa=parseInt(svc.buffer_after)||0;
+  if(v){
+    var vb=parseInt(v.buffer_before)||0;
+    var va=parseInt(v.buffer_after)||0;
+    if(vb>0)sb=vb;
+    if(va>0)sa=va;
+  }
+  var eb=getEffectiveBuffer({buffer_before:sb,buffer_after:sa},_apptCurrentStaffIds());
+  var bb=document.getElementById('af-buf-before');
+  var ba=document.getElementById('af-buf-after');
+  if(bb)bb.value=eb.before;
+  if(ba)ba.value=eb.after;
+}
+
 // Returns the array of currently-assigned staff IDs on the open appointment
 // modal. Handles both group mode (state.apptGroup.staff) and single mode
 // (af-user dropdown). Used by buffer prefill so the effective buffer reflects
@@ -7409,6 +7436,7 @@ function _apptGroupAddStaff(staffId){
   if(g.staff.length >= max) return;
   if(g.staff.indexOf(staffId) >= 0) return;
   g.staff.push(staffId);
+  _apptRecomputeBufferFromCurrent();
   _apptGroupRerender();
 }
 
@@ -7416,6 +7444,7 @@ function _apptGroupRemoveStaff(idx){
   var g = state.apptGroup;
   if(!g || g.staff[idx] === undefined) return;
   g.staff.splice(idx, 1);
+  _apptRecomputeBufferFromCurrent();
   _apptGroupRerender();
 }
 

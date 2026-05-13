@@ -254,7 +254,13 @@ async function handler(req, res) {
     const slotMap = {};
     for (const staff of staffPool) {
       const appts = apptsByStaff[staff.id] || [];
-      const staffSlots = getSlotsForStaff(staff, date, duration, bufBefore, bufAfter, appts, leadTimeHours, serviceAvailabilityWindow, strictAvailability, subTz, slotInterval);
+      // Apply per-staff default buffer max. Service or variation or appointment-type
+      // or widget override has already set bufBefore/bufAfter. Staff defaults floor it.
+      const staffBufB = parseInt(staff.schedule && staff.schedule.defaultBufferBefore) || 0;
+      const staffBufA = parseInt(staff.schedule && staff.schedule.defaultBufferAfter) || 0;
+      const effBufB = Math.max(bufBefore, staffBufB);
+      const effBufA = Math.max(bufAfter, staffBufA);
+      const staffSlots = getSlotsForStaff(staff, date, duration, effBufB, effBufA, appts, leadTimeHours, serviceAvailabilityWindow, strictAvailability, subTz, slotInterval);
       for (const s of staffSlots) {
         if (!slotMap[s.time]) slotMap[s.time] = [];
         slotMap[s.time].push(staff.id);

@@ -458,6 +458,18 @@ async function handler(req, res) {
       }
 
       assignedStaffId = (staff_id && staff_id !== 'any') ? staff_id : null;
+      // Apply per-staff default buffer max for the resolved staff. Service or
+      // variation or appointment-type or widget override has already set
+      // bufBefore/bufAfter; staff defaults floor it.
+      if (assignedStaffId && Array.isArray(allUsers)) {
+        const _u = allUsers.find(x => x.id === assignedStaffId);
+        if (_u && _u.schedule) {
+          const _sb = parseInt(_u.schedule.defaultBufferBefore) || 0;
+          const _sa = parseInt(_u.schedule.defaultBufferAfter)  || 0;
+          if (_sb > bufBefore) bufBefore = _sb;
+          if (_sa > bufAfter)  bufAfter  = _sa;
+        }
+      }
       // Verify the requested staff is eligible
       if (assignedStaffId && !allUsers.find(u => u.id === assignedStaffId)) {
         return res.status(400).json({ error: 'Selected staff member is not available for this service' });
