@@ -8,7 +8,7 @@ const { resolveResourceClaims, replaceClaims } = require('./lib/resource-allocat
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
-const resend = require('./lib/resend');
+const resend = require('./lib/ses');
 const crypto = require('crypto');
 
 function genActionToken() {

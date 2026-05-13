@@ -13,7 +13,7 @@
 
 const db = require('./lib/db');
 const secrets = require('./lib/secrets');
-const { sendEmail } = require('./lib/resend');
+const { sendEmail } = require('./lib/ses');
 const { sendSms } = require('./lib/twilio');
 const { wrap } = require('./lib/lambda-adapter');
 const { apptTimestampInTz } = require('./lib/timezone');

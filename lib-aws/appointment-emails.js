@@ -8,7 +8,7 @@
 // Each email is personalized with the client's name. No cancel/reschedule links
 // per current policy ("by call only").
 
-const { sendEmail } = require('./resend');
+const { sendEmail } = require('./ses');
 
 function fmtDate(d) {
   if (!d) return '';

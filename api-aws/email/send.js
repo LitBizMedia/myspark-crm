@@ -8,7 +8,7 @@
 //
 // MIGRATED: No DB calls of its own - delegates to lib/resend, lib/plan-limits.
 
-const { sendEmail } = require('./lib/resend');
+const { sendEmail } = require('./lib/ses');
 const {
   parseSessionCookie,
   parseAgencySessionCookie,

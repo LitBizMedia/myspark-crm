@@ -7,7 +7,7 @@
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
-const resend = require('./lib/resend');
+const resend = require('./lib/ses');
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

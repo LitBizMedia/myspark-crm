@@ -12,7 +12,7 @@
 //                 trial_ending_soon | cancellation_confirmed |
 //                 reactivation_confirmed | reactivation_no_charge
 
-const { sendEmail: resendSend } = require('./resend');
+const { sendEmail: resendSend } = require('./ses');
 
 // ---------------------------------------------------------------------------
 // Public entry point
