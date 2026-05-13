@@ -447,7 +447,7 @@ function visibleSteps() {
   // Widget-level payment requirement (overrides workspace default)
   const requirePayment = !!D.settings.require_payment;
   const tipEnabled = !!D.settings.tip_enabled;
-  if (requirePayment || tipEnabled) steps.push('payment');
+  if (requirePayment) steps.push('payment');
   steps.push('confirm');
   return steps;
 }
@@ -1615,7 +1615,7 @@ function renderPayment(el) {
   const willCharge = requirePayment && paymentMode !== 'none' && chargeAmount > 0;
 
   let tipHtml = '';
-  if (tipEnabled && tipBase > 0) {
+  if (tipEnabled && tipBase > 0 && willCharge) {
     const tipOpts = tipPcts.map(p => {
       const amt = (tipBase * p / 100).toFixed(2);
       const active = Math.abs((S.tip||0) - parseFloat(amt)) < 0.005 ? 'active' : '';
