@@ -6988,9 +6988,12 @@ function apptOnStaffChange(){
     var v=varId?(db.serviceVariations||[]).find(function(x){return x.id===varId;}):null;
     var effSvc=svc;
     if(v){
+      // Variation overrides service buffer only when >0. Variation 0 means "no override".
+      var vb=parseInt(v.buffer_before)||0;
+      var va=parseInt(v.buffer_after)||0;
       effSvc={
-        buffer_before:v.buffer_before!=null?v.buffer_before:svc.buffer_before,
-        buffer_after:v.buffer_after!=null?v.buffer_after:svc.buffer_after
+        buffer_before:vb>0?vb:(parseInt(svc.buffer_before)||0),
+        buffer_after:va>0?va:(parseInt(svc.buffer_after)||0)
       };
     }
     var eb=getEffectiveBuffer(effSvc,_apptCurrentStaffIds());
@@ -7102,14 +7105,20 @@ function apptOnVariationChange(){
   var durInp2 = document.getElementById('af-dur');
   if (durInp2) durInp2.value = variation.duration || svc.duration_default || 60;
   var bufBefore2 = document.getElementById('af-buf-before');
-  // Variation override: max(variation buffer, staff default) when set.
-  if (bufBefore2 && variation.buffer_before != null) {
-    var _vEbB = getEffectiveBuffer({buffer_before: variation.buffer_before, buffer_after: 0}, _apptCurrentStaffIds());
+  // Variation buffer overrides service only when >0. Then apply staff max.
+  if (bufBefore2) {
+    var _vb = parseInt(variation.buffer_before)||0;
+    var _sb = parseInt(svc.buffer_before)||0;
+    var _effB = _vb>0 ? _vb : _sb;
+    var _vEbB = getEffectiveBuffer({buffer_before: _effB, buffer_after: 0}, _apptCurrentStaffIds());
     bufBefore2.value = _vEbB.before;
   }
   var bufAfter2 = document.getElementById('af-buf-after');
-  if (bufAfter2 && variation.buffer_after != null) {
-    var _vEbA = getEffectiveBuffer({buffer_before: 0, buffer_after: variation.buffer_after}, _apptCurrentStaffIds());
+  if (bufAfter2) {
+    var _va = parseInt(variation.buffer_after)||0;
+    var _sa = parseInt(svc.buffer_after)||0;
+    var _effA = _va>0 ? _va : _sa;
+    var _vEbA = getEffectiveBuffer({buffer_before: 0, buffer_after: _effA}, _apptCurrentStaffIds());
     bufAfter2.value = _vEbA.after;
   }
   checkApptConflict();
