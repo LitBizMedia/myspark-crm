@@ -407,6 +407,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 
 /* TASKS */
 .task-chip-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.task-chip-sep{display:inline-block;width:1px;height:20px;background:var(--border,#e5e7eb);margin:0 4px;align-self:center;flex-shrink:0}
 .chip{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;
   border:1px solid var(--border);color:var(--text-muted);background:transparent;
   font-family:Lato,sans-serif;transition:all .18s}
@@ -1758,12 +1759,14 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         </div>
         <div class="task-chip-row">
           <div class="search-box" style="max-width:200px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="t-search" type="text" placeholder="Search tasks..." oninput="onTSearch(this.value)"></div>
-          <button class="chip active" id="tf-mine" onclick="setTF('mine')">My Tasks</button>
-          <button class="chip" id="tf-all" onclick="setTF('all')">All</button>
-          <button class="chip" id="tf-open" onclick="setTF('open')">Open</button>
-          <button class="chip" id="tf-in-progress" onclick="setTF('in-progress')">In Progress</button>
-          <button class="chip" id="tf-done" onclick="setTF('done')">Done</button>
-          <button class="chip chip-orange" id="tf-overdue" onclick="setTF('overdue')">Overdue</button>
+          <button class="chip active" id="tf-scope-mine" onclick="setTScope('mine')">My Tasks</button>
+          <button class="chip" id="tf-scope-all" onclick="setTScope('all')">Everyone's Tasks</button>
+          <span class="task-chip-sep" aria-hidden="true"></span>
+          <button class="chip active" id="tf-status-all" onclick="setTStatus('all')">All</button>
+          <button class="chip" id="tf-status-open" onclick="setTStatus('open')">Open</button>
+          <button class="chip" id="tf-status-in-progress" onclick="setTStatus('in-progress')">In Progress</button>
+          <button class="chip" id="tf-status-done" onclick="setTStatus('done')">Done</button>
+          <button class="chip chip-orange" id="tf-status-overdue" onclick="setTStatus('overdue')">Overdue</button>
           <select class="filter-sel" id="t-pri" onchange="renderTasks()"><option value="">All Priority</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
         </div>
         <div class="task-list" id="tasks-list"></div>
@@ -2340,14 +2343,14 @@ let state={
   cPage:1,cSearch:'',cType:'',cStatus:'',cTag:'',cSort:{col:'name',dir:'asc'},cSelected:new Set(),cShowArchived:false,
   drawer:null,dTab:'info',
   calView:'month',calDate:new Date(),calUser:'all',
-  tFilter:'all',tSearch:'',tPri:'',tPage:1,
+  tScope:'mine',tStatus:'all',tSearch:'',tPri:'',tPage:1,
   notifOpen:false,
   modal:{type:null,id:null,extra:null},
   syncTimer:null,
   selTagColor:TAG_COLORS[0],selUserColor:USER_COLORS[0],
   posItems:[],posTip:'15',posPM:'card',
   paymentsTab:'pos',subsPage:1,subsSearch:'',subsStatusFilter:'',subsCycleFilter:'',
-  calTab:'calendar',formsTab:'',tMyTasks:true,
+  calTab:'calendar',formsTab:'',
   serverDataLoaded:false
 };
 
@@ -5655,19 +5658,17 @@ function renderDayCal(){
 // TASKS
 // =====================================================
 function filteredTasks(){
-  const{tFilter:f,tSearch:q,tPri,tMyTasks}=state,td=todayStr();
+  const{tScope,tStatus,tSearch:q,tPri}=state;
   const pri=document.getElementById('t-pri')&&document.getElementById('t-pri').value||tPri;
   const myId=state.user&&state.user.id;
   return db.tasks.filter(t=>{
-    if(tMyTasks&&f!=='all'&&f!=='done'){if(t.assignedTo&&t.assignedTo!==myId)return false}
+    if(tScope==='mine'&&t.assignedTo&&t.assignedTo!==myId)return false;
     if(q){const ql=q.toLowerCase();if(!(t.title||'').toLowerCase().includes(ql)&&!(t.description||'').toLowerCase().includes(ql))return false}
     if(pri&&t.priority!==pri)return false;
-    if(f==='mine')return!t.assignedTo||t.assignedTo===myId;
-    if(f==='all')return true;
-    if(f==='open')return t.status==='open'&&(!tMyTasks||!t.assignedTo||t.assignedTo===myId);
-    if(f==='in-progress')return t.status==='in-progress'&&(!tMyTasks||!t.assignedTo||t.assignedTo===myId);
-    if(f==='done')return t.status==='done';
-    if(f==='overdue')return t.status!=='done'&&isOverdue(t.dueDate)&&(!tMyTasks||!t.assignedTo||t.assignedTo===myId);
+    if(tStatus==='open')return t.status==='open';
+    if(tStatus==='in-progress')return t.status==='in-progress';
+    if(tStatus==='done')return t.status==='done';
+    if(tStatus==='overdue')return t.status!=='done'&&isOverdue(t.dueDate);
     return true;
   }).sort((a,b)=>{const ap=a.priority==='high'?0:a.priority==='medium'?1:2,bp=b.priority==='high'?0:b.priority==='medium'?1:2;if(ap!==bp)return ap-bp;return(a.dueDate||'9').localeCompare(b.dueDate||'9')});
 }
@@ -5692,7 +5693,8 @@ function renderTasks(){
 }
 
 function onTSearch(v){state.tSearch=v;state.tPage=1;renderTasks()}
-function setTF(f){state.tFilter=f;state.tMyTasks=(f==='mine');state.tPage=1;['mine','all','open','in-progress','done','overdue'].forEach(x=>document.getElementById('tf-'+x)&&document.getElementById('tf-'+x).classList.toggle('active',x===f));renderTasks()}
+function setTScope(s){state.tScope=s;state.tPage=1;['mine','all'].forEach(x=>{const el=document.getElementById('tf-scope-'+x);if(el)el.classList.toggle('active',x===s)});renderTasks()}
+function setTStatus(s){state.tStatus=s;state.tPage=1;['all','open','in-progress','done','overdue'].forEach(x=>{const el=document.getElementById('tf-status-'+x);if(el)el.classList.toggle('active',x===s)});renderTasks()}
 function tPg(p){state.tPage=p;renderTasks()}
 function cycleTask(id){const t=getTask(id);if(!t)return;const m={'open':'in-progress','in-progress':'done','done':'open'};t.status=m[t.status];t.updatedAt=now_();saveData();renderTasks();if(state.drawer)renderDrawer();updateNotifBadge()}
 
