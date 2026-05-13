@@ -8641,10 +8641,15 @@ function apptSetGCRemainder(method){
 
 // Mounts a fresh Square card form into the appointment payment tab container.
 // Each modal open gets a fresh instance; we destroy on switch/close.
+var apptSqCardInitInFlight=false;
 async function _initApptSquareCardForm(){
   var errEl=document.getElementById('apt-sq-card-errors');
   var container=document.getElementById('apt-sq-card-container');
   if(!container)return;
+  if(apptSqCard)return; // Already initialized
+  if(apptSqCardInitInFlight)return; // Another init is already running, don't race
+  if(container.querySelector('iframe'))return; // Safety net: iframe already in DOM
+  apptSqCardInitInFlight=true;
   container.innerHTML='';
   try{
     var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
@@ -8657,6 +8662,8 @@ async function _initApptSquareCardForm(){
   }catch(e){
     console.error('Square init error (appt):',e);
     if(errEl)errEl.textContent='Could not load card form: '+e.message;
+  }finally{
+    apptSqCardInitInFlight=false;
   }
 }
 
@@ -20343,8 +20350,15 @@ async function openAddCardModal(contactId){
 }
 
 let sqCard=null;
+let sqCardInitInFlight=false;
 async function initSquareCardForm(){
   const errEl=document.getElementById('sq-card-errors');
+  const container=document.getElementById('sq-card-container');
+  if(!container)return;
+  if(sqCard)return; // Already initialized
+  if(sqCardInitInFlight)return; // Another init is already running, don't race
+  if(container.querySelector('iframe'))return; // Safety net: iframe already in DOM
+  sqCardInitInFlight=true;
   try{
     const cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     const cfg=await cfgRes.json();
@@ -20356,6 +20370,14 @@ async function initSquareCardForm(){
   }catch(e){
     console.error('Square card form error:',e);
     if(errEl)errEl.textContent='Could not load card form. '+e.message;
+  }finally{
+    sqCardInitInFlight=false;
+  }
+}
+function destroySquareCardForm(){
+  if(sqCard){
+    try{sqCard.destroy();}catch(e){}
+    sqCard=null;
   }
 }
 
@@ -22521,11 +22543,17 @@ function gcSelectCofCard(idx){
 }
 
 let gcSellCard=null;
+let gcSellCardInitInFlight=false;
 
 async function gcInitSellCardForm(){
   var errEl=document.getElementById('gc-sq-card-errors');
   var container=document.getElementById('gc-sq-card-container');
   if(!container)return;
+  if(gcSellCard)return; // Already initialized
+  if(gcSellCardInitInFlight)return; // Another init is already running, don't race
+  if(container.querySelector('iframe'))return; // Safety net: iframe already in DOM
+  gcSellCardInitInFlight=true;
+  container.innerHTML='';
   try{
     var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     var cfg=await cfgRes.json();
@@ -22537,6 +22565,8 @@ async function gcInitSellCardForm(){
   }catch(e){
     console.error('GC Square card form error:',e);
     if(errEl)errEl.textContent='Could not load card form: '+e.message;
+  }finally{
+    gcSellCardInitInFlight=false;
   }
 }
 
