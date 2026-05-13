@@ -257,7 +257,8 @@ async function handler(req, res) {
       usersResult, widgetsResult, paymentsResult, appointmentsResult, apptClientsResult, apptStaffResult,
       plansResult, subscriptionsResult, planCategoriesResult,
       subscriptionEventsResult, resourcesResult, groupsResult, groupMembersResult,
-      contactsResult, contactNotesResult, contactWarningsResult, contactAllergiesResult, contactCreditLogResult
+      contactsResult, contactNotesResult, contactWarningsResult, contactAllergiesResult, contactCreditLogResult,
+      refundsResult
     ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
@@ -423,6 +424,16 @@ async function handler(req, res) {
          WHERE subaccount_id = $1
          ORDER BY created_at DESC`,
         [subaccountId]
+      ),
+      db.query(
+        `SELECT id, payment_id, subaccount_id, refunded_at, refunded_by,
+                total, gift_card_portion, card_portion,
+                reason, square_refunded, square_refund_id, gc_restored,
+                created_at
+           FROM payment_refunds
+          WHERE subaccount_id = $1
+          ORDER BY refunded_at DESC`,
+        [subaccountId]
       )]);
 
     // Group events by subscription_id and attach to each sub
@@ -569,7 +580,32 @@ async function handler(req, res) {
       users: usersResult.rows,
       serviceCategories: blobResult.rows[0]?.service_categories || [],
       serviceWidgets: widgetsResult.rows,
-      payments: paymentsResult.rows.map(paymentToFrontend),
+      payments: (function(){
+        // Bucket refunds by payment_id, attach as refundLog array on each payment
+        var refundsByPmt = {};
+        var refundRows = (refundsResult && refundsResult.rows) || [];
+        for (var ri = 0; ri < refundRows.length; ri++) {
+          var rr = refundRows[ri];
+          if (!refundsByPmt[rr.payment_id]) refundsByPmt[rr.payment_id] = [];
+          refundsByPmt[rr.payment_id].push({
+            id: rr.id,
+            date: rr.refunded_at instanceof Date ? rr.refunded_at.toISOString() : rr.refunded_at,
+            refundedBy: rr.refunded_by,
+            total: parseFloat(rr.total),
+            giftCardPortion: parseFloat(rr.gift_card_portion),
+            cardPortion: parseFloat(rr.card_portion),
+            reason: rr.reason || '',
+            squareRefunded: !!rr.square_refunded,
+            squareRefundId: rr.square_refund_id,
+            gcRestored: !!rr.gc_restored
+          });
+        }
+        return paymentsResult.rows.map(function(row){
+          var p = paymentToFrontend(row);
+          p.refundLog = refundsByPmt[row.id] || [];
+          return p;
+        });
+      })(),
       appointments: (function(){
         // Bucket clients and staff by appointment_id for joining.
         var clientRows = (apptClientsResult && apptClientsResult.rows) || [];

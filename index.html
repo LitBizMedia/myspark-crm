@@ -21314,7 +21314,7 @@ function txnRenderSummary(){
     if(p.status === 'voided') return 0;
     var gross = (p.afterDiscount != null) ? parseFloat(p.afterDiscount)
               : (p.subtotal != null ? parseFloat(p.subtotal) : (parseFloat(p.amount)||0));
-    var refunded = (p.refundLog || []).reduce(function(rs, r){ return rs + (r.total || 0); }, 0);
+    var refunded = parseFloat(p.refundedAmount) || 0;
     if(refunded <= 0) return gross;
     var total = parseFloat(p.total) || gross;
     if(total <= 0) return Math.max(0, gross - refunded);
@@ -21737,25 +21737,55 @@ async function txnConfirmRefund(id){
       toast('Square unreachable.'+(gcRestored?' Gift card was restored, card refund pending.':''),'warn');
     }
   }
-  // --- Step 3: Update local transaction record ---
-  var prevRefunded = p.refundedAmount || 0;
-  var newRefundedTotal = prevRefunded + totalRefund;
-  var isFull = Math.abs(newRefundedTotal - t.total) < 0.01;
-  p.status = isFull ? 'refunded' : 'partial_refund';
-  p.refundedAmount = newRefundedTotal;
-  p.refundReason = reason;
-  p.refundedAt = now_();
-  if(!p.refundLog) p.refundLog = [];
-  p.refundLog.push({
-    date: now_(),
-    total: totalRefund,
-    giftCardPortion: gcRefund,
-    cardPortion: remRefund,
-    reason: reason,
-    squareRefunded: squareRefundSucceeded,
-    gcRestored: gcRestored
-  });
-  saveData();
+  // --- Step 3: Persist refund via backend (replaces ephemeral refundLog .push) ---
+  // The new /api/subaccount/payment-refund endpoint atomically:
+  //   1. Locks the payment row (prevents concurrent over-refund)
+  //   2. Inserts a row into payment_refunds (durable refund log)
+  //   3. Updates the payment row's refunded_amount, refunded_at, refunded_by, status
+  //   4. Audit logs the event
+  try {
+    var refResp = await fetch(apiUrl('/api/subaccount/payment-refund'), {
+      credentials: 'include',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paymentId: id,
+        total: totalRefund,
+        giftCardPortion: gcRefund,
+        cardPortion: remRefund,
+        reason: reason,
+        squareRefunded: squareRefundSucceeded,
+        squareRefundId: null,
+        gcRestored: gcRestored
+      })
+    });
+    var refData = await refResp.json();
+    if(!refResp.ok || refData.error){
+      toast('Refund record save failed: '+(refData.error || 'unknown error')+'. Please reload and check the transaction.', 'error');
+      return;
+    }
+    // Update local state to match backend response
+    p.status = refData.newStatus;
+    p.refundedAmount = refData.newTotalRefunded;
+    p.refundReason = reason;
+    p.refundedAt = now_();
+    if(!p.refundLog) p.refundLog = [];
+    p.refundLog.push({
+      id: refData.refundId,
+      date: now_(),
+      total: totalRefund,
+      giftCardPortion: gcRefund,
+      cardPortion: remRefund,
+      reason: reason,
+      squareRefunded: squareRefundSucceeded,
+      gcRestored: gcRestored
+    });
+  } catch(err){
+    toast('Refund record save failed: network error. Please reload and check the transaction.', 'error');
+    return;
+  }
+  // GC restoration still goes through the blob save for now (giftCards is TIER 2)
+  if(gcRestored) saveData();
   closeModal();
   txnRenderSummary();
   txnRenderTable();
