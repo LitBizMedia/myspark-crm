@@ -46,11 +46,25 @@ async function getVerifiedDomain(subaccountId) {
   try {
     const row = await db.findOne('subaccount_email_domains',
       { subaccount_id: subaccountId, status: 'verified' },
-      { select: 'domain, inbound_subdomain, inbound_status' }
+      { select: 'domain, inbound_subdomain, inbound_status, inbound_mode' }
     );
     return row || null;
   } catch (e) {
     console.error('getVerifiedDomain error:', e.message);
+    return null;
+  }
+}
+
+async function getSubaccountName(subaccountId) {
+  if (!subaccountId) return null;
+  try {
+    const row = await db.findOne('subaccounts',
+      { id: subaccountId },
+      { select: 'name' }
+    );
+    return (row && row.name) || null;
+  } catch (e) {
+    console.error('getSubaccountName error:', e.message);
     return null;
   }
 }
@@ -210,7 +224,19 @@ async function sendEmail(slug, opts) {
 
   const domainRow = subaccountId ? await getVerifiedDomain(subaccountId) : null;
   const fromDomain = (domainRow && domainRow.domain) || FALLBACK_DOMAIN;
-  const fromName = opts.fromName || 'MySpark+';
+
+  // From name selection:
+  //   - explicit opts.fromName always wins (callers like billing-emails set 'MySpark+ Billing')
+  //   - subaccount-scope: pull from subaccounts.name (e.g. 'LitBiz Media')
+  //   - agency-scope: 'MySpark+'
+  let fromName = opts.fromName;
+  if (!fromName) {
+    if (scope === 'subaccount' && subaccountId) {
+      fromName = await getSubaccountName(subaccountId);
+    }
+    if (!fromName) fromName = 'MySpark+';
+  }
+
   const fromEmail = 'noreply@' + fromDomain;
   const from = fromName + ' <' + fromEmail + '>';
 
@@ -221,7 +247,14 @@ async function sendEmail(slug, opts) {
       conversation = await upsertConversation(subaccountId, opts.contactId);
       if (conversation && domainRow && domainRow.inbound_status === 'verified') {
         const sub = domainRow.inbound_subdomain || 'reply';
-        replyTo = 'reply+' + conversation.reply_token + '@' + sub + '.' + fromDomain;
+        const mode = domainRow.inbound_mode || 'shared';
+        // shared: reply+TOKEN@reply.mysparkplus.app (single inbound domain for all subaccounts)
+        // branded: reply+TOKEN@<sub>.<their-domain> (per-subaccount inbound subdomain)
+        if (mode === 'branded') {
+          replyTo = 'reply+' + conversation.reply_token + '@' + sub + '.' + fromDomain;
+        } else {
+          replyTo = 'reply+' + conversation.reply_token + '@' + sub + '.' + FALLBACK_DOMAIN;
+        }
       }
     } else {
       console.warn('lib/ses.js: subaccount-scope send with no contactId; message will not be threaded.');
