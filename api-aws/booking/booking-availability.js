@@ -8,7 +8,11 @@
 // Hours Off / Work These Hours overrides are honored. Previously only the
 // outer day boundary and 'off' override type were considered.
 
-// TODO_SERVICE_AVAILABILITY: When public widget work resumes, filter\n// slots returned here by service.availability window. Backend\n// appointments-upsert already enforces it; widget would just hide\n// non-bookable slots upfront for UX.\nconst db = require('./lib/db');
+// TODO_SERVICE_AVAILABILITY: When public widget work resumes, filter
+// slots returned here by service.availability window. Backend
+// appointments-upsert already enforces it; widget would just hide
+// non-bookable slots upfront for UX.
+const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz, nowMinutesInTz } = require('./lib/timezone');
 const { buildAvailableWindows, intersectWindows, timeToMins, dayKeyForDate } = require('./lib/schedule');
