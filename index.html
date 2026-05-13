@@ -2417,13 +2417,6 @@ let db={
   }
 };
 
-const DEFAULT_ADMIN={
-  id:'admin-patrick',username:'patrick',passwordHash:ADMIN_HASH,role:'admin',
-  active:true,name:'Patrick',color:'#ff4000',
-  schedule:JSON.parse(JSON.stringify(DEF_SCHED)),
-  dateOverrides:[],createdAt:'2026-01-01T00:00:00Z'
-};
-
 // =====================================================
 // UTILS
 // =====================================================
@@ -3400,7 +3393,6 @@ document.getElementById('login-form').addEventListener('submit',async function(e
 });
 
 function openForgotPassword(context){
-  var isAgency=context==='agency';
   var body='<div class="form-group"><label>Your Email Address</label>'
     +'<input id="fp-email" type="email" placeholder="you@example.com" style="width:100%"></div>'
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Enter the email associated with your account. A reset link will be sent if a match is found.</div>';
@@ -5494,7 +5486,6 @@ function buildTimedCol(dateStr,appts,allHours){
   // so lunch-break gaps and per-staff overrides surface in week view too.
   var hoursSet=getColAvailableHours(dateStr,state.calUser);
   if(!allHours.length)return'<div style="min-height:200px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-style:italic">Closed</div>';
-  var offBlocks=getOffBlocksForCol(dateStr);
   var totalH=(maxH-minH)*68;
   var offHTML='';
   var laidOut=layoutOverlap(appts);
@@ -5991,7 +5982,6 @@ async function reviewCharge(){
     +'<div style="margin-top:8px;font-size:12px;color:var(--text-muted)"><strong style="color:var(--text)">Staff:</strong> '+esc(staff&&(staff.name||staff.username)||'Unassigned')+'&nbsp;&nbsp;<strong style="color:var(--text)">Method:</strong> '+esc(methodTxt)+'</div>'
     +'</div>'
     +'<p style="font-size:13px;color:var(--text-muted);margin-top:12px">Confirm to process and save this transaction.</p>';
-  const creditAmt=parseFloat(document.getElementById('pos-credit-inp')&&document.getElementById('pos-credit-inp').value)||0;
   state.modal={type:'charge',id:null,extra:{cid,staffId,sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,tax:tax||0,taxableAmount:taxableAmount||0,additionalFee:additionalFee||0,tip,credit:creditCalc||0,total,pm:state.posPM,last4,items:[...state.posItems],useSquare:useSquare,squareToken:null}};
   openModal('Review Charge',body,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="process-charge-btn" onclick="withBtnLock(this,()=>processCharge())">Process Payment</button>');
 }
@@ -10632,9 +10622,7 @@ function initApp(){
     state.hipaaEnabled = (isHipaa === false) ? false : true;
     if(state.hipaaEnabled){
       initIdleTimeout();
-      console.log('[HIPAA] Idle timeout active (30 min)');
     }else{
-      console.log('[HIPAA] Disabled for this workspace, no idle timeout');
     }
   });
 }
@@ -10721,7 +10709,6 @@ async function saveProfile(){
   if(!pass){toast('No changes to save.','warning');return;}
   if(pass&&pass!==pass2){toast('Passwords do not match.','error');return}
   const u=state.user;
-  const wasForced=!!(state.modal&&state.modal.forced);
 
   // If password change requested, hit the server-side endpoint.
   if(pass){
@@ -17352,7 +17339,6 @@ function fbInitSigCanvas(canvas){
 // =====================================================
 // FORM BUILDER - Preview with signature init + button style
 // =====================================================
-const _fbPreviewOrig=fbPreview;
 function fbPreview(){
   const f=fbState.editingForm;if(!f)return;
   const st=f.settings.style||{};
@@ -17381,7 +17367,6 @@ function fbPreview(){
 // =====================================================
 // FORM BUILDER - fbRenderFormHTML with content elements, T&C inline, button style
 // =====================================================
-const _fbRenderFormHTMLOrig=fbRenderFormHTML;
 function fbRenderFormHTML(f,st,radius){
   const r=radius||'8';
   const fieldBg=st&&st.fieldBg||'#f8f8f8';const border=st&&st.borderColor||'#d0d0d8';
@@ -19043,8 +19028,6 @@ function renderApptWidgetAvailGrid(){
     var v=_apptWidgetAvail[d.key]||{on:false,start:'09:00',end:'17:00'};
     var on=!!v.on;
     var rowStyle='display:grid;grid-template-columns:130px 1fr 24px 1fr;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--main-border)';
-    var inputStyle='font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--main-border);border-radius:5px;background:var(--bg-input);color:var(--text);width:100%';
-    var disabledStyle=on?'':';opacity:.4;cursor:not-allowed';
     return'<div style="'+rowStyle+'" id="swg-avail-row-'+d.key+'">'
       +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin:0;user-select:none">'
       +'<input type="checkbox"'+(on?' checked':'')+' onchange="apptAvailToggle(\''+d.key+'\',this.checked)" style="margin:0;flex-shrink:0">'
@@ -19456,8 +19439,6 @@ function renderStaffUserList(){
   renderStaffTeam(); // settings tab removed, delegate to team
 }
 
-// Override switchStaffTab to remove settings case
-const _switchStaffTabOrig=switchStaffTab;
 function switchStaffTab(tab){
   if(tab==='settings')tab='team'; // redirect removed tab
   const isAdmin=state.user&&state.user.role==='admin';
@@ -20495,8 +20476,6 @@ function selectPosCard(idx){
   updatePosCoFTab();
 }
 
-// Override setPM to handle cof
-const _origSetPM=typeof setPM==='function'?setPM:null;
 function setPM(m){
   state.posPM=m;
   ['card','cash','other','cof','gc'].forEach(function(x){
@@ -20984,8 +20963,6 @@ async function confirmBulkDelete(){
   }
 }
 
-// Toggle bulk bar buttons based on archive view
-const _origToggleArchiveView=typeof toggleArchiveView==='function'?toggleArchiveView:null;
 function toggleArchiveView(){
   state.cShowArchived=!state.cShowArchived;
   state.cSelected.clear();
@@ -21237,7 +21214,6 @@ function txnBuildShell(){
   var users = allUsers();
   var uOpts = users.map(function(u){ return '<option value="'+u.id+'">'+esc(u.name||u.username)+'</option>'; }).join('');
   var rangeVal = state.txnRange || 'this_month';
-  var staffVal = state.txnStaff || '';
   var methodVal = state.txnMethod || '';
   var isCustom = rangeVal === 'custom';
   var ranges = ['today','this_week','last_week','this_month','last_month','custom'];
@@ -22366,7 +22342,6 @@ function openGcProductModal(id){if(!canManageGiftCards()){toast('Permission deni
   var prod=id?(db.giftCardProducts||[]).find(function(x){return x.id===id;}):null;
   state.modal={type:'gcprod',id:id||null};
   var denoms=prod&&prod.denominations?prod.denominations.join(', '):'25, 50, 100';
-  var hasBg=!!(prod&&prod.bgImage);
   var body='<div class="form-row">'
     +'<div class="form-group"><label>Gift Card Name *</label>'
     +'<input id="gcp-name" type="text" value="'+esc(prod&&prod.name||'')+'" placeholder="e.g. Holiday Gift Card"></div>'
@@ -25935,7 +25910,6 @@ async function saveEditSubaccount(id){
 // ── Suspend / Activate ──
 async function agencyToggleSub(id,active,name){
   if(!agencyCanManageSubaccounts()){toast('You do not have permission to change subaccount status.','error');return;}
-  var verb=active?'activate':'suspend';
   var warn=active
     ?'Users in <strong>'+esc(name||'')+'</strong> will regain access to their workspace.'
     :'Users in <strong>'+esc(name||'')+'</strong> will be unable to log in or use their workspace until reactivated.';
@@ -26640,8 +26614,6 @@ async function agencySaveOwnPassword(){
   if(passErr){toast(passErr,'error');return;}
   var sess=loadAgencySession();
   if(!sess||!sess.id){toast('Session expired. Please sign in again.','error');return;}
-  var oldHash=await sha256(oldPass);
-  var newHash=await sha256(newPass);
   try{
     var r2=await fetch(apiUrl('/api/agency/users-change-own-password'),{
       method:'POST',
