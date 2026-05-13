@@ -17,7 +17,7 @@
 :root{
   /* Dark surfaces - sidebar, topbar, drawers, modals */
   --bg:#09061a;--bg-panel:#100d24;--bg-card:#181230;--bg-card-hover:#1f1840;
-  --bg-input:#0d0a1e;--purple:#6b21ea;--purple-light:#9b55ff;--purple-dim:rgba(107,33,234,.12);
+  --bg-input:#0d0a1e;--purple:#6b21ea;--purple-light:#9b55ff;--purple-soft:#c7b8ff;--purple-dim:rgba(107,33,234,.12);
   --purple-border:rgba(107,33,234,.35);--orange:#ff4000;--orange-light:#ff6133;
   --orange-dim:rgba(255,64,0,.12);--orange-border:rgba(255,64,0,.35);
   --text:#ede8ff;--text-muted:#b8aee0;--text-dim:#6b5fa0;
@@ -4303,7 +4303,7 @@ function _dPaySubscriptions(c,cSubs){
     const sticker=breakdown.subtotal;
     const total=breakdown.total;
     const discounted=hasActiveDiscount(s)&&breakdown.discount>0;
-    const borderColor=filter==='active'?'#34d399':filter==='paused'?'#fbbf24':filter==='suspended'?'#f87171':'#94a3b8';
+    const borderColor=filter==='active'?'var(--success-light)':filter==='paused'?'var(--warning-light)':filter==='suspended'?'var(--danger-light)':'#94a3b8';
     const failBadge=(s.status==='suspended'&&s.failedChargeCount)?' <span style="font-size:10px;color:var(--danger-light);font-weight:700">'+s.failedChargeCount+' failed</span>':'';
     const priceText=discounted
       ? '<span style="text-decoration:line-through;color:var(--text-muted);margin-right:4px">'+fmt$(sticker)+'</span><span style="color:var(--success-light)">'+fmt$(total)+'</span>'
@@ -4383,7 +4383,7 @@ function _dPayGiftCards(c){
   }
   let h='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Gift cards issued to '+esc(c.name)+' as the recipient.</div>';
   cards.forEach(function(g){
-    const statusColor=g.status==='active'?'#34d399':g.status==='partial'?'#fbbf24':g.status==='redeemed'?'#94a3b8':g.status==='refunded'?'#f87171':'#94a3b8';
+    const statusColor=g.status==='active'?'var(--success-light)':g.status==='partial'?'var(--warning-light)':g.status==='redeemed'?'#94a3b8':g.status==='refunded'?'var(--danger-light)':'#94a3b8';
     h+='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
       +'<div style="font-family:monospace;font-size:13px;font-weight:700;color:var(--text);letter-spacing:.05em">'+esc(g.code||'')+'</div>'
@@ -12256,7 +12256,7 @@ const SUB_CYCLES=['weekly','monthly','quarterly','annual'];
 const SUBS_PER_PAGE=10;
 const SUB_STATUSES=['trialing','active','paused','suspended','cancelled'];
 const SUB_STATUS_LABEL={trialing:'Trial',active:'Active',paused:'Paused',suspended:'Suspended',cancelled:'Cancelled'};
-const SUB_STATUS_COLOR={trialing:'#fbbf24',active:'#34d399',paused:'var(--orange)',suspended:'#f87171',cancelled:'var(--text-dim)'};
+const SUB_STATUS_COLOR={trialing:'var(--warning-light)',active:'var(--success-light)',paused:'var(--orange)',suspended:'var(--danger-light)',cancelled:'var(--text-dim)'};
 const SUB_STATUS_ORDER={active:0,paused:1,suspended:2,cancelled:3};
 const CANCELLATION_REASONS=[
   'Customer requested',
@@ -12789,12 +12789,12 @@ function _renderSubDetailHistory(s){
     owner_changed:'Owner changed',card_changed:'Card changed'
   };
   const eventColor={
-    created:'#34d399',edited:'var(--text-muted)',paused:'var(--orange)',
-    resumed:'#34d399',cancelled:'var(--text-dim)',
-    resumed_from_suspension:'#34d399',
-    charge_succeeded:'#34d399',charge_failed:'#f87171',
-    charge_retried:'#fbbf24',auto_suspended:'#f87171',
-    item_added:'#34d399',item_removed:'var(--orange)',item_updated:'var(--purple-light)',
+    created:'var(--success-light)',edited:'var(--text-muted)',paused:'var(--orange)',
+    resumed:'var(--success-light)',cancelled:'var(--text-dim)',
+    resumed_from_suspension:'var(--success-light)',
+    charge_succeeded:'var(--success-light)',charge_failed:'var(--danger-light)',
+    charge_retried:'var(--warning-light)',auto_suspended:'var(--danger-light)',
+    item_added:'var(--success-light)',item_removed:'var(--orange)',item_updated:'var(--purple-light)',
     owner_changed:'var(--purple-light)',card_changed:'var(--purple-light)'
   };
   let html='';
@@ -21477,11 +21477,11 @@ function txnMethodLabel(t){
 
 function txnStatusBadge(status){
   var map = {
-    completed:     {bg:'rgba(52,211,153,.15)',  color:'#34d399', label:'Completed'},
-    voided:        {bg:'rgba(239,68,68,.12)',    color:'#f87171', label:'Voided'},
-    refunded:      {bg:'rgba(245,158,11,.12)',   color:'#fbbf24', label:'Refunded'},
-    partial_refund:{bg:'rgba(245,158,11,.12)',   color:'#fbbf24', label:'Partial Refund'},
-    failed:        {bg:'rgba(239,68,68,.12)',    color:'#f87171', label:'Failed'}
+    completed:     {bg:'rgba(52,211,153,.15)',  color:'var(--success-light)', label:'Completed'},
+    voided:        {bg:'rgba(239,68,68,.12)',    color:'var(--danger-light)', label:'Voided'},
+    refunded:      {bg:'rgba(245,158,11,.12)',   color:'var(--warning-light)', label:'Refunded'},
+    partial_refund:{bg:'rgba(245,158,11,.12)',   color:'var(--warning-light)', label:'Partial Refund'},
+    failed:        {bg:'rgba(239,68,68,.12)',    color:'var(--danger-light)', label:'Failed'}
   };
   var s = map[status] || {bg:'rgba(107,33,234,.12)', color:'var(--purple-light)', label: status || 'Unknown'};
   return '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:4px;white-space:nowrap;background:'+s.bg+';color:'+s.color+'">'+s.label+'</span>';
@@ -21871,7 +21871,7 @@ function renderCoupons(){
       var isExpired=cpn.expiryDate&&cpn.expiryDate<todayStr();
       var isMaxed=cpn.maxUses&&cpn.usageCount>=(cpn.maxUses||0);
       var effectiveStatus=isExpired?'expired':isMaxed?'maxed':cpn.status;
-      var statusColors={active:{bg:'rgba(52,211,153,.12)',color:'#34d399',label:'Active'},inactive:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Inactive'},expired:{bg:'rgba(239,68,68,.12)',color:'#f87171',label:'Expired'},maxed:{bg:'rgba(245,158,11,.12)',color:'#fbbf24',label:'Max Uses Reached'}};
+      var statusColors={active:{bg:'rgba(52,211,153,.12)',color:'var(--success-light)',label:'Active'},inactive:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Inactive'},expired:{bg:'rgba(239,68,68,.12)',color:'var(--danger-light)',label:'Expired'},maxed:{bg:'rgba(245,158,11,.12)',color:'var(--warning-light)',label:'Max Uses Reached'}};
       var sc=statusColors[effectiveStatus]||statusColors.inactive;
       var discLabel=cpn.discountType==='pct'?cpn.discountValue+'% Off':'$'+parseFloat(cpn.discountValue||0).toFixed(2)+' Off';
       var usageLabel=(cpn.usageCount||0)+(cpn.maxUses?' / '+cpn.maxUses:'')+' use'+(cpn.usageCount!==1?'s':'');
@@ -22789,7 +22789,7 @@ function gcRenderOrdersTable(){
     el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><h3>No issued cards</h3><p>Issue or sell a gift card to see it here.</p></div>';
     return;
   }
-  var statusColors={active:{bg:'rgba(52,211,153,.12)',color:'#34d399',label:'Active'},partial:{bg:'rgba(245,158,11,.12)',color:'#fbbf24',label:'Partial'},redeemed:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Redeemed'},refunded:{bg:'rgba(239,68,68,.12)',color:'#f87171',label:'Refunded'}};
+  var statusColors={active:{bg:'rgba(52,211,153,.12)',color:'var(--success-light)',label:'Active'},partial:{bg:'rgba(245,158,11,.12)',color:'var(--warning-light)',label:'Partial'},redeemed:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Redeemed'},refunded:{bg:'rgba(239,68,68,.12)',color:'var(--danger-light)',label:'Refunded'}};
   var h='<div class="tbl-wrap"><table class="ct-table"><thead><tr>'
     +'<th>Code</th><th>Card</th><th>Recipient</th><th>Issued By</th><th>Date</th>'
     +'<th style="text-align:right">Original</th><th style="text-align:right">Balance</th>'
@@ -22839,7 +22839,7 @@ function gcOpenOrderDetail(id){
   var prod=g.productId?(db.giftCardProducts||[]).find(function(x){return x.id===g.productId;}):null;
   var contact=g.contactId?db.contacts.find(function(x){return x.id===g.contactId;}):null;
   var issuedBy=g.issuedById?getUserById(g.issuedById):null;
-  var sc={active:{bg:'rgba(52,211,153,.12)',color:'#34d399',label:'Active'},partial:{bg:'rgba(245,158,11,.12)',color:'#fbbf24',label:'Partial'},redeemed:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Redeemed'},refunded:{bg:'rgba(239,68,68,.12)',color:'#f87171',label:'Refunded'}}[g.status]||{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Active'};
+  var sc={active:{bg:'rgba(52,211,153,.12)',color:'var(--success-light)',label:'Active'},partial:{bg:'rgba(245,158,11,.12)',color:'var(--warning-light)',label:'Partial'},redeemed:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Redeemed'},refunded:{bg:'rgba(239,68,68,.12)',color:'var(--danger-light)',label:'Refunded'}}[g.status]||{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Active'};
   var body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
     // Preview
     +(prod?'<div style="width:100%;height:90px;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;position:relative;'+(prod.bgImage?'background:url(\''+esc(prod.bgImage)+'\') center/cover no-repeat':'background:linear-gradient(135deg,'+esc(prod.bgColor1||'#6b21ea')+','+esc(prod.bgColor2||'#ff4000')+')') +'"><div style="position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;flex-direction:column;justify-content:space-between;padding:10px 14px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:800;color:#fff">'+esc(prod.name)+'</div><div style="font-family:monospace;font-size:11px;color:rgba(255,255,255,.9);letter-spacing:.1em">'+esc(g.code)+'</div></div></div>':'')
@@ -24263,12 +24263,12 @@ const USAGE_PACKS = {
 const PLAN_TIER_LABELS = {starter:'Starter',professional:'Professional',business:'Business',enterprise:'Enterprise'};
 const PLAN_STATUS_LABELS = {trialing:'Trial',active:'Active',past_due:'Past Due',cancelled:'Cancelled',exempt:'Exempt',suspended:'Suspended',inactive:'Inactive'};
 const PLAN_STATUS_COLORS = {
-  trialing:  {bg:'rgba(245,158,11,.12)', fg:'#fbbf24'},
-  active:    {bg:'rgba(52,211,153,.12)', fg:'#34d399'},
-  past_due:  {bg:'rgba(239,68,68,.12)',  fg:'#f87171'},
+  trialing:  {bg:'rgba(245,158,11,.12)', fg:'var(--warning-light)'},
+  active:    {bg:'rgba(52,211,153,.12)', fg:'var(--success-light)'},
+  past_due:  {bg:'rgba(239,68,68,.12)',  fg:'var(--danger-light)'},
   cancelled: {bg:'rgba(122,133,153,.12)',fg:'#7a8599'},
-  exempt:    {bg:'rgba(107,33,234,.15)', fg:'#c7b8ff'},
-  suspended: {bg:'rgba(239,68,68,.12)',  fg:'#f87171'},
+  exempt:    {bg:'rgba(107,33,234,.15)', fg:'var(--purple-soft)'},
+  suspended: {bg:'rgba(239,68,68,.12)',  fg:'var(--danger-light)'},
   inactive:  {bg:'rgba(122,133,153,.12)',fg:'#7a8599'}
 };
 
