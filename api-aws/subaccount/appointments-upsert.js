@@ -322,9 +322,10 @@ async function handler(req, res) {
       INSERT INTO appointments (
         id, subaccount_id, title, contact_id, assigned_to, date, time, duration,
         status, location, notes, service_id, service_variation_id, addons,
+        buffer_before, buffer_after,
         created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
         contact_id = EXCLUDED.contact_id,
@@ -338,13 +339,16 @@ async function handler(req, res) {
         service_id = EXCLUDED.service_id,
         service_variation_id = EXCLUDED.service_variation_id,
         addons = EXCLUDED.addons,
+        buffer_before = EXCLUDED.buffer_before,
+        buffer_after = EXCLUDED.buffer_after,
         updated_at = NOW()
       WHERE appointments.subaccount_id = $2
     `, [
       a.id, subaccountId, a.title, a.contactId || null, a.assignedTo || null,
       a.date, a.time || null, parseInt(a.duration) || 60,
       a.status || 'scheduled', a.location || null, a.notes || null,
-      a.service_id || null, a.service_variation_id || null, JSON.stringify(resolvedAddons)
+      a.service_id || null, a.service_variation_id || null, JSON.stringify(resolvedAddons),
+      parseInt(a.buffer_before) || 0, parseInt(a.buffer_after) || 0
     ]);
 
     // Persist resource claims for this appointment (replaces any existing claims).
