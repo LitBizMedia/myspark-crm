@@ -6313,6 +6313,27 @@ function renderTagMgr(){const el=document.getElementById('tag-mgr');if(!el)retur
 // =====================================================
 // DOUBLE BOOKING
 // =====================================================
+// Compute the effective buffer for an appointment given a service and assigned
+// staff. Returns {before, after} as max(service buffer, largest staff default
+// buffer among assigned). Used by service and staff prefill in the appointment
+// modal. The stamped value flows through conflict checks and widget availability.
+function getEffectiveBuffer(svc, staffIds){
+  var sb=parseInt(svc&&svc.buffer_before)||0;
+  var sa=parseInt(svc&&svc.buffer_after)||0;
+  var maxStaffBefore=0,maxStaffAfter=0;
+  var ids=Array.isArray(staffIds)?staffIds:(staffIds?[staffIds]:[]);
+  ids.forEach(function(id){
+    if(!id)return;
+    var u=(db.users||[]).find(function(x){return x.id===id;});
+    if(!u||!u.schedule)return;
+    var b=parseInt(u.schedule.defaultBufferBefore)||0;
+    var a=parseInt(u.schedule.defaultBufferAfter)||0;
+    if(b>maxStaffBefore)maxStaffBefore=b;
+    if(a>maxStaffAfter)maxStaffAfter=a;
+  });
+  return {before:Math.max(sb,maxStaffBefore),after:Math.max(sa,maxStaffAfter)};
+}
+
 function checkDoubleBook(apptId,date,time,duration,userId){
   if(!userId||!time||!date)return null;
   const s=t2m(time),e=s+(parseInt(duration)||60);
@@ -9836,6 +9857,9 @@ function buildSchedSection(standalone){
   // Max bookings per day. Stored in schedule.maxBookingsPerDay (no separate column).
   const maxBookingsVal=(editSched&&editSched.maxBookingsPerDay!=null)?String(editSched.maxBookingsPerDay):'';
   const maxBookingsInput='<div style="margin-bottom:14px;padding:10px 12px;background:rgba(107,33,234,.04);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;gap:10px;flex-wrap:wrap"><label style="font-size:12px;font-weight:600;color:var(--text);margin:0;flex-shrink:0">Maximum bookings per day</label><input type="number" min="0" step="1" id="sched-max-bookings" value="'+esc(maxBookingsVal)+'" placeholder="No limit" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:6px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:90px"><span style="font-size:11px;color:var(--text-muted)">Leave blank for no limit. Caps appointments per day across all booking sources.</span></div>';
+  const bufBeforeVal=(editSched&&editSched.defaultBufferBefore!=null)?String(editSched.defaultBufferBefore):'';
+  const bufAfterVal=(editSched&&editSched.defaultBufferAfter!=null)?String(editSched.defaultBufferAfter):'';
+  const bufferInput='<div style="margin-bottom:14px;padding:10px 12px;background:rgba(107,33,234,.04);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;gap:10px;flex-wrap:wrap"><label style="font-size:12px;font-weight:600;color:var(--text);margin:0;flex-shrink:0">Default appointment buffers</label><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:var(--text-muted)">Before</span><input type="number" min="0" max="120" step="5" id="sched-buf-before" value="'+esc(bufBeforeVal)+'" placeholder="0" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:6px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:70px"><span style="font-size:11px;color:var(--text-muted)">min</span></div><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:var(--text-muted)">After</span><input type="number" min="0" max="120" step="5" id="sched-buf-after" value="'+esc(bufAfterVal)+'" placeholder="0" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:6px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:70px"><span style="font-size:11px;color:var(--text-muted)">min</span></div><span style="font-size:11px;color:var(--text-muted);flex-basis:100%">Applied as the minimum buffer for all appointments with this provider. If a service also has a buffer, the larger value wins.</span></div>';
   const sg=order.map((dk,i)=>{
     const ds=editSched[dk]||{on:false,start:'08:00',end:'17:00'};
     const hasL=!!ds.hasLunch;
@@ -9884,7 +9908,7 @@ function buildSchedSection(standalone){
     +'</div>'
     +'<button class="btn btn-ghost btn-sm" onclick="addOv()">Add</button>'
     +'</div></div>';
-  return maxBookingsInput+'<div style="display:grid;gap:5px">'+sg+'</div>'+ov;
+  return maxBookingsInput+bufferInput+'<div style="display:grid;gap:5px">'+sg+'</div>'+ov;
 }
 
 // Toggles label text on the override From/Until inputs based on type so the
@@ -10015,6 +10039,19 @@ async function saveUser(){
     if(isNaN(mx)||mx<=0)delete sched.maxBookingsPerDay;
     else sched.maxBookingsPerDay=mx;
   }
+  // Default appointment buffers for this staff. Empty or 0 = no default (delete the field).
+  var bbEl=document.getElementById('sched-buf-before');
+  if(bbEl){
+    var bb=parseInt(bbEl.value,10);
+    if(isNaN(bb)||bb<=0)delete sched.defaultBufferBefore;
+    else sched.defaultBufferBefore=bb;
+  }
+  var baEl=document.getElementById('sched-buf-after');
+  if(baEl){
+    var ba=parseInt(baEl.value,10);
+    if(isNaN(ba)||ba<=0)delete sched.defaultBufferAfter;
+    else sched.defaultBufferAfter=ba;
+  }
   var userEmail=(document.getElementById('uf-email')&&document.getElementById('uf-email').value||'').trim().toLowerCase();
 
   // Call update-user. With newPassword and a username that doesn't exist,
@@ -10074,6 +10111,19 @@ async function saveUserSched(){
     var mx=parseInt(mxEl.value,10);
     if(isNaN(mx)||mx<=0)delete sched.maxBookingsPerDay;
     else sched.maxBookingsPerDay=mx;
+  }
+  // Default appointment buffers for this staff. Empty or 0 = no default (delete the field).
+  var bbEl=document.getElementById('sched-buf-before');
+  if(bbEl){
+    var bb=parseInt(bbEl.value,10);
+    if(isNaN(bb)||bb<=0)delete sched.defaultBufferBefore;
+    else sched.defaultBufferBefore=bb;
+  }
+  var baEl=document.getElementById('sched-buf-after');
+  if(baEl){
+    var ba=parseInt(baEl.value,10);
+    if(isNaN(ba)||ba<=0)delete sched.defaultBufferAfter;
+    else sched.defaultBufferAfter=ba;
   }
   const overrides=[...userOvs];
   // Drop overrides for dates that have already passed. Keeps stored data lean.
