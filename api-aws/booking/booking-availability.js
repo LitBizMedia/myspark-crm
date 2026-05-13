@@ -260,8 +260,12 @@ async function handler(req, res) {
       const appts = apptsByStaff[staff.id] || [];
       // Apply per-staff default buffer max. Service or variation or appointment-type
       // or widget override has already set bufBefore/bufAfter. Staff defaults floor it.
-      const staffBufB = parseInt(staff.schedule && staff.schedule.defaultBufferBefore) || 0;
-      const staffBufA = parseInt(staff.schedule && staff.schedule.defaultBufferAfter) || 0;
+      let schedObj = staff.schedule;
+      if (typeof schedObj === 'string') {
+        try { schedObj = JSON.parse(schedObj); } catch (e) { schedObj = {}; }
+      }
+      const staffBufB = parseInt(schedObj && schedObj.defaultBufferBefore) || 0;
+      const staffBufA = parseInt(schedObj && schedObj.defaultBufferAfter) || 0;
       const effBufB = Math.max(bufBefore, staffBufB);
       const effBufA = Math.max(bufAfter, staffBufA);
       const staffSlots = getSlotsForStaff(staff, date, duration, effBufB, effBufA, appts, leadTimeHours, serviceAvailabilityWindow, strictAvailability, subTz, slotInterval);

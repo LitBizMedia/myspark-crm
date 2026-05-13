@@ -385,13 +385,17 @@ async function handler(req, res) {
       // Look up the instructor for the confirmation email
       if (assignedStaffId) {
         const instrRes = await db.query(
-          `SELECT id, username, display_name FROM subaccount_users
+          `SELECT id, username, display_name, schedule FROM subaccount_users
            WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
           [assignedStaffId, subaccountId]
         );
         if (instrRes.rows.length) {
           const u = instrRes.rows[0];
-          allUsers.push({ id: u.id, name: u.display_name || u.username });
+          let sched = u.schedule;
+          if (typeof sched === 'string') {
+            try { sched = JSON.parse(sched); } catch (e) { sched = {}; }
+          }
+          allUsers.push({ id: u.id, name: u.display_name || u.username, schedule: sched || {} });
         }
       }
     } else {
@@ -436,13 +440,21 @@ async function handler(req, res) {
          WHERE subaccount_id = $1 AND active = true`,
         [subaccountId]
       );
-      allUsers = staffDbRes.rows.map(u => ({
-        id: u.id,
-        name: u.display_name || u.username,
-        maxBookingsPerDay: (u.schedule && u.schedule.maxBookingsPerDay != null && parseInt(u.schedule.maxBookingsPerDay) > 0)
-          ? parseInt(u.schedule.maxBookingsPerDay)
-          : null
-      }));
+      allUsers = staffDbRes.rows.map(u => {
+        let sched = u.schedule;
+        if (typeof sched === 'string') {
+          try { sched = JSON.parse(sched); } catch (e) { sched = {}; }
+        }
+        sched = sched || {};
+        return {
+          id: u.id,
+          name: u.display_name || u.username,
+          schedule: sched,
+          maxBookingsPerDay: (sched.maxBookingsPerDay != null && parseInt(sched.maxBookingsPerDay) > 0)
+            ? parseInt(sched.maxBookingsPerDay)
+            : null
+        };
+      });
 
       if (widgetType === 'service') {
         // Service widget: filter by service.assigned_staff only
