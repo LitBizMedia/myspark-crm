@@ -2446,6 +2446,13 @@ function todayStr(){
   catch(_){return new Date().toISOString().split('T')[0];}
 }
 
+// Local date as YYYY-MM-DD in the subaccount timezone for any Date object.
+// Replaces toISOString().split('T')[0] / .slice(0,10) which used UTC and shifted dates by 1 in evenings.
+function _localDS(d){
+  try{return d.toLocaleDateString('en-CA',{timeZone:getTz()});}
+  catch(_){return d.toISOString().split('T')[0];}
+}
+
 // Now timestamp as ISO-ish string for storage. Stays in UTC for storage; only
 // display uses the TZ. (Server stores UTC; we display TZ-aware.)
 const now_=()=>new Date().toISOString();
@@ -6271,7 +6278,7 @@ function renderBlackoutList(){
   if(!db.settings.blackoutDates)db.settings.blackoutDates=[];
   // Filter past dates from display only - don't mutate storage so historical
   // records survive in case any backend logic needs them.
-  var today=new Date().toISOString().slice(0,10);
+  var today=_localDS(new Date());
   var future=db.settings.blackoutDates.filter(b=>b.date>=today);
   if(!future.length){
     el.innerHTML='<div style="font-size:12px;color:var(--text-muted);padding:6px 0">No upcoming blackout dates.</div>';
@@ -9914,7 +9921,7 @@ function updateOvHrsLabels(type){
 function renderOvList(){
   if(!userOvs.length)return'<div style="font-size:12px;color:var(--text-muted);padding:3px 0">No date overrides yet.</div>';
   // Hide past overrides from view (data is preserved in storage).
-  var today=new Date().toISOString().slice(0,10);
+  var today=_localDS(new Date());
   var future=userOvs.map(function(ov,i){return {ov:ov,i:i};}).filter(function(x){return x.ov.date>=today;});
   if(!future.length)return'<div style="font-size:12px;color:var(--text-muted);padding:3px 0">No upcoming date overrides.</div>';
   return future.sort(function(a,b){return a.ov.date.localeCompare(b.ov.date);}).map(function(x){
@@ -10080,7 +10087,7 @@ async function saveUserSched(){
   }
   const overrides=[...userOvs];
   // Drop overrides for dates that have already passed. Keeps stored data lean.
-  var todayStr=new Date().toISOString().slice(0,10);
+  var todayStr=_localDS(new Date());
   var trimmedOverrides=overrides.filter(function(ov){return ov && ov.date && ov.date>=todayStr;});
 
   // Look up the target user
@@ -11841,7 +11848,7 @@ function getNotifs(){
   }
 
   if(types.tasksDueTomorrow){
-    const tom=new Date();tom.setDate(tom.getDate()+1);const ts=tom.toISOString().split('T')[0];
+    const tom=new Date();tom.setDate(tom.getDate()+1);const ts=_localDS(tom);
     db.tasks.filter(t=>t.status!=='done'&&t.dueDate===ts&&(isAdmin||!t.assignedTo||t.assignedTo===uid))
       .forEach(t=>{const key='duetom-'+t.id;out.push({cls:'ni-due',icon:'T',text:'"'+t.title+'" due tomorrow',sub:'Task due tomorrow',kind:'task',id:t.id,key,read:readSet.has(key)})});
   }
@@ -11852,7 +11859,7 @@ function getNotifs(){
   }
 
   if(types.apptTomorrow!==false){
-    const tom=new Date();tom.setDate(tom.getDate()+1);const ts=tom.toISOString().split('T')[0];
+    const tom=new Date();tom.setDate(tom.getDate()+1);const ts=_localDS(tom);
     db.appointments.filter(a=>a.date===ts&&a.status==='scheduled'&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
       .forEach(a=>{const key='appttom-'+a.id;if(!out.find(x=>x.key===key))out.push({cls:'ni-appt',icon:'C',text:'"'+a.title+'" tomorrow'+(a.time?' at '+fmtTime(a.time):''),sub:'Appointment tomorrow',kind:'appt',id:a.id,key,read:readSet.has(key)})});
   }
@@ -12291,7 +12298,7 @@ function calcNextDueDate(startDate,cycle){
     else if(cycle==='quarterly')next.setMonth(next.getMonth()+3);
     else next.setFullYear(next.getFullYear()+1);
   }
-  return next.toISOString().split('T')[0];
+  return _localDS(next);
 }
 
 function getSub(id){return (db.subscriptions||[]).find(s=>s.id===id)}
@@ -13126,7 +13133,7 @@ function _renderItemsSummary(){
     const startDate=startStr>todayStr()?startStr:todayStr();
     const [ty,tm,tdy]=startDate.split('-').map(Number);
     const endDate=new Date(Date.UTC(ty,tm-1,tdy+trialDays));
-    const endStr=endDate.toISOString().slice(0,10);
+    const endStr=_localDS(endDate);
     const endDisplay=fmtDate(endStr);
     trialBanner='<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius);padding:10px 12px;margin-top:6px;margin-bottom:6px;font-size:13px;color:#fbbf24">'
       +'<strong>'+trialDays+'-day free trial.</strong> First charge of '+fmt$(b.total)+' on '+endDisplay+'.'
@@ -13865,9 +13872,9 @@ function renderClassesList(){
   var today=todayStr();
   // Compute the cutoff date for the range filter. 'future' = no cutoff.
   var cutoff=null;
-  if(range==='2w')cutoff=new Date(Date.now()+14*86400000).toISOString().slice(0,10);
-  else if(range==='30d')cutoff=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
-  else if(range==='60d')cutoff=new Date(Date.now()+60*86400000).toISOString().slice(0,10);
+  if(range==='2w')cutoff=_localDS(new Date(Date.now()+14*86400000));
+  else if(range==='30d')cutoff=_localDS(new Date(Date.now()+30*86400000));
+  else if(range==='60d')cutoff=_localDS(new Date(Date.now()+60*86400000));
   var sessions=(db.classSessions||[]).filter(function(s){
     if(s.status==='cancelled')return false;
     if(s.date<today)return false;
@@ -16093,7 +16100,7 @@ function renderApptList(){
   // 'all' = no date filter; other values bound by start/end inclusive (YYYY-MM-DD strings).
   function rangeBounds(rg){
     const today=new Date();today.setHours(0,0,0,0);
-    function shift(days){const d=new Date(today);d.setDate(today.getDate()+days);return d.toISOString().slice(0,10);}
+    function shift(days){const d=new Date(today);d.setDate(today.getDate()+days);return _localDS(d);}
     if(rg==='2w')     return {start:td, end:shift(14)};
     if(rg==='30d')    return {start:td, end:shift(30)};
     if(rg==='60d')    return {start:td, end:shift(60)};
@@ -16122,7 +16129,7 @@ function renderApptList(){
   Object.keys(byDate).sort().forEach(ds=>{
     const d=new Date(ds+'T12:00:00');
     const isToday=ds===td;
-    const isTom=ds===new Date(new Date().getTime()+86400000).toISOString().split('T')[0];
+    const isTom=ds===_localDS(new Date(new Date().getTime()+86400000));
     const label=isToday?'Today':isTom?'Tomorrow':DFULL[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();
     html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:'+(isToday?'var(--orange)':'var(--text-muted)')+';padding:10px 0 7px;border-bottom:1px solid var(--border);margin-bottom:10px">'+label+'</div>';
     byDate[ds].forEach(a=>{
@@ -17861,7 +17868,7 @@ function getRptDateRange(){
   }
   const cd=document.getElementById('rpt-custom-dates');
   if(cd){cd.classList.toggle('hidden',range!=='custom');if(range==='custom')cd.style.display='flex';}
-  return{from:from.toISOString().split('T')[0],to:to.toISOString().split('T')[0]};
+  return{from:_localDS(from),to:_localDS(to)};
 }
 
 function renderStaffReporting(){
@@ -18650,7 +18657,7 @@ function openClassWidgetEditor(w,isNew){
     :'<span style="color:var(--text-muted);font-size:12px">All classes (none selected)</span>';
 
   // Count upcoming sessions for context
-  var today=new Date().toISOString().slice(0,10);
+  var today=_localDS(new Date());
   var upcomingCount=(db.classSessions||[]).filter(function(cs){
     return cs.status!=='cancelled' && cs.date>=today;
   }).length;
@@ -19590,8 +19597,6 @@ function renderDashWeek(){
   const u=userId?getUserById(userId):null;
   const now=new Date();
   const dow=now.getDay();
-  // Local YYYY-MM-DD avoids toISOString UTC drift that shifted schedule lookup +1 day in the evening
-  function _localDS(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
   const td=_localDS(now);
 
   let h='<div class="week-sched-grid">';
@@ -21173,26 +21178,26 @@ function txnGetRange(){
     const dow = now.getDay();
     const ws = new Date(now); ws.setDate(now.getDate() - dow);
     const we = new Date(ws); we.setDate(ws.getDate() + 6);
-    from = ws.toISOString().split('T')[0];
-    to = we.toISOString().split('T')[0];
+    from = _localDS(ws);
+    to = _localDS(we);
   } else if(range === 'last_week'){
     const dow = now.getDay();
     const ws = new Date(now); ws.setDate(now.getDate() - dow - 7);
     const we = new Date(ws); we.setDate(ws.getDate() + 6);
-    from = ws.toISOString().split('T')[0];
-    to = we.toISOString().split('T')[0];
+    from = _localDS(ws);
+    to = _localDS(we);
   } else if(range === 'this_month'){
-    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    from = _localDS(new Date(now.getFullYear(), now.getMonth(), 1));
+    to = _localDS(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   } else if(range === 'last_month'){
-    from = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-    to = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+    from = _localDS(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    to = _localDS(new Date(now.getFullYear(), now.getMonth(), 0));
   } else if(range === 'custom'){
     from = state.txnFrom || todayStr();
     to = state.txnTo || todayStr();
   } else {
-    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    from = _localDS(new Date(now.getFullYear(), now.getMonth(), 1));
+    to = _localDS(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   }
   return {from: from, to: to};
 }
@@ -21298,7 +21303,7 @@ function txnRenderSummary(){
   var mStart = new Date(now.getFullYear(), now.getMonth(), 1);
   // YTD: Jan 1 of current year through today
   var yStart = new Date(now.getFullYear(), 0, 1);
-  var fmtYMD = function(d){ return d.toISOString().split('T')[0]; };
+  var fmtYMD = function(d){ return _localDS(d); };
   var todayYMD = fmtYMD(now);
   // Revenue = afterDiscount minus refunded portion. Excludes tax, tip, fee, credits.
   // Per-transaction:
@@ -23805,7 +23810,7 @@ function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcIn
   var expiresDate=null;
   if(tmpl.expiresMonths){
     var d=new Date();d.setMonth(d.getMonth()+tmpl.expiresMonths);
-    expiresDate=d.toISOString().split('T')[0];
+    expiresDate=_localDS(d);
   }
   var taxableFlag=tmpl.taxable!==false;
   var tx=parseFloat(taxAmount)||0;
