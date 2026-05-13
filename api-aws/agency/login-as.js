@@ -1,18 +1,43 @@
-// api/agency/login-as.js (Lambda version)
+// api/agency/login-as.js
 //
 // POST /api/agency/login-as
 //
-// Server-side validation and audit logging for agency login-as-subaccount.
-// HIPAA-critical event. Logs actor, target, and timestamp.
+// Validates agency permission to act on a target subaccount, resolves the
+// target subaccount's primary admin user, and mints a single-use token
+// stored in agency_login_as_tokens. The frontend then opens a new tab and
+// POSTs the token to /api/agency/login-as-exchange to mint a real
+// subaccount session cookie.
 //
-// MIGRATED: Supabase REST → lib/db.js for agency_users and subaccounts lookups.
+// HIPAA-critical event. Both this endpoint and the exchange endpoint log
+// to audit_log with action 'agency.login_as.start' and 'agency.login_as.exchange'.
+//
+// Rewritten May 13, 2026 to replace the broken localStorage-based token
+// flow that never minted a server-side subaccount session.
 
+const crypto = require('crypto');
 const db = require('./lib/db');
 const { logAudit } = require('./lib/audit');
 const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 const ALLOWED_ROLES = ['super_admin', 'admin', 'support'];
+const TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function generateToken() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+function getIpFromReq(req) {
+  return (
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.headers['x-real-ip'] ||
+    null
+  );
+}
+
+function getUserAgent(req) {
+  return req.headers['user-agent'] || null;
+}
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -33,9 +58,8 @@ async function handler(req, res) {
   };
 
   try {
-    // Step 1: Validate the agency user
+    // Step 1: Resolve agency user
     let user = null;
-
     if (actor.id === 'agency-admin-primary' && ALLOWED_ROLES.includes(actor.role)) {
       user = {
         id:       actor.id,
@@ -44,130 +68,142 @@ async function handler(req, res) {
         role:     actor.role || 'super_admin'
       };
     } else {
-      try {
-        const u = await db.findOne('agency_users',
-          { id: actor.id, active: true },
-          { select: 'id, username, name, role' }
-        );
-        
-        if (!u) {
-          await logAudit({
-            req,
-            actorType:     'agency',
-            actorId:       actor.id,
-            actorUsername: actor.username,
-            action:        'agency.login_as.start',
-            targetType:    'subaccount',
-            outcome:       'denied',
-            errorMessage:  'Agency user not found or inactive',
-            metadata:      { target_slug: slug }
-          });
-          return res.status(403).json({ error: 'Not authorized' });
-        }
-        user = u;
-      } catch (e) {
+      const u = await db.findOne('agency_users',
+        { id: actor.id, active: true },
+        { select: 'id, username, name, role' }
+      );
+      if (!u) {
         await logAudit({
-          req,
-          actorType:     'agency',
-          actorId:       actor.id,
-          actorUsername: actor.username,
-          action:        'agency.login_as.start',
-          targetType:    'subaccount',
-          outcome:       'failure',
-          errorMessage:  'Could not verify agency user (DB error)',
-          metadata:      { target_slug: slug }
+          req, actorType: 'agency', actorId: actor.id, actorUsername: actor.username,
+          action: 'agency.login_as.start', targetType: 'subaccount',
+          outcome: 'denied', errorMessage: 'Agency user not found or inactive',
+          metadata: { target_slug: slug }
         });
-        return res.status(500).json({ error: 'Could not verify user' });
+        return res.status(403).json({ error: 'Not authorized' });
       }
+      user = u;
     }
 
     if (!ALLOWED_ROLES.includes(user.role)) {
       await logAudit({
-        req,
-        actorType:     'agency',
-        actorId:       user.id,
-        actorUsername: user.username,
-        actorRole:     user.role,
-        action:        'agency.login_as.start',
-        targetType:    'subaccount',
-        outcome:       'denied',
-        errorMessage:  'Role does not permit login-as',
-        metadata:      { target_slug: slug }
+        req, actorType: 'agency', actorId: user.id, actorUsername: user.username,
+        actorRole: user.role, action: 'agency.login_as.start', targetType: 'subaccount',
+        outcome: 'denied', errorMessage: 'Role does not permit login-as',
+        metadata: { target_slug: slug }
       });
       return res.status(403).json({ error: 'Insufficient permission' });
     }
 
-    // Step 2: Validate the target subaccount
+    // Step 2: Resolve target subaccount
     const subId = 'sub-' + slug;
-    let subName = null;
-    let subActive = null;
-    
-    try {
-      const sub = await db.findOne('subaccounts',
-        { id: subId },
-        { select: 'id, name, active' }
-      );
-      if (sub) {
-        subName = sub.name;
-        subActive = sub.active;
-      }
-    } catch (e) {
-      // Continue with subName=null check below
-    }
+    const sub = await db.findOne('subaccounts',
+      { id: subId },
+      { select: 'id, name, active' }
+    );
 
-    if (subName === null) {
+    if (!sub) {
       await logAudit({
-        req,
-        actorType:           'agency',
-        actorId:             user.id,
-        actorUsername:       user.username,
-        actorRole:           user.role,
-        action:              'agency.login_as.start',
-        targetType:          'subaccount',
-        targetId:            subId,
-        targetSubaccountId:  subId,
-        outcome:             'failure',
-        errorMessage:        'Subaccount not found',
-        metadata:            { target_slug: slug }
+        req, actorType: 'agency', actorId: user.id, actorUsername: user.username,
+        actorRole: user.role, action: 'agency.login_as.start',
+        targetType: 'subaccount', targetId: subId, targetSubaccountId: subId,
+        outcome: 'failure', errorMessage: 'Subaccount not found',
+        metadata: { target_slug: slug }
       });
       return res.status(404).json({ error: 'Subaccount not found' });
     }
 
-    // Step 3: Log success and return
+    if (sub.active === false) {
+      await logAudit({
+        req, actorType: 'agency', actorId: user.id, actorUsername: user.username,
+        actorRole: user.role, action: 'agency.login_as.start',
+        targetType: 'subaccount', targetId: subId, targetSubaccountId: subId,
+        outcome: 'denied', errorMessage: 'Subaccount is inactive',
+        metadata: { target_slug: slug }
+      });
+      return res.status(403).json({ error: 'Subaccount is inactive' });
+    }
+
+    // Step 3: Resolve target admin user in subaccount_users.
+    // Strategy: pick the oldest active admin in the target subaccount.
+    // This mirrors how getEffectiveAdmin works on the frontend.
+    const targetUserRes = await db.query(
+      `SELECT id, username, display_name, role
+       FROM subaccount_users
+       WHERE subaccount_id = $1 AND active = true AND role = 'admin'
+       ORDER BY created_at ASC
+       LIMIT 1`,
+      [subId]
+    );
+
+    if (!targetUserRes.rows.length) {
+      await logAudit({
+        req, actorType: 'agency', actorId: user.id, actorUsername: user.username,
+        actorRole: user.role, action: 'agency.login_as.start',
+        targetType: 'subaccount', targetId: subId, targetSubaccountId: subId,
+        outcome: 'failure',
+        errorMessage: 'Target subaccount has no active admin user',
+        metadata: { target_slug: slug, target_name: sub.name }
+      });
+      return res.status(404).json({ error: 'Subaccount has no admin user to log in as' });
+    }
+
+    const targetUser = targetUserRes.rows[0];
+
+    // Step 4: Mint single-use token
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
+
+    await db.query(
+      `INSERT INTO agency_login_as_tokens
+        (token, agency_user_id, agency_username, target_sub_id, target_slug,
+         target_user_id, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        token, user.id, user.username, subId, slug,
+        targetUser.id, expiresAt,
+        getIpFromReq(req), getUserAgent(req)
+      ]
+    );
+
+    // Step 5: Audit log success
     await logAudit({
       req,
-      actorType:           'agency',
-      actorId:             user.id,
-      actorUsername:       user.username,
-      actorRole:           user.role,
-      action:              'agency.login_as.start',
-      targetType:          'subaccount',
-      targetId:            subId,
-      targetSubaccountId:  subId,
+      actorType: 'agency',
+      actorId: user.id,
+      actorUsername: user.username,
+      actorRole: user.role,
+      action: 'agency.login_as.start',
+      targetType: 'subaccount',
+      targetId: subId,
+      targetSubaccountId: subId,
       metadata: {
-        target_slug:   slug,
-        target_name:   subName,
-        target_active: subActive
+        target_slug: slug,
+        target_name: sub.name,
+        target_user_id: targetUser.id,
+        target_username: targetUser.username,
+        token_expires_at: expiresAt
       }
     });
 
     return res.status(200).json({
       success: true,
-      target: { id: subId, name: subName, active: subActive }
+      token: token,
+      target: {
+        id: subId,
+        name: sub.name,
+        slug: slug,
+        active: sub.active
+      },
+      expires_at: expiresAt
     });
 
   } catch (e) {
     console.error('login-as error:', e);
     await logAudit({
-      req,
-      actorType:     'agency',
-      actorId:       actor.id,
-      actorUsername: actor.username,
-      action:        'agency.login_as.start',
-      targetType:    'subaccount',
-      outcome:       'failure',
-      errorMessage:  e.message,
-      metadata:      { target_slug: slug }
+      req, actorType: 'agency', actorId: actor.id, actorUsername: actor.username,
+      action: 'agency.login_as.start', targetType: 'subaccount',
+      outcome: 'failure', errorMessage: e.message,
+      metadata: { target_slug: slug }
     });
     return res.status(500).json({ error: 'Server error', detail: e.message });
   }

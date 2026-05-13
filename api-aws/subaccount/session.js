@@ -36,13 +36,17 @@ async function handler(req, res) {
   // Look up subaccount status (active flag) and HIPAA addon status
   let subaccountActive = null;
   let hipaaAddon = false;
+  let subaccountName = null;
+  let subaccountSlug = null;
   try {
     const subResult = await db.query(
-      'SELECT active FROM subaccounts WHERE id = $1 LIMIT 1',
+      'SELECT name, slug, active FROM subaccounts WHERE id = $1 LIMIT 1',
       [session.subaccount_id]
     );
     if (subResult.rows.length > 0) {
       subaccountActive = subResult.rows[0].active !== false;
+      subaccountName = subResult.rows[0].name || null;
+      subaccountSlug = subResult.rows[0].slug || null;
     }
 
     const planResult = await db.query(
@@ -68,6 +72,9 @@ async function handler(req, res) {
       subaccount_id: session.subaccount_id
     },
     subaccount: {
+      id: session.subaccount_id,
+      name: subaccountName,
+      slug: subaccountSlug,
       active: subaccountActive,
       hipaa_addon: hipaaAddon
     },

@@ -6,6 +6,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 
 const ALLOWED_FIELDS = [
+  'external_id',
   'first_name', 'last_name', 'display_name',
   'email', 'phone', 'company', 'title', 'website',
   'date_of_birth', 'gender', 'pronouns', 'preferred_language',

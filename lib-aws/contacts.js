@@ -72,7 +72,7 @@ function rowToCamel(row) {
 
 // Standard SELECT column list. Keep in sync with data-load.js mapping.
 const CONTACT_COLUMNS = `
-  id, subaccount_id,
+  id, subaccount_id, external_id,
   first_name, last_name, display_name,
   email, phone, company, title, website,
   date_of_birth, gender, pronouns, preferred_language,

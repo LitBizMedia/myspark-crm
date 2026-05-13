@@ -35,10 +35,24 @@ async function handler(req, res) {
     const id = safeStr(b.id) || uid();
     const email = safeStr(b.email);
     const phone = safeStr(b.phone);
+    // Defensive: if date_of_birth doesn't match YYYY-MM-DD or has a clearly
+    // bogus year, null it instead of letting Postgres reject the whole row.
+    let dob = safeStr(b.date_of_birth);
+    if (dob) {
+      const m = dob.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) {
+        dob = null;
+      } else {
+        const y = parseInt(m[1], 10);
+        if (y < 1900 || y > new Date().getUTCFullYear()) dob = null;
+      }
+    }
+
+    const externalId = safeStr(b.external_id);
 
     await db.query(
       `INSERT INTO contacts (
-        id, subaccount_id,
+        id, subaccount_id, external_id,
         first_name, last_name, display_name,
         email, phone, company, title, website,
         date_of_birth, gender, pronouns, preferred_language,
@@ -49,22 +63,22 @@ async function handler(req, res) {
         square_customer_id, square_cards,
         created_at, updated_at, created_by, updated_by
       ) VALUES (
-        $1, $2,
-        $3, $4, $5,
-        $6, $7, $8, $9, $10,
-        $11, $12, $13, $14,
-        $15, $16, $17, $18, $19, $20, $21,
-        $22, $23, $24,
-        $25, $26, $27, $28,
-        $29, $30,
-        $31, $32,
-        NOW(), NOW(), $33, $33
+        $1, $2, $3,
+        $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        $12, $13, $14, $15,
+        $16, $17, $18, $19, $20, $21, $22,
+        $23, $24, $25,
+        $26, $27, $28, $29,
+        $30, $31,
+        $32, $33,
+        NOW(), NOW(), $34, $34
       )`,
       [
-        id, auth.subaccount_id,
+        id, auth.subaccount_id, externalId,
         firstName, lastName, displayName,
         email, phone, safeStr(b.company), safeStr(b.title), safeStr(b.website),
-        safeStr(b.date_of_birth), safeStr(b.gender), safeStr(b.pronouns), safeStr(b.preferred_language),
+        dob, safeStr(b.gender), safeStr(b.pronouns), safeStr(b.preferred_language),
         safeStr(b.address_line1), safeStr(b.address_line2), safeStr(b.city), safeStr(b.state),
         safeStr(b.postal_code), safeStr(b.country) || 'US', safeStr(b.timezone),
         safeStr(b.emergency_contact_name), safeStr(b.emergency_contact_phone), safeStr(b.emergency_contact_relationship),
@@ -89,6 +103,9 @@ async function handler(req, res) {
   } catch (e) {
     console.error('contact-create error:', e.message);
     if (e.code === '23505') {
+      if (e.constraint === 'idx_contacts_subaccount_external') {
+        return res.status(409).json({ error: 'Contact with this external_id already exists', external_id_conflict: true });
+      }
       return res.status(409).json({ error: 'Contact ID already exists' });
     }
     return res.status(500).json({ error: 'Failed to create contact' });
