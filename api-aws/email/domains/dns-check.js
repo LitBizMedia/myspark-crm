@@ -59,22 +59,34 @@ async function checkRecord(rec) {
       // returns array of arrays of strings (DNS chunks each TXT into 255-char segments)
       if (!result || !result.length) return { status: 'not_found' };
       const joined = result.map(function(arr) { return arr.join(''); });
-      // For SPF and DMARC, we want a substring match because customers might have
-      // a combined SPF record (multiple includes) - just check the key bit matches
       const expectedNorm = norm(expected);
-      const match = joined.find(function(s) { return norm(s) === expectedNorm; });
-      if (match) {
-        return { status: 'live', actual: match };
+
+      // Exact match
+      const exactMatch = joined.find(function(s) { return norm(s) === expectedNorm; });
+      if (exactMatch) {
+        return { status: 'live', actual: exactMatch };
       }
-      // For SPF specifically, check if our include is part of an existing record
+
+      // SPF semantic match: existing record contains our include
       if (expectedNorm.indexOf('v=spf1') === 0) {
-        const has_include = joined.find(function(s) {
-          return s.toLowerCase().indexOf('include:amazonses.com') !== -1;
-        });
-        if (has_include) {
-          return { status: 'live', actual: has_include };
+        const spfRec = joined.find(function(s) { return s.toLowerCase().indexOf('v=spf1') === 0; });
+        if (spfRec) {
+          if (spfRec.toLowerCase().indexOf('include:amazonses.com') !== -1) {
+            return { status: 'live', actual: spfRec };
+          }
+          // SPF record exists but doesn't include amazonses.com - mismatch with actionable hint
+          return { status: 'mismatch', actual: spfRec };
         }
       }
+
+      // DMARC semantic match: any valid v=DMARC1 record with a p= policy counts as live
+      if (expectedNorm.indexOf('v=dmarc1') === 0) {
+        const dmarcRec = joined.find(function(s) { return s.toLowerCase().indexOf('v=dmarc1') === 0; });
+        if (dmarcRec && /p\s*=/i.test(dmarcRec)) {
+          return { status: 'live', actual: dmarcRec };
+        }
+      }
+
       return { status: 'mismatch', actual: joined[0] };
     }
 
