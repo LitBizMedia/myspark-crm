@@ -17,20 +17,25 @@ async function handler(req, res) {
   if (!subaccount_id) return res.status(400).json({ error: 'subaccount_id required' });
   if (!twilio_number) return res.status(400).json({ error: 'twilio_number required' });
   if (!twilio_number_sid) return res.status(400).json({ error: 'twilio_number_sid required' });
-  if (!campaign_status) return res.status(400).json({ error: 'campaign_status required' });
+
+  // Default provision state is 'pending' (awaiting Twilio approval).
+  // Agency can pass campaign_status explicitly to override (rare).
+  const finalStatus = campaign_status || 'pending';
+  if (!['pending', 'live', 'paused'].includes(finalStatus)) {
+    return res.status(400).json({ error: 'campaign_status must be one of: pending, live, paused' });
+  }
 
   try {
-    // Upsert sms_settings
+    // Upsert sms_settings (no enabled column anymore)
     await db.query(`
-      INSERT INTO sms_settings (subaccount_id, twilio_number, twilio_number_sid, campaign_status, enabled, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      INSERT INTO sms_settings (subaccount_id, twilio_number, twilio_number_sid, campaign_status, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, NOW(), NOW())
       ON CONFLICT (subaccount_id) DO UPDATE SET
         twilio_number = EXCLUDED.twilio_number,
         twilio_number_sid = EXCLUDED.twilio_number_sid,
         campaign_status = EXCLUDED.campaign_status,
-        enabled = EXCLUDED.enabled,
         updated_at = NOW()
-    `, [subaccount_id, twilio_number, twilio_number_sid, campaign_status, campaign_status === 'approved']);
+    `, [subaccount_id, twilio_number, twilio_number_sid, finalStatus]);
 
     // Update registration request status
     if (request_id) {

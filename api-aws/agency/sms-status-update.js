@@ -13,14 +13,25 @@ async function handler(req, res) {
   const auth = await requireAgencyAuth(req, res, { requireRole: 'super_admin' });
   if (!auth) return;
 
-  const { subaccount_id, campaign_status, enabled } = req.body || {};
+  const { subaccount_id, campaign_status, rejection_note } = req.body || {};
   if (!subaccount_id) return res.status(400).json({ error: 'subaccount_id required' });
+
+  // Validate status if provided
+  if (campaign_status !== undefined && !['pending', 'live', 'paused'].includes(campaign_status)) {
+    return res.status(400).json({ error: 'campaign_status must be one of: pending, live, paused' });
+  }
 
   const sets = [];
   const params = [subaccount_id];
   let p = 2;
-  if (campaign_status !== undefined) { sets.push(`campaign_status = $${p++}`); params.push(campaign_status); }
-  if (enabled !== undefined) { sets.push(`enabled = $${p++}`); params.push(!!enabled); }
+  if (campaign_status !== undefined) {
+    sets.push(`campaign_status = $${p++}`);
+    params.push(campaign_status);
+  }
+  if (rejection_note !== undefined) {
+    sets.push(`rejection_note = $${p++}`);
+    params.push(rejection_note || null);
+  }
   if (sets.length === 0) return res.status(400).json({ error: 'Nothing to update' });
   sets.push('updated_at = NOW()');
 
@@ -41,7 +52,7 @@ async function handler(req, res) {
       targetType: 'sms_settings',
       targetId: subaccount_id,
       targetSubaccountId: subaccount_id,
-      metadata: { campaign_status, enabled }
+      metadata: { campaign_status, rejection_note }
     });
 
     return res.status(200).json({ settings: r.rows[0] });

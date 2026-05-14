@@ -13,19 +13,49 @@ async function handler(req, res) {
   const auth = await requireSubaccountAuth(req, res, { requireRole: 'admin' });
   if (!auth) return;
 
-  const { enabled } = req.body || {};
-  if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled (boolean) is required' });
+  // Accept either {action:'pause'|'resume'} or legacy {enabled:bool} for compat
+  const body = req.body || {};
+  let targetStatus;
+  if (body.action === 'pause') targetStatus = 'paused';
+  else if (body.action === 'resume') targetStatus = 'live';
+  else if (typeof body.enabled === 'boolean') targetStatus = body.enabled ? 'live' : 'paused';
+  else return res.status(400).json({ error: 'action (pause|resume) required' });
 
   const subaccountId = auth.subaccount_id;
 
   try {
-    const r = await db.query(
-      'UPDATE sms_settings SET enabled = $1, updated_at = NOW() WHERE subaccount_id = $2 RETURNING *',
-      [enabled, subaccountId]
+    // Load current state to validate transition
+    const check = await db.query(
+      'SELECT campaign_status, twilio_number FROM sms_settings WHERE subaccount_id = $1',
+      [subaccountId]
     );
-    if (r.rowCount === 0) {
+    if (check.rowCount === 0) {
       return res.status(404).json({ error: 'No SMS settings found for this subaccount' });
     }
+    const row = check.rows[0];
+    if (!row.twilio_number) {
+      return res.status(400).json({ error: 'No Twilio number assigned. Contact your administrator.' });
+    }
+    if (row.campaign_status === 'pending') {
+      return res.status(400).json({
+        error: 'SMS campaign is still pending carrier approval. Pause/resume is only available once your campaign is live.',
+        code: 'CAMPAIGN_NOT_LIVE',
+        campaign_status: row.campaign_status
+      });
+    }
+
+    // Valid transitions: live -> paused (pause), paused -> live (resume)
+    if (targetStatus === 'paused' && row.campaign_status !== 'live') {
+      return res.status(400).json({ error: 'Can only pause when SMS is live' });
+    }
+    if (targetStatus === 'live' && row.campaign_status !== 'paused') {
+      return res.status(400).json({ error: 'Can only resume when SMS is paused' });
+    }
+
+    const r = await db.query(
+      'UPDATE sms_settings SET campaign_status = $1, updated_at = NOW() WHERE subaccount_id = $2 RETURNING *',
+      [targetStatus, subaccountId]
+    );
 
     await logAudit({
       req,
@@ -33,11 +63,11 @@ async function handler(req, res) {
       actorId: auth.user_id,
       actorUsername: auth.username,
       actorRole: auth.role,
-      action: 'subaccount.sms.toggle',
+      action: targetStatus === 'paused' ? 'subaccount.sms.pause' : 'subaccount.sms.resume',
       targetType: 'sms_settings',
       targetId: subaccountId,
       targetSubaccountId: subaccountId,
-      metadata: { enabled }
+      metadata: { from: row.campaign_status, to: targetStatus }
     });
 
     return res.status(200).json({ settings: r.rows[0] });
