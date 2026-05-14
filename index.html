@@ -2132,10 +2132,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             </div>
           </div>
           <div id="subs-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+          <div id="subs-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="subs-search" type="text" placeholder="Search subscriptions..." oninput="renderSubscriptions()"></div>
-            <select class="filter-sel" id="subs-status-filter" onchange="renderSubscriptions()"><option value="">All Status</option><option value="trialing">Trial</option><option value="active">Active</option><option value="paused">Paused</option><option value="suspended">Suspended</option><option value="cancelled">Cancelled</option></select>
             <select class="filter-sel" id="subs-cycle-filter" onchange="renderSubscriptions()"><option value="">All Cycles</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select>
+            <select class="filter-sel" id="subs-sort" onchange="setSubsSort(this.value)"><option value="next_bill_asc">Next bill, soonest first</option><option value="next_bill_desc">Next bill, latest first</option><option value="started_desc">Started, newest first</option><option value="started_asc">Started, oldest first</option><option value="customer_asc">Customer A to Z</option><option value="plan_asc">Plan A to Z</option><option value="price_desc">Price, high to low</option></select>
           </div>
           <div id="subs-list"></div>
           <div id="subs-pg"></div>
@@ -2482,7 +2483,7 @@ let state={
   syncTimer:null,
   selTagColor:TAG_COLORS[0],selUserColor:USER_COLORS[0],
   posItems:[],posTip:'15',posPM:'card',
-  paymentsTab:'pos',subsPage:1,subsSearch:'',subsStatusFilter:'',subsCycleFilter:'',
+  paymentsTab:'pos',subsPage:1,subsSearch:'',subsStatusFilter:'',subsCycleFilter:'',subsSort:'next_bill_asc',
   calTab:'calendar',formsTab:'',
   serverDataLoaded:false
 };
@@ -13186,8 +13187,12 @@ async function apiCategoryDelete(id){
 // =====================================================
 function filteredSubs(){
   const q=(document.getElementById('subs-search')&&document.getElementById('subs-search').value||'').toLowerCase();
-  const sf=document.getElementById('subs-status-filter')&&document.getElementById('subs-status-filter').value||'';
+  const sf=state.subsStatusFilter||'';
   const cf=document.getElementById('subs-cycle-filter')&&document.getElementById('subs-cycle-filter').value||'';
+  const sort=state.subsSort||'next_bill_asc';
+  function nbd(s){return s.nextDueDate||calcNextDueDate(s.startDate,s.billingCycle||'monthly')||'9999-12-31';}
+  function cname(s){const c=s.contactId?getContact(s.contactId):null;return ((c&&c.name)||s.planName||'').toLowerCase();}
+  function price(s){const b=calcSubTaxBreakdown(s);return b.total||0;}
   return (db.subscriptions||[]).filter(s=>{
     if(sf&&s.status!==sf)return false;
     if(cf&&s.billingCycle!==cf)return false;
@@ -13199,10 +13204,17 @@ function filteredSubs(){
       if(!name.includes(q)&&!biz.includes(q)&&!plan.includes(q))return false;
     }
     return true;
-  }).sort((a,b)=>{
-    const ao=SUB_STATUS_ORDER[a.status]??99,bo=SUB_STATUS_ORDER[b.status]??99;
-    if(ao!==bo)return ao-bo;
-    return(b.startDate||'').localeCompare(a.startDate||'');
+  }).sort(function(a,b){
+    switch(sort){
+      case 'next_bill_desc': return (nbd(b)||'').localeCompare(nbd(a)||'');
+      case 'started_desc':   return (b.startDate||'').localeCompare(a.startDate||'');
+      case 'started_asc':    return (a.startDate||'').localeCompare(b.startDate||'');
+      case 'customer_asc':   return cname(a).localeCompare(cname(b));
+      case 'plan_asc':       return ((a.planName||'').toLowerCase()).localeCompare((b.planName||'').toLowerCase());
+      case 'price_desc':     return price(b)-price(a);
+      case 'next_bill_asc':
+      default:               return (nbd(a)||'').localeCompare(nbd(b)||'');
+    }
   });
 }
 
@@ -13253,6 +13265,7 @@ function renderSubscriptions(){
   if(planBtn)planBtn.style.display=canManagePlans()?'':'none';
 
   _renderSubsStats();
+  _renderSubsPills();
 
   const all=filteredSubs();
   const pages=Math.ceil(all.length/SUBS_PER_PAGE)||1;
@@ -13262,58 +13275,87 @@ function renderSubscriptions(){
   if(lbl)lbl.textContent=all.length+' subscription'+(all.length!==1?'s':'');
   const el=document.getElementById('subs-list');if(!el)return;
   if(!slice.length){
-    el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><h3>No subscriptions found</h3><p>'+(canManageSubscriptions()?'Create a subscription or adjust filters.':'No subscriptions match your filters.')+'</p></div>';
+    const cur=state.subsStatusFilter||'';
+    const emptyMsg=cur?'No '+(SUB_STATUS_LABEL[cur]||cur).toLowerCase()+' subscriptions match your filters.':(canManageSubscriptions()?'Create a subscription or adjust filters.':'No subscriptions match your filters.');
+    el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><h3>No subscriptions found</h3><p>'+emptyMsg+'</p></div>';
     const pg=document.getElementById('subs-pg');if(pg)pg.innerHTML='';
     return;
   }
-  // Group by status for section headers
-  const groups={trialing:[],active:[],paused:[],suspended:[],cancelled:[]};
-  slice.forEach(s=>{ if(groups[s.status])groups[s.status].push(s); });
   let html='';
-  SUB_STATUSES.forEach(st=>{
-    if(!groups[st].length)return;
-    html+='<div class="sub-section-label" style="color:'+SUB_STATUS_COLOR[st]+'">'+SUB_STATUS_LABEL[st]+'<span class="sub-count-badge">'+groups[st].length+'</span></div>';
-    groups[st].forEach(s=>{
-      const c=s.contactId?getContact(s.contactId):null;
-      const cycle=s.billingCycle||'monthly';
-      const breakdown=calcSubTaxBreakdown(s);
-      const sticker=breakdown.subtotal;
-      const total=breakdown.total;
-      const discounted=hasActiveDiscount(s)&&breakdown.discount>0;
-      const nd=s.nextDueDate||calcNextDueDate(s.startDate,cycle);
-      const failBadge=(s.status==='suspended'&&s.failedChargeCount)?'<span style="font-size:10px;font-weight:700;color:var(--danger-light);margin-left:6px">'+s.failedChargeCount+' failed charge'+(s.failedChargeCount===1?'':'s')+'</span>':'';
-      // Trial badge: shown only for trialing subs with a trial_ends_at date
-      const trialEnd=s.trialEndsAt||s.trial_ends_at;
-      const trialBadge=(s.status==='trialing'&&trialEnd)?'<span style="font-size:10px;font-weight:700;color:var(--warning-light);margin-left:6px">trial ends '+fmtDate(trialEnd)+'</span>':'';
-      // Price cell: shows total including tax. When discounted, sticker is shown
-      // struck through above. When tax applies, indicate with tiny "incl tax" label.
-      const taxNote=breakdown.taxEnabled&&breakdown.tax>0?' incl tax':'';
-      const priceCell=discounted
-        ? '<div style="font-size:11px;color:var(--text-muted);text-decoration:line-through;line-height:1">'+fmt$(sticker)+'</div>'
-          +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange);line-height:1.2">'+fmt$(total)+'</div>'
-          +'<div style="font-size:10px;color:var(--success-light);text-transform:uppercase">/'+cycle+taxNote+'</div>'
-        : '<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(total)+'</div>'
-          +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase">/'+cycle+taxNote+'</div>';
-      html+='<div class="sub-row '+s.status+'" onclick="openSubDetail(\''+s.id+'\')">'
-        +'<div><div class="sub-name">'+(c?esc(c.name):esc(s.planName||'Unnamed'))+'</div>'
-        +(c&&c.company?'<div class="sub-biz">'+esc(c.company)+'</div>':'')
-        +'<span class="sub-cycle-badge">'+cycle+'</span>'+failBadge+trialBadge+'</div>'
-        +'<div class="sub-date-cell"><strong>'+fmtDate(s.startDate)+'</strong>Started</div>'
-        +'<div class="sub-date-cell"><strong>'+(nd?fmtDate(nd):'TBD')+'</strong>Next Due</div>'
-        +'<div>'+priceCell+'</div>'
-        +'<div class="sub-actions" onclick="event.stopPropagation()">'
-        +(canManageSubscriptions()?'<button class="btn btn-ghost btn-sm" onclick="openSubModal(\''+s.id+'\')">Edit</button>':'')
-        +(canManageSubscriptions()&&s.status==='active'?'<button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border)" onclick="pauseSub(\''+s.id+'\')">Pause</button>':'')
-        +(canManageSubscriptions()&&(s.status==='paused'||s.status==='suspended')?'<button class="btn btn-purple btn-sm" onclick="restartSub(\''+s.id+'\')">Resume</button>':'')
-        +(canManageSubscriptions()&&s.status!=='cancelled'?'<button class="btn btn-danger btn-sm" onclick="cancelSub(\''+s.id+'\')">Cancel</button>':'')
-        +'</div></div>';
-    });
+  slice.forEach(function(s){
+    const c=s.contactId?getContact(s.contactId):null;
+    const cycle=s.billingCycle||'monthly';
+    const breakdown=calcSubTaxBreakdown(s);
+    const sticker=breakdown.subtotal;
+    const total=breakdown.total;
+    const discounted=hasActiveDiscount(s)&&breakdown.discount>0;
+    const nd=s.nextDueDate||calcNextDueDate(s.startDate,cycle);
+    const failBadge=(s.status==='suspended'&&s.failedChargeCount)?'<span style="font-size:10px;font-weight:700;color:var(--danger-light);margin-left:6px">'+s.failedChargeCount+' failed charge'+(s.failedChargeCount===1?'':'s')+'</span>':'';
+    // Trial badge: shown only for trialing subs with a trial_ends_at date
+    const trialEnd=s.trialEndsAt||s.trial_ends_at;
+    const trialBadge=(s.status==='trialing'&&trialEnd)?'<span style="font-size:10px;font-weight:700;color:var(--warning-light);margin-left:6px">trial ends '+fmtDate(trialEnd)+'</span>':'';
+    // Per-row status pill so the indicator is visible regardless of sort or filter
+    const sc=SUB_STATUS_COLOR[s.status]||'var(--text-dim)';
+    const statusPill='<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:11px;background:'+sc+'22;color:'+sc+';border:1px solid '+sc+'55;white-space:nowrap">'+(SUB_STATUS_LABEL[s.status]||s.status)+'</span>';
+    const taxNote=breakdown.taxEnabled&&breakdown.tax>0?' incl tax':'';
+    const priceCell=discounted
+      ? '<div style="font-size:11px;color:var(--text-muted);text-decoration:line-through;line-height:1">'+fmt$(sticker)+'</div>'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange);line-height:1.2">'+fmt$(total)+'</div>'
+        +'<div style="font-size:10px;color:var(--success-light);text-transform:uppercase">/'+cycle+taxNote+'</div>'
+      : '<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange)">'+fmt$(total)+'</div>'
+        +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase">/'+cycle+taxNote+'</div>';
+    html+='<div class="sub-row '+s.status+'" onclick="openSubDetail(\''+s.id+'\')">'
+      +'<div><div class="sub-name">'+(c?esc(c.name):esc(s.planName||'Unnamed'))+'</div>'
+      +(c&&c.company?'<div class="sub-biz">'+esc(c.company)+'</div>':'')
+      +'<div style="margin-top:5px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">'+statusPill+'<span class="sub-cycle-badge">'+cycle+'</span>'+failBadge+trialBadge+'</div></div>'
+      +'<div class="sub-date-cell"><strong>'+fmtDate(s.startDate)+'</strong>Started</div>'
+      +'<div class="sub-date-cell"><strong>'+(nd?fmtDate(nd):'TBD')+'</strong>Next Due</div>'
+      +'<div>'+priceCell+'</div>'
+      +'<div class="sub-actions" onclick="event.stopPropagation()">'
+      +(canManageSubscriptions()?'<button class="btn btn-ghost btn-sm" onclick="openSubModal(\''+s.id+'\')">Edit</button>':'')
+      +(canManageSubscriptions()&&s.status==='active'?'<button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border)" onclick="pauseSub(\''+s.id+'\')">Pause</button>':'')
+      +(canManageSubscriptions()&&(s.status==='paused'||s.status==='suspended')?'<button class="btn btn-purple btn-sm" onclick="restartSub(\''+s.id+'\')">Resume</button>':'')
+      +(canManageSubscriptions()&&s.status!=='cancelled'?'<button class="btn btn-danger btn-sm" onclick="cancelSub(\''+s.id+'\')">Cancel</button>':'')
+      +'</div></div>';
   });
   el.innerHTML=html;
   renderPg('subs-pg',state.subsPage,pages,'subsPg');
 }
 
 function subsPg(p){state.subsPage=p;renderSubscriptions()}
+
+function setSubsStatus(k){
+  state.subsStatusFilter=k;
+  state.subsPage=1;
+  renderSubscriptions();
+}
+
+function setSubsSort(v){
+  state.subsSort=v;
+  state.subsPage=1;
+  renderSubscriptions();
+}
+
+function _renderSubsPills(){
+  var subs=db.subscriptions||[];
+  var counts={all:subs.length,trialing:0,active:0,paused:0,suspended:0,cancelled:0};
+  subs.forEach(function(s){if(counts.hasOwnProperty(s.status))counts[s.status]++;});
+  var pills=[
+    {k:'',label:'All',n:counts.all},
+    {k:'trialing',label:'Trial',n:counts.trialing},
+    {k:'active',label:'Active',n:counts.active},
+    {k:'paused',label:'Paused',n:counts.paused},
+    {k:'suspended',label:'Suspended',n:counts.suspended},
+    {k:'cancelled',label:'Cancelled',n:counts.cancelled}
+  ];
+  var cur=state.subsStatusFilter||'';
+  var html=pills.map(function(p){
+    var isActive=cur===p.k;
+    return '<button class="chip'+(isActive?' active':'')+'" onclick="setSubsStatus(\''+p.k+'\')">'+p.label+' <span style="opacity:.65;font-weight:500">('+p.n+')</span></button>';
+  }).join('');
+  var el=document.getElementById('subs-pills');
+  if(el)el.innerHTML=html;
+}
 
 // =====================================================
 // Subscription detail modal (Details + History tabs)
