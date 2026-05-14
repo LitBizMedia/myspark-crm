@@ -11884,8 +11884,6 @@ function switchSettingsTab(tab){
 }
 
 async function loadEmailDomainStatus(){
-  var slug=state.subaccountSlug||'litbiz';
-  var subId='sub-'+slug;
   try{
     var res=await fetch(apiUrl('/api/subaccount/email-domain-status'),{credentials:'include'});
     if(!res.ok)return null;
@@ -11894,229 +11892,286 @@ async function loadEmailDomainStatus(){
   }catch(e){return null;}
 }
 
+// State machine for the Email tab UI.
+function _emailDomainState(record){
+  if(!record) return 'none';
+  if(record.status !== 'verified') return 'dkim_pending';
+  if(record.inbound_status !== 'verified') return 'sending_only';
+  return 'fully_active';
+}
+
+// Per-record DNS status. Held in memory only; refreshed on Check verification.
+// Keyed by record name+type to avoid collisions.
+function _emailDnsKey(rec){ return (rec.type||'')+':'+(rec.name||''); }
+
 function renderEmailDomainSettings(){
   var el=document.getElementById('email-domain-container');
   if(!el)return;
   var record=state.emailDomain;
+
   if(record===undefined){
-    el.innerHTML='<div style="color:var(--main-text-muted);font-size:14px;padding:20px 0">Loading...</div>';
+    el.innerHTML='<div style="font-size:13px;color:var(--main-text-muted);padding:14px 0">Loading email domain status...</div>';
     return;
   }
-  if(!record){
-    el.innerHTML='<div class="email-wizard">'
-      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">Connect Your Sending Domain</div>'
-      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Emails send from your own domain instead of mysparkplus.app. This improves deliverability and trust. You will need to add a few DNS records to your domain host.</div>'
-      +'<div class="form-group" style="max-width:400px">'
-      +'<label style="color:var(--main-text);font-weight:600">Your Domain</label>'
-      +'<input id="email-domain-input" type="text" placeholder="yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px">'
-      +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:5px">Enter the root domain only. Example: yourbusiness.com, not mail.yourbusiness.com.</div>'
-      +'</div>'
-      +'<button class="btn btn-primary" onclick="submitEmailDomain()" style="margin-top:12px">Continue</button>'
+
+  var status=_emailDomainState(record);
+
+  if(status==='none'){
+    el.innerHTML=
+      '<div style="max-width:520px">'
+      +'<div style="font-size:18px;font-weight:700;color:var(--main-text);margin-bottom:6px">Connect Your Email Domain</div>'
+      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Emails send from your own domain instead of mysparkplus.app. Patient replies route back into Conversations. You will add a handful of DNS records to your domain provider.</div>'
+      +'<div style="font-size:12px;color:var(--main-text);font-weight:600;margin-bottom:6px">Your domain</div>'
+      +'<input id="email-domain-input" type="text" placeholder="yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-bottom:12px">'
+      +'<button class="btn btn-action" onclick="addEmailDomain()">Add Domain</button>'
       +'</div>';
     return;
   }
-  if(record.status==='verified'){
-    var recRows=buildDnsRecordRows(record.dkim_records||[]);
-    el.innerHTML='<div class="email-wizard">'
-      +'<div class="domain-verified-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>Domain Verified</div>'
-      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">'+esc(record.domain)+'</div>'
-      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px">Emails send from noreply@'+esc(record.domain)+'. Your DNS records are active.</div>'
-      +recRows
-      +buildInboundSection(record)
-      +'<button class="btn btn-ghost btn-sm" style="margin-top:16px" onclick="removeEmailDomain(\''+record.resend_domain_id+'\')">Remove Domain</button>'
-      +'</div>';
-    return;
+
+  var sendingVerified = record.status === 'verified';
+  var inboundVerified = record.inbound_status === 'verified';
+  var allRecords = (record.dkim_records && Array.isArray(record.dkim_records)) ? record.dkim_records : [];
+
+  var sendingRecs = allRecords.filter(function(r){ return r.group === 'sending'; });
+  var inboundRecs = allRecords.filter(function(r){ return r.group === 'inbound'; });
+  var dmarcRecs = allRecords.filter(function(r){ return r.group === 'dmarc'; });
+
+  var dnsResults = (state.emailDomainDns || {});
+
+  var html='<div style="max-width:1180px">';
+
+  // Header bar
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">';
+  html+='<div style="font-size:20px;font-weight:700;color:var(--main-text)">'+esc(record.domain)+'</div>';
+  html+='<div style="display:flex;gap:8px;align-items:center">';
+  html+='<button class="btn btn-primary btn-sm" onclick="verifyEmailDomain(\''+record.id+'\')">Check verification</button>';
+  html+='</div>';
+  html+='</div>';
+  html+='<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:24px;line-height:1.6">Add the records below to your domain DNS provider. DNS changes can take 5 to 30 minutes to propagate. Click Check verification to see which records are live.</div>';
+
+  html+=_emailSection('Sending', sendingVerified, 'Emails you send go out signed by your domain', sendingRecs, dnsResults);
+  html+=_emailSection('Inbound replies', inboundVerified, 'Patient replies route into Conversations at '+esc(record.inbound_subdomain || 'reply')+'.'+esc(record.domain), inboundRecs, dnsResults);
+  html+=_emailSection('DMARC (recommended)', null, 'Enables monitoring of who claims to send mail from your domain. Safe to add, does not block delivery.', dmarcRecs, dnsResults);
+
+  html+='<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--main-border)">';
+  html+='<button class="btn btn-ghost btn-sm" onclick="removeEmailDomain(\''+record.id+'\')">Remove Domain</button>';
+  html+='</div>';
+
+  html+='</div>';
+  el.innerHTML=html;
+
+  // Auto-check verification on first render after the domain is loaded. The flag
+  // is keyed on the domain id so switching subaccounts re-triggers correctly.
+  if(state._emailAutoCheckedFor !== record.id){
+    state._emailAutoCheckedFor = record.id;
+    verifyEmailDomain(record.id, true);
   }
-  var recRows=buildDnsRecordRows(record.dkim_records||[]);
-  el.innerHTML='<div class="email-wizard">'
-    +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">Add DNS Records for '+esc(record.domain)+'</div>'
-    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Log in to your domain DNS host and add these records. Once added, click Check Verification. DNS changes can take a few minutes to propagate.</div>'
-    +recRows
-    +'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">'
-    +'<button class="btn btn-primary" onclick="verifyEmailDomain(\''+record.resend_domain_id+'\')">Check Verification</button>'
-    +'<button class="btn btn-ghost btn-sm" onclick="removeEmailDomain(\''+record.resend_domain_id+'\')">Start Over</button>'
+}
+
+// Section header + table of records
+function _emailSection(title, verified, helpText, records, dnsResults){
+  if(!records.length) return '';
+  var pill='';
+  if(verified === true){
+    pill='<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,.14);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Verified</span>';
+  } else if(verified === false){
+    pill='<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(247,184,1,.12);color:#a16207;border:1px solid rgba(247,184,1,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Pending</span>';
+  }
+
+  // Table head
+  var head='<thead><tr>'
+    +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;width:74px">Type</th>'
+    +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;width:310px">Name / Host</th>'
+    +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px">Value</th>'
+    +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;width:104px">Status</th>'
+    +'</tr></thead>';
+
+  var rows=records.map(function(r){ return _emailRecordRow(r, dnsResults); }).join('');
+
+  return '<div style="margin-bottom:28px">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">'
+      +'<div style="font-size:15px;font-weight:700;color:var(--main-text)">'+esc(title)+'</div>'
+      +pill
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:12px">'+esc(helpText)+'</div>'
+    +'<div style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden">'
+      +'<table style="width:100%;border-collapse:collapse;table-layout:fixed">'+head+'<tbody>'+rows+'</tbody></table>'
     +'</div>'
     +'</div>';
 }
 
-function buildDnsRecordRows(records){
-  if(!records||!records.length)return'<div style="color:var(--main-text-muted);font-size:13px">No DNS records found. Try removing and re-adding the domain.</div>';
-  return records.map(function(r){
-    var name=String(r.name||'');
-    var val=String(r.value||'');
-    var type=String(r.type||'');
-    var rec=String(r.record||type);
-    var priority=r.priority?'<span style="font-size:11px;color:var(--main-text-muted)">Priority: '+r.priority+'</span>':'';
-    return'<div class="dns-rec-row">'
-      +'<div class="dns-rec-meta"><span class="dns-rec-type">'+esc(type)+'</span><span style="font-size:11px;font-weight:600;color:var(--main-text-muted)">'+esc(rec)+'</span>'+priority+'</div>'
-      +'<div class="dns-rec-label">Name / Host</div>'
-      +'<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px">'
-      +'<div class="dns-rec-val">'+esc(name)+'</div>'
-      +'<button class="dns-rec-copy" onclick="copyDnsVal(this,decodeURIComponent(\''+encodeURIComponent(name)+'\')))">Copy</button></div>'
-      +'<div class="dns-rec-label">Value</div>'
-      +'<div style="display:flex;align-items:flex-start;gap:8px">'
-      +'<div class="dns-rec-val">'+esc(val)+'</div>'
-      +'<button class="dns-rec-copy" onclick="copyDnsVal(this,decodeURIComponent(\''+encodeURIComponent(val)+'\')))">Copy</button></div>'
-      +'</div>';
-  }).join('');
+// One record = one row
+function _emailRecordRow(rec, dnsResults){
+  var key=_emailDnsKey(rec);
+  var dns=dnsResults[key]; // { status, actual?, error? } or undefined
+
+  var typeBadge='<span style="background:var(--purple-dim);color:var(--purple);border-radius:var(--radius-sm);padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">'+esc(rec.type||'')+'</span>'
+    +(rec.priority ? '<div style="font-size:10px;color:var(--main-text-muted);margin-top:3px">Pri '+rec.priority+'</div>' : '');
+
+  var nameEsc=esc(rec.name||'');
+  var valueEsc=esc(rec.value||'');
+
+  var nameAttr=String(rec.name||'').replace(/"/g,'&quot;');
+  var valueAttr=String(rec.value||'').replace(/"/g,'&quot;');
+
+  var nameCell='<div style="display:flex;align-items:flex-start;gap:6px"><div style="flex:1;font-family:ui-monospace,Menlo,Monaco,Consolas,monospace;font-size:11px;color:var(--main-text);word-break:break-all;line-height:1.4">'+nameEsc+'</div>'+_emailCopyIcon(nameAttr)+'</div>'
+    +(rec.label ? '<div style="font-size:10px;color:var(--main-text-muted);margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+esc(rec.label)+'</div>' : '');
+
+  var valueCell='<div style="display:flex;align-items:flex-start;gap:6px"><div style="flex:1;font-family:ui-monospace,Menlo,Monaco,Consolas,monospace;font-size:11px;color:var(--main-text);word-break:break-all;line-height:1.4">'+valueEsc+'</div>'+_emailCopyIcon(valueAttr)+'</div>'
+    +(rec.description ? '<div style="font-size:10px;color:var(--main-text-muted);margin-top:4px;line-height:1.45">'+esc(rec.description)+'</div>' : '');
+
+  // Status pill
+  var statusPill;
+  if(!dns){
+    statusPill='<span style="display:inline-block;background:var(--main-bg);color:var(--main-text-muted);border:1px solid var(--main-border);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Not Checked</span>';
+  } else if(dns.status==='live'){
+    statusPill='<span style="display:inline-block;background:rgba(52,211,153,.14);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Live</span>';
+  } else if(dns.status==='not_found'){
+    statusPill='<span style="display:inline-block;background:rgba(247,184,1,.12);color:#a16207;border:1px solid rgba(247,184,1,.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em" title="DNS record not found yet">Pending</span>';
+  } else if(dns.status==='mismatch'){
+    var actualHint=dns.actual ? ' Found: '+dns.actual : '';
+    statusPill='<span style="display:inline-block;background:rgba(248,113,113,.14);color:#b91c1c;border:1px solid rgba(248,113,113,.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em" title="DNS value does not match.'+esc(actualHint)+'">Mismatch</span>';
+  } else {
+    statusPill='<span style="display:inline-block;background:rgba(248,113,113,.14);color:#b91c1c;border:1px solid rgba(248,113,113,.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em" title="'+esc(dns.error||'lookup failed')+'">Error</span>';
+  }
+
+  return '<tr style="border-top:1px solid var(--main-border)">'
+    +'<td style="padding:12px;vertical-align:top">'+typeBadge+'</td>'
+    +'<td style="padding:12px;vertical-align:top">'+nameCell+'</td>'
+    +'<td style="padding:12px;vertical-align:top">'+valueCell+'</td>'
+    +'<td style="padding:12px;vertical-align:top">'+statusPill+'</td>'
+    +'</tr>';
 }
 
-function copyDnsVal(btn,val){
-  navigator.clipboard.writeText(val).then(function(){
-    var orig=btn.textContent;
-    btn.textContent='Copied!';
-    setTimeout(function(){btn.textContent=orig;},1500);
-  }).catch(function(){toast('Copy failed. Select and copy manually.','warn');});
+// Inline copy icon next to a value. Matches the coupon copy-button pattern.
+function _emailCopyIcon(val){
+  return '<button class="cpn-copy-btn" data-copy-val="'+val+'" onclick="_emailCopyField(this)" title="Copy" style="background:transparent;border:none;cursor:pointer;padding:3px;color:var(--main-text-muted);display:flex;align-items:center;border-radius:4px;transition:all .15s;flex-shrink:0;margin-top:1px" onmouseover="this.style.background=\'var(--main-bg)\';this.style.color=\'var(--main-text)\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--main-text-muted)\'">'
+    +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
+    +'</button>';
 }
 
-async function submitEmailDomain(){
+function _emailCopyField(btn){
+  // If the click landed on the inner SVG, walk up to the button
+  while(btn && !btn.hasAttribute('data-copy-val')){ btn=btn.parentElement; }
+  if(!btn) return;
+  var val=btn.getAttribute('data-copy-val');
+  if(!val) return;
+  var done=function(){
+    var orig=btn.innerHTML;
+    var origColor=btn.style.color;
+    btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    btn.style.color='#10b981';
+    setTimeout(function(){
+      btn.innerHTML=orig;
+      btn.style.color=origColor;
+    }, 1200);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(val).then(done).catch(function(){ _emailCopyFallback(val, done); });
+  } else {
+    _emailCopyFallback(val, done);
+  }
+}
+function _emailCopyFallback(val, done){
+  var ta=document.createElement('textarea');
+  ta.value=val; ta.style.position='fixed'; ta.style.left='-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try{ document.execCommand('copy'); done(); }catch(e){}
+  document.body.removeChild(ta);
+}
+
+async function addEmailDomain(){
   var input=document.getElementById('email-domain-input');
   if(!input)return;
-  var domain=input.value.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'');
-  if(!domain||!domain.includes('.')){toast('Enter a valid domain name.','error');return;}
-  var slug=state.subaccountSlug||'litbiz';
-  var btn=document.querySelector('#email-domain-container .btn-primary');
-  if(btn){btn.disabled=true;btn.textContent='Adding domain...';}
+  var domain=(input.value||'').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
+  if(!domain){ toast('Enter a domain', 'warn'); return; }
+
+  var btn=document.querySelector('#email-domain-container .btn-action');
+  if(btn) btn.disabled=true;
   try{
+    var slug=state.subaccountSlug||'litbiz';
     var res=await fetch(apiUrl('/api/email/domains/add'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domain:domain})});
     var data=await res.json();
-    if(!res.ok){toast(data.error||'Failed to add domain.','error');if(btn){btn.disabled=false;btn.textContent='Continue';}return;}
+    if(!res.ok){ toast(data.error||'Add failed', 'error'); return; }
     state.emailDomain=data.domain;
-    if(data.records&&data.records.length)state.emailDomain.dkim_records=data.records;
+    if(data.records && data.records.length) state.emailDomain.dkim_records=data.records;
+    state.emailDomainDns={};
+    state._emailAutoCheckedFor = null;
     renderEmailDomainSettings();
-  }catch(e){toast('Error: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='Continue';}}
+    toast('Domain added. Add the DNS records below.', 'success');
+  }catch(e){
+    toast('Error: '+e.message, 'error');
+  }finally{
+    if(btn) btn.disabled=false;
+  }
 }
 
-async function verifyEmailDomain(domainId){
-  var slug=state.subaccountSlug||'litbiz';
+// Calls /verify (SES identity status) AND /dns-check (live per-record DNS) in parallel.
+// Merges both into state, then re-renders. Single click, full picture.
+// silent=true is used by auto-check on tab load to avoid surprise toasts.
+async function verifyEmailDomain(domainId, silent){
   var btn=document.querySelector('#email-domain-container .btn-primary');
-  if(btn){btn.disabled=true;btn.textContent='Checking...';}
+  if(btn && !silent){ btn.disabled=true; btn.textContent='Checking...'; }
   try{
-    var res=await fetch(apiUrl('/api/email/domains/verify'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})});
-    var data=await res.json();
-    if(!res.ok){toast(data.error||'Verification check failed.','error');if(btn){btn.disabled=false;btn.textContent='Check Verification';}return;}
-    if(data.status==='verified'){
-      if(state.emailDomain)state.emailDomain.status='verified';
-      toast('Domain verified. Emails will now send from your domain.','success');
-    }else{
-      toast('Not verified yet. Make sure your DNS records are saved and try again in a few minutes.','warn');
-      if(btn){btn.disabled=false;btn.textContent='Check Verification';}
+    var slug=state.subaccountSlug||'litbiz';
+    var verifyP=fetch(apiUrl('/api/email/domains/verify'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})}).then(function(r){return r.json();});
+    var dnsP=fetch(apiUrl('/api/email/domains/dns-check'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domainId:domainId})}).then(function(r){return r.json();});
+
+    var both=await Promise.all([verifyP, dnsP]);
+    var verifyData=both[0]||{};
+    var dnsData=both[1]||{};
+
+    if(verifyData.domain){ state.emailDomain=verifyData.domain; }
+    if(Array.isArray(dnsData.results)){
+      var map={};
+      dnsData.results.forEach(function(r){ map[_emailDnsKey(r)]=r; });
+      state.emailDomainDns=map;
     }
+
     renderEmailDomainSettings();
-  }catch(e){toast('Error: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='Check Verification';}}
+
+    if(!silent){
+      if(verifyData.sending_status==='verified' && verifyData.inbound_status==='verified'){
+        toast('Both sending and inbound verified. You are fully active.', 'success');
+      } else if(verifyData.sending_status==='verified'){
+        toast('Sending verified. Inbound still pending DNS.', 'success');
+      } else {
+        var liveCount=(dnsData.results||[]).filter(function(r){ return r.status==='live'; }).length;
+        var totalCount=(dnsData.results||[]).length;
+        toast(liveCount+' of '+totalCount+' records live. See pills below for details.', 'warn');
+      }
+    }
+  }catch(e){
+    if(!silent) toast('Error: '+e.message, 'error');
+  }finally{
+    if(btn && !silent){ btn.disabled=false; btn.textContent='Check verification'; }
+  }
 }
 
 function removeEmailDomain(domainId){
-  state.modal={type:'remove-email-domain',extra:domainId};
-  document.getElementById('modal-title').textContent='Remove Email Domain';
-  document.getElementById('modal-box').className='modal';
-  document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove this sending domain? Emails will fall back to noreply@mysparkplus.app until you connect a new one.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmRemoveEmailDomain()">Remove Domain</button>';
-  document.getElementById('modal-overlay').classList.add('open');
+  openConfirm({
+    title:'Remove Email Domain?',
+    message:'This deletes both sending and inbound configuration from AWS SES. You will go back to sending from mysparkplus.app. You can re-add the domain later.',
+    confirmText:'Remove',
+    danger:true,
+    onConfirm:function(){ _doRemoveEmailDomain(domainId); }
+  });
 }
 
-async function confirmRemoveEmailDomain(){
-  var domainId=state.modal&&state.modal.extra;
-  if(!domainId)return;
-  var slug=state.subaccountSlug||'litbiz';
-  closeModal();
+async function _doRemoveEmailDomain(domainId){
   try{
-    await fetch(apiUrl('/api/email/domains/remove'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})});
+    var res=await fetch(apiUrl('/api/email/domains/remove'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domainId:domainId})});
+    var data=await res.json();
+    if(!res.ok){ toast(data.error||'Remove failed', 'error'); return; }
     state.emailDomain=null;
+    state.emailDomainDns={};
+    state._emailAutoCheckedFor = null;
     renderEmailDomainSettings();
-    toast('Domain removed. Emails will send from mysparkplus.app.','success');
-  }catch(e){toast('Error removing domain: '+e.message,'error');}
-}
-
-function buildInboundSection(record){
-  var ibs=record.inbound_status||'not_setup';
-  if(ibs==='pending_setup')ibs='not_setup';
-  var sub=record.inbound_subdomain||'reply';
-  var mxTarget=record.inbound_mx_target||'';
-  var rootDomain=record.domain||'';
-  var domainId=record.id;
-  if(ibs==='verified'){
-    return '<div style="margin-top:20px;padding:16px;background:rgba(40,167,69,0.08);border:1px solid rgba(40,167,69,0.25);border-radius:var(--radius)">'
-      +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:4px">Inbound replies are active</div>'
-      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:10px">Patient replies sent to your messages will appear in Conversations.</div>'
-      +'<div style="font-size:12px;color:var(--main-text-muted)">Reply address: '+esc(sub)+'.'+esc(rootDomain)+'</div>'
-      +'<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetInboundSetup(\''+domainId+'\')">Reconfigure</button>'
-      +'</div>';
+    toast('Domain removed.', 'success');
+  }catch(e){
+    toast('Error: '+e.message, 'error');
   }
-  if(ibs==='pending'){
-    return '<div style="margin-top:20px;padding:16px;background:rgba(247,184,1,0.08);border:1px solid rgba(247,184,1,0.3);border-radius:var(--radius)">'
-      +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:4px">Add MX record for inbound replies</div>'
-      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:12px;line-height:1.6">Add this MX record to '+esc(rootDomain)+' in your DNS provider. DNS can take 5 to 30 minutes to propagate.</div>'
-      +'<div style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);padding:12px;font-family:monospace;font-size:12px;line-height:1.8">'
-      +'<div><strong>Type:</strong> MX</div>'
-      +'<div><strong>Host:</strong> '+esc(sub)+'</div>'
-      +'<div><strong>Value:</strong> '+esc(mxTarget)+'</div>'
-      +'<div><strong>Priority:</strong> 10</div>'
-      +'</div>'
-      +'<div style="display:flex;gap:10px;margin-top:12px">'
-      +'<button class="btn btn-primary btn-sm" onclick="verifyInboundMx(\''+domainId+'\')">Check MX</button>'
-      +'<button class="btn btn-ghost btn-sm" onclick="resetInboundSetup(\''+domainId+'\')">Cancel</button>'
-      +'</div>'
-      +'</div>';
-  }
-  return '<div style="margin-top:20px;padding:16px;background:rgba(107,33,234,0.04);border:1px solid var(--main-border);border-radius:var(--radius)">'
-    +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:4px">Enable inbound replies (optional)</div>'
-    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:12px;line-height:1.6">When patients reply to an email from your CRM, the reply lands in Conversations. Requires the agency to enable Inbound on '+esc(rootDomain)+' in Resend and provide the MX target.</div>'
-    +'<div style="font-size:12px;color:var(--main-text);font-weight:600;margin-bottom:4px">Reply subdomain</div>'
-    +'<input id="ib-sub-input" type="text" value="reply" placeholder="reply" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:8px 10px;font-size:13px;width:200px;box-sizing:border-box;margin-bottom:10px">'
-    +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:10px">Patients will reply to addresses like reply@'+esc(rootDomain)+'</div>'
-    +'<div style="font-size:12px;color:var(--main-text);font-weight:600;margin-bottom:4px">MX target (from Resend)</div>'
-    +'<input id="ib-mx-input" type="text" placeholder="inbound-smtp.us-east-1.amazonaws.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:8px 10px;font-size:13px;width:100%;box-sizing:border-box;margin-bottom:10px">'
-    +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:10px">Ask your agency for this value. They enable Inbound on your domain in Resend, copy the MX target Resend shows, and give it to you.</div>'
-    +'<button class="btn btn-primary btn-sm" onclick="submitInboundSetup(\''+domainId+'\')">Save</button>'
-    +'</div>';
-}
-
-async function submitInboundSetup(domainId){
-  var subInput=document.getElementById('ib-sub-input');
-  var mxInput=document.getElementById('ib-mx-input');
-  if(!subInput||!mxInput)return;
-  var inboundSubdomain=(subInput.value||'').trim().toLowerCase();
-  var mxTarget=(mxInput.value||'').trim().toLowerCase();
-  if(!mxTarget){toast('Enter the MX target from Resend.','warn');return;}
-  try{
-    var res=await fetch(apiUrl('/api/email/domains/inbound-setup'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domainId:domainId,mxTarget:mxTarget,inboundSubdomain:inboundSubdomain||'reply'})});
-    var data=await res.json();
-    if(!res.ok){toast(data.error||'Setup failed','error');return;}
-    if(state.emailDomain){
-      state.emailDomain.inbound_subdomain=data.inbound_subdomain;
-      state.emailDomain.inbound_mx_target=data.inbound_mx_target;
-      state.emailDomain.inbound_status=data.inbound_status;
-    }
-    renderEmailDomainSettings();
-    toast('Inbound config saved. Add the MX record to your DNS, then click Check MX.','success');
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-async function verifyInboundMx(domainId){
-  try{
-    var res=await fetch(apiUrl('/api/email/domains/inbound-verify'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domainId:domainId})});
-    var data=await res.json();
-    if(!res.ok){toast(data.error||'Verify failed','error');return;}
-    if(data.verified){
-      if(state.emailDomain){state.emailDomain.inbound_status='verified';state.emailDomain.inbound_verified_at=new Date().toISOString();}
-      renderEmailDomainSettings();
-      toast('Inbound verified. Patient replies will now appear in Conversations.','success');
-    }else{
-      toast('MX record not found yet. DNS can take 5 to 30 minutes to propagate.','warn');
-    }
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-async function resetInboundSetup(domainId){
-  try{
-    if(state.emailDomain){
-      state.emailDomain.inbound_status='pending_setup';
-      state.emailDomain.inbound_mx_target=null;
-      state.emailDomain.inbound_verified_at=null;
-    }
-    renderEmailDomainSettings();
-  }catch(e){}
 }
 
 function renderNotifSettings(){
@@ -16694,6 +16749,8 @@ function convRenderList(){
 function convOpenThread(conversationId){
   var s = _convState();
   s.activeId = conversationId;
+  s._justOpened = true;
+  s._forceScroll = true;
   var conv = (db.conversations || []).find(function(c){ return c.id === conversationId; });
   var wasUnread = conv && (conv.unreadCount || 0) > 0;
   if(conv) conv.unreadCount = 0;
@@ -16793,11 +16850,15 @@ function convRenderThread(opts){
   var lastDate = '';
   var lastSubject = '';
   msgs.forEach(function(m){
-    var d = new Date(m.sentAt || m.createdAt);
-    var dateKey = d.toDateString();
-    if(dateKey !== lastDate){
-      lastDate = dateKey;
-      bodyHtml += '<div class="conv-msg-date-divider">' + esc(d.toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' })) + '</div>';
+    var ts = m.sentAt || m.createdAt;
+    var d = ts ? new Date(ts) : null;
+    var validDate = d && !isNaN(d.getTime());
+    if(validDate){
+      var dateKey = d.toDateString();
+      if(dateKey !== lastDate){
+        lastDate = dateKey;
+        bodyHtml += '<div class="conv-msg-date-divider">' + esc(d.toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' })) + '</div>';
+      }
     }
     var dirCls = m.direction === 'inbound' ? 'inbound' : 'outbound';
     var failedCls = (m.status === 'failed') ? ' failed' : '';
@@ -16817,12 +16878,18 @@ function convRenderThread(opts){
     metaParts.push('<span>· ' + esc(_convFullTime(m.sentAt || m.createdAt)) + '</span>');
     if(statusLbl) metaParts.push('<span class="conv-msg-status' + (m.status === 'failed' ? ' failed' : '') + '">· ' + statusLbl + '</span>');
 
-    bodyHtml += '<div class="conv-msg ' + dirCls + '">' +
+    // Retry control on failed outbound messages. Stash the body in a data attr
+    // so convRetryFailed can pull it without needing a fresh server lookup.
+    var retryBtn = (m.status === 'failed' && m.direction === 'outbound')
+      ? '<button class="conv-msg-retry" onclick="convRetryFailed(\'' + m.id + '\')">Retry</button>'
+      : '';
+
+    bodyHtml += '<div class="conv-msg ' + dirCls + (m.status === 'sending' ? ' sending' : '') + '" data-msg-id="' + esc(m.id) + '">' +
       '<div class="conv-msg-bubble' + failedCls + '">' +
         subj +
         '<div class="conv-msg-body">' + esc(body) + '</div>' +
       '</div>' +
-      '<div class="conv-msg-meta">' + metaParts.join(' ') + '</div>' +
+      '<div class="conv-msg-meta">' + metaParts.join(' ') + retryBtn + '</div>' +
     '</div>';
   });
 
@@ -16855,14 +16922,34 @@ function convRenderThread(opts){
     '</div></div>';
   }
 
+  // Smart scroll: capture whether the user was near the bottom BEFORE re-render.
+  // After re-render we only auto-scroll if (a) the conv state requests it (just
+  // opened or just sent) or (b) the user was already near the bottom and a new
+  // message arrived.
+  var prevMsgsEl = document.getElementById('conv-thread-messages');
+  var wasNearBottom = true;
+  if(prevMsgsEl){
+    var distFromBottom = prevMsgsEl.scrollHeight - prevMsgsEl.scrollTop - prevMsgsEl.clientHeight;
+    wasNearBottom = distFromBottom < 120;
+  }
+
   threadEl.innerHTML = head + '<div class="conv-thread-messages" id="conv-thread-messages">' + bodyHtml + '</div>' + composerHtml;
 
   var msgsEl = document.getElementById('conv-thread-messages');
-  if(msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+  if(msgsEl){
+    var sState = _convState();
+    var shouldScroll = sState._forceScroll || wasNearBottom;
+    if(shouldScroll) msgsEl.scrollTop = msgsEl.scrollHeight;
+    sState._forceScroll = false;
+  }
 
-  // Auto-focus composer for quick replies
+  // Auto-focus composer for quick replies, but ONLY when this is a fresh open
+  // (not on every re-render, which would steal focus away from the user).
   var textArea = document.getElementById('conv-composer-text');
-  if(textArea) textArea.focus();
+  if(textArea && _convState()._justOpened){
+    textArea.focus();
+    _convState()._justOpened = false;
+  }
 }
 
 // Composer state + actions
@@ -16899,6 +16986,7 @@ function convSend(){
 
   // Optimistic UI: append a sending message to local cache (camelCase shape
   // matches messageToFrontend from conversation-thread/reply Lambdas).
+  s._forceScroll = true;  // user sent something - always scroll to see it
   var optimisticId = 'optimistic-' + Date.now();
   var cached = db.conversationMessages[convId];
   var nowIso = new Date().toISOString();
@@ -16964,6 +17052,26 @@ function convSend(){
     }
     toast('Network error', 'error');
   });
+}
+
+// Retry a failed outbound message. Pulls the body from the cached message,
+// removes it from the thread, restores it to the draft, and re-fires convSend.
+function convRetryFailed(msgId){
+  var s = _convState();
+  var convId = s.activeId;
+  if(!convId) return;
+  var cached = db.conversationMessages[convId];
+  if(!cached) return;
+  var failedMsg = cached.messages.find(function(m){ return m.id === msgId; });
+  if(!failedMsg) return;
+  var body = failedMsg.bodyText || '';
+  // Remove the failed message and re-stage as a draft
+  cached.messages = cached.messages.filter(function(m){ return m.id !== msgId; });
+  if(!s.drafts) s.drafts = {};
+  s.drafts[convId] = body;
+  convRenderThread();
+  // Fire send again
+  convSend();
 }
 
 function _convStripHtml(html){
