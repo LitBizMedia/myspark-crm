@@ -11701,8 +11701,9 @@ function renderSmsSettings(){
   var el=document.getElementById('sms-settings-container');
   if(!el)return;
   var s=state.smsSettings;
-  var statusColor={not_registered:'var(--main-text-muted)',pending:'#f59e0b',approved:'#059669',rejected:'#ef4444'};
-  var statusLabel={not_registered:'Not Registered',pending:'Pending Approval',approved:'Active',rejected:'Rejected'};
+  // New schema: pending | live | paused
+  var statusColor={pending:'#f59e0b',live:'#059669',paused:'#a16207'};
+  var statusLabel={pending:'Pending Approval',live:'Live',paused:'Paused'};
 
   var statusBadge=s
     ?'<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:'+statusColor[s.campaign_status]+'18;color:'+statusColor[s.campaign_status]+';border:1px solid '+statusColor[s.campaign_status]+'44;margin-bottom:16px">'
@@ -11715,9 +11716,23 @@ function renderSmsSettings(){
     ?'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:16px">SMS number: <span style="font-weight:700;color:var(--main-text);font-family:monospace">'+s.twilio_number+'</span></div>'
     :'';
 
+  // Rejection note: shown above the status message when present, on any state.
+  var rejectionNoteRow=s&&s.rejection_note
+    ?'<div style="padding:14px;background:#ef44440a;border:1px solid #ef444422;border-radius:8px;font-size:13px;color:var(--main-text);line-height:1.6;margin-bottom:16px">'
+      +'<strong style="display:block;margin-bottom:4px">Agency note</strong>'
+      +esc(s.rejection_note)
+      +'</div>'
+    :'';
+
   var req=state.smsRequest;
-  if(!s||s.campaign_status==='not_registered'){
-    if(req){
+
+  // No SMS row exists yet. Branch on request state:
+  // - No request: show fresh wizard form
+  // - Draft request: resume the wizard mid-flow
+  // - Submitted request (status !== 'draft'): show 'awaiting agency' view
+  if(!s){
+    var hasSubmitted = req && req.status && req.status !== 'draft';
+    if(hasSubmitted){
       var reqStatusColor={requested:'#f59e0b',in_progress:'#6b21ea',provisioned:'#059669',rejected:'#ef4444'};
       var reqStatusLabel={requested:'Request Received',in_progress:'In Progress',provisioned:'Provisioned',rejected:'Rejected'};
       el.innerHTML='<div style="max-width:560px">'
@@ -11726,81 +11741,56 @@ function renderSmsSettings(){
         +'<div style="width:7px;height:7px;border-radius:50%;background:'+reqStatusColor[req.status]+'"></div>'
         +reqStatusLabel[req.status]
         +'</div>'
-        +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:16px;line-height:1.6">Your SMS setup request has been received. Your agency is working on it. You will be notified once your number is provisioned and approved.</div>'
+        +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:16px;line-height:1.6">Your SMS setup request has been received. Your agency is reviewing it and will provision a dedicated phone number for your business. You will be notified once your number is live.</div>'
         +'<div style="padding:14px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:8px;font-size:13px;line-height:1.8">'
-        +'<div><span style="color:var(--main-text-muted)">Business:</span> <strong>'+esc(req.legal_business_name)+'</strong></div>'
-        +'<div><span style="color:var(--main-text-muted)">Contact:</span> <strong>'+esc(req.contact_name)+'</strong></div>'
+        +'<div><span style="color:var(--main-text-muted)">Business:</span> <strong>'+esc(req.legal_business_name||'')+'</strong></div>'
+        +'<div><span style="color:var(--main-text-muted)">Contact:</span> <strong>'+esc(req.contact_name||'')+'</strong></div>'
         +'<div><span style="color:var(--main-text-muted)">Submitted:</span> <strong>'+fmtDate((req.created_at||'').split('T')[0])+'</strong></div>'
         +'</div>'
         +'</div>';
       return;
     }
-    el.innerHTML='<div style="max-width:560px">'
-      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">SMS Messaging</div>'
-      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Send appointment confirmations, reminders, and cancellation notices by text. Each workspace gets its own dedicated phone number.</div>'
-      +'<div style="padding:16px;background:#6b21ea0a;border:1px solid #6b21ea22;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6;margin-bottom:20px">'
-      +'<strong style="color:var(--main-text);display:block;margin-bottom:6px">How it works</strong>'
-      +'Your agency provisions a dedicated local phone number for your business. Once your SMS campaign is approved by carriers (3 to 7 business days), texting activates automatically.'
-      +'</div>'
-      +'<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:14px">Request SMS Setup</div>'
-      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Legal Business Name *</label>'
-      +'<input id="sms-req-biz" type="text" placeholder="As it appears on your EIN documents" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
-      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">EIN / Tax ID *</label>'
-      +'<input id="sms-req-ein" type="text" placeholder="XX-XXXXXXX" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
-      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Business Website</label>'
-      +'<input id="sms-req-web" type="text" placeholder="https://yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
-      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Contact Name *</label>'
-      +'<input id="sms-req-name" type="text" placeholder="Primary contact for SMS registration" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
-      +'<div class="form-row">'
-      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Contact Phone *</label>'
-      +'<input id="sms-req-phone" type="tel" placeholder="(555) 123-4567" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
-      +'<div class="form-group"><label style="color:var(--main-text);font-weight:600;font-size:13px">Contact Email</label>'
-      +'<input id="sms-req-email" type="email" placeholder="contact@yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px"></div>'
-      +'</div>'
-      +'<button class="btn btn-primary" onclick="submitSmsRequest()" style="margin-top:8px">Submit Request</button>'
-      +'</div>';
+    // Show the wizard - fresh or resumed from draft
+    renderSmsRegistrationWizard(el, req || null);
     return;
   }
 
+  // Pending state: awaiting Twilio approval (with optional rejection_note resubmit context)
   if(s.campaign_status==='pending'){
     el.innerHTML='<div style="max-width:560px">'
       +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:12px">SMS Messaging</div>'
       +statusBadge
       +numberRow
+      +rejectionNoteRow
       +'<div style="padding:16px;background:#f59e0b0a;border:1px solid #f59e0b22;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6">'
-      +'Your SMS campaign is pending carrier approval. This typically takes 3 to 7 business days. You will be notified once approved and texting will activate automatically.'
+      +'Your SMS campaign is pending carrier approval. This typically takes 3 to 7 business days. Texting will activate automatically once approved.'
       +'</div>'
       +'</div>';
     return;
   }
 
-  if(s.campaign_status==='rejected'){
+  // Paused state: agency has stopped sending (emergency or admin decision)
+  if(s.campaign_status==='paused'){
     el.innerHTML='<div style="max-width:560px">'
       +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:12px">SMS Messaging</div>'
       +statusBadge
       +numberRow
-      +'<div style="padding:16px;background:#ef44440a;border:1px solid #ef444422;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6">'
-      +'Your SMS campaign registration was rejected. Please contact your agency to resolve this.'
+      +rejectionNoteRow
+      +'<div style="padding:16px;background:#a162070a;border:1px solid #a1620722;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6">'
+      +'SMS is paused by your administrator. Inbound messages are still received but no outbound SMS will be sent. Contact your agency to resume.'
       +'</div>'
       +'</div>';
     return;
   }
 
-  // Approved state
-  var enabledToggle='<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">'
-    +'<button class="ns-sw'+(s.enabled?' on':'')+'" id="sms-enabled-sw" onclick="toggleSmsEnabled()"></button>'
-    +'<span style="font-size:13px;color:var(--main-text);font-weight:600">'+(s.enabled?'SMS Enabled':'SMS Disabled')+'</span>'
-    +'</div>';
-
+  // Live state: SMS is active and sending
   el.innerHTML='<div style="max-width:560px">'
     +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:12px">SMS Messaging</div>'
     +statusBadge
     +numberRow
-    +enabledToggle
-    +'<div style="font-size:13px;color:var(--main-text-muted);line-height:1.6">'
-    +(s.enabled
-      ?'SMS is active. Appointment confirmations, reminders, and cancellation notices will be sent automatically to contacts with a phone number on file.'
-      :'SMS is disabled. Enable it to start sending appointment notifications by text.')
+    +rejectionNoteRow
+    +'<div style="padding:16px;background:#0596690a;border:1px solid #05966922;border-radius:8px;font-size:13px;color:var(--main-text-muted);line-height:1.6">'
+    +'SMS is live. Appointment confirmations, reminders, and cancellation notices will be sent automatically to contacts with a phone number on file.'
     +'</div>'
     +'</div>';
 }
@@ -11833,6 +11823,301 @@ async function submitSmsRequest(){
   }catch(e){toast('Error: '+e.message,'error');if(btn){btn.disabled=false;btn.textContent='Submit Request';}}
 }
 
+// =========================================================================
+// SMS A2P Registration Wizard - 4 steps, pre-filled, draft-saving
+// =========================================================================
+
+// Twilio-supported enums (kept in sync with the backend Lambda)
+var SMS_BUSINESS_TYPES = ['Sole Proprietorship', 'Partnership', 'LLC', 'Corporation', 'Co-operative', 'Non-profit'];
+var SMS_BUSINESS_INDUSTRIES = ['Healthcare', 'Real Estate', 'Retail', 'Financial', 'Education', 'Hospitality', 'Manufacturing', 'Construction', 'Insurance', 'Legal', 'Technology', 'Transportation', 'Energy', 'Agriculture', 'Communication', 'Entertainment', 'Government', 'Non-profit', 'Other'];
+var SMS_USE_CASES = ['Customer Care', 'Account Notification', 'Marketing', 'Mixed', 'Polling/Voting', 'Public Service Announcement', 'Higher Education', 'Charity (501c3)', 'Political', 'Security', 'Two-Factor Authentication'];
+var SMS_OPT_IN_METHODS = ['Verbal', 'Web Form', 'Paper Form', 'Via Text', 'Mobile QR Code'];
+var SMS_US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'];
+
+// Build the wizard state from existing draft (or initialize empty with pre-fills).
+function _smsBuildWizardState(req){
+  // Pre-fill source: settings + current user
+  var settings = db.settings || {};
+  var user = state.user || {};
+  var nameParts = (user.display_name || '').trim().split(/\s+/);
+  var firstName = nameParts.shift() || '';
+  var lastName = nameParts.join(' ') || '';
+
+  // Default templates - editable, designed to maximize Twilio approval rate
+  var defaultUseDesc = 'Send appointment confirmations, reminders, cancellation notices, and customer service communications to clients who have an existing business relationship with our company and have provided explicit consent to receive SMS.';
+  var defaultSample1 = 'Hi {first_name}, this is {business_name} confirming your appointment on {date} at {time}. Reply STOP to opt out.';
+  var defaultSample2 = 'Hi {first_name}, reminder: your appointment with {business_name} is tomorrow at {time}. See you soon! Reply STOP to opt out.';
+  var defaultSample3 = 'Hi {first_name}, your appointment with {business_name} on {date} has been cancelled. Please call us to reschedule. Reply STOP to opt out.';
+  var defaultOptInDesc = 'Clients provide consent to receive SMS communications at intake when they schedule appointments, either verbally with staff at the time of booking or by checking a consent box on our digital booking and intake forms. Consent is recorded in their client record.';
+
+  // If we have a draft, use its values. Otherwise use pre-fills.
+  var d = req || {};
+  return {
+    step: 1,
+    legal_business_name: d.legal_business_name || '',
+    ein: d.ein || '',
+    business_type: d.business_type || '',
+    business_industry: d.business_industry || '',
+    business_country: d.business_country || 'US',
+    website: d.website || settings.website || '',
+    address_street: d.address_street || settings.address || '',
+    address_city: d.address_city || settings.city || '',
+    address_state: d.address_state || settings.state || '',
+    address_zip: d.address_zip || settings.zip || '',
+    contact_first_name: d.contact_first_name || firstName,
+    contact_last_name: d.contact_last_name || lastName,
+    contact_title: d.contact_title || '',
+    contact_email: d.contact_email || user.email || '',
+    contact_phone: d.contact_phone || user.phone || settings.phone || '',
+    use_case: d.use_case || 'Mixed',
+    use_case_description: d.use_case_description || defaultUseDesc,
+    sample_message_1: d.sample_message_1 || defaultSample1,
+    sample_message_2: d.sample_message_2 || defaultSample2,
+    sample_message_3: d.sample_message_3 || defaultSample3,
+    opt_in_method: d.opt_in_method || 'Verbal',
+    opt_in_description: d.opt_in_description || defaultOptInDesc
+  };
+}
+
+// Capture current form field values into state.smsWizard before navigation
+function _smsCaptureCurrentStep(){
+  if(!state.smsWizard) return;
+  var fields = ['legal_business_name','ein','business_type','business_industry','business_country','website','address_street','address_city','address_state','address_zip','contact_first_name','contact_last_name','contact_title','contact_email','contact_phone','use_case','use_case_description','sample_message_1','sample_message_2','sample_message_3','opt_in_method','opt_in_description'];
+  fields.forEach(function(f){
+    var el = document.getElementById('smsw-' + f);
+    if(el) state.smsWizard[f] = el.value.trim();
+  });
+}
+
+function renderSmsRegistrationWizard(container, draftReq){
+  if(!state.smsWizard){
+    state.smsWizard = _smsBuildWizardState(draftReq);
+  }
+  var w = state.smsWizard;
+  var step = w.step || 1;
+
+  // Common style helpers
+  var inputStyle = 'background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-top:6px';
+  var labelStyle = 'color:var(--main-text);font-weight:600;font-size:13px';
+  var textareaStyle = inputStyle + ';min-height:80px;resize:vertical;font-family:inherit';
+
+  // Progress indicator (4 dots)
+  var progress = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:24px">';
+  ['Business','Address','Contact','Messaging'].forEach(function(label, i){
+    var n = i + 1;
+    var active = n === step;
+    var done = n < step;
+    var color = active ? 'var(--purple)' : (done ? 'var(--success)' : 'var(--main-border)');
+    var textColor = active ? 'var(--main-text)' : (done ? 'var(--success-text)' : 'var(--main-text-muted)');
+    progress += '<div style="display:flex;align-items:center;gap:6px"><div style="width:24px;height:24px;border-radius:50%;background:'+color+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">'+n+'</div><span style="font-size:12px;color:'+textColor+';font-weight:'+(active?'700':'500')+'">'+label+'</span></div>';
+    if(n < 4) progress += '<div style="flex:0 0 18px;height:1px;background:var(--main-border)"></div>';
+  });
+  progress += '</div>';
+
+  var stepHtml = '';
+  if(step === 1){
+    stepHtml = '<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:14px">Business Identity</div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Legal Business Name *</label>'
+      +'<input id="smsw-legal_business_name" type="text" value="'+esc(w.legal_business_name)+'" placeholder="As it appears on your EIN documents" style="'+inputStyle+'"></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">EIN / Tax ID *</label>'
+      +'<input id="smsw-ein" type="text" value="'+esc(w.ein)+'" placeholder="XX-XXXXXXX" style="'+inputStyle+'"></div>'
+      +'<div class="form-row">'
+      +'<div class="form-group"><label style="'+labelStyle+'">Business Type *</label>'
+      +'<select id="smsw-business_type" style="'+inputStyle+'"><option value="">Select a type</option>'
+      + SMS_BUSINESS_TYPES.map(function(t){return '<option value="'+esc(t)+'"'+(w.business_type===t?' selected':'')+'>'+esc(t)+'</option>'}).join('')
+      +'</select></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Business Industry *</label>'
+      +'<select id="smsw-business_industry" style="'+inputStyle+'"><option value="">Select an industry</option>'
+      + SMS_BUSINESS_INDUSTRIES.map(function(i){return '<option value="'+esc(i)+'"'+(w.business_industry===i?' selected':'')+'>'+esc(i)+'</option>'}).join('')
+      +'</select></div>'
+      +'</div>'
+      +'<div class="form-row">'
+      +'<div class="form-group"><label style="'+labelStyle+'">Business Country *</label>'
+      +'<select id="smsw-business_country" style="'+inputStyle+'"><option value="US"'+(w.business_country==='US'?' selected':'')+'>United States</option><option value="CA"'+(w.business_country==='CA'?' selected':'')+'>Canada</option></select></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Business Website</label>'
+      +'<input id="smsw-website" type="text" value="'+esc(w.website)+'" placeholder="https://yourbusiness.com" style="'+inputStyle+'"></div>'
+      +'</div>';
+  } else if(step === 2){
+    stepHtml = '<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:14px">Business Address</div>'
+      +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:14px;line-height:1.6">The address registered with your EIN. Twilio verifies this matches public records.</div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Street Address *</label>'
+      +'<input id="smsw-address_street" type="text" value="'+esc(w.address_street)+'" placeholder="123 Main Street, Suite 100" style="'+inputStyle+'"></div>'
+      +'<div class="form-row">'
+      +'<div class="form-group"><label style="'+labelStyle+'">City *</label>'
+      +'<input id="smsw-address_city" type="text" value="'+esc(w.address_city)+'" placeholder="City" style="'+inputStyle+'"></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">State *</label>'
+      +'<select id="smsw-address_state" style="'+inputStyle+'"><option value="">Select</option>'
+      + SMS_US_STATES.map(function(s){return '<option value="'+s+'"'+(w.address_state===s?' selected':'')+'>'+s+'</option>'}).join('')
+      +'</select></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">ZIP Code *</label>'
+      +'<input id="smsw-address_zip" type="text" value="'+esc(w.address_zip)+'" placeholder="12345" style="'+inputStyle+'"></div>'
+      +'</div>';
+  } else if(step === 3){
+    stepHtml = '<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:14px">Authorized Contact</div>'
+      +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:14px;line-height:1.6">The person Twilio can reach if they have questions about your registration. Usually the business owner or operations lead.</div>'
+      +'<div class="form-row">'
+      +'<div class="form-group"><label style="'+labelStyle+'">First Name *</label>'
+      +'<input id="smsw-contact_first_name" type="text" value="'+esc(w.contact_first_name)+'" style="'+inputStyle+'"></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Last Name *</label>'
+      +'<input id="smsw-contact_last_name" type="text" value="'+esc(w.contact_last_name)+'" style="'+inputStyle+'"></div>'
+      +'</div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Job Title *</label>'
+      +'<input id="smsw-contact_title" type="text" value="'+esc(w.contact_title)+'" placeholder="Owner, Office Manager, Operations Director" style="'+inputStyle+'"></div>'
+      +'<div class="form-row">'
+      +'<div class="form-group"><label style="'+labelStyle+'">Email *</label>'
+      +'<input id="smsw-contact_email" type="email" value="'+esc(w.contact_email)+'" placeholder="contact@yourbusiness.com" style="'+inputStyle+'"></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Phone *</label>'
+      +'<input id="smsw-contact_phone" type="tel" value="'+esc(w.contact_phone)+'" placeholder="(555) 123-4567" style="'+inputStyle+'"></div>'
+      +'</div>';
+  } else if(step === 4){
+    stepHtml = '<div style="font-size:14px;font-weight:700;color:var(--main-text);margin-bottom:14px">Messaging Use Case</div>'
+      +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:14px;line-height:1.6">Tell Twilio what kind of messages you send and how customers opt in. Placeholders like {business_name}, {first_name}, {date}, {time} will be replaced with real values when messages are sent. The defaults shown below are designed to maximize approval.</div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Use Case *</label>'
+      +'<select id="smsw-use_case" style="'+inputStyle+'">'
+      + SMS_USE_CASES.map(function(u){return '<option value="'+esc(u)+'"'+(w.use_case===u?' selected':'')+'>'+esc(u)+'</option>'}).join('')
+      +'</select></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Use Case Description *</label>'
+      +'<textarea id="smsw-use_case_description" placeholder="Describe what kind of messages you send" style="'+textareaStyle+'">'+esc(w.use_case_description)+'</textarea></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Sample Message 1 *</label>'
+      +'<textarea id="smsw-sample_message_1" style="'+textareaStyle+';min-height:60px">'+esc(w.sample_message_1)+'</textarea></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Sample Message 2 *</label>'
+      +'<textarea id="smsw-sample_message_2" style="'+textareaStyle+';min-height:60px">'+esc(w.sample_message_2)+'</textarea></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Sample Message 3 (optional)</label>'
+      +'<textarea id="smsw-sample_message_3" style="'+textareaStyle+';min-height:60px">'+esc(w.sample_message_3)+'</textarea></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Opt-in Method *</label>'
+      +'<select id="smsw-opt_in_method" style="'+inputStyle+'">'
+      + SMS_OPT_IN_METHODS.map(function(m){return '<option value="'+esc(m)+'"'+(w.opt_in_method===m?' selected':'')+'>'+esc(m)+'</option>'}).join('')
+      +'</select></div>'
+      +'<div class="form-group"><label style="'+labelStyle+'">Opt-in Description *</label>'
+      +'<textarea id="smsw-opt_in_description" placeholder="Describe how customers opt in to receive SMS" style="'+textareaStyle+'">'+esc(w.opt_in_description)+'</textarea></div>';
+  }
+
+  var navButtons = '<div style="display:flex;justify-content:space-between;margin-top:24px;gap:10px">';
+  if(step > 1){
+    navButtons += '<button class="btn btn-ghost" onclick="smsWizardBack()">Back</button>';
+  } else {
+    navButtons += '<div></div>';
+  }
+  navButtons += '<div style="display:flex;gap:10px">';
+  navButtons += '<button class="btn btn-ghost" onclick="smsWizardSaveDraft()">Save Draft</button>';
+  if(step < 4){
+    navButtons += '<button class="btn btn-primary" onclick="smsWizardNext()">Next</button>';
+  } else {
+    navButtons += '<button class="btn btn-primary" onclick="smsWizardSubmit()">Submit Registration</button>';
+  }
+  navButtons += '</div></div>';
+
+  container.innerHTML = '<div style="max-width:600px">'
+    +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:8px">Request SMS Setup</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">This information is required for Twilio to register your business for SMS. Your draft is saved automatically when you click Next or Save Draft.</div>'
+    + progress
+    + stepHtml
+    + navButtons
+    +'</div>';
+}
+
+function smsWizardBack(){
+  _smsCaptureCurrentStep();
+  if(state.smsWizard && state.smsWizard.step > 1) state.smsWizard.step--;
+  renderSmsSettings();
+}
+
+function smsWizardNext(){
+  _smsCaptureCurrentStep();
+  // Per-step validation
+  var w = state.smsWizard;
+  if(!w) return;
+  var missing = [];
+  if(w.step === 1){
+    if(!w.legal_business_name) missing.push('Legal Business Name');
+    if(!w.ein) missing.push('EIN');
+    if(!w.business_type) missing.push('Business Type');
+    if(!w.business_industry) missing.push('Business Industry');
+    if(!w.business_country) missing.push('Business Country');
+  } else if(w.step === 2){
+    if(!w.address_street) missing.push('Street Address');
+    if(!w.address_city) missing.push('City');
+    if(!w.address_state) missing.push('State');
+    if(!w.address_zip) missing.push('ZIP');
+  } else if(w.step === 3){
+    if(!w.contact_first_name) missing.push('First Name');
+    if(!w.contact_last_name) missing.push('Last Name');
+    if(!w.contact_title) missing.push('Job Title');
+    if(!w.contact_email) missing.push('Email');
+    if(!w.contact_phone) missing.push('Phone');
+  }
+  if(missing.length){
+    toast('Please complete: ' + missing.join(', '), 'error');
+    return;
+  }
+  // Background draft save (best-effort, don't block navigation)
+  _smsWizardSendToBackend(true).catch(function(){});
+  w.step++;
+  renderSmsSettings();
+}
+
+async function smsWizardSaveDraft(){
+  _smsCaptureCurrentStep();
+  var ok = await _smsWizardSendToBackend(true);
+  if(ok) toast('Draft saved.', 'success');
+}
+
+async function smsWizardSubmit(){
+  _smsCaptureCurrentStep();
+  var w = state.smsWizard;
+  if(!w) return;
+  // Final validation on step 4
+  var missing = [];
+  if(!w.use_case) missing.push('Use Case');
+  if(!w.use_case_description) missing.push('Use Case Description');
+  if(!w.sample_message_1) missing.push('Sample Message 1');
+  if(!w.sample_message_2) missing.push('Sample Message 2');
+  if(!w.opt_in_method) missing.push('Opt-in Method');
+  if(!w.opt_in_description) missing.push('Opt-in Description');
+  if(missing.length){
+    toast('Please complete: ' + missing.join(', '), 'error');
+    return;
+  }
+  var ok = await _smsWizardSendToBackend(false);
+  if(ok){
+    toast('Registration submitted. Your agency will review and provision your number.', 'success');
+    state.smsWizard = null;  // clear wizard state
+    // Reload status to get the new request row from backend
+    var data = await loadSmsSettings();
+    state.smsSettings = (data && data.settings) || null;
+    state.smsRequest = (data && data.request) || null;
+    renderSmsSettings();
+  }
+}
+
+async function _smsWizardSendToBackend(isDraft){
+  var w = state.smsWizard;
+  if(!w) return false;
+  var slug = state.subaccountSlug || 'litbiz';
+  var bizName = (db.settings && db.settings.businessName) || slug;
+  var payload = Object.assign({}, w, { subaccount_name: bizName, is_draft: !!isDraft });
+  delete payload.step;
+  try {
+    var res = await fetch(apiUrl('/api/subaccount/sms-registration-submit'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){
+      var err = await res.json().catch(function(){ return {}; });
+      toast(err.error || 'Save failed', 'error');
+      return false;
+    }
+    var data = await res.json();
+    state.smsRequest = data.request || null;
+    return true;
+  } catch(e){
+    toast('Network error: ' + e.message, 'error');
+    return false;
+  }
+}
+
 async function toggleSmsEnabled(){
   var s=state.smsSettings;
   if(!s)return;
@@ -11849,7 +12134,7 @@ async function toggleSmsEnabled(){
     if(!res.ok){toast('Failed to update SMS settings.','error');return;}
     state.smsSettings.enabled=newVal;
     renderSmsSettings();
-    toast(newVal?'SMS enabled.':'SMS disabled.','success');
+    toast(newVal?'SMS resumed.':'SMS paused.','success');
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
@@ -16995,13 +17280,16 @@ function convRenderThread(opts){
     // Hide subject if same as the previous message's subject (collapses repetition like
     // dozens of "Appointment Confirmed" rows). Strip 'Re: ' prefix when comparing.
     var normSubj = (m.subject || '').replace(/^(Re|Fwd|Fw)\s*:\s*/i, '').trim();
-    var showSubj = m.subject && normSubj !== lastSubject;
+    // SMS has no subject concept; never render subject for SMS messages
+    var showSubj = m.subject && normSubj !== lastSubject && m.channel !== 'sms';
     lastSubject = normSubj;
     var subj = showSubj ? '<div class="conv-msg-subject">' + esc(m.subject) + '</div>' : '';
     var sourceLbl = m.source && m.source !== 'manual' ? esc(m.source) : '';
     var statusLbl = m.status && m.status !== 'sent' && m.status !== 'delivered' ? esc(m.status) : '';
     var senderLbl = m.direction === 'outbound' && m.sentByUserName ? esc(m.sentByUserName) : '';
+    var channelLbl = m.channel === 'sms' ? '<span style="display:inline-block;background:rgba(52,211,153,.14);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-right:4px">SMS</span>' : '';
     var metaParts = [];
+    if(channelLbl) metaParts.push(channelLbl);
     if(sourceLbl) metaParts.push('<span class="conv-msg-source">' + sourceLbl + '</span>');
     if(senderLbl) metaParts.push('<span>· ' + senderLbl + '</span>');
     metaParts.push('<span>· ' + esc(_convFullTime(m.sentAt || m.createdAt)) + '</span>');
@@ -17028,16 +17316,17 @@ function convRenderThread(opts){
 
   // Composer: shown when conv.status === 'open'; otherwise show reopen hint
   var composerHtml;
+  var smsBlocker = (c.channel === 'sms') ? _convSmsBlockerBanner() : '';
   if(c.status === 'open'){
     var draft = (_convState().drafts && _convState().drafts[c.id]) || '';
-    composerHtml = '<div class="conv-composer-wrap"><div class="conv-composer">' +
+    composerHtml = '<div class="conv-composer-wrap">' + smsBlocker + '<div class="conv-composer">' +
       '<textarea id="conv-composer-text" placeholder="Type a reply..." oninput="convDraftChange(this.value)">' + esc(draft) + '</textarea>' +
       '<div class="conv-composer-actions">' +
         '<div class="conv-composer-meta">' +
-          '<span class="char-count" id="conv-char-count">' + draft.length + '</span>' +
-          '<span>Reply via email to ' + esc(c.contactEmail || c.contactName || 'this contact') + '</span>' +
+          '<span class="char-count" id="conv-char-count">' + _convCharCountLabel(c.channel, draft) + '</span>' +
+          '<span>' + _convComposerHint(c) + '</span>' +
         '</div>' +
-        '<button class="conv-composer-send" id="conv-send-btn" onclick="convSend()" ' + (draft.trim() ? '' : 'disabled') + '>' +
+        '<button class="conv-composer-send" id="conv-send-btn" onclick="convSend()" ' + ((draft.trim() && !(c.channel === 'sms' && _convSmsBlockerReason())) ? '' : 'disabled') + '>' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
           'Send' +
         '</button>' +
@@ -17083,19 +17372,109 @@ function convRenderThread(opts){
 
 // Composer state + actions
 
+// Check SMS readiness from state.smsSettings - returns null when ready, or a
+// message string describing why SMS can't be sent.
+function _convSmsBlockerReason(){
+  var s = state.smsSettings;
+  // Lazy-load if state isn't populated yet
+  if(s === undefined){
+    if(typeof loadSmsSettings === 'function' && !state._smsLoadFired){
+      state._smsLoadFired = true;
+      loadSmsSettings().then(function(data){
+        state.smsSettings = (data && data.settings) || null;
+        state.smsRequest = (data && data.request) || null;
+        convRenderThread();
+      }).catch(function(){
+        state.smsSettings = null;
+        convRenderThread();
+      });
+    }
+    return 'Loading SMS status...';
+  }
+  if(!s){
+    return 'SMS is not set up for this workspace. Visit Settings to register.';
+  }
+  // New 3-state schema: pending | live | paused
+  if(s.campaign_status === 'pending'){
+    return 'SMS campaign is pending carrier approval. You can read incoming texts but cannot send replies yet.';
+  }
+  if(s.campaign_status === 'paused'){
+    return 'SMS is paused by your administrator. Contact your agency to resume.';
+  }
+  if(s.campaign_status !== 'live'){
+    return 'SMS is not yet active for this workspace.';
+  }
+  return null;
+}
+
+// Returns the SMS blocker banner HTML, or empty string if SMS is ready
+function _convSmsBlockerBanner(){
+  var reason = _convSmsBlockerReason();
+  if(!reason) return '';
+  return '<div style="background:rgba(247,184,1,0.10);border:1px solid rgba(247,184,1,0.35);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;padding:10px 14px;font-size:12px;color:#a16207;display:flex;align-items:center;gap:8px">' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+    '<span>' + esc(reason) + '</span>' +
+  '</div>';
+}
+
+// Channel-aware hint shown next to the character counter
+function _convComposerHint(c){
+  if(c.channel === 'sms'){
+    return 'Reply via SMS to ' + esc(c.contactPhone || c.contactName || 'this contact');
+  }
+  return 'Reply via email to ' + esc(c.contactEmail || c.contactName || 'this contact');
+}
+
+// Detect if text contains any non-GSM-7 characters (forces UCS-2 encoding,
+// which halves segment size). This is a simplified check - real GSM-7 detection
+// is more nuanced but this catches the common cases (emoji, accents, etc).
+function _convIsUcs2(text){
+  // Match anything outside basic Latin printable + common GSM extensions
+  return /[^\u0020-\u007E\u00A0-\u00FF]/.test(text);
+}
+
+// Compute segments for an SMS body.
+// GSM-7: 160 single, 153 multi
+// UCS-2: 70 single, 67 multi
+function _convSmsSegments(text){
+  var ucs2 = _convIsUcs2(text);
+  var single = ucs2 ? 70 : 160;
+  var multi = ucs2 ? 67 : 153;
+  var len = text.length;
+  if(len === 0) return { length: 0, segments: 0, perSegment: single, encoding: ucs2 ? 'UCS-2' : 'GSM-7' };
+  if(len <= single) return { length: len, segments: 1, perSegment: single, encoding: ucs2 ? 'UCS-2' : 'GSM-7' };
+  var segments = Math.ceil(len / multi);
+  return { length: len, segments: segments, perSegment: multi, encoding: ucs2 ? 'UCS-2' : 'GSM-7' };
+}
+
+// Channel-aware character count label
+function _convCharCountLabel(channel, text){
+  if(channel === 'sms'){
+    var s = _convSmsSegments(text);
+    if(s.length === 0) return '0 chars';
+    var segLabel = s.segments + ' segment' + (s.segments === 1 ? '' : 's');
+    return s.length + ' chars · ' + segLabel;
+  }
+  return text.length + ' chars';
+}
+
 function convDraftChange(val){
   var s = _convState();
   if(!s.drafts) s.drafts = {};
   if(s.activeId){
     s.drafts[s.activeId] = val;
-    // Update char count + send button disabled state without full re-render
+    // Channel-aware char count + send button disabled state
+    var conv = (db.conversations || []).find(function(c){ return c.id === s.activeId; });
+    var channel = (conv && conv.channel) || 'email';
+    var maxLen = (channel === 'sms') ? 1600 : 50000;
+    var smsBlocked = (channel === 'sms') && !!_convSmsBlockerReason();
     var cc = document.getElementById('conv-char-count');
     if(cc){
-      cc.textContent = val.length;
-      cc.classList.toggle('over', val.length > 50000);
+      cc.textContent = _convCharCountLabel(channel, val);
+      cc.classList.toggle('over', val.length > maxLen);
     }
     var btn = document.getElementById('conv-send-btn');
-    if(btn) btn.disabled = !val.trim() || val.length > 50000;
+    if(btn) btn.disabled = !val.trim() || val.length > maxLen || smsBlocked;
   }
 }
 
@@ -17105,17 +17484,24 @@ function convSend(){
   var convId = s.activeId;
   var text = (s.drafts && s.drafts[convId] || '').trim();
   if(!text) return;
-  if(text.length > 50000){
-    toast('Message too long (max 50000 chars)', 'error');
+
+  // Branch on conversation channel
+  var conv = (db.conversations || []).find(function(c){ return c.id === convId; });
+  var channel = (conv && conv.channel) || 'email';
+
+  // Length limits differ by channel - SMS has a practical 1600 char ceiling
+  // (10 segments) before things get weird; email allows much longer
+  var maxLen = (channel === 'sms') ? 1600 : 50000;
+  if(text.length > maxLen){
+    toast('Message too long (max ' + maxLen + ' chars)', 'error');
     return;
   }
 
   var btn = document.getElementById('conv-send-btn');
   if(btn) btn.disabled = true;
 
-  // Optimistic UI: append a sending message to local cache (camelCase shape
-  // matches messageToFrontend from conversation-thread/reply Lambdas).
-  s._forceScroll = true;  // user sent something - always scroll to see it
+  // Optimistic UI: append a sending message to local cache
+  s._forceScroll = true;
   var optimisticId = 'optimistic-' + Date.now();
   var cached = db.conversationMessages[convId];
   var nowIso = new Date().toISOString();
@@ -17125,7 +17511,7 @@ function convSend(){
       conversationId: convId,
       direction: 'outbound',
       source: 'manual',
-      channel: 'email',
+      channel: channel,
       subject: null,
       bodyText: text,
       bodyHtml: null,
@@ -17137,11 +17523,37 @@ function convSend(){
     convRenderThread();
   }
 
-  fetch(apiUrl('/api/subaccount/conversation-reply'), {
+  // Branch the API call based on channel
+  var endpoint, payload;
+  if(channel === 'sms'){
+    if(!conv || !conv.contactPhone){
+      if(cached){
+        var f = cached.messages.find(function(m){ return m.id === optimisticId; });
+        if(f){ f.status = 'failed'; f.error = 'No phone number on contact'; }
+        convRenderThread();
+      }
+      toast('Contact has no phone number on file', 'error');
+      if(btn) btn.disabled = false;
+      return;
+    }
+    endpoint = '/api/sms/send';
+    payload = {
+      slug: state.subaccountSlug,
+      to: conv.contactPhone,
+      body: text,
+      contactId: conv.contactId,
+      source: 'manual'
+    };
+  } else {
+    endpoint = '/api/subaccount/conversation-reply';
+    payload = { conversation_id: convId, body_text: text };
+  }
+
+  fetch(apiUrl(endpoint), {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: convId, body_text: text })
+    body: JSON.stringify(payload)
   }).then(function(r){
     return r.json().then(function(j){ return { ok: r.ok, body: j }; });
   }).then(function(res){
@@ -17158,15 +17570,36 @@ function convSend(){
       toast(res.body && res.body.error ? res.body.error : 'Send failed', 'error');
       return;
     }
-    // Replace optimistic with real message
-    if(cached && res.body.message){
-      var idx = cached.messages.findIndex(function(m){ return m.id === optimisticId; });
-      if(idx >= 0) cached.messages[idx] = res.body.message;
-      cached.conversation.last_message_at = res.body.message.created_at;
-      cached.conversation.last_message_preview = (res.body.message.body_text || '').slice(0, 140);
-      cached.conversation.last_message_direction = 'outbound';
-      cached.conversation.last_manual_message_at = res.body.message.created_at;
-      convRenderThread();
+    // Replace optimistic with real message. SMS endpoint returns a different
+    // shape than the email reply endpoint, so normalize here.
+    if(cached){
+      var realMsg = res.body.message;  // email reply returns this
+      if(!realMsg && res.body.messageId){
+        // SMS endpoint - synthesize a message from the response
+        realMsg = {
+          id: res.body.messageId,
+          conversationId: res.body.conversationId || convId,
+          direction: 'outbound',
+          source: 'manual',
+          channel: 'sms',
+          bodyText: text,
+          status: 'queued',
+          externalId: res.body.sid,
+          sentAt: nowIso,
+          createdAt: nowIso,
+          sentByUserName: state.user && state.user.display_name
+        };
+      }
+      if(realMsg){
+        var idx = cached.messages.findIndex(function(m){ return m.id === optimisticId; });
+        if(idx >= 0) cached.messages[idx] = realMsg;
+        var msgTs = realMsg.created_at || realMsg.createdAt || nowIso;
+        cached.conversation.last_message_at = msgTs;
+        cached.conversation.last_message_preview = (realMsg.body_text || realMsg.bodyText || text).slice(0, 140);
+        cached.conversation.last_message_direction = 'outbound';
+        cached.conversation.last_manual_message_at = msgTs;
+        convRenderThread();
+      }
     }
     // Clear draft + refresh list to update preview/timestamp
     if(s.drafts) s.drafts[convId] = '';
@@ -26599,6 +27032,8 @@ async function agencyLoadSmsRequests(){
     var data=res.ok?await res.json():{pending:[],provisioned:[]};
     var pending=data.pending||[];
     var provisioned=data.provisioned||[];
+    state.agencySmsProvisioned = provisioned;
+    state.agencySmsPending = pending;
     var out='';
     if(pending&&pending.length){
       var sColor={requested:'#f59e0b',in_progress:'#6b21ea'};
@@ -26618,13 +27053,14 @@ async function agencyLoadSmsRequests(){
             +'<div style="width:6px;height:6px;border-radius:50%;background:'+sColor[r.status]+'"></div>'
             +sLabel[r.status]
             +'</div>'
+            +'<button class="btn btn-ghost btn-sm" onclick="openAgencyViewSmsSubmission(\''+r.id+'\')">View Details</button>'
             +'<button class="btn btn-primary btn-sm" onclick="openAgencySmsProvision(\''+r.subaccount_id+'\',\''+r.id+'\')">Provision</button>'
             +'</div>';
         }).join('')+'</div></div>';
     }
     if(provisioned&&provisioned.length){
-      var cColor={pending:'#f59e0b',approved:'#059669',rejected:'#ef4444',not_registered:'var(--text-muted)'};
-      var cLabel={pending:'Pending Approval',approved:'Approved',rejected:'Rejected',not_registered:'Not Registered'};
+      var cColor={pending:'#f59e0b',live:'#059669',paused:'#a16207'};
+      var cLabel={pending:'Pending',live:'Live',paused:'Paused'};
       out+='<div style="margin-bottom:28px">'
         +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;margin-bottom:14px">SMS Numbers</div>'
         +'<div style="display:flex;flex-direction:column;gap:10px">'+provisioned.map(function(s){
@@ -26637,6 +27073,7 @@ async function agencyLoadSmsRequests(){
             +'<div style="width:6px;height:6px;border-radius:50%;background:'+cColor[s.campaign_status]+'"></div>'
             +(cLabel[s.campaign_status]||s.campaign_status)
             +'</div>'
+            +'<button class="btn btn-ghost btn-sm" onclick="openAgencyViewSmsSubmissionByAccount(\''+s.subaccount_id+'\')">View Details</button>'
             +'<button class="btn btn-ghost btn-sm" onclick="openAgencyUpdateSmsStatus(\''+s.subaccount_id+'\')">Update Status</button>'
             +'</div>';
         }).join('')+'</div></div>';
@@ -26647,38 +27084,163 @@ async function agencyLoadSmsRequests(){
 
 function openAgencyUpdateSmsStatus(subaccountId){
   state.modal={type:'agency-update-sms-status',extra:{subaccountId:subaccountId}};
-  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">Update the SMS campaign status for this subaccount. Set to Approved once Twilio confirms carrier approval.</div>'
+  var current = (state.agencySmsProvisioned||[]).find(function(s){ return s.subaccount_id === subaccountId; }) || {};
+  var curStatus = current.campaign_status || 'pending';
+  var curNote = current.rejection_note || '';
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">Update the SMS campaign status. Pending: awaiting Twilio. Live: approved and sending. Paused: emergency stop.</div>'
     +'<div class="form-group"><label>Campaign Status</label>'
     +'<select id="update-sms-status" class="filter-sel" style="width:100%;height:38px">'
-    +'<option value="pending">Pending Approval</option>'
-    +'<option value="approved">Approved</option>'
-    +'<option value="rejected">Rejected</option>'
-    +'</select></div>'
-    +'<div class="form-group"><label>Enable SMS</label>'
-    +'<select id="update-sms-enabled" class="filter-sel" style="width:100%;height:38px">'
-    +'<option value="true">Enabled</option>'
-    +'<option value="false">Disabled</option>'
-    +'</select></div>';
+    +'<option value="pending"' + (curStatus === 'pending' ? ' selected' : '') + '>Pending</option>'
+    +'<option value="live"' + (curStatus === 'live' ? ' selected' : '') + '>Live</option>'
+    +'<option value="paused"' + (curStatus === 'paused' ? ' selected' : '') + '>Paused</option>'
+    +'</select>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Only Live state allows outbound SMS. Paused is an emergency stop. Set Pending after a Twilio rejection so the clinic can resubmit.</div>'
+    +'</div>'
+    +'<div class="form-group"><label>Agency Note (optional)</label>'
+    +'<textarea id="update-sms-note" class="filter-sel" style="width:100%;min-height:80px;padding:8px;font-family:inherit" placeholder="Visible to the clinic. Use this when Twilio rejects to explain what they need to fix.">'+esc(curNote)+'</textarea>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Leave blank to clear an existing note.</div>'
+    +'</div>';
   openModal('Update SMS Status: '+subaccountId,body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="confirmAgencyUpdateSmsStatus()">Save</button>');
+}
+
+// View the full submitted registration data in a readable modal
+function openAgencyViewSmsSubmission(requestId){
+  var pending = (state.agencySmsPending || []);
+  var found = pending.find(function(r){ return r.id === requestId; });
+  if(!found){
+    toast('Registration record not found in current view. Refresh and try again.', 'error');
+    return;
+  }
+  _smsRenderSubmissionModal(found);
+}
+
+// Find the most recent registration request for a subaccount (used from
+// the provisioned-numbers card where we only have subaccount_id)
+async function openAgencyViewSmsSubmissionByAccount(subaccountId){
+  // First try in-memory cache
+  var pending = (state.agencySmsPending || []);
+  var inCache = pending.find(function(r){ return r.subaccount_id === subaccountId; });
+  if(inCache){ _smsRenderSubmissionModal(inCache); return; }
+  // Fall back to a server lookup - we don't have a dedicated endpoint, so
+  // re-fetch the agency requests list and pull from there.
+  try {
+    var res = await fetch(apiUrl('/api/agency/sms-requests'), { credentials: 'include' });
+    if(!res.ok){ toast('Could not load registration data.', 'error'); return; }
+    var data = await res.json();
+    var all = (data.pending || []).concat(data.provisioned || []);
+    var match = all.find(function(r){ return r.subaccount_id === subaccountId && r.legal_business_name; });
+    if(!match){ toast('No registration record on file for this account.', 'error'); return; }
+    _smsRenderSubmissionModal(match);
+  } catch(e){ toast('Error loading: ' + e.message, 'error'); }
+}
+
+function _smsRenderSubmissionModal(r){
+  var fmt = function(v){ return v ? esc(v) : '<span style="color:var(--text-muted);font-style:italic">not provided</span>'; };
+  var row = function(label, value){
+    return '<div style="display:flex;padding:8px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:0 0 180px;font-size:12px;color:var(--text-muted);font-weight:600">'+label+'</div>'
+      +'<div style="flex:1;font-size:13px;color:var(--text);word-break:break-word">'+fmt(value)+'</div>'
+      +'</div>';
+  };
+  var section = function(title, rows){
+    return '<div style="margin-bottom:18px">'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding-bottom:6px;border-bottom:2px solid var(--purple)">'+title+'</div>'
+      + rows
+      +'</div>';
+  };
+
+  var address = [r.address_street, r.address_city, r.address_state, r.address_zip].filter(Boolean).join(', ');
+
+  var body = ''
+    + section('Business Identity',
+        row('Legal Business Name', r.legal_business_name)
+      + row('EIN / Tax ID', r.ein)
+      + row('Business Type', r.business_type)
+      + row('Business Industry', r.business_industry)
+      + row('Business Country', r.business_country)
+      + row('Website', r.website))
+    + section('Business Address',
+        row('Address', address))
+    + section('Authorized Contact',
+        row('Name', [r.contact_first_name, r.contact_last_name].filter(Boolean).join(' ') || r.contact_name)
+      + row('Job Title', r.contact_title)
+      + row('Email', r.contact_email)
+      + row('Phone', r.contact_phone))
+    + section('Messaging Use Case',
+        row('Use Case', r.use_case)
+      + row('Description', r.use_case_description)
+      + row('Sample 1', r.sample_message_1)
+      + row('Sample 2', r.sample_message_2)
+      + row('Sample 3', r.sample_message_3)
+      + row('Opt-in Method', r.opt_in_method)
+      + row('Opt-in Description', r.opt_in_description))
+    + section('Submission Info',
+        row('Status', r.status)
+      + row('Submitted', r.created_at ? fmtDate(r.created_at.split('T')[0]) : null)
+      + row('Last Updated', r.updated_at ? fmtDate(r.updated_at.split('T')[0]) : null));
+
+  // Copy-to-clipboard helper for pasting into Twilio
+  var copyJson = JSON.stringify({
+    legal_business_name: r.legal_business_name,
+    ein: r.ein,
+    business_type: r.business_type,
+    business_industry: r.business_industry,
+    business_country: r.business_country,
+    website: r.website,
+    address: address,
+    contact_name: [r.contact_first_name, r.contact_last_name].filter(Boolean).join(' '),
+    contact_title: r.contact_title,
+    contact_email: r.contact_email,
+    contact_phone: r.contact_phone,
+    use_case: r.use_case,
+    use_case_description: r.use_case_description,
+    sample_messages: [r.sample_message_1, r.sample_message_2, r.sample_message_3].filter(Boolean),
+    opt_in_method: r.opt_in_method,
+    opt_in_description: r.opt_in_description
+  }, null, 2);
+
+  state._smsModalCopyJson = copyJson;
+
+  openModal(
+    'Registration Details: ' + (r.legal_business_name || r.subaccount_name || r.subaccount_id),
+    '<div style="max-height:60vh;overflow-y:auto;padding-right:6px">' + body + '</div>',
+    '<button class="btn btn-ghost" onclick="_smsCopySubmissionJson()">Copy as JSON</button>'
+    +'<button class="btn btn-primary" onclick="closeModal()">Close</button>'
+  );
+}
+
+function _smsCopySubmissionJson(){
+  var j = state._smsModalCopyJson || '';
+  if(!j){ toast('Nothing to copy.', 'error'); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(j).then(function(){
+      toast('Copied to clipboard.', 'success');
+    }).catch(function(){
+      toast('Copy failed. Select the text and copy manually.', 'error');
+    });
+  } else {
+    toast('Clipboard not available in this browser.', 'error');
+  }
 }
 
 async function confirmAgencyUpdateSmsStatus(){
   var subaccountId=state.modal&&state.modal.extra&&state.modal.extra.subaccountId;
   if(!subaccountId){toast('Missing subaccount.','error');return;}
   var status=document.getElementById('update-sms-status')&&document.getElementById('update-sms-status').value;
-  var enabled=document.getElementById('update-sms-enabled')&&document.getElementById('update-sms-enabled').value==='true';
+  var noteEl=document.getElementById('update-sms-note');
+  var note=noteEl?noteEl.value.trim():'';
   try{
     var res=await fetch(apiUrl('/api/agency/sms-status-update'),{
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccount_id:subaccountId,campaign_status:status,enabled:enabled})
+      body:JSON.stringify({subaccount_id:subaccountId,campaign_status:status,rejection_note:note})
     });
     if(!res.ok){var e=await res.text();toast('Update failed: '+e,'error');return;}
     closeModal();
-    toast('SMS status updated for '+subaccountId+'.','success');
+    toast('SMS status updated.','success');
     agencyLoadSmsRequests();
   }catch(e){toast('Error: '+e.message,'error');}
 }
