@@ -16,9 +16,6 @@
 const db = require('./db');
 
 // Convert a contacts row (snake_case) to the camelCase shape callers expect.
-// Mirrors contactToFrontend() in data-load.js but without the joined arrays
-// (notes/warnings/allergies/creditHistory) since most callers don't need them.
-// If a caller needs those, they should call data-load.js or query directly.
 function rowToCamel(row) {
   if (!row) return null;
   return {
@@ -84,7 +81,6 @@ const CONTACT_COLUMNS = `
 `;
 
 // Look up a single contact by id, scoped to subaccount.
-// Returns the camelCase shape or null if not found.
 async function getContactById(subaccountId, contactId) {
   if (!subaccountId || !contactId) return null;
   try {
@@ -100,8 +96,6 @@ async function getContactById(subaccountId, contactId) {
 }
 
 // Look up a contact by email, scoped to subaccount.
-// Useful for booking widget submissions to auto-link to an existing contact.
-// Returns the camelCase shape or null if not found.
 async function getContactByEmail(subaccountId, email) {
   if (!subaccountId || !email) return null;
   try {
@@ -118,9 +112,50 @@ async function getContactByEmail(subaccountId, email) {
   }
 }
 
+// Look up a contact by phone, scoped to subaccount.
+// Tries exact match first, then digits-only comparison (handles formatting),
+// then last-10-digits match (handles country code differences).
+async function getContactByPhone(subaccountId, phone) {
+  if (!subaccountId || !phone) return null;
+  try {
+    let r = await db.query(
+      `SELECT ${CONTACT_COLUMNS} FROM contacts
+       WHERE subaccount_id = $1 AND phone = $2 LIMIT 1`,
+      [subaccountId, phone]
+    );
+    if (r.rows.length) return rowToCamel(r.rows[0]);
+
+    const digits = String(phone).replace(/\D/g, '');
+    if (digits.length >= 10) {
+      r = await db.query(
+        `SELECT ${CONTACT_COLUMNS} FROM contacts
+         WHERE subaccount_id = $1
+           AND regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $2
+         LIMIT 1`,
+        [subaccountId, digits]
+      );
+      if (r.rows.length) return rowToCamel(r.rows[0]);
+
+      if (digits.length > 10) {
+        const last10 = digits.slice(-10);
+        r = await db.query(
+          `SELECT ${CONTACT_COLUMNS} FROM contacts
+           WHERE subaccount_id = $1
+             AND right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $2
+           LIMIT 1`,
+          [subaccountId, last10]
+        );
+        if (r.rows.length) return rowToCamel(r.rows[0]);
+      }
+    }
+    return null;
+  } catch (e) {
+    console.error('getContactByPhone error:', e.message);
+    return null;
+  }
+}
+
 // Fetch all contacts for a subaccount.
-// Returns array of camelCase contacts. Used by sub-charge iteration and
-// subaccount-lifecycle Square cleanup.
 async function getAllContacts(subaccountId) {
   if (!subaccountId) return [];
   try {
@@ -135,4 +170,46 @@ async function getAllContacts(subaccountId) {
   }
 }
 
-module.exports = { getContactById, getContactByEmail, getAllContacts };
+// Create a stub contact when we receive an SMS from an unknown number.
+// Populates all NOT NULL columns with sensible defaults. The 'Unknown' name
+// and source='sms_inbound' make these easy to find and clean up later.
+//
+// Returns the new contact id, or null on error.
+async function createStubContactFromSms(subaccountId, phone) {
+  if (!subaccountId || !phone) return null;
+  try {
+    const contactId = 'cnt_' + Math.random().toString(36).slice(2, 14);
+    const displayName = 'Unknown (' + phone + ')';
+    const now = new Date().toISOString();
+    await db.query(
+      `INSERT INTO contacts
+         (id, subaccount_id, first_name, last_name, display_name, phone,
+          source, type, status, archived,
+          tags, custom_field_values, credit_balance, square_cards,
+          email_suppressed,
+          created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false,
+               '[]'::jsonb, '{}'::jsonb, 0, '[]'::jsonb,
+               false,
+               $10, $10)`,
+      [
+        contactId, subaccountId,
+        'Unknown', 'SMS Sender', displayName, phone,
+        'sms_inbound', 'lead', 'active',
+        now
+      ]
+    );
+    return contactId;
+  } catch (e) {
+    console.error('createStubContactFromSms error:', e.message);
+    return null;
+  }
+}
+
+module.exports = {
+  getContactById,
+  getContactByEmail,
+  getContactByPhone,
+  getAllContacts,
+  createStubContactFromSms
+};
