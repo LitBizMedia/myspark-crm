@@ -16616,6 +16616,135 @@ function renderConversations(){
     s._loadedOnce = true;
     convFetchList();
   }
+  // Start the tiered poll. Idempotent - safe to call on every render.
+  _convStartPoll();
+}
+
+// =============================================================================
+// CONVERSATIONS POLLING (tiered + visibility-aware + activity-aware)
+// =============================================================================
+//
+// Design:
+// - On the conversations panel, poll a CHEAP endpoint (/conversations-since)
+//   to detect when new messages have arrived
+// - Tier the interval based on user activity:
+//     * Recent activity (<2 min): 30 seconds
+//     * Idle (2-10 min): 2 minutes
+//     * Tab hidden: paused entirely
+//     * Other panel: paused entirely
+// - Only when the cheap endpoint reports count>0 do we fire the expensive
+//   /conversation-list refresh
+
+var _CONV_POLL = {
+  timer: null,
+  lastSince: null,         // ISO timestamp passed to the next ?ts= query
+  lastActivityAt: 0,       // Date.now() of most recent user activity on panel
+  activeIntervalMs: 30000, // tier 1: recent activity
+  idleIntervalMs: 120000,  // tier 2: idle
+  hiddenIntervalMs: 0,     // tier 3: paused
+  idleThresholdMs: 2 * 60 * 1000,   // 2 min before tier change
+  stopThresholdMs: 10 * 60 * 1000   // 10 min and we just stop polling
+};
+
+function _convCurrentInterval(){
+  if(document.hidden) return _CONV_POLL.hiddenIntervalMs; // 0 = paused
+  if(state.panel !== 'conversations') return _CONV_POLL.hiddenIntervalMs;
+  var sinceActivity = Date.now() - _CONV_POLL.lastActivityAt;
+  if(sinceActivity > _CONV_POLL.stopThresholdMs) return _CONV_POLL.hiddenIntervalMs;
+  if(sinceActivity > _CONV_POLL.idleThresholdMs) return _CONV_POLL.idleIntervalMs;
+  return _CONV_POLL.activeIntervalMs;
+}
+
+function _convMarkActivity(){
+  _CONV_POLL.lastActivityAt = Date.now();
+}
+
+function _convStartPoll(){
+  // Mark activity now (treat panel open as activity)
+  _convMarkActivity();
+
+  // Already polling - reschedule from current activity tier
+  if(_CONV_POLL.timer){
+    clearTimeout(_CONV_POLL.timer);
+    _CONV_POLL.timer = null;
+  }
+
+  // Attach activity listeners on the conversations container (once)
+  if(!_CONV_POLL._listenersBound){
+    _CONV_POLL._listenersBound = true;
+    var events = ['click', 'keydown', 'scroll', 'mousemove'];
+    events.forEach(function(evt){
+      document.addEventListener(evt, function(){
+        if(state.panel === 'conversations') _convMarkActivity();
+      }, { passive: true, capture: true });
+    });
+    // Page Visibility: tick immediately when tab becomes visible
+    document.addEventListener('visibilitychange', function(){
+      if(!document.hidden && state.panel === 'conversations'){
+        _convMarkActivity();
+        _convPollTick();
+      }
+    });
+  }
+
+  _convScheduleNextPoll();
+}
+
+function _convStopPoll(){
+  if(_CONV_POLL.timer){
+    clearTimeout(_CONV_POLL.timer);
+    _CONV_POLL.timer = null;
+  }
+}
+
+function _convScheduleNextPoll(){
+  if(_CONV_POLL.timer){
+    clearTimeout(_CONV_POLL.timer);
+    _CONV_POLL.timer = null;
+  }
+  var interval = _convCurrentInterval();
+  if(interval <= 0){
+    // Paused. Reschedule a low-frequency check just to detect if we should resume.
+    _CONV_POLL.timer = setTimeout(_convScheduleNextPoll, 60000);
+    return;
+  }
+  _CONV_POLL.timer = setTimeout(_convPollTick, interval);
+}
+
+async function _convPollTick(){
+  // Guard: only run if on the conversations panel and tab visible
+  if(document.hidden || state.panel !== 'conversations'){
+    _convScheduleNextPoll();
+    return;
+  }
+  try {
+    var url = _convAPI('/api/subaccount/conversations-since');
+    if(_CONV_POLL.lastSince) url += '?ts=' + encodeURIComponent(_CONV_POLL.lastSince);
+    var res = await fetch(url, { credentials:'include' });
+    if(!res.ok){
+      // Server hiccup - back off, reschedule
+      _convScheduleNextPoll();
+      return;
+    }
+    var data = await res.json();
+    // First call (no lastSince) just establishes baseline; no refresh
+    var isFirstCall = !_CONV_POLL.lastSince;
+    if(data.server_ts) _CONV_POLL.lastSince = data.server_ts;
+    if(!isFirstCall && data.count > 0){
+      // Something changed - do the expensive refresh
+      convFetchList();
+      // Also refresh the active thread if one is open
+      var s = _convState();
+      if(s.activeId){
+        convFetchThread(s.activeId, function(err){ if(!err) convRenderThread(); });
+      }
+      _convUpdateSidebarBadge();
+    }
+  } catch(e) {
+    // Network failure - log quietly, reschedule
+    console.warn('convPollTick failed', e && e.message);
+  }
+  _convScheduleNextPoll();
 }
 
 function convFetchList(){
