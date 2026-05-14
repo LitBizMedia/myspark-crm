@@ -114,7 +114,6 @@ async function upsertConversation(subaccountId, contactId) {
     }, { returning: 'id' });
     return { id, reply_token: token };
   } catch (e) {
-    console.error('upsertConversation error:', e.message);
     return null;
   }
 }
@@ -163,7 +162,6 @@ async function logSubaccountMessage(subaccountId, conversation, fields) {
       await db.update('conversations', updates, { id: conversation.id });
     }
   } catch (e) {
-    console.error('logSubaccountMessage error:', e.message);
   }
 }
 
