@@ -855,6 +855,79 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .appt-list-title{font-size:14px;font-weight:600;margin-bottom:3px;color:var(--main-text)}
 .appt-list-meta{font-size:12px;color:var(--main-text-muted)}
 
+/* CONVERSATIONS PANEL */
+.conv-wrap{display:flex;flex-direction:column;height:100%;margin:-22px -24px;background:var(--main-bg)}
+.conv-toolbar{display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--main-card);border-bottom:1px solid var(--main-border);flex-shrink:0}
+.conv-filter-group{display:flex;gap:6px;align-items:center}
+.conv-filter-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--main-text-muted);margin-right:4px}
+.conv-pill{padding:5px 12px;border-radius:var(--radius-full);background:var(--main-bg);color:var(--main-text-muted);font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--main-border);transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.conv-pill:hover{background:var(--main-card-hover);color:var(--main-text)}
+.conv-pill.active{background:var(--purple);color:#fff;border-color:var(--purple)}
+.conv-pill .conv-pill-count{font-size:10px;background:rgba(255,255,255,.18);padding:1px 6px;border-radius:var(--radius-full);font-weight:700}
+.conv-pill:not(.active) .conv-pill-count{background:var(--purple-dim);color:var(--purple)}
+.conv-toolbar-spacer{flex:1}
+.conv-refresh{padding:6px 10px;background:none;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text-muted);cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:6px}
+.conv-refresh:hover{background:var(--main-card-hover);color:var(--main-text)}
+.conv-main{flex:1;display:flex;min-height:0;overflow:hidden}
+.conv-list{width:360px;flex-shrink:0;border-right:1px solid var(--main-border);background:var(--main-card);overflow-y:auto}
+.conv-list-empty{padding:40px 20px;text-align:center;color:var(--main-text-muted);font-size:13px}
+.conv-list-item{padding:14px 16px;border-bottom:1px solid var(--main-border);cursor:pointer;display:flex;gap:12px;transition:background .12s;border-left:3px solid transparent}
+.conv-list-item:hover{background:var(--main-card-hover)}
+.conv-list-item.active{background:var(--purple-dim);border-left-color:var(--purple)}
+.conv-list-item.unread{background:var(--main-bg)}
+.conv-list-item.unread.active{background:var(--purple-dim)}
+.conv-avatar{width:36px;height:36px;border-radius:var(--radius-full);background:var(--purple-dim);color:var(--purple);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;text-transform:uppercase}
+.conv-list-body{flex:1;min-width:0}
+.conv-list-row1{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}
+.conv-list-name{font-size:13px;font-weight:600;color:var(--main-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-list-item.unread .conv-list-name{font-weight:700}
+.conv-list-time{font-size:11px;color:var(--main-text-muted);flex-shrink:0;white-space:nowrap}
+.conv-list-item.unread .conv-list-time{color:var(--purple);font-weight:600}
+.conv-list-preview{font-size:12px;color:var(--main-text-muted);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.conv-list-item.unread .conv-list-preview{color:var(--main-text)}
+.conv-list-meta{display:flex;align-items:center;gap:6px;margin-top:4px}
+.conv-list-channel{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.conv-list-channel svg{width:11px;height:11px}
+.conv-list-direction{font-size:10px;color:var(--main-text-muted);font-weight:600}
+.conv-list-direction.inbound{color:var(--success-text)}
+.conv-list-unread-dot{width:8px;height:8px;border-radius:var(--radius-full);background:var(--purple);flex-shrink:0;margin-left:auto}
+.conv-thread{flex:1;display:flex;flex-direction:column;min-width:0;background:#e8e5f0}
+.conv-thread-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--main-text-muted);padding:40px;text-align:center}
+.conv-thread-empty svg{width:48px;height:48px;margin-bottom:14px;opacity:.4}
+.conv-thread-empty h3{font-size:15px;font-weight:600;margin-bottom:6px;color:var(--main-text)}
+.conv-thread-empty p{font-size:13px;max-width:280px}
+.conv-thread-head{background:var(--main-card);border-bottom:1px solid var(--main-border);padding:14px 20px;flex-shrink:0;display:flex;align-items:center;gap:12px}
+.conv-thread-head-info{flex:1;min-width:0}
+.conv-thread-head-name{font-size:14px;font-weight:700;color:var(--main-text)}
+.conv-thread-head-meta{font-size:12px;color:var(--main-text-muted);margin-top:2px;display:flex;align-items:center;gap:8px}
+.conv-thread-head-actions{display:flex;gap:6px}
+.conv-thread-action{padding:6px 12px;font-size:12px;border-radius:var(--radius);background:none;border:1px solid var(--main-border);color:var(--main-text-muted);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.conv-thread-action:hover{background:var(--main-card-hover);color:var(--main-text)}
+.conv-thread-action.danger{color:var(--danger-text);border-color:var(--danger-dim)}
+.conv-thread-action.danger:hover{background:var(--danger-dim);color:var(--danger-text)}
+.sb-badge{position:absolute;top:8px;right:10px;background:var(--purple);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+.sb-item{position:relative}
+.conv-thread-action svg{width:13px;height:13px}
+.conv-thread-status{display:inline-block;font-size:10px;padding:2px 8px;border-radius:var(--radius-full);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.conv-thread-status.open{background:var(--success-dim);color:var(--success-text)}
+.conv-thread-status.closed{background:var(--main-border);color:var(--main-text-muted)}
+.conv-thread-status.archived{background:var(--text-disabled);color:var(--main-text-muted)}
+.conv-thread-messages{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:14px;max-width:880px;width:calc(100% - 32px);margin:16px auto;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm)}
+.conv-msg{max-width:82%;display:flex;flex-direction:column;gap:4px}
+.conv-msg.outbound{align-self:flex-end;align-items:flex-end}
+.conv-msg.inbound{align-self:flex-start;align-items:flex-start}
+.conv-msg-bubble{padding:10px 14px;border-radius:var(--radius-lg);font-size:13px;line-height:1.5;word-wrap:break-word}
+.conv-msg.outbound .conv-msg-bubble{background:var(--purple);color:#fff;border-bottom-right-radius:var(--radius-sm)}
+.conv-msg.inbound .conv-msg-bubble{background:var(--main-card);color:var(--main-text);border:1px solid var(--main-border);border-bottom-left-radius:var(--radius-sm)}
+.conv-msg-subject{font-weight:600;margin-bottom:4px;font-size:12px;opacity:.95}
+.conv-msg-body{white-space:pre-wrap}
+.conv-msg.outbound .conv-msg-bubble.failed{background:var(--danger);}
+.conv-msg-meta{font-size:10px;color:var(--main-text-muted);display:flex;align-items:center;gap:6px;padding:0 6px}
+.conv-msg-source{text-transform:uppercase;letter-spacing:.05em;font-weight:600;opacity:.8}
+.conv-msg-status{font-weight:600}
+.conv-msg-status.failed{color:var(--danger-text)}
+.conv-msg-date-divider{align-self:center;font-size:10px;color:var(--main-text-muted);background:var(--main-card);padding:3px 10px;border-radius:var(--radius-full);border:1px solid var(--main-border);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+
 /* FORMS PANEL */
 .forms-panel-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-22px -24px 22px;flex-shrink:0;padding:0}
 .forms-panel-tab{padding:13px 18px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif;white-space:nowrap}
@@ -1799,11 +1872,37 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <div id="panel-products" class="panel hidden"><!-- Products UI now rendered in modal via openProductsModal() --></div>
 
       <div id="panel-conversations" class="panel hidden">
-        <div class="coming-soon-wrap">
-          <span class="coming-soon-badge">Coming Soon</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <h3>Conversations</h3>
-          <p>Unified inbox for SMS, email, and chat threads with your contacts. Reply, schedule sends, and tag conversations to follow up later.</p>
+        <div class="conv-wrap">
+          <div class="conv-toolbar">
+            <div class="conv-filter-group">
+              <span class="conv-filter-label">Channel</span>
+              <button class="conv-pill active" data-conv-channel="all" onclick="convFilterChannel('all')">All <span class="conv-pill-count" id="conv-count-all">0</span></button>
+              <button class="conv-pill" data-conv-channel="email" onclick="convFilterChannel('email')">Email <span class="conv-pill-count" id="conv-count-email">0</span></button>
+              <button class="conv-pill" data-conv-channel="sms" onclick="convFilterChannel('sms')">SMS <span class="conv-pill-count" id="conv-count-sms">0</span></button>
+              <button class="conv-pill" data-conv-channel="chat" onclick="convFilterChannel('chat')">Chat <span class="conv-pill-count" id="conv-count-chat">0</span></button>
+            </div>
+            <div class="conv-filter-group" style="margin-left:14px">
+              <span class="conv-filter-label">Status</span>
+              <button class="conv-pill active" data-conv-status="open" onclick="convFilterStatus('open')">Open</button>
+              <button class="conv-pill" data-conv-status="closed" onclick="convFilterStatus('closed')">Closed</button>
+              <button class="conv-pill" data-conv-status="archived" onclick="convFilterStatus('archived')">Archived</button>
+            </div>
+            <div class="conv-toolbar-spacer"></div>
+            <button class="conv-refresh" onclick="convRefresh()" title="Refresh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Refresh
+            </button>
+          </div>
+          <div class="conv-main">
+            <div class="conv-list" id="conv-list"></div>
+            <div class="conv-thread" id="conv-thread">
+              <div class="conv-thread-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <h3>Select a conversation</h3>
+                <p>Choose a conversation from the list to view the full thread.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -10394,6 +10493,36 @@ function toast(msg,type){
   setTimeout(()=>el.remove(),3500);
 }
 
+// Reusable confirmation modal. Wraps openModal so it matches existing modal styling.
+// Usage:
+//   openConfirm({
+//     title: 'Delete this?',
+//     message: 'Cannot be undone.',
+//     confirmText: 'Delete',         // optional, default 'Confirm'
+//     cancelText: 'Cancel',           // optional, default 'Cancel'
+//     danger: true,                   // optional, styles confirm as danger
+//     onConfirm: function(){ ... }    // required, runs on confirm
+//   })
+function openConfirm(opts){
+  opts = opts || {};
+  var title = opts.title || 'Are you sure?';
+  var message = opts.message || '';
+  var confirmText = opts.confirmText || 'Confirm';
+  var cancelText = opts.cancelText || 'Cancel';
+  var danger = !!opts.danger;
+  var onConfirm = opts.onConfirm;
+  var body = '<div style="font-size:14px;line-height:1.55;color:var(--main-text);white-space:pre-wrap">' + esc(message) + '</div>';
+  var confirmCls = danger ? 'btn-danger' : 'btn-primary';
+  var foot = '<button class="btn btn-ghost" onclick="closeModal()">' + esc(cancelText) + '</button>' +
+             '<button class="btn ' + confirmCls + '" id="confirm-modal-btn">' + esc(confirmText) + '</button>';
+  openModal(title, body, foot);
+  var btn = document.getElementById('confirm-modal-btn');
+  if(btn) btn.onclick = function(){
+    closeModal();
+    if(typeof onConfirm === 'function') setTimeout(onConfirm, 80);
+  };
+}
+
 // =====================================================
 // BUTTON LOCK - prevents double-click on async actions
 // Usage: onclick="withBtnLock(this, ()=>myAsyncFn(args))"
@@ -16344,9 +16473,524 @@ function renderApptList(){
 // =====================================================
 // FORMS PANEL
 // =====================================================
+// =====================================================
+// CONVERSATIONS PANEL (Stage 2 - Phase 1: read-only inbox)
+// =====================================================
+// Data flow:
+//   db.conversations: array, slim shape from /api/subaccount/conversation-list
+//   db.conversationMessages: object keyed by conversation_id, full thread shape
+//   state.conv: { activeId, filterChannel, filterStatus, loading }
+// =====================================================
+
+function _convState(){
+  if(!state.conv) state.conv = { activeId:null, filterChannel:'all', filterStatus:'open', loading:false };
+  return state.conv;
+}
+
+function _convAPI(path){ return apiUrl(path); }
+
+function _convChannelIcon(channel){
+  if(channel==='sms') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+  if(channel==='chat') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>';
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>';
+}
+
+function _convAvatarInitials(name){
+  if(!name) return '?';
+  var parts = String(name).trim().split(/\s+/);
+  if(parts.length === 0) return '?';
+  if(parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+  return (parts[0][0] + parts[parts.length-1][0]).toUpperCase();
+}
+
+function _convRelTime(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  var now = new Date();
+  var diffMs = now - d;
+  var diffMin = Math.floor(diffMs / 60000);
+  if(diffMin < 1) return 'now';
+  if(diffMin < 60) return diffMin + 'm';
+  var diffH = Math.floor(diffMin / 60);
+  if(diffH < 24) return diffH + 'h';
+  var diffD = Math.floor(diffH / 24);
+  if(diffD < 7){
+    return d.toLocaleDateString(undefined, { weekday:'short' });
+  }
+  if(d.getFullYear() === now.getFullYear()){
+    return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  }
+  return d.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'2-digit' });
+}
+
+function _convFullTime(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+}
+
+function _convChannelLabel(channel){
+  if(channel === 'sms') return 'SMS';
+  if(channel === 'chat') return 'Chat';
+  return 'Email';
+}
+
 function renderConversations(){
-  // Placeholder - panel HTML is static for now. Future: load threads list,
-  // render thread view, send/receive SMS/email here.
+  var s = _convState();
+  if(!db.conversations) db.conversations = [];
+  if(!db.conversationMessages) db.conversationMessages = {};
+  convRenderList();
+  convRenderThread();
+  if(!s._loadedOnce){
+    s._loadedOnce = true;
+    convFetchList();
+  }
+}
+
+function convFetchList(){
+  var s = _convState();
+  if(s.loading) return;
+  s.loading = true;
+  fetch(_convAPI('/api/subaccount/conversation-list'), { credentials:'include' })
+    .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, body:j }; }); })
+    .then(function(res){
+      s.loading = false;
+      if(!res.ok){
+        console.error('conversation-list error', res.body);
+        return;
+      }
+      db.conversations = res.body.conversations || [];
+      convRenderList();
+      _convUpdateSidebarBadge();
+    })
+    .catch(function(e){
+      s.loading = false;
+      console.error('conversation-list fetch failed', e);
+    });
+}
+
+function convFetchThread(conversationId, cb){
+  fetch(_convAPI('/api/subaccount/conversation-thread?id=' + encodeURIComponent(conversationId)), { credentials:'include' })
+    .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, body:j }; }); })
+    .then(function(res){
+      if(!res.ok){
+        console.error('conversation-thread error', res.body);
+        if(cb) cb(res.body, null);
+        return;
+      }
+      db.conversationMessages[conversationId] = {
+        conversation: res.body.conversation,
+        messages: res.body.messages || []
+      };
+      if(cb) cb(null, db.conversationMessages[conversationId]);
+    })
+    .catch(function(e){
+      console.error('conversation-thread fetch failed', e);
+      if(cb) cb(e, null);
+    });
+}
+
+function convFilterChannel(channel){
+  _convState().filterChannel = channel;
+  document.querySelectorAll('.conv-pill[data-conv-channel]').forEach(function(b){
+    b.classList.toggle('active', b.dataset.convChannel === channel);
+  });
+  convRenderList();
+}
+function convFilterStatus(status){
+  _convState().filterStatus = status;
+  document.querySelectorAll('.conv-pill[data-conv-status]').forEach(function(b){
+    b.classList.toggle('active', b.dataset.convStatus === status);
+  });
+  convRenderList();
+}
+function convRefresh(){
+  convFetchList();
+  var s = _convState();
+  if(s.activeId) convFetchThread(s.activeId, function(err, data){ if(!err) convRenderThread(); });
+}
+
+function _convFiltered(){
+  var s = _convState();
+  var arr = db.conversations || [];
+  return arr.filter(function(c){
+    if(s.filterChannel !== 'all' && c.channel !== s.filterChannel) return false;
+    if(s.filterStatus && c.status !== s.filterStatus) return false;
+    return true;
+  });
+}
+
+function _convUpdateCounts(){
+  var s = _convState();
+  var byStatus = (db.conversations || []).filter(function(c){ return c.status === s.filterStatus; });
+  var counts = { all: byStatus.length, email: 0, sms: 0, chat: 0 };
+  byStatus.forEach(function(c){
+    if(c.channel === 'email') counts.email++;
+    else if(c.channel === 'sms') counts.sms++;
+    else if(c.channel === 'chat') counts.chat++;
+  });
+  ['all','email','sms','chat'].forEach(function(k){
+    var el = document.getElementById('conv-count-' + k);
+    if(el) el.textContent = counts[k];
+  });
+}
+
+function convRenderList(){
+  var listEl = document.getElementById('conv-list');
+  if(!listEl) return;
+  _convUpdateCounts();
+  var s = _convState();
+  var rows = _convFiltered();
+  if(rows.length === 0){
+    var msg = s.loading ? 'Loading conversations…' : 'No conversations match your filters.';
+    listEl.innerHTML = '<div class="conv-list-empty">' + esc(msg) + '</div>';
+    return;
+  }
+  var html = rows.map(function(c){
+    var unread = (c.unreadCount || 0) > 0;
+    var activeCls = s.activeId === c.id ? ' active' : '';
+    var unreadCls = unread ? ' unread' : '';
+    var name = c.contactName || c.contactEmail || c.contactPhone || 'Unknown';
+    var initials = _convAvatarInitials(name);
+    var preview = c.lastMessagePreview || '';
+    var time = _convRelTime(c.lastMessageAt || c.updatedAt);
+    var direction = c.lastMessageDirection === 'inbound' ? 'inbound' : '';
+    var directionLbl = c.lastMessageDirection === 'inbound' ? 'From' : (c.lastMessageDirection === 'outbound' ? 'You' : '');
+    return '<div class="conv-list-item' + activeCls + unreadCls + '" onclick="convOpenThread(\'' + c.id + '\')">' +
+      '<div class="conv-avatar">' + esc(initials) + '</div>' +
+      '<div class="conv-list-body">' +
+        '<div class="conv-list-row1">' +
+          '<div class="conv-list-name">' + esc(name) + '</div>' +
+          '<div class="conv-list-time">' + esc(time) + '</div>' +
+        '</div>' +
+        '<div class="conv-list-preview">' + esc(preview) + '</div>' +
+        '<div class="conv-list-meta">' +
+          '<span class="conv-list-channel">' + _convChannelIcon(c.channel) + esc(_convChannelLabel(c.channel)) + '</span>' +
+          (directionLbl ? '<span class="conv-list-direction ' + direction + '">' + esc(directionLbl) + '</span>' : '') +
+          (unread ? '<span class="conv-list-unread-dot" title="Unread"></span>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  listEl.innerHTML = html;
+}
+
+function convOpenThread(conversationId){
+  var s = _convState();
+  s.activeId = conversationId;
+  var conv = (db.conversations || []).find(function(c){ return c.id === conversationId; });
+  var wasUnread = conv && (conv.unreadCount || 0) > 0;
+  if(conv) conv.unreadCount = 0;
+  convRenderList();
+  _convUpdateSidebarBadge();
+  // Silent backend mark_read if there was anything unread
+  if(wasUnread) _convMarkReadSilent(conversationId);
+  if(db.conversationMessages[conversationId]){
+    convRenderThread();
+  } else {
+    convRenderThread({ loading:true });
+    convFetchThread(conversationId, function(err, data){
+      if(err){
+        convRenderThread({ error:'Failed to load conversation.' });
+        return;
+      }
+      convRenderThread();
+    });
+  }
+}
+
+function convRenderThread(opts){
+  opts = opts || {};
+  var threadEl = document.getElementById('conv-thread');
+  if(!threadEl) return;
+  var s = _convState();
+  if(!s.activeId){
+    threadEl.innerHTML = '<div class="conv-thread-empty">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+      '<h3>Select a conversation</h3>' +
+      '<p>Choose a conversation from the list to view the full thread.</p>' +
+    '</div>';
+    return;
+  }
+  if(opts.loading){
+    threadEl.innerHTML = '<div class="conv-thread-empty"><p>Loading thread…</p></div>';
+    return;
+  }
+  if(opts.error){
+    threadEl.innerHTML = '<div class="conv-thread-empty"><p>' + esc(opts.error) + '</p></div>';
+    return;
+  }
+  var cached = db.conversationMessages[s.activeId];
+  if(!cached){
+    threadEl.innerHTML = '<div class="conv-thread-empty"><p>Loading thread…</p></div>';
+    return;
+  }
+  var c = cached.conversation;
+  var msgs = cached.messages || [];
+  var name = c.contactName || c.contactEmail || c.contactPhone || 'Unknown';
+  var contactLine = [];
+  if(c.contactEmail) contactLine.push(c.contactEmail);
+  if(c.contactPhone) contactLine.push(c.contactPhone);
+  var statusCls = c.status === 'open' ? 'open' : (c.status === 'closed' ? 'closed' : 'archived');
+
+  var head = '<div class="conv-thread-head">' +
+    '<div class="conv-avatar">' + esc(_convAvatarInitials(name)) + '</div>' +
+    '<div class="conv-thread-head-info">' +
+      '<div class="conv-thread-head-name">' + esc(name) + '</div>' +
+      '<div class="conv-thread-head-meta">' +
+        '<span>' + _convChannelIcon(c.channel) + ' ' + esc(_convChannelLabel(c.channel)) + '</span>' +
+        (contactLine.length ? '<span>· ' + esc(contactLine.join(' · ')) + '</span>' : '') +
+        '<span class="conv-thread-status ' + statusCls + '">' + esc(c.status) + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="conv-thread-head-actions">' +
+      '<button class="conv-thread-action" onclick="convMarkUnread(\'' + c.id + '\')" title="Mark as unread">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' +
+        'Unread' +
+      '</button>' +
+      (c.status === 'open'
+        ? '<button class="conv-thread-action" onclick="convSetStatus(\'' + c.id + '\',\'closed\')" title="Close conversation">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>' +
+          'Close' +
+        '</button>'
+        : '<button class="conv-thread-action" onclick="convSetStatus(\'' + c.id + '\',\'open\')" title="Reopen conversation">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 12 11 12"/></svg>' +
+          'Reopen' +
+        '</button>') +
+      (c.status !== 'archived'
+        ? '<button class="conv-thread-action" onclick="convSetStatus(\'' + c.id + '\',\'archived\')" title="Archive">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>' +
+          'Archive' +
+        '</button>'
+        : '<button class="conv-thread-action danger" onclick="convDeleteConfirm(\'' + c.id + '\')" title="Delete permanently">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' +
+          'Delete' +
+        '</button>') +
+      '<button class="conv-thread-action" onclick="convOpenContact(\'' + c.contactId + '\')" title="Open contact">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' +
+        'Contact' +
+      '</button>' +
+    '</div>' +
+  '</div>';
+
+  var bodyHtml = '';
+  var lastDate = '';
+  var lastSubject = '';
+  msgs.forEach(function(m){
+    var d = new Date(m.sentAt || m.createdAt);
+    var dateKey = d.toDateString();
+    if(dateKey !== lastDate){
+      lastDate = dateKey;
+      bodyHtml += '<div class="conv-msg-date-divider">' + esc(d.toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' })) + '</div>';
+    }
+    var dirCls = m.direction === 'inbound' ? 'inbound' : 'outbound';
+    var failedCls = (m.status === 'failed') ? ' failed' : '';
+    var body = m.bodyText || (m.bodyHtml ? _convStripHtml(m.bodyHtml) : '');
+    // Hide subject if same as the previous message's subject (collapses repetition like
+    // dozens of "Appointment Confirmed" rows). Strip 'Re: ' prefix when comparing.
+    var normSubj = (m.subject || '').replace(/^(Re|Fwd|Fw)\s*:\s*/i, '').trim();
+    var showSubj = m.subject && normSubj !== lastSubject;
+    lastSubject = normSubj;
+    var subj = showSubj ? '<div class="conv-msg-subject">' + esc(m.subject) + '</div>' : '';
+    var sourceLbl = m.source && m.source !== 'manual' ? esc(m.source) : '';
+    var statusLbl = m.status && m.status !== 'sent' && m.status !== 'delivered' ? esc(m.status) : '';
+    var senderLbl = m.direction === 'outbound' && m.sentByUserName ? esc(m.sentByUserName) : '';
+    var metaParts = [];
+    if(sourceLbl) metaParts.push('<span class="conv-msg-source">' + sourceLbl + '</span>');
+    if(senderLbl) metaParts.push('<span>· ' + senderLbl + '</span>');
+    metaParts.push('<span>· ' + esc(_convFullTime(m.sentAt || m.createdAt)) + '</span>');
+    if(statusLbl) metaParts.push('<span class="conv-msg-status' + (m.status === 'failed' ? ' failed' : '') + '">· ' + statusLbl + '</span>');
+
+    bodyHtml += '<div class="conv-msg ' + dirCls + '">' +
+      '<div class="conv-msg-bubble' + failedCls + '">' +
+        subj +
+        '<div class="conv-msg-body">' + esc(body) + '</div>' +
+      '</div>' +
+      '<div class="conv-msg-meta">' + metaParts.join(' ') + '</div>' +
+    '</div>';
+  });
+
+  if(msgs.length === 0){
+    bodyHtml = '<div class="conv-thread-empty"><p>No messages in this conversation yet.</p></div>';
+  }
+
+  threadEl.innerHTML = head + '<div class="conv-thread-messages" id="conv-thread-messages">' + bodyHtml + '</div>';
+
+  var msgsEl = document.getElementById('conv-thread-messages');
+  if(msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+function _convStripHtml(html){
+  if(!html) return '';
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').trim();
+}
+
+function convOpenContact(contactId){
+  // Drawer is a top-level overlay (z-index 200), opens over any panel.
+  if(typeof openDrawer === 'function'){
+    openDrawer(contactId);
+  } else {
+    switchPanel('contacts');
+  }
+}
+
+// Phase 2 actions: real backend calls. Optimistic UI - update local state
+// immediately, revert + toast on failure.
+
+function _convApplyUpdate(updated){
+  // Merge the updated conversation row into db.conversations
+  if(!updated || !updated.id) return;
+  var arr = db.conversations || [];
+  var idx = arr.findIndex(function(c){ return c.id === updated.id; });
+  if(idx >= 0) arr[idx] = updated;
+  // Mirror to thread cache header if present
+  if(db.conversationMessages && db.conversationMessages[updated.id]){
+    db.conversationMessages[updated.id].conversation = updated;
+  }
+  convRenderList();
+  var s = _convState();
+  if(s.activeId === updated.id) convRenderThread();
+  _convUpdateSidebarBadge();
+}
+
+function _convPostUpdate(conversationId, action, extra, onDone){
+  var body = Object.assign({ id:conversationId, action:action }, extra || {});
+  fetch(apiUrl('/api/subaccount/conversation-update'), {
+    method:'POST',
+    credentials:'include',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(r){
+    return r.json().then(function(j){ return { ok:r.ok, body:j }; });
+  }).then(function(res){
+    if(!res.ok){
+      toast(res.body && res.body.error ? res.body.error : 'Update failed', 'error');
+      if(onDone) onDone(res.body);
+      return;
+    }
+    _convApplyUpdate(res.body.conversation);
+    if(onDone) onDone(null, res.body.conversation);
+  }).catch(function(e){
+    console.error('conversation-update fetch failed', e);
+    toast('Network error', 'error');
+    if(onDone) onDone(e);
+  });
+}
+
+function convMarkUnread(conversationId){
+  _convPostUpdate(conversationId, 'mark_unread', null, function(err){
+    if(!err) toast('Marked as unread', 'success');
+  });
+}
+
+function _convMarkReadSilent(conversationId){
+  // No toast on success - used when opening a conversation
+  _convPostUpdate(conversationId, 'mark_read', null, null);
+}
+
+function convSetStatus(conversationId, newStatus){
+  var s = _convState();
+  var nextId = null;
+  if(s.activeId === conversationId){
+    var filtered = _convFiltered();
+    var idx = filtered.findIndex(function(c){ return c.id === conversationId; });
+    if(idx >= 0 && idx + 1 < filtered.length) nextId = filtered[idx + 1].id;
+    else if(idx > 0) nextId = filtered[idx - 1].id;
+  }
+  _convPostUpdate(conversationId, 'set_status', { status:newStatus }, function(err){
+    if(err) return;
+    var label = newStatus === 'open' ? 'Reopened' :
+                newStatus === 'closed' ? 'Closed' :
+                newStatus === 'archived' ? 'Archived' : newStatus;
+    toast(label, 'success');
+    if(s.activeId === conversationId){
+      var stillVisible = _convFiltered().some(function(c){ return c.id === conversationId; });
+      if(!stillVisible){
+        if(nextId){
+          convOpenThread(nextId);
+        } else {
+          s.activeId = null;
+          convRenderList();
+          convRenderThread();
+        }
+      }
+    }
+  });
+}
+
+function convDeleteConfirm(conversationId){
+  console.log('[conv] convDeleteConfirm called for', conversationId);
+  var conv = (db.conversations || []).find(function(c){ return c.id === conversationId; });
+  var name = conv ? (conv.contactName || conv.contactEmail || 'this conversation') : 'this conversation';
+  if(typeof openConfirm !== 'function'){
+    console.error('[conv] openConfirm not defined');
+    toast('Delete UI failed to load. Refresh and try again.', 'error');
+    return;
+  }
+  openConfirm({
+    title:'Delete conversation permanently?',
+    message:'This will permanently delete the conversation with ' + name + ' and all its messages. This cannot be undone.',
+    confirmText:'Delete forever',
+    cancelText:'Keep',
+    danger:true,
+    onConfirm:function(){
+      console.log('[conv] delete confirmed, calling convDelete');
+      convDelete(conversationId);
+    }
+  });
+}
+
+function convDelete(conversationId){
+  fetch(apiUrl('/api/subaccount/conversation-delete'), {
+    method:'POST',
+    credentials:'include',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ id:conversationId })
+  }).then(function(r){
+    return r.json().then(function(j){ return { ok:r.ok, body:j }; });
+  }).then(function(res){
+    if(!res.ok){
+      toast(res.body && res.body.error ? res.body.error : 'Delete failed', 'error');
+      return;
+    }
+    // Remove from local data + clear thread pane if active
+    db.conversations = (db.conversations || []).filter(function(c){ return c.id !== conversationId; });
+    if(db.conversationMessages) delete db.conversationMessages[conversationId];
+    var s = _convState();
+    if(s.activeId === conversationId) s.activeId = null;
+    convRenderList();
+    convRenderThread();
+    _convUpdateSidebarBadge();
+    toast('Conversation deleted', 'success');
+  }).catch(function(e){
+    console.error('conversation-delete fetch failed', e);
+    toast('Network error', 'error');
+  });
+}
+
+// Sidebar unread badge - total unread across all conversations
+function _convUpdateSidebarBadge(){
+  var total = (db.conversations || []).reduce(function(acc, c){
+    if(c.status === 'open') return acc + (c.unreadCount || 0);
+    return acc;
+  }, 0);
+  var btn = document.getElementById('sb-conversations');
+  if(!btn) return;
+  var existing = btn.querySelector('.sb-badge');
+  if(total > 0){
+    if(!existing){
+      existing = document.createElement('span');
+      existing.className = 'sb-badge';
+      btn.appendChild(existing);
+    }
+    existing.textContent = total > 99 ? '99+' : String(total);
+  } else if(existing){
+    existing.remove();
+  }
 }
 
 function renderHelp(){
