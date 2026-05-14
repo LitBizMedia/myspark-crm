@@ -8,36 +8,35 @@
 //   scope='subaccount' → conversations + conversation_messages (patient comms, threading)
 //   scope='agency'     → agency_email_log (admin/owner comms, no threading)
 //
-// CREDENTIALS: AWS SDK auto-loads from Lambda execution role.
-// No Secrets Manager call required.
+// Threading (RFC 5322):
+//   Every outbound generates a Message-ID we control (stored in external_message_id).
+//   When opts.parentMessage is provided, sendEmail uses raw MIME via nodemailer and
+//   sets In-Reply-To + References so the recipient's email client threads correctly.
 //
-// USAGE (identical to lib/resend.js):
-//   await sendEmail(slug, {
-//     scope: 'subaccount' | 'agency',   // REQUIRED
-//     to: 'patient@example.com',
-//     subject: 'Reminder: appointment tomorrow',
-//     html: '<p>...</p>',
-//     text: 'optional plain text',
-//     templateType: 'appt-reminder',
-//     vars: { name: 'Jane' },
-//     contactId: 'mocyg...',             // REQUIRED for scope='subaccount'
-//     source: 'reminder'|'manual'|'confirmation'|'cancellation'|'widget'|'system',
-//     sentByUserId: 'user-id',
-//     fromName: 'Clinic Name'
-//   });
+// CREDENTIALS: AWS SDK auto-loads from Lambda execution role.
 
 const db = require('./db');
 const crypto = require('crypto');
 const { SESv2Client, SendEmailCommand } = require('@aws-sdk/client-sesv2');
+const nodemailer = require('nodemailer');
 
 const FALLBACK_DOMAIN = 'mysparkplus.app';
-const CONFIG_SET = 'myspark-events';  // SES configuration set for bounce/complaint tracking
+const CONFIG_SET = 'myspark-events';
 const SES_REGION = process.env.AWS_REGION || 'us-east-2';
 
 const uid = () => Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-6);
 const replyToken = () => crypto.randomBytes(16).toString('hex');
 
-// SES client — auto-discovers credentials from Lambda execution role
+// Build an RFC 5322 Message-ID from an SES MessageId.
+// Called after SES SendEmail returns; the format SES actually puts on the wire
+// is <{ses-id}@us-east-2.amazonses.com>. Storing this is what makes threading work
+// because future replies can use it as In-Reply-To and recipient clients will
+// recognize it.
+function sesIdToMessageIdHeader(sesId) {
+  if (!sesId) return null;
+  return '<' + sesId + '@' + SES_REGION + '.amazonses.com>';
+}
+
 const sesClient = new SESv2Client({ region: SES_REGION });
 
 // ─── Domain + template lookup ─────────────────────────────────────
@@ -114,6 +113,7 @@ async function upsertConversation(subaccountId, contactId) {
     }, { returning: 'id' });
     return { id, reply_token: token };
   } catch (e) {
+    console.error('upsertConversation error:', e.message);
     return null;
   }
 }
@@ -142,6 +142,8 @@ async function logSubaccountMessage(subaccountId, conversation, fields) {
       body_text: fields.text || null,
       body_html: fields.html || null,
       external_id: fields.sesMessageId || null,
+      external_message_id: fields.messageIdHeader || null,
+      in_reply_to: fields.inReplyTo || null,
       status,
       error: fields.error || null,
       sent_by_user_id: fields.sentByUserId || null,
@@ -162,6 +164,7 @@ async function logSubaccountMessage(subaccountId, conversation, fields) {
       await db.update('conversations', updates, { id: conversation.id });
     }
   } catch (e) {
+    console.error('logSubaccountMessage error:', e.message);
   }
 }
 
@@ -175,13 +178,39 @@ async function logAgencyMessage(fields) {
       from_email: fields.from,
       subject: fields.subject || null,
       template_type: fields.templateType || null,
-      resend_email_id: fields.sesMessageId || null,  // column name retained for now
+      resend_email_id: fields.sesMessageId || null,
       status: fields.status || 'sent',
       error_message: fields.error || null
     });
   } catch (e) {
     console.error('logAgencyMessage error:', e.message);
   }
+}
+
+// ─── Raw MIME builder (for all outbound, threading-aware) ─────────
+
+async function buildRawMime({ from, to, subject, html, text, replyTo, messageId, inReplyTo, references }) {
+  const transport = nodemailer.createTransport({ streamTransport: true, buffer: true });
+  const mailOptions = {
+    from,
+    to,
+    subject,
+    html,
+    text: text || undefined
+  };
+  // Only set messageId if explicitly provided (nodemailer auto-generates otherwise,
+  // but we let SES override that with its own anyway).
+  if (messageId) mailOptions.messageId = messageId;
+  if (replyTo) mailOptions.replyTo = replyTo;
+  if (inReplyTo) mailOptions.inReplyTo = inReplyTo;
+  if (references && references.length) mailOptions.references = references;
+
+  return new Promise(function(resolve, reject) {
+    transport.sendMail(mailOptions, function(err, info) {
+      if (err) return reject(err);
+      resolve(info.message);
+    });
+  });
 }
 
 // ─── Main send function ───────────────────────────────────────────
@@ -223,10 +252,6 @@ async function sendEmail(slug, opts) {
   const domainRow = subaccountId ? await getVerifiedDomain(subaccountId) : null;
   const fromDomain = (domainRow && domainRow.domain) || FALLBACK_DOMAIN;
 
-  // From name selection:
-  //   - explicit opts.fromName always wins (callers like billing-emails set 'MySpark+ Billing')
-  //   - subaccount-scope: pull from subaccounts.name (e.g. 'LitBiz Media')
-  //   - agency-scope: 'MySpark+'
   let fromName = opts.fromName;
   if (!fromName) {
     if (scope === 'subaccount' && subaccountId) {
@@ -246,8 +271,6 @@ async function sendEmail(slug, opts) {
       if (conversation && domainRow && domainRow.inbound_status === 'verified') {
         const sub = domainRow.inbound_subdomain || 'reply';
         const mode = domainRow.inbound_mode || 'shared';
-        // shared: reply+TOKEN@reply.mysparkplus.app (single inbound domain for all subaccounts)
-        // branded: reply+TOKEN@<sub>.<their-domain> (per-subaccount inbound subdomain)
         if (mode === 'branded') {
           replyTo = 'reply+' + conversation.reply_token + '@' + sub + '.' + fromDomain;
         } else {
@@ -259,26 +282,15 @@ async function sendEmail(slug, opts) {
     }
   }
 
-  // SES SendEmailCommand input
-  const commandInput = {
-    FromEmailAddress: from,
-    Destination: { ToAddresses: [opts.to] },
-    Content: {
-      Simple: {
-        Subject: { Data: subject, Charset: 'UTF-8' },
-        Body: {
-          Html: { Data: html, Charset: 'UTF-8' }
-        }
-      }
-    },
-    ConfigurationSetName: CONFIG_SET
-  };
-  if (opts.text) {
-    commandInput.Content.Simple.Body.Text = { Data: opts.text, Charset: 'UTF-8' };
-  }
-  if (replyTo) {
-    commandInput.ReplyToAddresses = [replyTo];
-  }
+  // Message-ID is set AFTER send (based on SES's MessageId). Pass null to
+  // nodemailer so it doesn't set its own; SES will assign one we then capture.
+  let messageIdHeader = null;
+
+  // Threading inputs from the caller (reply endpoint passes these)
+  const parent = opts.parentMessage || null;
+  const inReplyTo = parent && parent.message_id_header ? parent.message_id_header : null;
+  const references = parent && Array.isArray(parent.references) ? parent.references.slice() : [];
+  if (inReplyTo && references.indexOf(inReplyTo) === -1) references.push(inReplyTo);
 
   function buildLogFields(status, sesMessageId, error) {
     return {
@@ -289,6 +301,8 @@ async function sendEmail(slug, opts) {
       text: opts.text,
       templateType: opts.templateType,
       sesMessageId,
+      messageIdHeader,
+      inReplyTo,
       status,
       error,
       source: opts.source,
@@ -306,11 +320,32 @@ async function sendEmail(slug, opts) {
   }
 
   try {
-    const result = await sesClient.send(new SendEmailCommand(commandInput));
-    await logResult('sent', result.MessageId, null);
+    // messageId is intentionally omitted - SES will assign one and we
+    // capture it from the SendEmail response.
+    const rawBuffer = await buildRawMime({
+      from,
+      to: opts.to,
+      subject,
+      html,
+      text: opts.text,
+      replyTo,
+      messageId: null,
+      inReplyTo,
+      references
+    });
+    const commandInput = {
+      Content: { Raw: { Data: rawBuffer } },
+      ConfigurationSetName: CONFIG_SET
+    };
+    const sesResult = await sesClient.send(new SendEmailCommand(commandInput));
+    // Capture the real Message-ID header that SES put on the wire.
+    // This is the value future replies will use for In-Reply-To.
+    messageIdHeader = sesIdToMessageIdHeader(sesResult.MessageId);
+    await logResult('sent', sesResult.MessageId, null);
     return {
       ok: true,
-      id: result.MessageId,
+      id: sesResult.MessageId,
+      messageIdHeader,  // now reflects the actual on-wire Message-ID
       conversation_id: conversation ? conversation.id : null
     };
   } catch (e) {

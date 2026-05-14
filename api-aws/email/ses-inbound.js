@@ -18,6 +18,16 @@ const db = require('./lib/db');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const simpleParser = require('mailparser').simpleParser;
 
+// Wrap a Message-ID with <...> if not already wrapped. Used to keep stored
+// Message-IDs consistent across inbound and outbound (RFC 5322 format).
+function wrapMid(id) {
+  if (!id) return null;
+  const s = String(id).trim();
+  if (!s) return null;
+  if (s[0] === '<' && s[s.length - 1] === '>') return s;
+  return '<' + s + '>';
+}
+
 const S3_REGION = process.env.AWS_REGION || 'us-east-2';
 const s3Client = new S3Client({ region: S3_REGION });
 
@@ -119,6 +129,7 @@ async function processInboundNotification(notification) {
   const key = mail.messageId ? ('inbound/' + mail.messageId) : null;
   let bodyText = null;
   let bodyHtml = null;
+  let inReplyToHeader = null;
 
   if (bucket && key) {
     console.log('Fetching raw email from s3://' + bucket + '/' + key);
@@ -128,6 +139,11 @@ async function processInboundNotification(notification) {
         const parsed = await simpleParser(rawEmail);
         bodyText = parsed.text || null;
         bodyHtml = parsed.html || null;
+        // Capture In-Reply-To header for threading. mailparser returns this as
+        // either a string or an array; normalize to first value.
+        if (parsed.inReplyTo) {
+          inReplyToHeader = Array.isArray(parsed.inReplyTo) ? parsed.inReplyTo[0] : parsed.inReplyTo;
+        }
       } catch (e) {
         console.error('Email parse error:', e.message);
       }
@@ -154,7 +170,8 @@ async function processInboundNotification(notification) {
       body_text: bodyText,
       body_html: bodyHtml,
       external_id: externalMessageId,
-      external_message_id: externalMessageId,
+      external_message_id: wrapMid(externalMessageId),
+      in_reply_to: wrapMid(inReplyToHeader),
       status: 'received',
       sent_at: receivedAt
     });

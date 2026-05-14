@@ -926,6 +926,20 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .conv-msg-source{text-transform:uppercase;letter-spacing:.05em;font-weight:600;opacity:.8}
 .conv-msg-status{font-weight:600}
 .conv-msg-status.failed{color:var(--danger-text)}
+.conv-composer-wrap{flex-shrink:0;padding:0 28px 16px;max-width:880px;width:calc(100% - 32px);margin:0 auto;box-sizing:border-box}
+.conv-composer{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.conv-composer textarea{width:100%;min-height:60px;max-height:160px;border:none;outline:none;resize:none;background:transparent;font-family:inherit;font-size:14px;line-height:1.55;color:var(--main-text);padding:0;box-sizing:border-box}
+.conv-composer textarea::placeholder{color:var(--main-text-muted)}
+.conv-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid var(--main-border)}
+.conv-composer-meta{font-size:11px;color:var(--main-text-muted);display:flex;align-items:center;gap:10px}
+.conv-composer-meta .char-count.over{color:var(--danger-text);font-weight:600}
+.conv-composer-send{padding:7px 16px;font-size:13px;font-weight:600;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.conv-composer-send:hover:not(:disabled){background:var(--orange-hover)}
+.conv-composer-send:disabled{background:var(--main-border);color:var(--main-text-muted);cursor:not-allowed}
+.conv-composer-disabled{padding:14px 16px;font-size:13px;color:var(--main-text-muted);text-align:center;background:var(--main-card);border:1px dashed var(--main-border);border-radius:var(--radius-lg)}
+.conv-composer-disabled button{background:none;border:none;color:var(--purple);font-weight:600;cursor:pointer;padding:0;font-size:inherit;text-decoration:underline}
+.conv-msg.sending .conv-msg-bubble{opacity:.6}
+.conv-msg-retry{margin-left:8px;background:none;border:none;color:var(--danger-text);cursor:pointer;font-weight:600;font-size:11px;text-decoration:underline;padding:0}
 .conv-msg-date-divider{align-self:center;font-size:10px;color:var(--main-text-muted);background:var(--main-card);padding:3px 10px;border-radius:var(--radius-full);border:1px solid var(--main-border);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
 
 /* FORMS PANEL */
@@ -16816,10 +16830,140 @@ function convRenderThread(opts){
     bodyHtml = '<div class="conv-thread-empty"><p>No messages in this conversation yet.</p></div>';
   }
 
-  threadEl.innerHTML = head + '<div class="conv-thread-messages" id="conv-thread-messages">' + bodyHtml + '</div>';
+  // Composer: shown when conv.status === 'open'; otherwise show reopen hint
+  var composerHtml;
+  if(c.status === 'open'){
+    var draft = (_convState().drafts && _convState().drafts[c.id]) || '';
+    composerHtml = '<div class="conv-composer-wrap"><div class="conv-composer">' +
+      '<textarea id="conv-composer-text" placeholder="Type a reply..." oninput="convDraftChange(this.value)">' + esc(draft) + '</textarea>' +
+      '<div class="conv-composer-actions">' +
+        '<div class="conv-composer-meta">' +
+          '<span class="char-count" id="conv-char-count">' + draft.length + '</span>' +
+          '<span>Reply via email to ' + esc(c.contactEmail || c.contactName || 'this contact') + '</span>' +
+        '</div>' +
+        '<button class="conv-composer-send" id="conv-send-btn" onclick="convSend()" ' + (draft.trim() ? '' : 'disabled') + '>' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
+          'Send' +
+        '</button>' +
+      '</div>' +
+    '</div></div>';
+  } else {
+    var statusLabel = c.status === 'closed' ? 'closed' : 'archived';
+    composerHtml = '<div class="conv-composer-wrap"><div class="conv-composer-disabled">' +
+      'This conversation is ' + statusLabel + '. ' +
+      '<button onclick="convSetStatus(\'' + c.id + '\',\'open\')">Reopen to reply</button>' +
+    '</div></div>';
+  }
+
+  threadEl.innerHTML = head + '<div class="conv-thread-messages" id="conv-thread-messages">' + bodyHtml + '</div>' + composerHtml;
 
   var msgsEl = document.getElementById('conv-thread-messages');
   if(msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  // Auto-focus composer for quick replies
+  var textArea = document.getElementById('conv-composer-text');
+  if(textArea) textArea.focus();
+}
+
+// Composer state + actions
+
+function convDraftChange(val){
+  var s = _convState();
+  if(!s.drafts) s.drafts = {};
+  if(s.activeId){
+    s.drafts[s.activeId] = val;
+    // Update char count + send button disabled state without full re-render
+    var cc = document.getElementById('conv-char-count');
+    if(cc){
+      cc.textContent = val.length;
+      cc.classList.toggle('over', val.length > 50000);
+    }
+    var btn = document.getElementById('conv-send-btn');
+    if(btn) btn.disabled = !val.trim() || val.length > 50000;
+  }
+}
+
+function convSend(){
+  var s = _convState();
+  if(!s.activeId) return;
+  var convId = s.activeId;
+  var text = (s.drafts && s.drafts[convId] || '').trim();
+  if(!text) return;
+  if(text.length > 50000){
+    toast('Message too long (max 50000 chars)', 'error');
+    return;
+  }
+
+  var btn = document.getElementById('conv-send-btn');
+  if(btn) btn.disabled = true;
+
+  // Optimistic UI: append a sending message to local cache (camelCase shape
+  // matches messageToFrontend from conversation-thread/reply Lambdas).
+  var optimisticId = 'optimistic-' + Date.now();
+  var cached = db.conversationMessages[convId];
+  var nowIso = new Date().toISOString();
+  if(cached){
+    cached.messages.push({
+      id: optimisticId,
+      conversationId: convId,
+      direction: 'outbound',
+      source: 'manual',
+      channel: 'email',
+      subject: null,
+      bodyText: text,
+      bodyHtml: null,
+      status: 'sending',
+      sentAt: nowIso,
+      createdAt: nowIso,
+      sentByUserName: state.user && state.user.display_name
+    });
+    convRenderThread();
+  }
+
+  fetch(apiUrl('/api/subaccount/conversation-reply'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversation_id: convId, body_text: text })
+  }).then(function(r){
+    return r.json().then(function(j){ return { ok: r.ok, body: j }; });
+  }).then(function(res){
+    if(!res.ok){
+      // Mark optimistic message as failed
+      if(cached){
+        var failed = cached.messages.find(function(m){ return m.id === optimisticId; });
+        if(failed){
+          failed.status = 'failed';
+          failed.error = res.body && res.body.error;
+        }
+        convRenderThread();
+      }
+      toast(res.body && res.body.error ? res.body.error : 'Send failed', 'error');
+      return;
+    }
+    // Replace optimistic with real message
+    if(cached && res.body.message){
+      var idx = cached.messages.findIndex(function(m){ return m.id === optimisticId; });
+      if(idx >= 0) cached.messages[idx] = res.body.message;
+      cached.conversation.last_message_at = res.body.message.created_at;
+      cached.conversation.last_message_preview = (res.body.message.body_text || '').slice(0, 140);
+      cached.conversation.last_message_direction = 'outbound';
+      cached.conversation.last_manual_message_at = res.body.message.created_at;
+      convRenderThread();
+    }
+    // Clear draft + refresh list to update preview/timestamp
+    if(s.drafts) s.drafts[convId] = '';
+    convFetchList();
+    toast('Reply sent', 'success');
+  }).catch(function(e){
+    console.error('convSend fetch failed', e);
+    if(cached){
+      var failed2 = cached.messages.find(function(m){ return m.id === optimisticId; });
+      if(failed2){ failed2.status = 'failed'; failed2.error = 'Network error'; }
+      convRenderThread();
+    }
+    toast('Network error', 'error');
+  });
 }
 
 function _convStripHtml(html){
