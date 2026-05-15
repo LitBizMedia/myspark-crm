@@ -981,9 +981,10 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .fb-dropzone.dz-over{height:24px;background:var(--purple-dim)}
 .fb-dz-line{position:absolute;top:50%;left:0;right:0;height:2px;background:var(--purple);border-radius:1px;transform:translateY(-50%);opacity:0;transition:opacity .1s}
 .fb-dropzone.dz-over .fb-dz-line{opacity:1}
-.fb-field-wrap{position:relative}
-.fb-field-wrap.half-w{display:inline-block;width:calc(50% - 5px);vertical-align:top}
-.fb-field-wrap.half-w:nth-child(odd of .half-w){margin-right:10px}
+.fb-fields-wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;grid-auto-flow:row dense}
+.fb-field-wrap{position:relative;grid-column:span 2}
+.fb-field-wrap.half-w{grid-column:span 1}
+.fb-dropzone{grid-column:span 2}
 .fb-fc{background:#f8f8f8;border:1px solid var(--text-disabled);border-radius:var(--radius);padding:9px 11px;cursor:pointer;transition:border-color .14s,box-shadow .14s;display:flex;align-items:flex-start;gap:8px}
 .fb-fc:hover{border-color:#aaa}
 .fb-fc.sel{border-color:var(--purple);box-shadow:0 0 0 2px rgba(107,33,234,.15)}
@@ -18304,12 +18305,14 @@ function fbFieldPreview(fd){
   if(fd.type==='fdivider'){return'<div class="fb-content-el"><hr class="fb-content-divider" style="border-top-style:'+(fd.settings&&fd.settings.style||'solid')+';border-top-color:'+(fd.settings&&fd.settings.color||'#d0d0d8')+'"></div>';}
   if(fd.type==='fimage'){const url=fd.settings&&fd.settings.url;return'<div class="fb-content-el" style="text-align:'+(fd.settings&&fd.settings.align||'center')+'">'+(url?'<img src="'+esc(url)+'" style="max-width:'+(fd.settings&&fd.settings.width||'100')+'%;border-radius:5px;max-height:60px;object-fit:cover">':'<div style="height:44px;background:#e8e8ee;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#aaa">Image URL not set</div>')+'</div>';}
   let h='<div class="fb-lbl">'+esc(fd.label||'Untitled')+(fd.required?'<span class="req">*</span>':'')+'</div>';
-  if(fd.type==='text'||fd.type==='email'||fd.type==='phone'||fd.type==='number'||fd.type==='url'||fd.type==='company'){
+  if(fd.type==='text'||fd.type==='email'||fd.type==='phone'||fd.type==='number'||fd.type==='url'||fd.type==='company'||fd.type==='first_name'||fd.type==='last_name'||fd.type==='gender'||fd.type==='pronouns'||fd.type==='language'||fd.type==='title'){
     h+='<div class="fb-mi"></div>';
   }else if(fd.type==='textarea'){
     h+='<div class="fb-mita"></div>';
   }else if(fd.type==='name'){
     h+='<div style="display:flex;gap:6px"><div class="fb-mi" style="flex:1"></div><div class="fb-mi" style="flex:1"></div></div>';
+  }else if(fd.type==='emergency_contact'){
+    h+='<div style="display:flex;gap:6px"><div class="fb-mi" style="flex:2"></div><div class="fb-mi" style="flex:1"></div></div><div class="fb-mi" style="margin-top:4px"></div>';
   }else if(fd.type==='address'){
     h+='<div class="fb-mi"></div><div style="display:flex;gap:6px;margin-top:4px"><div class="fb-mi" style="flex:1"></div><div class="fb-mi" style="width:60px"></div></div>';
   }else if(fd.type==='date'||fd.type==='dob'){
@@ -18571,6 +18574,14 @@ function fbSelectField(id){
 function fbUpdateField(key,val){
   const fd=fbGetField(fbState.fieldId);if(!fd)return;
   fd[key]=val;
+  // Visual properties: redraw the canvas so changes show immediately.
+  // Without this, width/required toggles set state but the canvas never
+  // updates and users think nothing happened.
+  const VISUAL_KEYS={width:1,label:1,required:1,placeholder:1};
+  if(VISUAL_KEYS[key]){
+    const ca=document.getElementById('fb-canvas-area');
+    if(ca){ca.innerHTML=fbRenderCanvas();setTimeout(fbApplyLiveStyles,0);}
+  }
 }
 
 function fbToggleFieldBool(key){
