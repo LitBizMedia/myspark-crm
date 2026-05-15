@@ -4195,30 +4195,34 @@ function renderDrawer(){
   let body='';
   if(state.dTab==='info'){
     const tags=(c.tags||[]).map(tid=>{const t=getTag(tid);return t?'<span class="tag-pill" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'</span>':''}).join('');
+    // Helper: show value or italic gray "Not set" so empty fields are visible
+    var _ns = '<em style="color:var(--text-muted);font-weight:400;font-style:italic">Not set</em>';
     body='<div class="sec-label">Contact Details</div><div class="info-grid">'
-      +'<div class="info-item"><label>Email</label><span>'+(c.email?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'–')+'</span></div>'
-      +'<div class="info-item"><label>Phone</label><span>'+(c.phone?'<a href="tel:'+esc(c.phone)+'">'+esc(c.phone)+'</a>':'–')+'</span></div>'
-      +(c.date_of_birth?'<div class="info-item"><label>Date of Birth</label><span>'+fmtDate(c.date_of_birth)+'</span></div>':'')
-      +(c.gender?'<div class="info-item"><label>Gender</label><span>'+esc(c.gender)+'</span></div>':'')
-      +(c.pronouns?'<div class="info-item"><label>Pronouns</label><span>'+esc(c.pronouns)+'</span></div>':'')
-      +(c.preferred_language?'<div class="info-item"><label>Preferred Language</label><span>'+esc(c.preferred_language)+'</span></div>':'')
-      +'<div class="info-item"><label>Company</label><span>'+esc(c.company||'–')+'</span></div>'
-      +'<div class="info-item"><label>Title</label><span>'+esc(c.title||'–')+'</span></div>'
-      +'<div class="info-item"><label>Website</label><span>'+(c.website?'<a href="'+esc(c.website)+'" target="_blank">'+esc(c.website)+'</a>':'–')+'</span></div>'
-      +'<div class="info-item"><label>Source</label><span>'+esc(c.source||'–')+'</span></div>'
+      +'<div class="info-item"><label>Email</label><span>'+(c.email?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':_ns)+'</span></div>'
+      +'<div class="info-item"><label>Phone</label><span>'+(c.phone?'<a href="tel:'+esc(c.phone)+'">'+esc(c.phone)+'</a>':_ns)+'</span></div>'
+      +'<div class="info-item"><label>Date of Birth</label><span>'+(c.date_of_birth?fmtDate(c.date_of_birth):_ns)+'</span></div>'
+      +'<div class="info-item"><label>Gender</label><span>'+(c.gender?esc(c.gender):_ns)+'</span></div>'
+      +'<div class="info-item"><label>Pronouns</label><span>'+(c.pronouns?esc(c.pronouns):_ns)+'</span></div>'
+      +'<div class="info-item"><label>Preferred Language</label><span>'+(c.preferred_language?esc(c.preferred_language):_ns)+'</span></div>'
+      +'<div class="info-item"><label>Company</label><span>'+(c.company?esc(c.company):_ns)+'</span></div>'
+      +'<div class="info-item"><label>Title</label><span>'+(c.title?esc(c.title):_ns)+'</span></div>'
+      +'<div class="info-item"><label>Website</label><span>'+(c.website?'<a href="'+esc(c.website)+'" target="_blank">'+esc(c.website)+'</a>':_ns)+'</span></div>'
+      +'<div class="info-item"><label>Source</label><span>'+(c.source?esc(c.source):_ns)+'</span></div>'
       +'<div class="info-item"><label>Status</label><span><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span>'+c.status+'</span></div>'
-      +(c.timezone?'<div class="info-item"><label>Timezone</label><span>'+esc(_contactTzLabel(c.timezone))+'</span></div>':'')
+      +'<div class="info-item"><label>Timezone</label><span>'+(c.timezone?esc(_contactTzLabel(c.timezone)):_ns)+'</span></div>'
       +'<div class="info-item"><label>Added</label><span>'+fmtDate((c.createdAt||'').split('T')[0])+'</span></div>'
       +'</div>'
       +(function(){
-        // Emergency contact section. Only show if at least one field exists.
-        var hasEmerg = c.emergency_contact_name || c.emergency_contact_phone || c.emergency_contact_relationship;
-        if(!hasEmerg)return '';
-        var line1 = '';
-        if(c.emergency_contact_name)line1 += '<strong>' + esc(c.emergency_contact_name) + '</strong>';
-        if(c.emergency_contact_relationship)line1 += (line1?' ':'')+'<span style="color:var(--text-muted)">(' + esc(c.emergency_contact_relationship) + ')</span>';
-        var line2 = c.emergency_contact_phone ? '<a href="tel:'+esc(c.emergency_contact_phone)+'">'+esc(c.emergency_contact_phone)+'</a>' : '';
-        return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+line1+(line1&&line2?'<br>':'')+line2+'</div>';
+        // Emergency contact section. Always shown so staff can see what's missing.
+        var name = c.emergency_contact_name ? '<strong>'+esc(c.emergency_contact_name)+'</strong>' : _ns;
+        var rel = c.emergency_contact_relationship ? ' <span style="color:var(--text-muted)">('+esc(c.emergency_contact_relationship)+')</span>' : '';
+        // Phone stays clickable (staff may need to call in emergency) but styled
+        // to match surface, not blue link. Small phone icon for affordance.
+        var phoneIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-1px;margin-right:4px;opacity:.7"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/></svg>';
+        var phone = c.emergency_contact_phone
+          ? '<a href="tel:'+esc(c.emergency_contact_phone)+'" style="color:var(--main-text);text-decoration:none">'+phoneIcon+esc(c.emergency_contact_phone)+'</a>'
+          : _ns;
+        return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
       })()
       +(function(){
         // Address display: prefer the new structured fields. Fall back to the
@@ -22920,28 +22924,64 @@ function toggleArchiveView(){
 }
 
 
-function confirmSave(saveFn,label){
-  if(!state.modal||!state.modal.id){saveFn();return;}
+// Two-step save with locked "Saving..." state. Pattern:
+// 1. New record (no state.modal.id): save immediately, lock button while saving
+// 2. Edit record (has state.modal.id):
+//    - First click: button changes to "Confirm Save" (orange), 3s timeout to revert
+//    - Second click within window: button locks to "Saving...", saveFn runs
+//    - After saveFn resolves: modal closes naturally (or button restores on error)
+async function confirmSave(saveFn,label){
   const btn=document.querySelector('#modal-foot .btn-primary');
-  if(!btn)return;
-  if(state._saveConfirmPending){
-    state._saveConfirmPending=false;
-    btn.textContent=state._origBtnText||'Save';
-    btn.style.background='';
-    saveFn();
-    return;
-  }
-  state._saveConfirmPending=true;
-  state._origBtnText=btn.textContent;
-  btn.textContent='Confirm Save';
-  btn.style.background='var(--orange)';
-  setTimeout(function(){
-    if(state._saveConfirmPending){
-      state._saveConfirmPending=false;
-      btn.textContent=state._origBtnText||'Save';
-      btn.style.background='';
+  if(!btn){if(typeof saveFn==='function')await saveFn();return;}
+  // Already saving: ignore further clicks
+  if(state._saveInProgress)return;
+  const isNew=!state.modal||!state.modal.id;
+  // Confirm step (skip for new records)
+  if(!isNew){
+    if(!state._saveConfirmPending){
+      state._saveConfirmPending=true;
+      state._origBtnText=btn.textContent;
+      btn.textContent='Confirm Save';
+      btn.style.background='var(--orange)';
+      setTimeout(function(){
+        if(state._saveConfirmPending&&!state._saveInProgress){
+          state._saveConfirmPending=false;
+          var b=document.querySelector('#modal-foot .btn-primary');
+          if(b){b.textContent=state._origBtnText||'Save';b.style.background='';}
+        }
+      },3000);
+      return;
     }
-  },3000);
+    state._saveConfirmPending=false;
+  }
+  // Lock and run
+  state._saveInProgress=true;
+  state._origBtnText=state._origBtnText||btn.textContent;
+  btn.textContent='Saving...';
+  btn.disabled=true;
+  btn.style.background='';
+  btn.style.opacity='0.7';
+  try{
+    if(typeof saveFn==='function')await saveFn();
+  }catch(e){
+    // saveFn surfaces its own toast; restore the button so user can retry
+    btn.textContent=state._origBtnText||'Save';
+    btn.disabled=false;
+    btn.style.opacity='';
+  }finally{
+    state._saveInProgress=false;
+    // If the modal is still open (save failed silently), make sure button can be clicked
+    var stillOpen=document.getElementById('modal-overlay');
+    if(stillOpen&&stillOpen.classList.contains('open')){
+      var b=document.querySelector('#modal-foot .btn-primary');
+      if(b&&b.disabled){
+        b.textContent=state._origBtnText||'Save';
+        b.disabled=false;
+        b.style.opacity='';
+      }
+    }
+    state._origBtnText=null;
+  }
 }
 
 
