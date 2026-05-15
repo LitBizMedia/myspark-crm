@@ -4113,32 +4113,40 @@ function openDrawer(id){
   state.drawer=id;state.dTab='info';renderDrawer();
   document.getElementById('drawer-overlay').classList.add('open');
   document.getElementById('contact-drawer').classList.add('open');
-  // Fetch full PHI (notes, allergies, warnings, credit history) since
-  // contact-list returns the slim shape with empty arrays for these.
-  // The drawer renders with whatever's in db.contacts immediately, then
-  // re-renders once the PHI loads. Audit log fires inside contact-open Lambda.
-  fetch(apiUrl('/api/subaccount/contact-open?id=' + encodeURIComponent(id)), {
-    credentials: 'include'
-  }).then(function(r){
-    if (!r.ok) throw new Error('Failed to load contact details');
-    return r.json();
-  }).then(function(data){
-    if (!data || !data.contact) return;
-    var idx = (db.contacts||[]).findIndex(function(x){return x.id===id;});
-    if (idx >= 0) {
-      // Merge PHI fields into the existing contact object so other code
-      // paths that hold a reference still see the updated data.
-      var existing = db.contacts[idx];
+  // Fetch full PHI (notes, allergies, warnings, credit history). The drawer
+  // renders with whatever's in db.contacts immediately, then re-renders once
+  // PHI loads. Audit log fires inside the contact-open Lambda.
+  refreshContactPHI(id).then(function(){
+    if (state.drawer === id) renderDrawer();
+  });
+}
+
+// Fetches a single contact's PHI (notes, allergies, warnings, credit history)
+// and merges into db.contacts[i] in place. Used by openDrawer and after any
+// allergy/warning mutation so the drawer doesn't lose PHI when fetchFromServer
+// repopulates db.contacts from the slim contact-list shape.
+async function refreshContactPHI(id){
+  if(!id)return null;
+  try{
+    const r = await fetch(apiUrl('/api/subaccount/contact-open?id=' + encodeURIComponent(id)), {
+      credentials: 'include'
+    });
+    if(!r.ok)throw new Error('contact-open returned '+r.status);
+    const data = await r.json();
+    if(!data || !data.contact)return null;
+    const idx = (db.contacts||[]).findIndex(function(x){return x.id===id;});
+    if(idx >= 0){
+      const existing = db.contacts[idx];
       existing.notes = data.contact.notes || [];
       existing.allergies = data.contact.allergies || [];
       existing.warnings = data.contact.warnings || [];
       existing.creditHistory = data.contact.creditHistory || [];
     }
-    // Re-render the drawer if it's still showing this contact
-    if (state.drawer === id) renderDrawer();
-  }).catch(function(e){
-    console.warn('contact-open fetch failed:', e.message);
-  });
+    return data.contact;
+  }catch(e){
+    console.warn('refreshContactPHI failed:', e.message);
+    return null;
+  }
 }
 function closeDrawer(){document.getElementById('drawer-overlay').classList.remove('open');document.getElementById('contact-drawer').classList.remove('open');state.drawer=null}
 function switchDTab(t){
@@ -4190,6 +4198,10 @@ function renderDrawer(){
     body='<div class="sec-label">Contact Details</div><div class="info-grid">'
       +'<div class="info-item"><label>Email</label><span>'+(c.email?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'–')+'</span></div>'
       +'<div class="info-item"><label>Phone</label><span>'+(c.phone?'<a href="tel:'+esc(c.phone)+'">'+esc(c.phone)+'</a>':'–')+'</span></div>'
+      +(c.date_of_birth?'<div class="info-item"><label>Date of Birth</label><span>'+fmtDate(c.date_of_birth)+'</span></div>':'')
+      +(c.gender?'<div class="info-item"><label>Gender</label><span>'+esc(c.gender)+'</span></div>':'')
+      +(c.pronouns?'<div class="info-item"><label>Pronouns</label><span>'+esc(c.pronouns)+'</span></div>':'')
+      +(c.preferred_language?'<div class="info-item"><label>Preferred Language</label><span>'+esc(c.preferred_language)+'</span></div>':'')
       +'<div class="info-item"><label>Company</label><span>'+esc(c.company||'–')+'</span></div>'
       +'<div class="info-item"><label>Title</label><span>'+esc(c.title||'–')+'</span></div>'
       +'<div class="info-item"><label>Website</label><span>'+(c.website?'<a href="'+esc(c.website)+'" target="_blank">'+esc(c.website)+'</a>':'–')+'</span></div>'
@@ -4197,7 +4209,18 @@ function renderDrawer(){
       +'<div class="info-item"><label>Status</label><span><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span>'+c.status+'</span></div>'
       +(c.timezone?'<div class="info-item"><label>Timezone</label><span>'+esc(_contactTzLabel(c.timezone))+'</span></div>':'')
       +'<div class="info-item"><label>Added</label><span>'+fmtDate((c.createdAt||'').split('T')[0])+'</span></div>'
-      +'</div>'+(function(){
+      +'</div>'
+      +(function(){
+        // Emergency contact section. Only show if at least one field exists.
+        var hasEmerg = c.emergency_contact_name || c.emergency_contact_phone || c.emergency_contact_relationship;
+        if(!hasEmerg)return '';
+        var line1 = '';
+        if(c.emergency_contact_name)line1 += '<strong>' + esc(c.emergency_contact_name) + '</strong>';
+        if(c.emergency_contact_relationship)line1 += (line1?' ':'')+'<span style="color:var(--text-muted)">(' + esc(c.emergency_contact_relationship) + ')</span>';
+        var line2 = c.emergency_contact_phone ? '<a href="tel:'+esc(c.emergency_contact_phone)+'">'+esc(c.emergency_contact_phone)+'</a>' : '';
+        return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+line1+(line1&&line2?'<br>':'')+line2+'</div>';
+      })()
+      +(function(){
         // Address display: prefer the new structured fields. Fall back to the
         // legacy single-line `address` field for contacts that haven't been
         // edited since the field split.
@@ -21490,7 +21513,7 @@ async function saveAllergy(){
     } else {
       await contactAllergyCreate(contactId, {allergen:allergen, severity:severity, reaction:reaction, notes:notes});
     }
-    await fetchFromServer();
+    await refreshContactPHI(contactId);
     closeModal();
     renderDrawer();
     renderContacts();
@@ -21515,7 +21538,7 @@ async function confirmDelAllergy(){
   if(!allergyId) return;
   try{
     await contactAllergyDelete(allergyId);
-    await fetchFromServer();
+    if(state.drawer)await refreshContactPHI(state.drawer);
     closeModal();
     renderDrawer();
     renderContacts();
@@ -21633,7 +21656,7 @@ async function saveWarning(){
     } else {
       await contactWarningCreate(contactId, severity, text);
     }
-    await fetchFromServer();
+    await refreshContactPHI(contactId);
     closeModal();
     renderDrawer();
     renderContacts();
@@ -21658,7 +21681,7 @@ async function confirmDelWarning(){
   if(!warningId) return;
   try{
     await contactWarningDelete(warningId);
-    await fetchFromServer();
+    if(state.drawer)await refreshContactPHI(state.drawer);
     closeModal();
     renderDrawer();
     renderContacts();
