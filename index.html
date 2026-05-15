@@ -18268,7 +18268,7 @@ function renderFormsList(){
         '<div style="display:flex;gap:5px" onclick="event.stopPropagation()">'+
         '<button class="btn btn-ghost btn-sm" onclick="fbOpenBuilder(\''+f.id+'\')">Edit</button>'+
         '<button class="btn btn-ghost btn-sm" onclick="fbOpenSubs(\''+f.id+'\')">Submissions</button>'+
-        '<button class="btn btn-ghost btn-sm" onclick="fbOpenEmbed(\''+f.id+'\')">Embed</button>'+
+        '<button class="btn btn-ghost btn-sm" onclick="fbOpenEmbed(\''+f.id+'\')">Share</button>'+
         '<button class="btn btn-ghost btn-sm" onclick="fbDuplicate(\''+f.id+'\')">Copy</button>'+
         '<button class="btn btn-danger btn-sm" onclick="fbDeleteForm(\''+f.id+'\')">Delete</button>'+
         '</div></div>';
@@ -19472,7 +19472,7 @@ function fbOpenEmbed(id){
 
   let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
     +'<button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button>'
-    +'<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Embed: '+esc(f.name)+'</div></div>';
+    +'<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Share: '+esc(f.name)+'</div></div>';
   h+='<div style="display:flex;flex-direction:column;gap:12px">';
   // Form URL
   h+='<div style="'+cardCss+'">'
@@ -19486,12 +19486,6 @@ function fbOpenEmbed(id){
     +'<div style="'+subCss+'">Works with Wordpress, Oxygen, Breakdance, Squarespace, Webflow. Includes auto-resize script.</div>'
     +'<div class="fb-code-block">'+esc(iframe)+'</div>'
     +'<button class="btn btn-purple btn-sm" onclick="fbCopyText(\'iframe\')">Copy iFrame</button></div>';
-  // Script
-  h+='<div style="'+cardCss+'">'
-    +'<div style="'+headingCss+'">Script Embed</div>'
-    +'<div style="'+subCss+'">Alternative for advanced setups. Paste in a Code Block, custom HTML widget, or before the closing body tag.</div>'
-    +'<div class="fb-code-block">'+esc(script)+'</div>'
-    +'<button class="btn btn-purple btn-sm" onclick="fbCopyText(\'script\')">Copy Script</button></div>';
   h+='</div>';
   el.innerHTML=h;
 }
