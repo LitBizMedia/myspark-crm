@@ -106,6 +106,7 @@ async function handler(req, res) {
            emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
            source, type, status, archived, tags, custom_field_values,
            credit_balance, square_customer_id, square_cards,
+           sms_consent_transactional, sms_consent_marketing, sms_consent_updated_at, sms_consent_source,
            created_at, updated_at, created_by, updated_by
          FROM contacts
          WHERE subaccount_id = $1

@@ -60,6 +60,10 @@ function rowToCamel(row) {
     creditBalance: row.credit_balance != null ? parseFloat(row.credit_balance) : 0,
     squareCustomerId: row.square_customer_id,
     squareCards: row.square_cards || [],
+    sms_consent_transactional: !!row.sms_consent_transactional,
+    sms_consent_marketing: !!row.sms_consent_marketing,
+    sms_consent_updated_at: row.sms_consent_updated_at instanceof Date ? row.sms_consent_updated_at.toISOString() : row.sms_consent_updated_at,
+    sms_consent_source: row.sms_consent_source,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     createdBy: row.created_by,
@@ -77,6 +81,7 @@ const CONTACT_COLUMNS = `
   emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
   source, type, status, archived, tags, custom_field_values,
   credit_balance, square_customer_id, square_cards,
+  sms_consent_transactional, sms_consent_marketing, sms_consent_updated_at, sms_consent_source,
   created_at, updated_at, created_by, updated_by
 `;
 
