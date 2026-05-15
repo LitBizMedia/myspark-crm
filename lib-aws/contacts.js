@@ -206,8 +206,67 @@ async function createStubContactFromSms(subaccountId, phone) {
   }
 }
 
+// Look up a single contact WITH all PHI joins (notes, allergies, warnings).
+// Used by contact-open endpoint when the drawer opens. Heavier query so don't
+// use this for bulk listings; that's what contact-list is for.
+async function getContactByIdWithPHI(subaccountId, contactId) {
+  if (!subaccountId || !contactId) return null;
+  try {
+    const contact = await getContactById(subaccountId, contactId);
+    if (!contact) return null;
+
+    const [notes, allergies, warnings] = await Promise.all([
+      db.query(
+        `SELECT id, text, author_id, author_name, created_at, updated_at
+         FROM contact_notes WHERE contact_id = $1 AND subaccount_id = $2
+         ORDER BY created_at DESC`,
+        [contactId, subaccountId]
+      ),
+      db.query(
+        `SELECT id, allergen, reaction, severity, notes, created_at, updated_at, created_by, updated_by
+         FROM contact_allergies WHERE contact_id = $1 AND subaccount_id = $2
+         ORDER BY created_at DESC`,
+        [contactId, subaccountId]
+      ),
+      db.query(
+        `SELECT id, severity, text, created_at, updated_at, created_by, updated_by
+         FROM contact_warnings WHERE contact_id = $1 AND subaccount_id = $2
+         ORDER BY created_at DESC`,
+        [contactId, subaccountId]
+      )
+    ]);
+
+    contact.notes = notes.rows.map(n => ({
+      id: n.id, text: n.text,
+      authorId: n.author_id, authorName: n.author_name,
+      createdAt: n.created_at instanceof Date ? n.created_at.toISOString() : n.created_at,
+      updatedAt: n.updated_at instanceof Date ? n.updated_at.toISOString() : n.updated_at
+    }));
+    contact.allergies = allergies.rows.map(a => ({
+      id: a.id, allergen: a.allergen, reaction: a.reaction,
+      severity: a.severity, notes: a.notes,
+      createdAt: a.created_at instanceof Date ? a.created_at.toISOString() : a.created_at,
+      updatedAt: a.updated_at instanceof Date ? a.updated_at.toISOString() : a.updated_at,
+      createdBy: a.created_by, updatedBy: a.updated_by
+    }));
+    contact.warnings = warnings.rows.map(w => ({
+      id: w.id, severity: w.severity, text: w.text,
+      createdAt: w.created_at instanceof Date ? w.created_at.toISOString() : w.created_at,
+      updatedAt: w.updated_at instanceof Date ? w.updated_at.toISOString() : w.updated_at,
+      createdBy: w.created_by, updatedBy: w.updated_by
+    }));
+    contact.creditHistory = [];
+
+    return contact;
+  } catch (e) {
+    console.error('getContactByIdWithPHI error:', e.message);
+    return null;
+  }
+}
+
 module.exports = {
   getContactById,
+  getContactByIdWithPHI,
   getContactByEmail,
   getContactByPhone,
   getAllContacts,

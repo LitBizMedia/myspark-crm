@@ -4113,12 +4113,31 @@ function openDrawer(id){
   state.drawer=id;state.dTab='info';renderDrawer();
   document.getElementById('drawer-overlay').classList.add('open');
   document.getElementById('contact-drawer').classList.add('open');
-  // Audit: PHI access via contact drawer
-  var c=getContact(id);
-  logSubaccountAudit('subaccount.contact.view', {
-    targetId: id,
-    targetType: 'contact',
-    metadata: { contact_name: (c && c.name) || null }
+  // Fetch full PHI (notes, allergies, warnings, credit history) since
+  // contact-list returns the slim shape with empty arrays for these.
+  // The drawer renders with whatever's in db.contacts immediately, then
+  // re-renders once the PHI loads. Audit log fires inside contact-open Lambda.
+  fetch(apiUrl('/api/subaccount/contact-open?id=' + encodeURIComponent(id)), {
+    credentials: 'include'
+  }).then(function(r){
+    if (!r.ok) throw new Error('Failed to load contact details');
+    return r.json();
+  }).then(function(data){
+    if (!data || !data.contact) return;
+    var idx = (db.contacts||[]).findIndex(function(x){return x.id===id;});
+    if (idx >= 0) {
+      // Merge PHI fields into the existing contact object so other code
+      // paths that hold a reference still see the updated data.
+      var existing = db.contacts[idx];
+      existing.notes = data.contact.notes || [];
+      existing.allergies = data.contact.allergies || [];
+      existing.warnings = data.contact.warnings || [];
+      existing.creditHistory = data.contact.creditHistory || [];
+    }
+    // Re-render the drawer if it's still showing this contact
+    if (state.drawer === id) renderDrawer();
+  }).catch(function(e){
+    console.warn('contact-open fetch failed:', e.message);
   });
 }
 function closeDrawer(){document.getElementById('drawer-overlay').classList.remove('open');document.getElementById('contact-drawer').classList.remove('open');state.drawer=null}

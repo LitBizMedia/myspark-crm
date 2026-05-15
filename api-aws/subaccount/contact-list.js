@@ -37,16 +37,46 @@ function contactToFrontend(row) {
     email: row.email,
     phone: row.phone,
     company: row.company,
+    title: row.title,
+    website: row.website,
+    date_of_birth: row.date_of_birth instanceof Date ?
+      (function(d){
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth()+1).padStart(2,'0');
+        const da = String(d.getUTCDate()).padStart(2,'0');
+        return y+'-'+m+'-'+da;
+      })(row.date_of_birth) :
+      row.date_of_birth,
+    gender: row.gender,
+    pronouns: row.pronouns,
+    preferred_language: row.preferred_language,
+    address_line1: row.address_line1,
+    address_line2: row.address_line2,
+    city: row.city,
+    state: row.state,
+    postal_code: row.postal_code,
+    country: row.country,
+    timezone: row.timezone,
+    emergency_contact_name: row.emergency_contact_name,
+    emergency_contact_phone: row.emergency_contact_phone,
+    emergency_contact_relationship: row.emergency_contact_relationship,
+    source: row.source,
     type: row.type,
     status: row.status,
     archived: !!row.archived,
     tags: row.tags || [],
+    customFieldValues: row.custom_field_values || {},
+    creditBalance: row.credit_balance != null ? parseFloat(row.credit_balance) : 0,
+    squareCustomerId: row.square_customer_id,
+    squareCards: row.square_cards || [],
     notes: [],
     warnings: [],
     allergies: [],
     creditHistory: [],
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
-    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by
   };
 }
 
@@ -63,9 +93,13 @@ async function handler(req, res) {
       `SELECT
          id, external_id,
          first_name, last_name, display_name,
-         email, phone, company,
-         type, status, archived, tags,
-         created_at, updated_at
+         email, phone, company, title, website,
+         date_of_birth, gender, pronouns, preferred_language,
+         address_line1, address_line2, city, state, postal_code, country, timezone,
+         emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+         source, type, status, archived, tags, custom_field_values,
+         credit_balance, square_customer_id, square_cards,
+         created_at, updated_at, created_by, updated_by
        FROM contacts
        WHERE subaccount_id = $1
        ORDER BY created_at ASC`,
