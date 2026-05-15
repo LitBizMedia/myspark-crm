@@ -19573,25 +19573,90 @@ function fbCheckEmbedMode(){
   return true;
 }
 
-function fbHandleEmbedSubmit(){
+async function fbHandleEmbedSubmit(){
   const params=new URLSearchParams(window.location.search);
   const fid=params.get('fbembed');
   const f=(db.forms||[]).find(function(x){return x.id===fid;});if(!f)return;
+
+  // Lock the submit button to prevent double-submit
+  const btn=document.querySelector('#fb-embed-form button');
+  const origBtnText=btn?btn.textContent:'Submit';
+  if(btn){btn.disabled=true;btn.textContent='Submitting...';btn.style.opacity='0.7';}
+
+  // Collect all form values, including content-type fields that include consent
   const data={};
   f.pages.forEach(function(pg){pg.fields.forEach(function(fd){
     if(fd.type==='captcha'||FB_CONTENT_TYPES.includes(fd.type))return;
     if(fd.type==='hidden'){data[fd.field_key||fd.id]=fd.settings&&fd.settings.value||'';return;}
+    if(fd.type==='consent'){
+      // SMS consent field stores two booleans as an object
+      const tx=document.querySelector('input[name="consent_transactional"]');
+      const mk=document.querySelector('input[name="consent_marketing"]');
+      data.sms_consent={
+        transactional: tx ? !!tx.checked : false,
+        marketing: mk ? !!mk.checked : false
+      };
+      return;
+    }
     const key=fd.field_key||fd.id;
     const el=document.querySelector('[data-fieldid="'+fd.id+'"]');
     if(el)data[key]=el.type==='checkbox'?el.checked:el.value;
   });});
+
+  // Honeypot check
+  const hp=document.querySelector('input[name="_hp"]');
+  const honeypotVal=hp?hp.value:'';
+
+  // Post to the server first; only mark as success if it lands
+  let apiResult=null;
+  try{
+    const resp=await fetch(apiUrl('/api/forms/submit'),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        subaccount_id: state.subaccountId,
+        form_id: fid,
+        form_name: f.name,
+        notify_email: (f.settings&&f.settings.notifyEmail)||'',
+        submission_data: data,
+        page_url: window.location.href,
+        honeypot: honeypotVal
+      })
+    });
+    apiResult=await resp.json();
+    if(!resp.ok)throw new Error(apiResult.error||'submit failed');
+  }catch(e){
+    console.error('form submit failed:', e);
+    if(btn){btn.disabled=false;btn.textContent=origBtnText;btn.style.opacity='';}
+    const errEl=document.createElement('div');
+    errEl.style.cssText='color:#ff4000;font-size:13px;margin-top:10px;text-align:center';
+    errEl.textContent='Submission failed. Please try again.';
+    const form=document.getElementById('fb-embed-form');
+    if(form)form.appendChild(errEl);
+    return;
+  }
+
+  // Server accepted. Save submission locally too (legacy blob, to be migrated).
   if(!db.formSubmissions)db.formSubmissions=[];
-  const sub={id:'fsub-'+uid(),formId:fid,data:data,contactId:null,createdAt:now_(),pageUrl:window.location.href};
+  const sub={
+    id: (apiResult&&apiResult.submission_id)||('fsub-'+uid()),
+    formId: fid,
+    data: data,
+    contactId: null,
+    createdAt: now_(),
+    pageUrl: window.location.href
+  };
   db.formSubmissions.push(sub);
   if(f.settings.createContact||f.settings.updateContact)fbCreateContactFromSub(sub,f);
-  saveData();
-  if(f.settings.submitAction==='redirect'&&f.settings.redirectUrl){window.location.href=f.settings.redirectUrl;}
-  else{document.getElementById('fb-embed-form').innerHTML='<div style="text-align:center;padding:40px 20px"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" style="margin:0 auto 12px;display:block" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p style="font-size:16px;font-weight:600;margin:0">'+esc(f.settings.successMessage||'Thank you for your submission!')+'</p></div>';window.parent.postMessage({fbResize:240},'*');}
+  try{saveData();}catch(e){console.warn('blob save failed:',e);}
+
+  // Success: redirect or show message
+  if(f.settings.submitAction==='redirect'&&f.settings.redirectUrl){
+    window.location.href=f.settings.redirectUrl;
+  }else{
+    document.getElementById('fb-embed-form').innerHTML='<div style="text-align:center;padding:40px 20px"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" style="margin:0 auto 12px;display:block" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p style="font-size:16px;font-weight:600;margin:0">'+esc(f.settings.successMessage||'Thank you for your submission!')+'</p></div>';
+    window.parent.postMessage({fbResize:240},'*');
+  }
 }
 
 // fbApplyLiveStyles - update canvas live when style changes
