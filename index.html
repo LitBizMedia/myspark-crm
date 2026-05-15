@@ -19686,8 +19686,31 @@ function fbCheckEmbedMode(){
         +'<button onclick="fbHandleEmbedSubmit()" style="background:'+(st.buttonBg||'#ff4000')+';color:'+(st.buttonTextColor||'#fff')+';border:none;border-radius:'+(st.borderRadius||'8')+'px;padding:'+(st.buttonSize==='large'?'14px 36px':'11px 28px')+';font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;width:'+(st.buttonWidth==='full'?'100%':'auto')+'">'+esc(st.buttonText||'Submit')+'</button>'
         +'</div></div>';
       document.querySelectorAll('.fb-prev-sig').forEach(fbInitSigCanvas);
-      // Notify parent iframe of our rendered height
-      try{window.parent.postMessage({fbResize: document.body.scrollHeight + 40}, '*');}catch(e){}
+      // Notify parent iframe of our rendered height. Send on load, on window
+      // resize, and whenever the form mutates (field validation messages,
+      // success state, etc). The parent iframe element listens for fbResize
+      // and adjusts its height accordingly.
+      function _fbPostHeight(){
+        try{
+          var h = Math.max(
+            document.body.scrollHeight,
+            document.documentElement.scrollHeight,
+            document.body.offsetHeight,
+            document.documentElement.offsetHeight
+          ) + 20;
+          window.parent.postMessage({fbResize: h}, '*');
+        }catch(e){}
+      }
+      _fbPostHeight();
+      // Re-measure shortly after, in case fonts/images shifted layout
+      setTimeout(_fbPostHeight, 100);
+      setTimeout(_fbPostHeight, 500);
+      window.addEventListener('resize', _fbPostHeight);
+      // Watch for DOM mutations (form state changes, validation messages)
+      try{
+        var _mo = new MutationObserver(_fbPostHeight);
+        _mo.observe(document.body, {childList:true, subtree:true, attributes:true, characterData:true});
+      }catch(e){}
     })
     .catch(function(err){
       console.error('fbCheckEmbedMode:', err);
