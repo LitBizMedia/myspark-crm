@@ -17953,10 +17953,13 @@ function renderForms(){
   var defaultTab=role==='admin'?'forms':'contracts';
   if(!state.formsTab||state.formsTab==='forms'&&role!=='admin') state.formsTab=defaultTab;
   var tab=state.formsTab;
+  // CRITICAL: if user is inside the builder, embed, or submissions view,
+  // bail completely. Don't even toggle tab visibility, since that's what
+  // was wiping the in-progress view. Only the user clicking a tab button
+  // (which calls switchFormsTab directly) should change visibility.
+  if(window.fbState && fbState.view && fbState.view !== 'list')return;
   switchFormsTab(tab);
-  // Only redraw the list when the user is actually on it. Otherwise the
-  // background poll would wipe the editor / embed / submissions view.
-  if(tab==='forms'&&(!window.fbState||!fbState.view||fbState.view==='list'))renderFormsList();
+  if(tab==='forms')renderFormsList();
 }
 
 function switchFormsTab(tab){
@@ -18863,6 +18866,14 @@ function fbCreateContactFromSub(sub,form){
 // =====================================================
 // FORM BUILDER - Embed
 // =====================================================
+// Copy embed code values to the clipboard. Values stashed on window.fbEmbed
+// to avoid messy JSON.stringify-inside-onclick attribute escaping.
+window.fbEmbed = window.fbEmbed || {};
+function fbCopyText(key){
+  const text = window.fbEmbed[key];
+  if(!text){ toast('Nothing to copy.','error'); return; }
+  navigator.clipboard.writeText(text).then(function(){ toast('Copied!','success'); });
+}
 
 // =====================================================
 // FORM BUILDER - Embed renderer (standalone page)
@@ -19365,35 +19376,44 @@ function fbOpenEmbed(id){
   const src=baseUrl+'?fbembed='+id;
   const script='<script>\n(function(){\n  var f=document.createElement("iframe");\n  f.src="'+src+'";\n  f.style.cssText="width:100%;border:none;min-height:400px";\n  f.onload=function(){window.addEventListener("message",function(e){if(e.data&&e.data.fbResize)f.style.height=e.data.fbResize+"px";});};\n  document.currentScript.parentNode.insertBefore(f,document.currentScript);\n})();\n<\/script>';
   const iframe='<iframe src="'+src+'" style="width:100%;border:none;min-height:400px" frameborder="0"></iframe>';
+
+  // Stash the codes so the copy buttons can grab them without onclick escaping hell
+  window.fbEmbed = { src: src, iframe: iframe, script: script };
+
+  const cardCss = 'background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px';
+  const headingCss = 'font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px;color:var(--text)';
+  const subCss = 'font-size:12px;color:var(--text-muted);margin-bottom:8px';
+  const inputCss = 'flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:12px;outline:none;font-family:monospace;min-width:0';
+
   let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
     +'<button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button>'
-    +'<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Embed: '+esc(f.name)+'</div></div>';
+    +'<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700;color:var(--text)">Embed: '+esc(f.name)+'</div></div>';
   if(isLocal&&!liveBase){h+='<div class="warn-box" style="margin-bottom:14px"><strong>Running locally.</strong> Enter your deployed domain below so embed codes use the correct URL when you go live.</div>';}
   h+='<div style="display:flex;flex-direction:column;gap:12px">';
-  // Live URL setter
-  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">'
-    +'<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">Your Live URL</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Set once when you deploy. All embed codes update automatically.</div>'
-    +'<div style="display:flex;gap:8px"><input id="fb-live-url" type="text" value="'+esc(liveBase||'')+'" placeholder="https://yourdomain.com/myspark-crm.html" style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:13px;outline:none;font-family:monospace;min-width:0">'
+  // Live URL
+  h+='<div style="'+cardCss+'">'
+    +'<div style="'+headingCss+'">Your Live URL</div>'
+    +'<div style="'+subCss+'">Set once when you deploy. All embed codes update automatically.</div>'
+    +'<div style="display:flex;gap:8px"><input id="fb-live-url" type="text" value="'+esc(liveBase||'')+'" placeholder="https://yourdomain.com/myspark-crm.html" style="'+inputCss+';font-size:13px">'
     +'<button class="btn btn-purple btn-sm" onclick="db.settings.appLiveUrl=document.getElementById(\'fb-live-url\').value.trim();saveData();fbOpenEmbed(\''+id+'\')">Save</button></div></div>';
   // Form URL
-  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">'
-    +'<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">Form URL</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Share directly or use as a standalone page link.</div>'
-    +'<div style="display:flex;gap:7px;align-items:center"><input type="text" value="'+esc(src)+'" readonly style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:12px;outline:none;font-family:monospace;min-width:0">'
-    +'<button class="btn btn-purple btn-sm" style="flex-shrink:0" onclick="navigator.clipboard.writeText('+JSON.stringify(src)+').then(function(){toast(\'Copied!\',\'success\')})">Copy</button></div></div>';
+  h+='<div style="'+cardCss+'">'
+    +'<div style="'+headingCss+'">Form URL</div>'
+    +'<div style="'+subCss+'">Share directly or use as a standalone page link.</div>'
+    +'<div style="display:flex;gap:7px;align-items:center"><input type="text" value="'+esc(src)+'" readonly style="'+inputCss+'">'
+    +'<button class="btn btn-purple btn-sm" style="flex-shrink:0" onclick="fbCopyText(\'src\')">Copy</button></div></div>';
   // iFrame
-  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">'
-    +'<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">iFrame Embed</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Works with Wordpress, Oxygen, Breakdance, Squarespace, Webflow.</div>'
+  h+='<div style="'+cardCss+'">'
+    +'<div style="'+headingCss+'">iFrame Embed</div>'
+    +'<div style="'+subCss+'">Works with Wordpress, Oxygen, Breakdance, Squarespace, Webflow.</div>'
     +'<div class="fb-code-block">'+esc(iframe)+'</div>'
-    +'<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(iframe)+').then(function(){toast(\'Copied!\',\'success\')})">Copy iFrame</button></div>';
+    +'<button class="btn btn-purple btn-sm" onclick="fbCopyText(\'iframe\')">Copy iFrame</button></div>';
   // Script
-  h+='<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px">'
-    +'<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px">Script Embed</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Auto-resizing. Paste before your closing body tag.</div>'
+  h+='<div style="'+cardCss+'">'
+    +'<div style="'+headingCss+'">Script Embed</div>'
+    +'<div style="'+subCss+'">Auto-resizing. Paste before your closing body tag.</div>'
     +'<div class="fb-code-block">'+esc(script)+'</div>'
-    +'<button class="btn btn-purple btn-sm" onclick="navigator.clipboard.writeText('+JSON.stringify(script)+').then(function(){toast(\'Copied!\',\'success\')})">Copy Script</button></div>';
+    +'<button class="btn btn-purple btn-sm" onclick="fbCopyText(\'script\')">Copy Script</button></div>';
   h+='</div>';
   el.innerHTML=h;
 }
