@@ -19701,7 +19701,9 @@ async function fbHandleEmbedSubmit(){
         notify_email: (f.settings&&f.settings.notifyEmail)||'',
         submission_data: data,
         page_url: window.location.href,
-        honeypot: honeypotVal
+        honeypot: honeypotVal,
+        create_contact: f.settings&&f.settings.createContact!==false,
+        update_contact: f.settings&&f.settings.updateContact!==false
       })
     });
     apiResult=await resp.json();
@@ -19718,17 +19720,19 @@ async function fbHandleEmbedSubmit(){
   }
 
   // Server accepted. Save submission locally too (legacy blob, to be migrated).
+  // Contact creation/update happens server-side now; capture the resolved
+  // contact_id from the API response.
   if(!db.formSubmissions)db.formSubmissions=[];
   const sub={
     id: (apiResult&&apiResult.submission_id)||('fsub-'+uid()),
     formId: fid,
     data: data,
-    contactId: null,
+    contactId: (apiResult&&apiResult.contact_id)||null,
+    contactAction: (apiResult&&apiResult.contact_action)||'none',
     createdAt: now_(),
     pageUrl: window.location.href
   };
   db.formSubmissions.push(sub);
-  if(f.settings.createContact||f.settings.updateContact)fbCreateContactFromSub(sub,f);
   try{saveData();}catch(e){console.warn('blob save failed:',e);}
 
   // Success: redirect or show message
