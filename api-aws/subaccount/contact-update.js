@@ -14,11 +14,14 @@ const ALLOWED_FIELDS = [
   'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship',
   'source', 'type', 'status', 'archived',
   'tags', 'custom_field_values',
-  'square_customer_id', 'square_cards'
+  'square_customer_id', 'square_cards',
+  'sms_consent_transactional', 'sms_consent_marketing'
 ];
 
 const JSONB_FIELDS = new Set(['tags', 'custom_field_values', 'square_cards']);
-const BOOLEAN_FIELDS = new Set(['archived']);
+const BOOLEAN_FIELDS = new Set(['archived', 'sms_consent_transactional', 'sms_consent_marketing']);
+// Fields that, when present in the request, auto-stamp consent metadata
+const CONSENT_TRIGGER_FIELDS = new Set(['sms_consent_transactional', 'sms_consent_marketing']);
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -34,10 +37,14 @@ async function handler(req, res) {
     let p = 3;
     const changedFields = [];
 
+    let consentTouched = false;
     for (const field of ALLOWED_FIELDS) {
       if (!(field in b)) continue;
       let value = b[field];
 
+      if (CONSENT_TRIGGER_FIELDS.has(field)) {
+        consentTouched = true;
+      }
       if (JSONB_FIELDS.has(field)) {
         value = JSON.stringify(value == null ? (field === 'custom_field_values' ? {} : []) : value);
       } else if (BOOLEAN_FIELDS.has(field)) {
@@ -57,8 +64,21 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'No updatable fields provided' });
     }
 
+    // When SMS consent is being changed, auto-stamp the updated_at timestamp
+    // and source = 'manual' so we have an audit trail. The form-submit Lambda
+    // sets source = 'form_submission' for consent captured via forms.
+    if (consentTouched) {
+      sets.push(`sms_consent_updated_at = ${p}`);
+      params.push(new Date().toISOString());
+      p++;
+      sets.push(`sms_consent_source = ${p}`);
+      params.push('manual');
+      p++;
+      changedFields.push('sms_consent_updated_at', 'sms_consent_source');
+    }
+
     sets.push(`updated_at = NOW()`);
-    sets.push(`updated_by = $${p}`);
+    sets.push(`updated_by = ${p}`);
     params.push(auth.user_id);
 
     const sql = `UPDATE contacts SET ${sets.join(', ')} WHERE id = $1 AND subaccount_id = $2 RETURNING id, display_name`;

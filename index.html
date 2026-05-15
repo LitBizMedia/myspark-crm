@@ -6712,6 +6712,29 @@ function openContactModal(id){
     +'<div class="form-group"><label>Timezone <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><select id="cf-tz">'+_contactTzOpts(c&&c.timezone||'')+'</select></div>'
     +'<div style="margin:8px 0 12px 0"><a href="#" id="cf-emerg-link" onclick="cfToggleEmergency(event)" style="font-size:12px;color:var(--purple);text-decoration:none">'+_emergencyLabel+'</a></div>'
     +'<div id="cf-emerg-wrap" style="display:'+_showEmergency+';margin-top:-6px"><div class="form-row"><div class="form-group" style="flex:2"><label>Emergency Contact Name</label><input id="cf-emerg-name" type="text" value="'+esc(c&&c.emergency_contact_name||'')+'"></div><div class="form-group" style="flex:1"><label>Relationship</label><input id="cf-emerg-rel" type="text" value="'+esc(c&&c.emergency_contact_relationship||'')+'" placeholder="e.g. Spouse"></div></div><div class="form-group"><label>Emergency Contact Phone</label><input id="cf-emerg-phone" type="tel" value="'+esc(c&&c.emergency_contact_phone||'')+'"></div></div>'
+    +(function(){
+      var tx = c && c.sms_consent_transactional ? ' checked' : '';
+      var mk = c && c.sms_consent_marketing ? ' checked' : '';
+      var meta = '';
+      if(c && c.sms_consent_updated_at){
+        var d = new Date(c.sms_consent_updated_at);
+        if(!isNaN(d.getTime())){
+          meta = 'Last updated ' + fmtDate(d.toISOString().split('T')[0]);
+          if(c.sms_consent_source) meta += ' via ' + esc(c.sms_consent_source.replace(/_/g,' '));
+        }
+      }
+      return '<div class="form-group" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+        +'<label style="margin-bottom:6px">SMS Consent (A2P Compliance)</label>'
+        +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">'
+        +'Toggling here records this as a manual consent capture. Use only when the patient has given consent in person or by phone.'
+        +'</div>'
+        +'<div style="display:flex;flex-direction:column;gap:8px">'
+        +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500"><input type="checkbox" id="cf-consent-tx"'+tx+' style="width:16px;height:16px;cursor:pointer">Transactional SMS (appointment reminders, account notifications)</label>'
+        +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500"><input type="checkbox" id="cf-consent-mk"'+mk+' style="width:16px;height:16px;cursor:pointer">Marketing SMS (promotions, broadcasts, offers)</label>'
+        +'</div>'
+        +(meta ? '<div style="font-size:11px;color:var(--text-muted);margin-top:8px">'+meta+'</div>' : '')
+        +'</div>';
+    })()
     +'<div class="form-group"><label>Tags</label><div class="tag-sel-wrap" id="tag-sel-c">'+tagOpts+'</div></div>';
   openModal(c?'Edit Contact':'Add Contact',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveContact,\'contact\')">Save Contact</button>','modal-lg');
 }
@@ -6720,6 +6743,7 @@ function toggleTagOpt(btn){btn.classList.toggle('selected');const t=getTag(btn.d
 function getSelTags(){return[...document.querySelectorAll('#tag-sel-c .tag-opt.selected')].map(b=>b.dataset.tag)}
 
 async function saveContact(){
+  const c = state.modal && state.modal.id ? getContact(state.modal.id) : null;
   const _fn=((document.getElementById('cf-firstname')||{}).value||'').trim();
   const _ln=((document.getElementById('cf-lastname')||{}).value||'').trim();
   const _nf=document.getElementById('cf-name');
@@ -6756,6 +6780,22 @@ async function saveContact(){
     status:document.getElementById('cf-status').value,
     tags:getSelTags()
   };
+  // Only include consent fields if they were CHANGED. The contact-update
+  // Lambda auto-stamps sms_consent_updated_at + source='manual' whenever it
+  // sees consent fields in the request. We don't want every contact save to
+  // reset the consent timestamp.
+  var _txEl = document.getElementById('cf-consent-tx');
+  var _mkEl = document.getElementById('cf-consent-mk');
+  if(_txEl){
+    var _txNew = !!_txEl.checked;
+    var _txOld = !!(c && c.sms_consent_transactional);
+    if(_txNew !== _txOld) data.sms_consent_transactional = _txNew;
+  }
+  if(_mkEl){
+    var _mkNew = !!_mkEl.checked;
+    var _mkOld = !!(c && c.sms_consent_marketing);
+    if(_mkNew !== _mkOld) data.sms_consent_marketing = _mkNew;
+  }
   const isNew=!state.modal.id;
   try{
     if(isNew){
