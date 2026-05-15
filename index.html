@@ -17859,7 +17859,9 @@ function renderForms(){
   if(!state.formsTab||state.formsTab==='forms'&&role!=='admin') state.formsTab=defaultTab;
   var tab=state.formsTab;
   switchFormsTab(tab);
-  if(tab==='forms')renderFormsList();
+  // Only redraw the list when the user is actually on it. Otherwise the
+  // background poll would wipe the editor / embed / submissions view.
+  if(tab==='forms'&&(!window.fbState||!fbState.view||fbState.view==='list'))renderFormsList();
 }
 
 function switchFormsTab(tab){
