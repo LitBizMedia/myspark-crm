@@ -1039,7 +1039,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .fb-sub-row:hover{border-color:var(--purple-border)}
 /* Preview overlay */
 .fb-prev-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
-.fb-prev-card{background:#f4f4f8;border-radius:14px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.fb-prev-card{background:#f4f4f8;border-radius:14px;width:100%;max-width:800px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.fb-form-fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 12px;grid-auto-flow:row dense}
+.fb-form-fields-grid > .fb-prev-field{grid-column:span 2}
+.fb-form-fields-grid > .fb-prev-field.half-w{grid-column:span 1}
+.fb-form-fields-grid > hr{grid-column:span 2}
 .fb-prev-head{padding:22px 24px 16px;border-bottom:1px solid #e0e0e8}
 .fb-prev-head h2{font-size:18px;font-weight:700;color:#111;margin:0}
 .fb-prev-body{padding:20px 24px 28px}
@@ -19222,17 +19226,18 @@ function fbRenderFormHTML(f,st,radius){
   const accent=st&&st.primaryColor||'#6b21ea';
   const iStyle='width:100%;border:1px solid '+border+';border-radius:'+r+'px;padding:9px 12px;font-size:14px;color:'+txt+';background:'+fieldBg+';outline:none;box-sizing:border-box;font-family:inherit';
   const taStyle='width:100%;border:1px solid '+border+';border-radius:'+r+'px;padding:9px 12px;font-size:14px;color:'+txt+';background:'+fieldBg+';outline:none;box-sizing:border-box;font-family:inherit;min-height:80px;resize:vertical';
-  let h='';
+  let h='<div class="fb-form-fields-grid">';
   const allFields=f.pages.reduce(function(arr,pg){return arr.concat(pg.fields);},[]);
   allFields.forEach(function(fd){
     if(fd.type==='captcha'||fd.type==='hidden')return;
     // Content elements
     if(fd.type==='fheader'){const lv=fd.settings&&fd.settings.level||'h2';const sz={h1:'22px',h2:'17px',h3:'14px'}[lv];const fw={h1:'800',h2:'700',h3:'600'}[lv];h+='<div class="fb-prev-field" style="text-align:'+(fd.settings&&fd.settings.align||'left')+'"><'+lv+' style="margin:0;font-size:'+sz+';font-weight:'+fw+';color:'+lbl+'">'+esc(fd.settings&&fd.settings.text||'')+'</'+lv+'></div>';return;}
-    if(fd.type==='fparagraph'){h+='<div class="fb-prev-field" style="text-align:'+(fd.settings&&fd.settings.align||'left')+';font-size:14px;color:'+txt+';line-height:1.7">'+esc(fd.settings&&fd.settings.text||'')+'</div>';return;}
+    if(fd.type==='fparagraph'){const _pCls=fd.width==='half'?'fb-prev-field half-w':'fb-prev-field';h+='<div class="'+_pCls+'" style="text-align:'+(fd.settings&&fd.settings.align||'left')+';font-size:14px;color:'+txt+';line-height:1.7">'+esc(fd.settings&&fd.settings.text||'')+'</div>';return;}
     if(fd.type==='fdivider'){h+='<hr style="border:none;border-top:1.5px '+(fd.settings&&fd.settings.style||'solid')+' '+(fd.settings&&fd.settings.color||'#d0d0d8')+';margin:10px 0">';return;}
-    if(fd.type==='fimage'){const url=fd.settings&&fd.settings.url;if(!url)return;const img='<img src="'+esc(url)+'" alt="'+esc(fd.settings&&fd.settings.alt||'')+'" style="max-width:'+(fd.settings&&fd.settings.width||'100')+'%;border-radius:'+r+'px;display:inline-block">';h+='<div class="fb-prev-field" style="text-align:'+(fd.settings&&fd.settings.align||'center')+'">'+(fd.settings&&fd.settings.linkUrl?'<a href="'+esc(fd.settings.linkUrl)+'" target="_blank">'+img+'</a>':img)+'</div>';return;}
+    if(fd.type==='fimage'){const url=fd.settings&&fd.settings.url;if(!url)return;const img='<img src="'+esc(url)+'" alt="'+esc(fd.settings&&fd.settings.alt||'')+'" style="max-width:'+(fd.settings&&fd.settings.width||'100')+'%;border-radius:'+r+'px;display:inline-block">';const _iCls=fd.width==='half'?'fb-prev-field half-w':'fb-prev-field';h+='<div class="'+_iCls+'" style="text-align:'+(fd.settings&&fd.settings.align||'center')+'">'+(fd.settings&&fd.settings.linkUrl?'<a href="'+esc(fd.settings.linkUrl)+'" target="_blank">'+img+'</a>':img)+'</div>';return;}
     const reqStar=fd.required?'<span style="color:#ff4000;margin-left:2px">*</span>':'';
-    h+='<div class="fb-prev-field">';
+    var _wCls = fd.width==='half' ? 'fb-prev-field half-w' : 'fb-prev-field';
+    h+='<div class="'+_wCls+'">';
     if(fd.type==='name'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><div style="display:flex;gap:8px"><input class="fb-prev-input" style="'+iStyle+'" placeholder="First name"><input class="fb-prev-input" style="'+iStyle+'" placeholder="Last name"></div>';}
     else if(fd.type==='address'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><input class="fb-prev-input" style="'+iStyle+';margin-bottom:6px" placeholder="Street address"><div style="display:flex;gap:6px"><input class="fb-prev-input" style="'+iStyle+';flex:2" placeholder="City"><input class="fb-prev-input" style="'+iStyle+';flex:1" placeholder="State"><input class="fb-prev-input" style="'+iStyle+';width:80px" placeholder="ZIP"></div>';}
     else if(fd.type==='textarea'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><textarea class="fb-prev-input" style="'+taStyle+'" placeholder="'+esc(fd.placeholder||'')+'"></textarea>';}
@@ -19260,6 +19265,7 @@ function fbRenderFormHTML(f,st,radius){
     }
     h+='</div>';
   });
+  h+='</div>'; // close .fb-form-fields-grid
   return h;
 }
 
