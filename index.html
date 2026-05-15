@@ -18674,7 +18674,13 @@ function fbUpdateCond(ci,key,val){
 function fbUpdateFormSetting(key,val){
   const f=fbState.editingForm;if(!f)return;
   f.settings[key]=val;
-  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+  // Most settings (text inputs, textareas) just need state updated. Re-rendering
+  // the settings panel on every keystroke destroys the active input and loses
+  // focus. Only re-render for settings that actually toggle UI sections.
+  const RERENDER_KEYS={submitAction:1};
+  if(RERENDER_KEYS[key]){
+    const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+  }
 }
 
 function fbToggleFS(key){
