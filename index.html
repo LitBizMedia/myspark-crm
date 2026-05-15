@@ -961,7 +961,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .fb-name-inp:focus{background:var(--bg-input)}
 .fb-status-sel{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:5px 9px;font-size:12px;font-family:Lato,sans-serif;outline:none;height:32px}
 .fb-body{display:flex;flex:1;overflow:hidden;min-height:0}
-.fb-pal{width:190px;flex-shrink:0;background:var(--bg-panel);border-right:1px solid var(--border);overflow-y:auto;padding-bottom:16px}
+.fb-pal{width:170px;flex-shrink:0;background:var(--bg-panel);border-right:1px solid var(--border);overflow-y:auto;padding-bottom:16px}
 .fb-pal-grp{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);padding:12px 12px 4px}
 .fb-pal-item{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:grab;transition:background .12s;font-size:12px;font-weight:500;color:var(--text-muted);user-select:none}
 .fb-pal-item:hover{background:var(--bg-card);color:var(--text)}
@@ -973,7 +973,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .fb-pg-tab.active{background:var(--purple-dim);color:var(--purple-light);border-color:var(--purple-border)}
 .fb-pg-add{padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1px dashed rgba(255,255,255,.18);color:rgba(255,255,255,.35);background:transparent;font-family:Lato,sans-serif}
 .fb-pg-add:hover{border-color:var(--purple-border);color:var(--purple-light)}
-.fb-canvas-center{max-width:600px;margin:0 auto}
+.fb-canvas-center{max-width:800px;margin:0 auto}
 .fb-page-canvas{background:#ffffff;border-radius:12px;padding:22px;min-height:280px;transition:background .2s;box-shadow:0 8px 40px rgba(0,0,0,.5)}
 .fb-page-canvas.dz-active{outline:2px solid var(--purple);outline-offset:2px}
 .fb-fields-wrap{position:relative}
@@ -1006,7 +1006,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .fb-mopt-dot{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--text-disabled);flex-shrink:0}
 .fb-mopt-box{width:11px;height:11px;border-radius:3px;border:1.5px solid var(--text-disabled);flex-shrink:0}
 .fb-empty-drop{border:2px dashed rgba(255,255,255,.15);border-radius:var(--radius);padding:32px 20px;text-align:center;color:rgba(255,255,255,.25);font-size:13px}
-.fb-sp{width:256px;flex-shrink:0;background:var(--bg-panel);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.fb-sp{width:240px;flex-shrink:0;background:var(--bg-panel);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
 .fb-sp-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
 .fb-sp-t{flex:1;padding:10px 6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;background:none;border:none;color:var(--text-muted);font-family:Lato,sans-serif;border-bottom:2px solid transparent;transition:all .15s}
 .fb-sp-t.active{color:var(--orange);border-bottom-color:var(--orange)}
@@ -17953,12 +17953,18 @@ function switchFormsTab(tab){
 // =====================================================
 const FB_FIELD_DEFS=[
   {g:'Personal',items:[
-    {type:'name',label:'Full Name',icon:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'},
+    {type:'first_name',label:'First Name',icon:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'},
+    {type:'last_name',label:'Last Name',icon:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'},
     {type:'email',label:'Email',icon:'<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>'},
     {type:'phone',label:'Phone',icon:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/>'},
     {type:'dob',label:'Date of Birth',icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
+    {type:'gender',label:'Gender',icon:'<circle cx="12" cy="9" r="5"/><line x1="12" y1="14" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/>'},
+    {type:'pronouns',label:'Pronouns',icon:'<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>'},
+    {type:'language',label:'Preferred Language',icon:'<path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><circle cx="12" cy="12" r="10"/>'},
     {type:'company',label:'Business Name',icon:'<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>'},
+    {type:'title',label:'Job Title',icon:'<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/>'},
     {type:'address',label:'Address',icon:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'},
+    {type:'emergency_contact',label:'Emergency Contact',icon:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/><circle cx="18" cy="6" r="3" fill="currentColor"/>'},
   ]},
   {g:'Input',items:[
     {type:'text',label:'Single Line',icon:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="15" y2="18"/>'},
@@ -18010,7 +18016,23 @@ let fbState={
   subsPage:1
 };
 
-const FB_STD_KEYS={email:'email',phone:'phone',name:'full_name',company:'company',address:'address',dob:'date_of_birth',url:'website',source:'lead_source'};
+const FB_STD_KEYS={
+  email:'email',
+  phone:'phone',
+  name:'full_name',
+  first_name:'first_name',
+  last_name:'last_name',
+  company:'company',
+  title:'title',
+  address:'address',
+  dob:'date_of_birth',
+  gender:'gender',
+  pronouns:'pronouns',
+  language:'preferred_language',
+  emergency_contact:'emergency_contact',
+  url:'website',
+  source:'lead_source'
+};
 const FB_CONTENT_TYPES=['fheader','fparagraph','fdivider','fimage'];
 
 function fbDefaultKey(type,label){
@@ -18040,7 +18062,40 @@ function fbNewField(type){
 }
 
 function fbDefaultLabel(type){
-  return{name:'Full Name',email:'Email Address',phone:'Phone Number',text:'Text Field',textarea:'Message',number:'Number',url:'Website URL',date:'Date',file:'File Upload',dropdown:'Dropdown',radio:'Choose One',checkbox:'Select All That Apply',address:'Address',company:'Company Name',dob:'Date of Birth',hidden:'Hidden Field',tnc:'I agree to the Terms and Conditions',source:'How did you hear about us?',signature:'Signature',captcha:'',fheader:'',fparagraph:'',fdivider:'',fimage:'',cf_field:'Custom Field'}[type]||type;
+  return{
+    name:'Full Name',
+    first_name:'First Name',
+    last_name:'Last Name',
+    email:'Email Address',
+    phone:'Phone Number',
+    text:'Text Field',
+    textarea:'Message',
+    number:'Number',
+    url:'Website URL',
+    date:'Date',
+    file:'File Upload',
+    dropdown:'Dropdown',
+    radio:'Choose One',
+    checkbox:'Select All That Apply',
+    address:'Address',
+    company:'Company Name',
+    title:'Job Title',
+    dob:'Date of Birth',
+    gender:'Gender',
+    pronouns:'Pronouns',
+    language:'Preferred Language',
+    emergency_contact:'Emergency Contact',
+    hidden:'Hidden Field',
+    tnc:'I agree to the Terms and Conditions',
+    source:'How did you hear about us?',
+    signature:'Signature',
+    captcha:'',
+    fheader:'',
+    fparagraph:'',
+    fdivider:'',
+    fimage:'',
+    cf_field:'Custom Field'
+  }[type]||type;
 }
 
 function fbNewForm(){
