@@ -18838,34 +18838,13 @@ function fbAutoLinkSub(sub){
   }
 }
 
-async function fbCreateContactFromSub(sub,form){
-  const fields=form.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]);
-  const get=type=>fields.find(f=>f.type===type);
-  const getV=type=>{const fd=get(type);return fd&&sub.data&&sub.data[fd.id]||'';};
-  const emailFd=get('email');const email=emailFd&&sub.data&&sub.data[emailFd.id]||'';
-  if(email&&db.contacts.find(c=>(c.email||'').toLowerCase()===email.toLowerCase())){toast('Contact already exists.','warn');return;}
-  const nameFd=get('name');
-  let name='';
-  if(nameFd&&sub.data){const v=sub.data[nameFd.id];name=v&&(v.first||'')+' '+(v.last||'');name=name.trim();}
-  const data={
-    display_name: name||email||'New Contact',
-    name: name||email||'New Contact',
-    email: email,
-    phone: getV('phone'),
-    company: getV('company'),
-    type: 'lead',
-    status: 'active',
-    tags: form.settings.contactTags||[],
-    source: 'Form: '+form.name
-  };
-  try{
-    const r = await contactCreate(data);
-    sub.contactId = r && r.id;
-    await fetchFromServer();
-    toast('Contact created: '+data.name,'success');
-  }catch(e){
-    toast('Contact create failed: '+(e.message||'unknown'),'error');
-  }
+// fbCreateContactFromSub was the legacy frontend stub for auto-creating
+// contacts from form submissions. Server-side replacement lives in
+// api-aws/forms/form-submit.js (form-submit Lambda). This stub is no
+// longer called from anywhere but kept as a no-op for safety in case
+// any old form code path or browser console still references it.
+function fbCreateContactFromSub(sub,form){
+  console.warn('fbCreateContactFromSub called but server-side handler should be used. Ignoring.');
 }
 
 // =====================================================
