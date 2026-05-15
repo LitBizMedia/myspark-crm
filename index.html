@@ -4212,18 +4212,7 @@ function renderDrawer(){
       +'<div class="info-item"><label>Timezone</label><span>'+(c.timezone?esc(_contactTzLabel(c.timezone)):_ns)+'</span></div>'
       +'<div class="info-item"><label>Added</label><span>'+fmtDate((c.createdAt||'').split('T')[0])+'</span></div>'
       +'</div>'
-      +(function(){
-        // Emergency contact section. Always shown so staff can see what's missing.
-        var name = c.emergency_contact_name ? '<strong>'+esc(c.emergency_contact_name)+'</strong>' : _ns;
-        var rel = c.emergency_contact_relationship ? ' <span style="color:var(--text-muted)">('+esc(c.emergency_contact_relationship)+')</span>' : '';
-        // Phone stays clickable (staff may need to call in emergency) but styled
-        // to match surface, not blue link. Small phone icon for affordance.
-        var phoneIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-1px;margin-right:4px;opacity:.7"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/></svg>';
-        var phone = c.emergency_contact_phone
-          ? '<a href="tel:'+esc(c.emergency_contact_phone)+'" style="color:var(--main-text);text-decoration:none">'+phoneIcon+esc(c.emergency_contact_phone)+'</a>'
-          : _ns;
-        return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
-      })()
+
       +(function(){
         // Address display: prefer the new structured fields. Fall back to the
         // legacy single-line `address` field for contacts that haven't been
@@ -4242,6 +4231,18 @@ function renderDrawer(){
           return '<div class="info-item" style="margin-bottom:12px"><label>Address</label><span>'+esc(c.address)+'</span></div>';
         }
         return '';
+      })()
+      +(function(){
+        // Emergency contact section. Always shown so staff can see what's missing.
+        var name = c.emergency_contact_name ? '<strong>'+esc(c.emergency_contact_name)+'</strong>' : _ns;
+        var rel = c.emergency_contact_relationship ? ' <span style="color:var(--text-muted)">('+esc(c.emergency_contact_relationship)+')</span>' : '';
+        // Phone stays clickable (staff may need to call in emergency) but styled
+        // to match the dark drawer surface, not blue link. Small phone icon for affordance.
+        var phoneIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-1px;margin-right:4px;opacity:.7"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/></svg>';
+        var phone = c.emergency_contact_phone
+          ? '<a href="tel:'+esc(c.emergency_contact_phone)+'" style="color:var(--text);text-decoration:none">'+phoneIcon+esc(c.emergency_contact_phone)+'</a>'
+          : _ns;
+        return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
       })()
       +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
       +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">Book Appointment</button>'
