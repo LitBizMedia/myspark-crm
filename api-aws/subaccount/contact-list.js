@@ -73,6 +73,7 @@ function contactToFrontend(row) {
     warnings: [],
     allergies: [],
     creditHistory: [],
+    warning_counts: row.warning_counts || { critical: 0, warning: 0, info: 0 },
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     createdBy: row.created_by,
@@ -89,22 +90,44 @@ async function handler(req, res) {
   const subaccountId = auth.subaccount_id;
 
   try {
-    const result = await db.query(
-      `SELECT
-         id, external_id,
-         first_name, last_name, display_name,
-         email, phone, company, title, website,
-         date_of_birth, gender, pronouns, preferred_language,
-         address_line1, address_line2, city, state, postal_code, country, timezone,
-         emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
-         source, type, status, archived, tags, custom_field_values,
-         credit_balance, square_customer_id, square_cards,
-         created_at, updated_at, created_by, updated_by
-       FROM contacts
-       WHERE subaccount_id = $1
-       ORDER BY created_at ASC`,
-      [subaccountId]
-    );
+    // Run main contact query and warning aggregate query in parallel
+    const [result, warnAgg] = await Promise.all([
+      db.query(
+        `SELECT
+           id, external_id,
+           first_name, last_name, display_name,
+           email, phone, company, title, website,
+           date_of_birth, gender, pronouns, preferred_language,
+           address_line1, address_line2, city, state, postal_code, country, timezone,
+           emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+           source, type, status, archived, tags, custom_field_values,
+           credit_balance, square_customer_id, square_cards,
+           created_at, updated_at, created_by, updated_by
+         FROM contacts
+         WHERE subaccount_id = $1
+         ORDER BY created_at ASC`,
+        [subaccountId]
+      ),
+      db.query(
+        `SELECT contact_id, severity, COUNT(*)::int AS cnt
+         FROM contact_warnings
+         WHERE subaccount_id = $1
+         GROUP BY contact_id, severity`,
+        [subaccountId]
+      )
+    ]);
+
+    // Build counts map: { contactId => { critical, warning, info } }
+    const warningCountsMap = {};
+    warnAgg.rows.forEach(r => {
+      if(!warningCountsMap[r.contact_id]) warningCountsMap[r.contact_id] = { critical: 0, warning: 0, info: 0 };
+      if(r.severity in warningCountsMap[r.contact_id]) warningCountsMap[r.contact_id][r.severity] = r.cnt;
+    });
+
+    // Attach counts to each row before shaping
+    result.rows.forEach(row => {
+      row.warning_counts = warningCountsMap[row.id] || { critical: 0, warning: 0, info: 0 };
+    });
 
     let contacts = result.rows.map(contactToFrontend);
     const total = contacts.length;

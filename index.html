@@ -22101,16 +22101,29 @@ async function confirmDelWarning(){
 
 // Small badge for contact list row: shows ⚠ in highest severity color when warnings exist
 function _contactRowWarningBadge(c){
-  if(!c || !Array.isArray(c.warnings) || !c.warnings.length) return '';
-  // Pick highest severity from raw array (don't re-sort)
-  var topRank = 99, topSev = null;
-  for(var i=0;i<c.warnings.length;i++){
-    var r = (WARNING_SEVERITY[c.warnings[i].severity]||{rank:99}).rank;
-    if(r<topRank){ topRank = r; topSev = c.warnings[i].severity; }
+  if(!c) return '';
+  // Prefer the full warnings array if loaded (drawer-open contacts have it).
+  // Fall back to warning_counts aggregate from the list payload (covers
+  // every contact in the list view without the heavy PHI join).
+  var topRank = 99, topSev = null, totalCount = 0;
+  if(Array.isArray(c.warnings) && c.warnings.length){
+    totalCount = c.warnings.length;
+    for(var i=0;i<c.warnings.length;i++){
+      var r = (WARNING_SEVERITY[c.warnings[i].severity]||{rank:99}).rank;
+      if(r<topRank){ topRank = r; topSev = c.warnings[i].severity; }
+    }
+  } else if(c.warning_counts){
+    var wc = c.warning_counts;
+    totalCount = (wc.critical||0) + (wc.warning||0) + (wc.info||0);
+    if(totalCount === 0) return '';
+    // Highest severity by rank: critical (1) < warning (2) < info (3)
+    if(wc.critical > 0) topSev = 'critical';
+    else if(wc.warning > 0) topSev = 'warning';
+    else if(wc.info > 0) topSev = 'info';
   }
   if(!topSev) return '';
   var m = WARNING_SEVERITY[topSev];
-  return '<span title="'+c.warnings.length+' warning(s); highest: '+m.label+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:'+m.color+';color:#fff;font-size:11px;font-weight:700;margin-left:6px;flex-shrink:0">'+m.icon+'</span>';
+  return '<span title="'+totalCount+' warning(s); highest: '+m.label+'" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:'+m.color+';color:#fff;font-size:11px;font-weight:700;margin-left:6px;flex-shrink:0">'+m.icon+'</span>';
 }
 
 // =====================================================
