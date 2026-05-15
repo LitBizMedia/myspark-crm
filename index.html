@@ -17985,6 +17985,7 @@ const FB_FIELD_DEFS=[
     {type:'radio',label:'Radio Buttons',icon:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>'},
     {type:'checkbox',label:'Checkboxes',icon:'<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'},
     {type:'tnc',label:'Terms & Conditions',icon:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'},
+    {type:'consent',label:'SMS Consent (A2P)',icon:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><polyline points="9 11 12 14 16 10"/>'},
   ]},
   {g:'Content',items:[
     {type:'fheader',label:'Heading',icon:'<path d="M4 6h16M4 12h8M4 18h12"/>'},
@@ -18036,7 +18037,8 @@ const FB_STD_KEYS={
   language:'preferred_language',
   emergency_contact:'emergency_contact',
   url:'website',
-  source:'lead_source'
+  source:'lead_source',
+  consent:'sms_consent'
 };
 const FB_CONTENT_TYPES=['fheader','fparagraph','fdivider','fimage'];
 
@@ -18052,6 +18054,18 @@ function fbNewField(type){
   const isCF=type.startsWith('cf_');
   const base={id:'f-'+uid(),type,label:FB_CONTENT_TYPES.includes(type)?'':label,field_key:FB_CONTENT_TYPES.includes(type)||isCF?'':fbDefaultKey(type,label),placeholder:'',required:false,width:'full',options:type==='dropdown'||type==='radio'||type==='checkbox'?defOpts:[],multiSelect:false,defaultValue:'',conditions:[],settings:{}};
   if(type==='tnc')base.settings={mode:'link',link:'',linkLabel:'Terms and Conditions',termsHtml:'<p>By submitting this form you agree to our terms and conditions.</p>'};
+  if(type==='consent')base.settings={
+    businessName:'YOUR BUSINESS NAME',
+    useCase:'appointment reminders and account notifications',
+    showTransactional:true,
+    showMarketing:true,
+    transactionalRequired:false,
+    marketingRequired:false,
+    transactionalText:'By checking this box, I consent to receive non-marketing text messages from [BUSINESS NAME] about [USE CASE]. Message frequency varies, message & data rates may apply. Text HELP for assistance, reply STOP to opt out.',
+    marketingText:'By checking this box, I consent to receive marketing and promotional messages including special offers, discounts, new product updates among others, from [BUSINESS NAME] at the phone number provided. Frequency may vary. Message & data rates may apply. Text HELP for assistance, reply STOP to opt out.',
+    privacyPolicyUrl:'',
+    termsOfServiceUrl:''
+  };
   if(type==='source')base.settings={sources:['Google','Facebook','Instagram','Referral','Website','Other'],visible:false};
   if(type==='hidden')base.settings={fieldName:'utm_source',value:''};
   if(type==='captcha')base.settings={enabled:true};
@@ -18092,6 +18106,7 @@ function fbDefaultLabel(type){
     emergency_contact:'Emergency Contact',
     hidden:'Hidden Field',
     tnc:'I agree to the Terms and Conditions',
+    consent:'',
     source:'How did you hear about us?',
     signature:'Signature',
     captcha:'',
@@ -18331,6 +18346,10 @@ function fbFieldPreview(fd){
     h+='<div class="fb-mock-checks">'+opts.map(o=>'<div class="fb-mopt"><div class="fb-mopt-box"></div>'+esc(o.label)+'</div>').join('')+'</div>';
   }else if(fd.type==='tnc'){
     h+='<div class="fb-mopt"><div class="fb-mopt-box"></div><span style="font-size:11px;color:#666">I agree to the <span style="color:#6b21ea">Terms</span></span></div>';
+  }else if(fd.type==='consent'){
+    var _cs=fd.settings||{};
+    if(_cs.showTransactional!==false)h+='<div class="fb-mopt" style="align-items:flex-start"><div class="fb-mopt-box" style="margin-top:2px"></div><span style="font-size:10px;color:#666;line-height:1.4">Non-marketing SMS consent</span></div>';
+    if(_cs.showMarketing!==false)h+='<div class="fb-mopt" style="align-items:flex-start;margin-top:4px"><div class="fb-mopt-box" style="margin-top:2px"></div><span style="font-size:10px;color:#666;line-height:1.4">Marketing SMS consent</span></div>';
   }else if(fd.type==='file'){
     h+='<div class="fb-mi" style="display:flex;align-items:center;padding:0 8px;font-size:10px;color:var(--text-dim)">Choose file...</div>';
   }else if(fd.type==='signature'){
@@ -18951,7 +18970,7 @@ function fbRenderFieldSettingsNew(fd){
   // Standard field settings
   if(fd.type!=='hidden'){
     h.push(inp('Label','label',fd.label));
-    if(!['tnc','checkbox','radio','name','address'].includes(fd.type)){
+    if(!['tnc','consent','checkbox','radio','name','address'].includes(fd.type)){
       h.push(inp('Placeholder','placeholder',fd.placeholder));
     }
     if(fd.field_key!==undefined){
@@ -19000,6 +19019,29 @@ function fbRenderFieldSettingsNew(fd){
       h.push(inp('Terms URL','link',(fd.settings&&fd.settings.link)||'','url','setting'));
       h.push(inp('Link Label','linkLabel',(fd.settings&&fd.settings.linkLabel)||'Terms and Conditions','text','setting'));
     }
+  }
+
+  // SMS Consent (A2P)
+  if(fd.type==='consent'){
+    h.push('<div class="fb-divider"></div>');
+    h.push('<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Placeholders [BUSINESS NAME] and [USE CASE] auto-fill from the fields below.</div>');
+    h.push(inp('Business Name','businessName',(fd.settings&&fd.settings.businessName)||'','text','setting'));
+    h.push(inp('Use Case','useCase',(fd.settings&&fd.settings.useCase)||'','text','setting'));
+    h.push('<div class="fb-divider"></div>');
+    h.push('<div class="fb-toggle-row"><span class="fb-toggle-lbl">Show transactional consent</span><div class="bh-toggle'+((fd.settings&&fd.settings.showTransactional!==false)?' on':'')+'" onclick="fbToggleSettingBool(\'showTransactional\')"></div></div>');
+    if(fd.settings&&fd.settings.showTransactional!==false){
+      h.push('<div class="fb-toggle-row" style="margin-top:-4px"><span class="fb-toggle-lbl" style="font-size:11px;color:var(--text-muted)">Required</span><div class="bh-toggle'+((fd.settings&&fd.settings.transactionalRequired)?' on':'')+'" onclick="fbToggleSettingBool(\'transactionalRequired\')"></div></div>');
+      h.push('<label class="fb-sl">Transactional consent text</label><textarea class="fb-si" rows="4" oninput="fbUpdateSetting(\'transactionalText\',this.value)">'+esc((fd.settings&&fd.settings.transactionalText)||'')+'</textarea>');
+    }
+    h.push('<div class="fb-divider"></div>');
+    h.push('<div class="fb-toggle-row"><span class="fb-toggle-lbl">Show marketing consent</span><div class="bh-toggle'+((fd.settings&&fd.settings.showMarketing!==false)?' on':'')+'" onclick="fbToggleSettingBool(\'showMarketing\')"></div></div>');
+    if(fd.settings&&fd.settings.showMarketing!==false){
+      h.push('<div class="fb-toggle-row" style="margin-top:-4px"><span class="fb-toggle-lbl" style="font-size:11px;color:var(--text-muted)">Required</span><div class="bh-toggle'+((fd.settings&&fd.settings.marketingRequired)?' on':'')+'" onclick="fbToggleSettingBool(\'marketingRequired\')"></div></div>');
+      h.push('<label class="fb-sl">Marketing consent text</label><textarea class="fb-si" rows="4" oninput="fbUpdateSetting(\'marketingText\',this.value)">'+esc((fd.settings&&fd.settings.marketingText)||'')+'</textarea>');
+    }
+    h.push('<div class="fb-divider"></div>');
+    h.push(inp('Privacy Policy URL','privacyPolicyUrl',(fd.settings&&fd.settings.privacyPolicyUrl)||'','url','setting'));
+    h.push(inp('Terms of Service URL','termsOfServiceUrl',(fd.settings&&fd.settings.termsOfServiceUrl)||'','url','setting'));
   }
 
   // Hidden
@@ -19244,6 +19286,25 @@ function fbRenderFormHTML(f,st,radius){
     else if(fd.type==='dropdown'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label><select class="fb-prev-select" style="'+iStyle+';height:42px"'+(fd.multiSelect?' multiple size="3"':'')+'><option value="">Select...</option>'+(fd.options||[]).map(function(o){return'<option>'+esc(o.label)+'</option>';}).join('')+'</select>';}
     else if(fd.type==='radio'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';(fd.options||[]).forEach(function(o){h+='<label class="fb-prev-opt-row"><input type="radio" name="'+fd.id+'" style="accent-color:'+accent+'">'+esc(o.label)+'</label>';});}
     else if(fd.type==='checkbox'){h+='<label class="fb-prev-label" style="color:'+lbl+'">'+esc(fd.label)+reqStar+'</label>';(fd.options||[]).forEach(function(o){h+='<label class="fb-prev-opt-row"><input type="checkbox" style="accent-color:'+accent+'">'+esc(o.label)+'</label>';});}
+    else if(fd.type==='consent'){
+      var cs=fd.settings||{};
+      var bizName=cs.businessName||'YOUR BUSINESS NAME';
+      var useCase=cs.useCase||'appointment reminders and account notifications';
+      var _sub=function(t){return (t||'').replace(/\[BUSINESS NAME\]/g,esc(bizName)).replace(/\[USE CASE\]/g,esc(useCase));};
+      if(cs.showTransactional!==false){
+        h+='<label class="fb-prev-tnc" style="align-items:flex-start;margin-bottom:14px"><input type="checkbox" name="consent_transactional"'+(cs.transactionalRequired?' required':'')+' style="accent-color:'+accent+';margin-top:3px;flex-shrink:0"><span style="font-size:13px;line-height:1.55;color:'+txt+'">'+_sub(cs.transactionalText)+(cs.transactionalRequired?' <span style="color:#ff4000">*</span>':'')+'</span></label>';
+      }
+      if(cs.showMarketing!==false){
+        h+='<label class="fb-prev-tnc" style="align-items:flex-start;margin-bottom:14px"><input type="checkbox" name="consent_marketing"'+(cs.marketingRequired?' required':'')+' style="accent-color:'+accent+';margin-top:3px;flex-shrink:0"><span style="font-size:13px;line-height:1.55;color:'+txt+'">'+_sub(cs.marketingText)+(cs.marketingRequired?' <span style="color:#ff4000">*</span>':'')+'</span></label>';
+      }
+      if(cs.privacyPolicyUrl||cs.termsOfServiceUrl){
+        h+='<div style="text-align:center;font-size:12px;margin-top:4px">';
+        if(cs.privacyPolicyUrl)h+='<a href="'+esc(cs.privacyPolicyUrl)+'" target="_blank" style="color:'+accent+';text-decoration:underline">Privacy Policy</a>';
+        if(cs.privacyPolicyUrl&&cs.termsOfServiceUrl)h+=' <span style="color:'+txt+'">|</span> ';
+        if(cs.termsOfServiceUrl)h+='<a href="'+esc(cs.termsOfServiceUrl)+'" target="_blank" style="color:'+accent+';text-decoration:underline">Terms of Service</a>';
+        h+='</div>';
+      }
+    }
     else if(fd.type==='tnc'){
       const tncMode=fd.settings&&fd.settings.mode||'link';
       if(tncMode==='inline'&&fd.settings&&fd.settings.termsHtml){
