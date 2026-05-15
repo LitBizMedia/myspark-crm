@@ -17953,11 +17953,12 @@ function renderForms(){
   var defaultTab=role==='admin'?'forms':'contracts';
   if(!state.formsTab||state.formsTab==='forms'&&role!=='admin') state.formsTab=defaultTab;
   var tab=state.formsTab;
-  // CRITICAL: if user is inside the builder, embed, or submissions view,
-  // bail completely. Don't even toggle tab visibility, since that's what
-  // was wiping the in-progress view. Only the user clicking a tab button
-  // (which calls switchFormsTab directly) should change visibility.
-  if(window.fbState && fbState.view && fbState.view !== 'list')return;
+  // Bail if the user is inside the builder, embed, or submissions view.
+  // Polling the data layer should never wipe these sub-views.
+  // Tech debt: this guard is duct tape over a structural issue where all
+  // Forms sub-views share the same DOM container (forms-forms-view). See
+  // MySpark-Forms-Refactor-Handoff.docx for the proper fix.
+  if(typeof fbState !== 'undefined' && fbState.view && fbState.view !== 'list')return;
   switchFormsTab(tab);
   if(tab==='forms')renderFormsList();
 }
@@ -18041,6 +18042,7 @@ let fbState={
   embedFormId:null,
   subsPage:1
 };
+window.fbState = fbState; // expose for the renderForms guard which uses window.fbState
 
 const FB_STD_KEYS={
   email:'email',
@@ -18148,12 +18150,13 @@ function fbNewForm(){
 
 
 function renderFormsList(){
-  // ROOT-LEVEL GUARD. No matter what calls this function (renderForms,
-  // direct call, callback, anything), if fbState.view says we're not on the
-  // list, bail out. This is the ONLY function that writes to forms-forms-view
-  // for the list, so guarding it here protects every other view (builder,
-  // embed, submissions) from being wiped on poll, save, or any other event.
-  if(window.fbState && fbState.view && fbState.view !== 'list')return;
+  // Root-level guard. Any code path that calls renderFormsList while the
+  // user is on a sub-view (builder, embed, submissions) bails here. Without
+  // this, polls and direct calls would clobber forms-forms-view.
+  // Tech debt: belt and suspenders. The renderForms-level guard catches the
+  // poll path; this catches everything else. Proper fix is dedicated DOM
+  // containers per view. See MySpark-Forms-Refactor-Handoff.docx.
+  if(typeof fbState !== 'undefined' && fbState.view && fbState.view !== 'list')return;
   // Also bail if the builder overlay is somehow visible without fbState.view
   // matching, paranoia for edge cases.
   const _ov=document.getElementById('fb-overlay');
