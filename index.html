@@ -4115,7 +4115,7 @@ function renderContacts(){
       // Normal view: edit icon
       rowActions='<button class="icon-btn-xs" onclick="openContactModal(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
     }
-    return'<tr onclick="openDrawer(\''+c.id+'\')"'+(c.archived?' style="opacity:.65"':'')+'>'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600;display:flex;align-items:center">'+esc(c.name)+_contactRowWarningBadge(c)+'</div></div></td>'+'<td style="font-size:13px">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.phone||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()" style="white-space:nowrap">'+rowActions+'</td></tr>';
+    return'<tr onclick="openDrawer(\''+c.id+'\')"'+(c.archived?' style="opacity:.65"':'')+'>'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600;display:flex;align-items:center">'+esc(c.name)+_contactRowWarningBadge(c)+'</div></div></td>'+'<td style="font-size:13px">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(fmtPhoneDisplay(c.phone))+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()" style="white-space:nowrap">'+rowActions+'</td></tr>';
   }).join('');
   renderPg('contacts-pg',state.cPage,pages,'cPg');
   updateBulkBar();
@@ -4221,7 +4221,7 @@ function renderDrawer(){
     var _ns = '<em style="color:var(--text-muted);font-weight:400;font-style:italic">Not set</em>';
     body='<div class="sec-label">Contact Details</div><div class="info-grid">'
       +'<div class="info-item"><label>Email</label><span>'+(c.email?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':_ns)+'</span></div>'
-      +'<div class="info-item"><label>Phone</label><span>'+(c.phone?'<a href="tel:'+esc(c.phone)+'">'+esc(c.phone)+'</a>':_ns)+'</span></div>'
+      +'<div class="info-item"><label>Phone</label><span>'+(c.phone?'<a href="tel:'+esc(c.phone)+'">'+esc(fmtPhoneDisplay(c.phone))+'</a>':_ns)+'</span></div>'
       +'<div class="info-item"><label>Date of Birth</label><span>'+(c.date_of_birth?fmtDate(c.date_of_birth):_ns)+'</span></div>'
       +'<div class="info-item"><label>Gender</label><span>'+(c.gender?esc(c.gender):_ns)+'</span></div>'
       +'<div class="info-item"><label>Pronouns</label><span>'+(c.pronouns?esc(c.pronouns):_ns)+'</span></div>'
@@ -4262,7 +4262,7 @@ function renderDrawer(){
         // to match the dark drawer surface, not blue link. Small phone icon for affordance.
         var phoneIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-1px;margin-right:4px;opacity:.7"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/></svg>';
         var phone = c.emergency_contact_phone
-          ? '<a href="tel:'+esc(c.emergency_contact_phone)+'" style="color:var(--text);text-decoration:none">'+phoneIcon+esc(c.emergency_contact_phone)+'</a>'
+          ? '<a href="tel:'+esc(c.emergency_contact_phone)+'" style="color:var(--text);text-decoration:none">'+phoneIcon+esc(fmtPhoneDisplay(c.emergency_contact_phone))+'</a>'
           : _ns;
         return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
       })()
