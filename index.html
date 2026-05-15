@@ -19460,7 +19460,7 @@ function fbOpenEmbed(id){
   const baseUrl=liveBase||rawBase;
   const src=baseUrl+'?fbembed='+id;
   const script='<script>\n(function(){\n  var f=document.createElement("iframe");\n  f.src="'+src+'";\n  f.style.cssText="width:100%;border:none;min-height:400px";\n  f.onload=function(){window.addEventListener("message",function(e){if(e.data&&e.data.fbResize)f.style.height=e.data.fbResize+"px";});};\n  document.currentScript.parentNode.insertBefore(f,document.currentScript);\n})();\n<\/script>';
-  const iframe='<iframe src="'+src+'" style="width:100%;border:none;min-height:400px" frameborder="0"></iframe>';
+  const iframe='<iframe id="myspark-form-'+id+'" src="'+src+'" style="width:100%;border:none;min-height:400px" frameborder="0"></iframe>\n<script>\n(function(){\n  window.addEventListener("message",function(e){\n    if(e.data&&e.data.fbResize){\n      var f=document.getElementById("myspark-form-'+id+'");\n      if(f)f.style.height=e.data.fbResize+"px";\n    }\n  });\n})();\n<\/script>';
 
   // Stash the codes so the copy buttons can grab them without onclick escaping hell
   window.fbEmbed = { src: src, iframe: iframe, script: script };
@@ -19473,14 +19473,7 @@ function fbOpenEmbed(id){
   let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
     +'<button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button>'
     +'<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">Embed: '+esc(f.name)+'</div></div>';
-  if(isLocal&&!liveBase){h+='<div class="warn-box" style="margin-bottom:14px"><strong>Running locally.</strong> Enter your deployed domain below so embed codes use the correct URL when you go live.</div>';}
   h+='<div style="display:flex;flex-direction:column;gap:12px">';
-  // Live URL
-  h+='<div style="'+cardCss+'">'
-    +'<div style="'+headingCss+'">Your Live URL</div>'
-    +'<div style="'+subCss+'">Set once when you deploy. All embed codes update automatically.</div>'
-    +'<div style="display:flex;gap:8px"><input id="fb-live-url" type="text" value="'+esc(liveBase||'')+'" placeholder="https://yourdomain.com/myspark-crm.html" style="'+inputCss+';font-size:13px">'
-    +'<button class="btn btn-purple btn-sm" onclick="db.settings.appLiveUrl=document.getElementById(\'fb-live-url\').value.trim();saveData();fbOpenEmbed(\''+id+'\')">Save</button></div></div>';
   // Form URL
   h+='<div style="'+cardCss+'">'
     +'<div style="'+headingCss+'">Form URL</div>'
@@ -19490,13 +19483,13 @@ function fbOpenEmbed(id){
   // iFrame
   h+='<div style="'+cardCss+'">'
     +'<div style="'+headingCss+'">iFrame Embed</div>'
-    +'<div style="'+subCss+'">Works with Wordpress, Oxygen, Breakdance, Squarespace, Webflow.</div>'
+    +'<div style="'+subCss+'">Works with Wordpress, Oxygen, Breakdance, Squarespace, Webflow. Includes auto-resize script.</div>'
     +'<div class="fb-code-block">'+esc(iframe)+'</div>'
     +'<button class="btn btn-purple btn-sm" onclick="fbCopyText(\'iframe\')">Copy iFrame</button></div>';
   // Script
   h+='<div style="'+cardCss+'">'
     +'<div style="'+headingCss+'">Script Embed</div>'
-    +'<div style="'+subCss+'">Auto-resizing. Paste before your closing body tag.</div>'
+    +'<div style="'+subCss+'">Alternative for advanced setups. Paste in a Code Block, custom HTML widget, or before the closing body tag.</div>'
     +'<div class="fb-code-block">'+esc(script)+'</div>'
     +'<button class="btn btn-purple btn-sm" onclick="fbCopyText(\'script\')">Copy Script</button></div>';
   h+='</div>';
