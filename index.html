@@ -17980,6 +17980,12 @@ function fbNewForm(){
 
 
 function renderFormsList(){
+  // Guard: if the builder overlay is open, the user is editing a form. The
+  // background poll calls renderForms -> renderFormsList every 30s, and
+  // running this function would call fbHideOverlay() and slam the editor
+  // shut mid-edit. Bail out and leave the editor alone.
+  const _ov=document.getElementById('fb-overlay');
+  if(_ov&&!_ov.classList.contains('hidden'))return;
   fbHideOverlay();
   const el=document.getElementById('forms-forms-view');if(!el)return;
   const forms=db.forms||[];
