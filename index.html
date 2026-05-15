@@ -6573,15 +6573,30 @@ function _contactTzLabel(iana){
 function openContactModal(id){
   const c=id?getContact(id):null;state.modal={type:'contact',id:id||null};
   const tagOpts=db.tags.map(t=>'<button type="button" class="tag-opt'+(c&&(c.tags||[]).includes(t.id)?' selected':'')+'" data-tag="'+t.id+'" onclick="toggleTagOpt(this)" style="'+(c&&(c.tags||[]).includes(t.id)?'background:'+t.color+'20;color:'+t.color+';border-color:'+t.color+'40':'')+'">'+esc(t.name)+'</button>').join('');
+  // Detect if display_name was customized (differs from auto-derived first+last)
+  const _autoDerived=((c&&c.first_name||'')+' '+(c&&c.last_name||'')).trim();
+  const _hasCustomDisplay=c&&c.name&&c.name!==_autoDerived&&(c.first_name||c.last_name);
+  const _showDisplayOverride=_hasCustomDisplay?'block':'none';
+  const _displayLinkText=_hasCustomDisplay?'Reset to auto':'Customize display name';
+  // Detect if any emergency contact field is filled, expand section if so
+  const _hasEmergency=c&&(c.emergency_contact_name||c.emergency_contact_phone||c.emergency_contact_relationship);
+  const _showEmergency=_hasEmergency?'block':'none';
+  const _emergencyLabel=_hasEmergency?'Hide emergency contact':'Add emergency contact';
   const b='<div class="form-row"><div class="form-group"><label>First Name</label><input id="cf-firstname" type="text" value="'+esc(c&&c.first_name||'')+'" placeholder="First" oninput="cfUpdateName()"></div><div class="form-group"><label>Last Name</label><input id="cf-lastname" type="text" value="'+esc(c&&c.last_name||'')+'" placeholder="Last" oninput="cfUpdateName()"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Full Name *</label><input id="cf-name" type="text" value="'+esc(c&&c.name||'')+'" placeholder="Auto-filled or enter manually"></div><div class="form-group"><label>Type</label><select id="cf-type">'+['lead','client','partner','employee','lapsed'].map(x=>'<option value="'+x+'"'+(c&&c.type===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Type</label><select id="cf-type">'+['lead','client','partner','employee','lapsed'].map(x=>'<option value="'+x+'"'+(c&&c.type===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Status</label><select id="cf-status"><option value="active"'+(c&&c.status!=='inactive'?' selected':'')+'>Active</option><option value="inactive"'+(c&&c.status==='inactive'?' selected':'')+'>Inactive</option></select></div></div>'
+    +'<div style="margin:-4px 0 12px 0"><a href="#" id="cf-display-link" onclick="cfToggleDisplay(event)" style="font-size:12px;color:var(--purple);text-decoration:none">'+_displayLinkText+'</a></div>'
+    +'<div id="cf-display-wrap" style="display:'+_showDisplayOverride+';margin-top:-6px;margin-bottom:12px"><div class="form-group"><label>Display Name <span style="color:var(--text-muted);font-weight:400">(overrides auto-derived)</span></label><input id="cf-name" type="text" value="'+esc(c&&c.name||'')+'" placeholder="e.g. Dr. Smith, Acme Clinic"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Email</label><input id="cf-email" type="email" value="'+esc(c&&c.email||'')+'"></div><div class="form-group"><label>Phone</label><input id="cf-phone" type="tel" value="'+esc(c&&c.phone||'')+'"></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Date of Birth</label><input id="cf-dob" type="date" value="'+esc(c&&c.date_of_birth||'')+'"></div><div class="form-group"><label>Preferred Language <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-lang" type="text" value="'+esc(c&&c.preferred_language||'')+'" placeholder="e.g. English, Spanish"></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Gender <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-gender" type="text" value="'+esc(c&&c.gender||'')+'" placeholder="Self-identify"></div><div class="form-group"><label>Pronouns <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-pronouns" type="text" value="'+esc(c&&c.pronouns||'')+'" placeholder="e.g. she/her, they/them"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Company</label><input id="cf-company" type="text" value="'+esc(c&&c.company||'')+'"></div><div class="form-group"><label>Title</label><input id="cf-title" type="text" value="'+esc(c&&c.title||'')+'"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Website</label><input id="cf-web" type="url" value="'+esc(c&&c.website||'')+'"></div><div class="form-group"><label>Source</label><input id="cf-source" type="text" value="'+esc(c&&c.source||'')+'"></div></div>'
     +'<div class="form-group"><label>Street Address</label><input id="cf-addr1" type="text" value="'+esc(c&&c.address_line1||c&&c.address||'')+'" placeholder="123 Main St"></div>'
     +'<div class="form-group"><label>Apt, Suite, etc. <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-addr2" type="text" value="'+esc(c&&c.address_line2||'')+'" placeholder="Apt 4B"></div>'
     +'<div class="form-row"><div class="form-group" style="flex:2"><label>City</label><input id="cf-city" type="text" value="'+esc(c&&c.city||'')+'"></div><div class="form-group" style="flex:1"><label>State / Region</label><input id="cf-state" type="text" value="'+esc(c&&c.state||'')+'" maxlength="32"></div><div class="form-group" style="flex:1"><label>ZIP / Postal</label><input id="cf-zip" type="text" value="'+esc(c&&c.postal_code||'')+'" maxlength="20"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Status</label><select id="cf-status"><option value="active"'+(c&&c.status!=='inactive'?' selected':'')+'">Active</option><option value="inactive"'+(c&&c.status==='inactive'?' selected':'')+'">Inactive</option></select></div><div class="form-group"><label>Timezone <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><select id="cf-tz">'+_contactTzOpts(c&&c.timezone||'')+'</select></div></div>'
+    +'<div class="form-group"><label>Timezone <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><select id="cf-tz">'+_contactTzOpts(c&&c.timezone||'')+'</select></div>'
+    +'<div style="margin:8px 0 12px 0"><a href="#" id="cf-emerg-link" onclick="cfToggleEmergency(event)" style="font-size:12px;color:var(--purple);text-decoration:none">'+_emergencyLabel+'</a></div>'
+    +'<div id="cf-emerg-wrap" style="display:'+_showEmergency+';margin-top:-6px"><div class="form-row"><div class="form-group" style="flex:2"><label>Emergency Contact Name</label><input id="cf-emerg-name" type="text" value="'+esc(c&&c.emergency_contact_name||'')+'"></div><div class="form-group" style="flex:1"><label>Relationship</label><input id="cf-emerg-rel" type="text" value="'+esc(c&&c.emergency_contact_relationship||'')+'" placeholder="e.g. Spouse"></div></div><div class="form-group"><label>Emergency Contact Phone</label><input id="cf-emerg-phone" type="tel" value="'+esc(c&&c.emergency_contact_phone||'')+'"></div></div>'
     +'<div class="form-group"><label>Tags</label><div class="tag-sel-wrap" id="tag-sel-c">'+tagOpts+'</div></div>';
   openModal(c?'Edit Contact':'Add Contact',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveContact,\'contact\')">Save Contact</button>','modal-lg');
 }
@@ -6590,18 +6605,26 @@ function toggleTagOpt(btn){btn.classList.toggle('selected');const t=getTag(btn.d
 function getSelTags(){return[...document.querySelectorAll('#tag-sel-c .tag-opt.selected')].map(b=>b.dataset.tag)}
 
 async function saveContact(){
-  const _fn=(document.getElementById('cf-firstname')||{}).value||'';
-  const _ln=(document.getElementById('cf-lastname')||{}).value||'';
-  if(_fn||_ln){const _auto=(_fn+' '+_ln).trim();const _nf=document.getElementById('cf-name');if(_nf&&(!_nf.value.trim()||_nf.getAttribute('data-auto')==='1')){_nf.value=_auto;_nf.setAttribute('data-auto','1');}}
-  const name=document.getElementById('cf-name').value.trim();if(!name){toast('Name is required.','error');return}
+  const _fn=((document.getElementById('cf-firstname')||{}).value||'').trim();
+  const _ln=((document.getElementById('cf-lastname')||{}).value||'').trim();
+  const _nf=document.getElementById('cf-name');
+  const _customName=_nf?_nf.value.trim():'';
+  // Display name: prefer customized override, otherwise auto-derive from first+last
+  let displayName=_customName||((_fn+' '+_ln).trim());
+  // Validation: need at least first_name OR last_name OR a custom display_name
+  if(!_fn&&!_ln&&!_customName){toast('First name, last name, or display name is required.','error');return}
   const data={
-    display_name: name,
-    name: name,
-    first_name:_fn.trim(),
-    last_name:_ln.trim(),
+    display_name: displayName,
+    name: displayName,
+    first_name: _fn,
+    last_name: _ln,
     type:document.getElementById('cf-type').value,
     email:document.getElementById('cf-email').value.trim(),
     phone:document.getElementById('cf-phone').value.trim(),
+    date_of_birth:(document.getElementById('cf-dob')||{}).value||'',
+    gender:((document.getElementById('cf-gender')||{}).value||'').trim(),
+    pronouns:((document.getElementById('cf-pronouns')||{}).value||'').trim(),
+    preferred_language:((document.getElementById('cf-lang')||{}).value||'').trim(),
     company:document.getElementById('cf-company').value.trim(),
     title:document.getElementById('cf-title').value.trim(),
     website:document.getElementById('cf-web').value.trim(),
@@ -6612,6 +6635,9 @@ async function saveContact(){
     state:document.getElementById('cf-state').value.trim(),
     postal_code:document.getElementById('cf-zip').value.trim(),
     timezone:document.getElementById('cf-tz').value,
+    emergency_contact_name:((document.getElementById('cf-emerg-name')||{}).value||'').trim(),
+    emergency_contact_phone:((document.getElementById('cf-emerg-phone')||{}).value||'').trim(),
+    emergency_contact_relationship:((document.getElementById('cf-emerg-rel')||{}).value||'').trim(),
     status:document.getElementById('cf-status').value,
     tags:getSelTags()
   };
@@ -29731,6 +29757,34 @@ function importDoImport(){
       failedRows:_importFailedRows
     });
   })();
+}
+function cfToggleDisplay(e){
+  if(e&&e.preventDefault)e.preventDefault();
+  var wrap=document.getElementById('cf-display-wrap');
+  var link=document.getElementById('cf-display-link');
+  if(!wrap||!link)return;
+  if(wrap.style.display==='none'){
+    wrap.style.display='block';
+    link.textContent='Reset to auto';
+  }else{
+    wrap.style.display='none';
+    link.textContent='Customize display name';
+    var nf=document.getElementById('cf-name');
+    if(nf)nf.value='';
+  }
+}
+function cfToggleEmergency(e){
+  if(e&&e.preventDefault)e.preventDefault();
+  var wrap=document.getElementById('cf-emerg-wrap');
+  var link=document.getElementById('cf-emerg-link');
+  if(!wrap||!link)return;
+  if(wrap.style.display==='none'){
+    wrap.style.display='block';
+    link.textContent='Hide emergency contact';
+  }else{
+    wrap.style.display='none';
+    link.textContent='Add emergency contact';
+  }
 }
 function cfUpdateName(){
   var fn=(document.getElementById('cf-firstname')||{}).value||'';
