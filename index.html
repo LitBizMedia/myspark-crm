@@ -4236,21 +4236,30 @@ function renderDrawer(){
       +'</div>'
 
       +(function(){
-        // Communication consent display. Only shown if the contact has any
-        // consent data captured (avoids cluttering drawer for legacy contacts
-        // that pre-date the SMS consent fields).
+        // Communication consent display. ALWAYS shown so staff know whether
+        // a patient has consented before sending SMS. Empty = "Not recorded"
+        // for legacy contacts that pre-date the consent fields.
         var hasConsentData = c.sms_consent_transactional || c.sms_consent_marketing || c.sms_consent_updated_at;
-        if(!hasConsentData)return '';
-        function badge(yes, label){
-          if(yes){
+        var dark = ''; // dark mode (drawer is dark surface, use --text not --main-text)
+        function badge(state, label){
+          // state: 'yes' (consented), 'no' (declined), 'unknown' (not recorded)
+          if(state === 'yes'){
             return '<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:var(--success-dim);color:var(--success-text);border:1px solid var(--success);border-radius:var(--radius-full);font-size:12px;font-weight:600">'
               +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>'
               +esc(label)+'</span>';
           }
-          return '<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:var(--main-bg);color:var(--main-text-muted);border:1px solid var(--main-border);border-radius:var(--radius-full);font-size:12px;font-weight:600">'
-            +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+          if(state === 'no'){
+            return '<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:var(--danger-dim);color:var(--danger-text);border:1px solid var(--danger);border-radius:var(--radius-full);font-size:12px;font-weight:600">'
+              +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+              +esc(label)+'</span>';
+          }
+          // unknown
+          return '<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:var(--bg-input);color:var(--text-muted);border:1px dashed var(--border);border-radius:var(--radius-full);font-size:12px;font-weight:500">'
+            +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
             +esc(label)+'</span>';
         }
+        var txState = hasConsentData ? (c.sms_consent_transactional ? 'yes' : 'no') : 'unknown';
+        var mkState = hasConsentData ? (c.sms_consent_marketing ? 'yes' : 'no') : 'unknown';
         var meta = '';
         if(c.sms_consent_updated_at){
           var d = new Date(c.sms_consent_updated_at);
@@ -4261,12 +4270,15 @@ function renderDrawer(){
         if(c.sms_consent_source){
           meta += (meta?' · ':'') + esc(c.sms_consent_source.replace(/_/g,' '));
         }
-        return '<div class="sec-label" style="margin-top:14px">Communication Consent</div>'
+        if(!hasConsentData){
+          meta = 'No consent on file. Capture via form submission, conversation, or manual update.';
+        }
+        return '<div class="sec-label" style="margin-top:14px">SMS Consent</div>'
           +'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px">'
-          +badge(!!c.sms_consent_transactional, 'Transactional SMS')
-          +badge(!!c.sms_consent_marketing, 'Marketing SMS')
+          +badge(txState, 'Transactional SMS: ' + (txState==='yes'?'Yes':txState==='no'?'No':'Not recorded'))
+          +badge(mkState, 'Marketing SMS: ' + (mkState==='yes'?'Yes':mkState==='no'?'No':'Not recorded'))
           +'</div>'
-          +(meta ? '<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:14px">'+meta+'</div>' : '<div style="margin-bottom:14px"></div>');
+          +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:14px">'+meta+'</div>';
       })()
 
       +(function(){
