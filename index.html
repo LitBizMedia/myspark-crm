@@ -18073,7 +18073,7 @@ function fbNewField(type){
   if(type==='dropdown')base.multiSelect=false;
   if(type==='signature')base.settings={height:100};
   if(type==='fheader')base.settings={text:'Your Heading Here',level:'h2',align:'left'};
-  if(type==='fparagraph')base.settings={text:'Add your paragraph text here.',align:'left'};
+  if(type==='fparagraph')base.settings={text:'Add your paragraph text here.',textHtml:'<p>Add your paragraph text here.</p>',align:'left'};
   if(type==='fdivider')base.settings={style:'solid',color:'#d0d0d8'};
   if(type==='fimage')base.settings={url:'',alt:'',align:'center',width:'100',linkUrl:''};
   if(isCF){const cfId=type.replace('cf_','');const cf=(db.customFields||[]).find(x=>x.id===cfId);if(cf){base.label=cf.label;base.field_key=cf.key;base.type='cf_field';base.settings={customFieldId:cfId};if(cf.options)base.options=JSON.parse(JSON.stringify(cf.options||[]));}}
@@ -18320,7 +18320,10 @@ function fbRenderFieldCard(fd,pi,fi){
 
 function fbFieldPreview(fd){
   if(fd.type==='fheader'){const lv=fd.settings&&fd.settings.level||'h2';const sz={h1:'18px',h2:'15px',h3:'13px'}[lv];const fw={h1:'800',h2:'700',h3:'600'}[lv];return'<div class="fb-content-el"><div class="fb-content-header" style="font-size:'+sz+';font-weight:'+fw+';text-align:'+(fd.settings&&fd.settings.align||'left')+'">'+esc(fd.settings&&fd.settings.text||'Heading')+'</div></div>';}
-  if(fd.type==='fparagraph'){return'<div class="fb-content-el"><div class="fb-content-para" style="text-align:'+(fd.settings&&fd.settings.align||'left')+'">'+esc((fd.settings&&fd.settings.text||'Paragraph...').slice(0,80))+'</div></div>';}
+  if(fd.type==='fparagraph'){
+    var _ptxt=(fd.settings&&fd.settings.textHtml)?(fd.settings.textHtml.replace(/<[^>]+>/g,'').trim()):(fd.settings&&fd.settings.text)||'Paragraph...';
+    return'<div class="fb-content-el"><div class="fb-content-para" style="text-align:'+(fd.settings&&fd.settings.align||'left')+'">'+esc(_ptxt.slice(0,80))+'</div></div>';
+  }
   if(fd.type==='fdivider'){return'<div class="fb-content-el"><hr class="fb-content-divider" style="border-top-style:'+(fd.settings&&fd.settings.style||'solid')+';border-top-color:'+(fd.settings&&fd.settings.color||'#d0d0d8')+'"></div>';}
   if(fd.type==='fimage'){const url=fd.settings&&fd.settings.url;return'<div class="fb-content-el" style="text-align:'+(fd.settings&&fd.settings.align||'center')+'">'+(url?'<img src="'+esc(url)+'" style="max-width:'+(fd.settings&&fd.settings.width||'100')+'%;border-radius:5px;max-height:60px;object-fit:cover">':'<div style="height:44px;background:#e8e8ee;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#aaa">Image URL not set</div>')+'</div>';}
   let h='<div class="fb-lbl">'+esc(fd.label||'Untitled')+(fd.required?'<span class="req">*</span>':'')+'</div>';
@@ -18949,7 +18952,18 @@ function fbRenderFieldSettingsNew(fd){
       h.push(align('setting','align',fd.settings&&fd.settings.align||'left'));
     }
     if(fd.type==='fparagraph'){
-      h.push('<label class="fb-sl">Text</label><textarea class="fb-si" rows="5" data-fn="setting" data-key="text" oninput="fbSpChange(this)">'+esc(fd.settings&&fd.settings.text||'')+'</textarea>');
+      const _phtml=(fd.settings&&fd.settings.textHtml)||(fd.settings&&fd.settings.text?'<p>'+esc(fd.settings.text)+'</p>':'');
+      h.push('<label class="fb-sl">Text</label>'
+        +'<div class="fb-rte-wrap">'
+        +'<div class="fb-rte-bar">'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();document.execCommand(\'italic\')"><i>I</i></button>'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();document.execCommand(\'underline\')"><u>U</u></button>'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();fbInsertRteLink()">Link</button>'
+        +'<button class="fb-rte-btn" onmousedown="event.preventDefault();document.execCommand(\'insertUnorderedList\')">List</button>'
+        +'</div>'
+        +'<div class="fb-rte-body" contenteditable="true" oninput="fbUpdateSetting(\'textHtml\',this.innerHTML);fbUpdateSetting(\'text\',this.innerText)">'+_phtml+'</div>'
+        +'</div>');
       h.push(align('setting','align',fd.settings&&fd.settings.align||'left'));
     }
     if(fd.type==='fdivider'){
@@ -19274,7 +19288,12 @@ function fbRenderFormHTML(f,st,radius){
     if(fd.type==='captcha'||fd.type==='hidden')return;
     // Content elements
     if(fd.type==='fheader'){const lv=fd.settings&&fd.settings.level||'h2';const sz={h1:'22px',h2:'17px',h3:'14px'}[lv];const fw={h1:'800',h2:'700',h3:'600'}[lv];h+='<div class="fb-prev-field" style="text-align:'+(fd.settings&&fd.settings.align||'left')+'"><'+lv+' style="margin:0;font-size:'+sz+';font-weight:'+fw+';color:'+lbl+'">'+esc(fd.settings&&fd.settings.text||'')+'</'+lv+'></div>';return;}
-    if(fd.type==='fparagraph'){const _pCls=fd.width==='half'?'fb-prev-field half-w':'fb-prev-field';h+='<div class="'+_pCls+'" style="text-align:'+(fd.settings&&fd.settings.align||'left')+';font-size:14px;color:'+txt+';line-height:1.7">'+esc(fd.settings&&fd.settings.text||'')+'</div>';return;}
+    if(fd.type==='fparagraph'){
+      const _pCls=fd.width==='half'?'fb-prev-field half-w':'fb-prev-field';
+      const _phtml=(fd.settings&&fd.settings.textHtml)||(fd.settings&&fd.settings.text?'<p>'+esc(fd.settings.text)+'</p>':'');
+      h+='<div class="'+_pCls+'" style="text-align:'+(fd.settings&&fd.settings.align||'left')+';font-size:14px;color:'+txt+';line-height:1.7">'+_phtml+'</div>';
+      return;
+    }
     if(fd.type==='fdivider'){h+='<hr style="border:none;border-top:1.5px '+(fd.settings&&fd.settings.style||'solid')+' '+(fd.settings&&fd.settings.color||'#d0d0d8')+';margin:10px 0">';return;}
     if(fd.type==='fimage'){const url=fd.settings&&fd.settings.url;if(!url)return;const img='<img src="'+esc(url)+'" alt="'+esc(fd.settings&&fd.settings.alt||'')+'" style="max-width:'+(fd.settings&&fd.settings.width||'100')+'%;border-radius:'+r+'px;display:inline-block">';const _iCls=fd.width==='half'?'fb-prev-field half-w':'fb-prev-field';h+='<div class="'+_iCls+'" style="text-align:'+(fd.settings&&fd.settings.align||'center')+'">'+(fd.settings&&fd.settings.linkUrl?'<a href="'+esc(fd.settings.linkUrl)+'" target="_blank">'+img+'</a>':img)+'</div>';return;}
     const reqStar=fd.required?'<span style="color:#ff4000;margin-left:2px">*</span>':'';
