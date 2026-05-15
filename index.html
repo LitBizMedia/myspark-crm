@@ -18148,10 +18148,14 @@ function fbNewForm(){
 
 
 function renderFormsList(){
-  // Guard: if the builder overlay is open, the user is editing a form. The
-  // background poll calls renderForms -> renderFormsList every 30s, and
-  // running this function would call fbHideOverlay() and slam the editor
-  // shut mid-edit. Bail out and leave the editor alone.
+  // ROOT-LEVEL GUARD. No matter what calls this function (renderForms,
+  // direct call, callback, anything), if fbState.view says we're not on the
+  // list, bail out. This is the ONLY function that writes to forms-forms-view
+  // for the list, so guarding it here protects every other view (builder,
+  // embed, submissions) from being wiped on poll, save, or any other event.
+  if(window.fbState && fbState.view && fbState.view !== 'list')return;
+  // Also bail if the builder overlay is somehow visible without fbState.view
+  // matching, paranoia for edge cases.
   const _ov=document.getElementById('fb-overlay');
   if(_ov&&!_ov.classList.contains('hidden'))return;
   fbHideOverlay();
@@ -19380,7 +19384,7 @@ function fbOpenEmbed(id){
   // Stash the codes so the copy buttons can grab them without onclick escaping hell
   window.fbEmbed = { src: src, iframe: iframe, script: script };
 
-  const cardCss = 'background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px';
+  const cardCss = 'background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;color:var(--text)';
   const headingCss = 'font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;margin-bottom:4px;color:var(--text)';
   const subCss = 'font-size:12px;color:var(--text-muted);margin-bottom:8px';
   const inputCss = 'flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-size:12px;outline:none;font-family:monospace;min-width:0';
