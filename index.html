@@ -18882,46 +18882,122 @@ function fbSetSpTab(tab){
 // =====================================================
 // FORM BUILDER - Submissions
 // =====================================================
-function fbOpenSubs(id){
+async function fbOpenSubs(id){
   fbState.subsFormId=id;fbState.view='submissions';
   fbHideOverlay();
   const el=document.getElementById('forms-forms-view');if(!el)return;
   const f=(db.forms||[]).find(x=>x.id===id);if(!f)return;
-  const subs=(db.formSubmissions||[]).filter(s=>s.formId===id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
-  // Audit: PHI access - viewing form submissions
-  logSubaccountAudit('subaccount.form.submission.view', {
-    targetId: id,
-    targetType: 'form',
-    metadata: { form_name: f.name, submission_count: subs.length }
-  });
-  const fields=f.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]).filter(fd=>fd.type!=='hidden'&&fd.type!=='captcha');
-  let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Submissions: '+esc(f.name)+'</div></div>';
+
+  // Loading state
+  el.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Submissions: '+esc(f.name)+'</div></div><div style="padding:40px;text-align:center;color:var(--text-muted)">Loading submissions...</div>';
+
+  // Fetch from server
+  let subs = [];
+  let unreadCount = 0;
+  try{
+    const resp = await fetch(apiUrl('/api/forms/submissions-list?form_id=') + encodeURIComponent(id), {credentials:'include'});
+    if(!resp.ok)throw new Error('Failed to load submissions');
+    const data = await resp.json();
+    subs = data.submissions || [];
+    unreadCount = data.unread_count || 0;
+  }catch(e){
+    console.error('fbOpenSubs fetch failed:', e);
+    el.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Submissions: '+esc(f.name)+'</div></div><div style="padding:40px;text-align:center;color:var(--danger)">Failed to load submissions. Try again.</div>';
+    return;
+  }
+
+  // Cache for fbViewSub
+  window._fbSubsCache = subs;
+
+  // Render
+  let h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><button class="btn btn-ghost btn-sm" onclick="fbState.view=\'list\';renderFormsList()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Forms</button><div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700">Submissions: '+esc(f.name)+'</div>';
+  if(unreadCount > 0){
+    h+='<span style="background:var(--purple);color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--radius-full)">'+unreadCount+' unread</span>';
+  }
+  h+='</div>';
+
   if(!subs.length){
     h+='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><h3>No submissions yet</h3><p>Embed this form on your website to start collecting responses.</p></div>';
   }else{
     subs.forEach(sub=>{
-      const c=sub.contactId?getContact(sub.contactId):null;
-      const ts=fmtDateTime(sub.createdAt);
-      h+='<div class="fb-sub-row" onclick="fbViewSub(\''+sub.id+'\')"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:2px">'+(c?esc(c.name):esc(sub.data&&sub.data.email||sub.data&&sub.data.name||'Anonymous'))+'</div><div style="font-size:11px;color:var(--text-muted)">'+ts+(c?' \u00b7 Linked to contact':'')+'</div></div><div style="font-size:12px;color:var(--text-muted)">'+(fields.slice(0,2).map(fd=>{const v=sub.data&&sub.data[fd.id];return v?esc(String(v).slice(0,30)):''}).filter(Boolean).join(' \u00b7 '))+'</div></div>';
+      const c = sub.contactId ? getContact(sub.contactId) : null;
+      const ts = fmtDateTime(sub.createdAt);
+      const data = sub.data || {};
+      // Title preference: contact name -> first+last -> email -> phone -> "Anonymous"
+      const title = c ? c.name :
+        ((data.first_name||'') + ' ' + (data.last_name||'')).trim() ||
+        data.email || data.phone || 'Anonymous';
+      // Preview: show up to 2 informative fields
+      const previewKeys = Object.keys(data).filter(k => k !== 'sms_consent' && k !== '_hp' && data[k]);
+      const preview = previewKeys.slice(0, 2).map(k => {
+        const v = data[k];
+        const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        return esc(s.slice(0, 30));
+      }).join(' \u00b7 ');
+      const unreadDot = !sub.readAt ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--purple);margin-right:8px;flex-shrink:0"></span>' : '';
+      h+='<div class="fb-sub-row" onclick="fbViewSub(\''+esc(sub.id)+'\')"><div style="flex:1;display:flex;align-items:center">'+unreadDot+'<div><div style="font-size:13px;font-weight:'+(!sub.readAt?'700':'500')+';margin-bottom:2px">'+esc(title)+'</div><div style="font-size:11px;color:var(--text-muted)">'+ts+(c?' \u00b7 Linked to contact':'')+(sub.contactAction==='created'?' (new)':'')+'</div></div></div><div style="font-size:12px;color:var(--text-muted)">'+preview+'</div></div>';
     });
   }
   el.innerHTML=h;
 }
 
 function fbViewSub(id){
-  const sub=(db.formSubmissions||[]).find(s=>s.id===id);if(!sub)return;
-  const f=(db.forms||[]).find(x=>x.id===sub.formId);if(!f)return;
-  const fields=f.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]).filter(fd=>fd.type!=='hidden'&&fd.type!=='captcha');
-  const ts=fmtDateTime(sub.createdAt, {month:'long'});
-  let body='<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Submitted '+ts+'</div>';
-  body+='<div style="display:flex;flex-direction:column;gap:10px">';
-  fields.forEach(fd=>{
-    const v=sub.data&&sub.data[fd.id];
-    if(v===undefined||v===null||v==='')return;
-    body+='<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">'+esc(fd.label)+'</div><div style="font-size:14px">'+esc(Array.isArray(v)?v.join(', '):String(v))+'</div></div>';
+  const subs = window._fbSubsCache || [];
+  const sub = subs.find(s => s.id === id);
+  if(!sub)return;
+  const data = sub.data || {};
+  const ts = fmtDateTime(sub.createdAt, {month:'long'});
+  let body = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Submitted '+ts+'</div>';
+
+  // Contact link section
+  if(sub.contactId){
+    const cn = getContact(sub.contactId);
+    if(cn){
+      body += '<div style="background:var(--bg-input);padding:10px;border-radius:var(--radius);margin-bottom:14px;font-size:12px"><strong>Linked to contact:</strong> <a href="#" onclick="closeModal();openDrawer(\''+esc(sub.contactId)+'\');return false">'+esc(cn.name)+'</a>'+(sub.contactAction?' <span style="color:var(--text-muted);margin-left:4px">('+esc(sub.contactAction)+')</span>':'')+'</div>';
+    }
+  }
+
+  body += '<div style="display:flex;flex-direction:column;gap:10px">';
+
+  // Render each data key. Submission shape uses standardized field_keys
+  // (first_name, email, etc.) so we render directly from the data object
+  // rather than walking the form definition.
+  Object.keys(data).forEach(key => {
+    if(key === '_hp') return; // skip honeypot
+    const v = data[key];
+    if(v === undefined || v === null || v === '')return;
+
+    const label = key.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+    let display;
+    if(Array.isArray(v)){
+      display = esc(v.join(', '));
+    } else if(typeof v === 'object'){
+      // Composite values (sms_consent {transactional, marketing}, address {...})
+      const lines = Object.keys(v).filter(k => v[k] !== '' && v[k] !== null && v[k] !== undefined).map(k => {
+        const sub = v[k];
+        const sublabel = k.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+        if(typeof sub === 'boolean')return sublabel + ': ' + (sub ? 'Yes' : 'No');
+        return sublabel + ': ' + String(sub);
+      });
+      display = esc(lines.join(' \u00b7 '));
+    } else if(typeof v === 'boolean'){
+      display = v ? 'Yes' : 'No';
+    } else {
+      display = esc(String(v));
+    }
+    body += '<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">'+esc(label)+'</div><div style="font-size:14px">'+display+'</div></div>';
   });
-  body+='</div>';
-  openModal('Submission Details',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="fbLinkSub(\''+sub.id+'\')">Link to Contact</button>','modal-lg');
+
+  body += '</div>';
+
+  // Meta footer with technical details
+  body += '<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted)">';
+  if(sub.pageUrl) body += '<div>Submitted from: '+esc(sub.pageUrl)+'</div>';
+  if(sub.notificationSent) body += '<div>Notification sent: '+esc(sub.notificationEmail || 'yes')+'</div>';
+  if(sub.notificationError) body += '<div style="color:var(--danger)">Notification error: '+esc(sub.notificationError)+'</div>';
+  body += '</div>';
+
+  openModal('Submission Details', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
 }
 
 function fbLinkSub(subId){

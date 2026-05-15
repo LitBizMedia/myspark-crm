@@ -25,6 +25,7 @@
 //   contact_action: 'created' | 'updated' | 'matched' | 'skipped' | 'none'
 
 const db = require('./lib/db');
+const crypto = require('crypto');
 const { wrap } = require('./lib/lambda-adapter');
 const { SESv2Client, SendEmailCommand } = require('@aws-sdk/client-sesv2');
 const { getContactByEmail, getContactByPhone } = require('./lib/contacts');
@@ -41,6 +42,40 @@ function safeStr(v) {
   if (v == null) return null;
   const s = String(v).trim();
   return s || null;
+}
+
+// Hash an IP for spam analytics without storing the raw value (GDPR alignment).
+// SHA-256 truncated to 16 chars is plenty for our 'is this IP a known spammer?'
+// use case while being practically irreversible.
+function hashIp(ip) {
+  if (!ip) return null;
+  return crypto.createHash('sha256').update(String(ip)).digest('hex').substring(0, 16);
+}
+
+// Extract caller IP from the request. API Gateway HTTP API v2 puts it in
+// requestContext.http.sourceIp. Fall back to x-forwarded-for header.
+function extractIp(req) {
+  try {
+    const rc = req.requestContext || (req.event && req.event.requestContext);
+    if (rc && rc.http && rc.http.sourceIp) return rc.http.sourceIp;
+    const xff = req.headers && (req.headers['x-forwarded-for'] || req.headers['X-Forwarded-For']);
+    if (xff) return String(xff).split(',')[0].trim();
+  } catch (e) {}
+  return null;
+}
+
+function extractUserAgent(req) {
+  try {
+    return (req.headers && (req.headers['user-agent'] || req.headers['User-Agent'])) || null;
+  } catch (e) { return null; }
+}
+
+// Size cap on submission_data. DB has CHECK constraint at 100KB but we reject
+// earlier at the Lambda to give a better error.
+function isSubmissionSizeOk(data) {
+  try {
+    return Buffer.byteLength(JSON.stringify(data || {}), 'utf8') < 90000;
+  } catch (e) { return false; }
 }
 function fmtFieldValue(val) {
   if (val == null || val === '') return '<em style="color:#999">empty</em>';
@@ -295,6 +330,10 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'subaccount_id and form_id are required' });
     }
 
+    if (!isSubmissionSizeOk(submissionData)) {
+      return res.status(413).json({ error: 'Submission too large' });
+    }
+
     const submissionId = 'fsub-' + Math.random().toString(36).slice(2, 14);
     const submittedAt = new Date().toISOString();
     let notificationSent = false;
@@ -357,7 +396,39 @@ async function handler(req, res) {
       }
     }
 
-    // 3. Audit log
+    // 3. Persist to form_submissions table (primary record). Audit log is
+    //    kept as a secondary record for HIPAA/compliance reasons.
+    try {
+      await db.query(
+        `INSERT INTO form_submissions (
+          id, subaccount_id, form_id, form_name,
+          contact_id, contact_action,
+          submission_data, schema_version,
+          page_url, ip_hash, user_agent,
+          notification_sent, notification_email, notification_error,
+          created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4,
+          $5, $6,
+          $7, 1,
+          $8, $9, $10,
+          $11, $12, $13,
+          NOW(), NOW()
+        )`,
+        [
+          submissionId, subaccountId, formId, formName,
+          contactId, contactAction,
+          JSON.stringify(submissionData),
+          pageUrl || null, hashIp(extractIp(req)), extractUserAgent(req),
+          notificationSent, notifyEmail || null, null
+        ]
+      );
+    } catch (e) {
+      console.error('form_submissions insert failed:', e.message);
+      // Don't fail the whole request; audit_log will still capture below.
+    }
+
+    // 4. Audit log (compliance secondary record)
     try {
       const auditId = 'log_' + Math.random().toString(36).slice(2, 14);
       await db.query(
