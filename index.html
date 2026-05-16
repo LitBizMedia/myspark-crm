@@ -1604,6 +1604,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <button class="sb-item" id="sb-forms" data-panel="forms" onclick="switchPanel('forms')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Forms
       </button>
+      <button class="sb-item" id="sb-journeys" data-panel="journeys" onclick="switchPanel('journeys')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="7" rx="1"/></svg>Journeys
+      </button>
       <button class="sb-item" id="sb-media" data-panel="media" onclick="switchPanel('media')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Media Library
       </button>
@@ -2181,6 +2184,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       </div>
 
       <!-- FORMS -->
+      <div id="panel-journeys" class="panel hidden"></div>
       <div id="panel-forms" class="panel hidden">
         <div class="forms-panel-tabs">
           <button class="forms-panel-tab active" id="fpt-forms" onclick="switchFormsTab('forms')">Forms</button>
@@ -3657,9 +3661,9 @@ function handleLogout(){
 // =====================================================
 // initApp defined below (server-aware version at line ~3180)
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',journeys:'Journeys',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings'};
 function renderPanel(){
-  const fns={dashboard:renderDash,contacts:renderContacts,conversations:renderConversations,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,staff:renderStaff,settings:renderSettings,products:renderProducts,media:renderMedia,help:renderHelp};
+  const fns={dashboard:renderDash,contacts:renderContacts,conversations:renderConversations,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,journeys:renderJourneys,staff:renderStaff,settings:renderSettings,products:renderProducts,media:renderMedia,help:renderHelp};
   if(fns[state.panel])fns[state.panel]();
 }
 
@@ -18032,6 +18036,22 @@ function _convUpdateSidebarBadge(){
 
 function renderHelp(){
   // Placeholder - help center pending content.
+}
+
+// =====================================================
+// JOURNEYS
+// =====================================================
+// Kanban-style funnel tracking. Stage 1B step 1: empty shell.
+// Subsequent steps add state load, picker, kanban board, drag/drop,
+// stat cards, card modal, journey settings, archive view.
+function renderJourneys(){
+  var el = document.getElementById('panel-journeys');
+  if(!el) return;
+  el.innerHTML = '<div style="padding:60px 40px;text-align:center;color:var(--main-text-muted)">'
+    + '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="opacity:0.4;margin-bottom:16px"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="7" rx="1"/></svg>'
+    + '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:700;color:var(--main-text);margin-bottom:8px">Journeys</div>'
+    + '<div style="font-size:14px;max-width:420px;margin:0 auto">Kanban funnel tracking is wiring up. Full board coming online in the next deploy.</div>'
+    + '</div>';
 }
 
 function renderForms(){
