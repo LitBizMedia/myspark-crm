@@ -71,7 +71,7 @@ async function handler(req, res) {
       db.query(
         `SELECT journey_id, COUNT(*)::int AS cnt
          FROM journey_cards
-         WHERE subaccount_id = $1 AND archived = FALSE
+         WHERE subaccount_id = $1
          GROUP BY journey_id`,
         [subaccountId]
       )
