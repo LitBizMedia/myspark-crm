@@ -18076,7 +18076,7 @@ function journeyDelete(id){ return _journeyApi('journeys-delete', {id:id, confir
 function fetchJourneyCards(journeyId){ return _journeyApi('journey-cards-list', {journey_id:journeyId}, {method:'GET'}); }
 function journeyCardUpsert(data){ return _journeyApi('journey-cards-upsert', data); }
 function journeyCardMove(data){ return _journeyApi('journey-cards-move', data); }
-function journeyCardArchive(id, restore){ return _journeyApi('journey-cards-delete', {id:id, restore: !!restore}); }
+function journeyCardDelete(id){ return _journeyApi('journey-cards-delete', {id:id}); }
 
 // Stale-load guard: if user clicks away and back fast, only the latest load renders.
 var _journeysLoadId = 0;
@@ -18146,7 +18146,6 @@ function _renderJourneysUI(){
             + '</div>';
         }).join('')
       + '<button style="padding:8px 14px;border-radius:var(--radius);border:1px dashed var(--main-border);background:transparent;color:var(--main-text-muted);cursor:pointer;font-size:14px" onclick="openCreateJourneyModal()" title="Create new journey">+ New</button>'
-      + _archiveToggleHTML()
       + '</div>';
   } else {
     var manageBtnStyle = 'padding:8px 10px;border-radius:var(--radius);border:1px solid var(--main-border);background:var(--main-card);color:var(--main-text-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center';
@@ -18158,7 +18157,6 @@ function _renderJourneysUI(){
       + '</select>'
       + '<button style="' + manageBtnStyle + '" onclick="openJourneySettingsModal(\'' + active.id + '\')" title="Journey settings">' + gearIcon + '</button>'
       + '<button class="btn btn-primary btn-sm" onclick="openCreateJourneyModal()">+ New Journey</button>'
-      + _archiveToggleHTML()
       + '</div>';
   }
 
@@ -18174,22 +18172,7 @@ function _renderJourneysUI(){
 
 var _journeyCardsCache = {};
 var _journeyCardsLoadId = 0;
-var _journeyShowArchived = false;
 
-function _archiveToggleHTML(){
-  var on = _journeyShowArchived;
-  var bg = on ? 'var(--purple)' : 'transparent';
-  var color = on ? '#fff' : 'var(--main-text-muted)';
-  var border = on ? 'var(--purple)' : 'var(--main-border)';
-  return '<button style="margin-left:auto;padding:8px 12px;border-radius:var(--radius);border:1px solid ' + border + ';background:' + bg + ';color:' + color + ';cursor:pointer;font-size:12px;font-weight:500" onclick="_toggleArchiveView()" title="Toggle archived cards">'
-    + (on ? '✓ Showing archived' : 'Show archived')
-    + '</button>';
-}
-
-function _toggleArchiveView(){
-  _journeyShowArchived = !_journeyShowArchived;
-  _renderJourneysUI();
-}
 
 async function _loadJourneyCards(journey){
   var board = document.getElementById('jrn-board');
@@ -18226,10 +18209,9 @@ function _renderJourneyBoard(journey, cards){
     return;
   }
 
-  // Group cards by stage_id. Archived only included when toggle is on.
+  // Group cards by stage_id
   var byStage = {};
   cards.forEach(function(c){
-    if (c.archived && !_journeyShowArchived) return;
     if (!byStage[c.stage_id]) byStage[c.stage_id] = [];
     byStage[c.stage_id].push(c);
   });
@@ -18261,8 +18243,6 @@ function _renderJourneyBoard(journey, cards){
     + '.jrn-card:hover { box-shadow:var(--shadow-md); }'
     + '.jrn-card.won { border-left-color:var(--success); opacity:0.85; }'
     + '.jrn-card.lost { border-left-color:var(--danger); opacity:0.75; }'
-    + '.jrn-card.archived { opacity:0.45; }'
-    + '.jrn-card.archived .jrn-card-title { text-decoration:line-through; color:var(--main-text-muted); }'
     + '.jrn-card.dragging { opacity:0.4; transform:rotate(1deg); }'
     + '.jrn-col-body.drop-active { background:var(--purple-dim); outline:2px dashed var(--purple); outline-offset:-4px; }'
     + '.jrn-card-title { font-weight:600; font-size:13px; color:var(--main-text); margin-bottom:4px; line-height:1.3; }'
@@ -18280,7 +18260,7 @@ function _renderJourneyBoard(journey, cards){
 }
 
 function _renderJourneyStats(cards){
-  cards = (cards || []).filter(function(c){ return !c.archived; });
+  cards = cards || [];
 
   // 1. Journey Value: sum of open card values
   var journeyValue = 0;
@@ -18387,7 +18367,6 @@ function _renderColumnHTML(stage, cards){
 
 function _renderCardHTML(card){
   var statusClass = card.status === 'won' ? ' won' : (card.status === 'lost' ? ' lost' : '');
-  if (card.archived) statusClass += ' archived';
 
   var valueLine = '';
   if (card.value && parseFloat(card.value) > 0) {
@@ -18639,9 +18618,9 @@ function openCardModal(cardId, stageId){
     + '<div class="form-group" style="grid-column:1 / -1">'
     + '<label>Contact</label>'
     + '<div id="cm-contact-wrap" style="position:relative">'
-    + '  <div id="cm-contact-selected"' + (_cardModalCtx.contactId ? '' : ' style="display:none"') + ' style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input)">'
-    + '    <span style="flex:1;font-size:13px">' + esc(contactInitialName) + '</span>'
-    + '    <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="_cmClearContact()">Change</button>'
+    + '  <div id="cm-contact-selected"' + (_cardModalCtx.contactId ? '' : ' style="display:none"') + ' style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-input);color:var(--text)">'
+    + '    <span style="flex:1;font-size:13px;color:var(--purple-light);cursor:pointer;text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color 0.15s" onmouseover="this.style.textDecorationColor=\'var(--purple-light)\'" onmouseout="this.style.textDecorationColor=\'transparent\'" onclick="_cmOpenContactDrawer()" title="Open contact">' + esc(contactInitialName) + '</span>'
+    + '    <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px" onclick="_cmClearContact()">Change</button>'
     + '  </div>'
     + '  <input id="cm-contact-search" type="text" placeholder="Search by name or email, or leave blank" autocomplete="off"' + (showRawLead ? '' : ' style="display:none"') + ' oninput="_cmContactSearch(this.value)" onfocus="_cmContactSearch(this.value)">'
     + '  <div id="cm-contact-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);margin-top:4px"></div>'
@@ -18696,14 +18675,8 @@ function openCardModal(cardId, stageId){
     + '</div>';
 
   if (card) {
-    var actionBtn;
-    if (card.archived) {
-      actionBtn = '<button class="btn btn-ghost" style="color:var(--success-text);border:1px solid var(--success)" onclick="_cmRestoreCard(event)">Restore Card</button>';
-    } else {
-      actionBtn = '<button class="btn btn-ghost" style="color:var(--danger);border:1px solid var(--danger)" onclick="_cmArchiveCard(event)">Archive Card</button>';
-    }
     body += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--main-border);display:flex;justify-content:flex-end">'
-      + actionBtn
+      + '<button class="btn btn-ghost" style="color:var(--danger);border:1px solid var(--danger)" onclick="_cmDeleteCard(event)">Delete Card</button>'
       + '</div>';
   }
 
@@ -18727,6 +18700,81 @@ function _cmClearContact(){
   if (sel) sel.style.display = 'none';
   if (search) { search.style.display = ''; search.value = ''; setTimeout(function(){ search.focus(); }, 30); }
   if (lead) lead.style.display = 'grid';
+}
+
+// Opens the contact drawer for the card's contact. Closes the card
+// modal first (no z-index war), stashes the form state, and reopens
+// the card modal with the same field values when the drawer closes.
+// Lets the drawer trigger nested modals (Book Appointment, etc.) without
+// stacking issues.
+function _cmOpenContactDrawer(){
+  if (!_cardModalCtx || !_cardModalCtx.contactId) return;
+  if (typeof openDrawer !== 'function') return;
+
+  // Capture current form state
+  function readVal(id){ var el = document.getElementById(id); return el ? el.value : null; }
+  var stashed = {
+    journeyId: _cardModalCtx.journeyId,
+    cardId: _cardModalCtx.cardId,
+    stageId: _cardModalCtx.stageId,
+    contactId: _cardModalCtx.contactId,
+    appointmentId: _cardModalCtx.appointmentId,
+    isEdit: _cardModalCtx.isEdit,
+    fields: {
+      title: readVal('cm-title'),
+      value: readVal('cm-value'),
+      staff: readVal('cm-staff'),
+      close: readVal('cm-close'),
+      source: readVal('cm-source'),
+      notes: readVal('cm-notes'),
+      leadName: readVal('cm-lead-name'),
+      leadEmail: readVal('cm-lead-email'),
+      leadPhone: readVal('cm-lead-phone'),
+      stageSelect: readVal('cm-stage')
+    }
+  };
+  var contactId = stashed.contactId;
+
+  // Close the card modal (closeModal also clears _cardModalCtx implicitly
+  // since the modal markup is gone; we re-create everything on restore)
+  closeModal();
+
+  // Open the drawer normally
+  openDrawer(contactId);
+
+  // Watch for drawer-overlay losing the 'open' class to restore the card modal.
+  var overlay = document.getElementById('drawer-overlay');
+  if (!overlay) return;
+  var observer = new MutationObserver(function(){
+    if (overlay.classList.contains('open')) return;
+    observer.disconnect();
+
+    // Reopen the card modal. Pass cardId for edit mode, or null+stageId for create.
+    // openCardModal pulls card data from the cache for edits, so saved-edit fields
+    // (title etc) get overwritten by cached values; we re-apply our stashed fields
+    // after the modal renders.
+    if (stashed.isEdit) {
+      openCardModal(stashed.cardId);
+    } else {
+      openCardModal(null, stashed.stageId);
+    }
+
+    // Re-apply stashed values after the modal DOM is built
+    setTimeout(function(){
+      function setVal(id, v){ var el = document.getElementById(id); if (el && v !== null && v !== undefined) el.value = v; }
+      setVal('cm-title', stashed.fields.title);
+      setVal('cm-value', stashed.fields.value);
+      setVal('cm-staff', stashed.fields.staff);
+      setVal('cm-close', stashed.fields.close);
+      setVal('cm-source', stashed.fields.source);
+      setVal('cm-notes', stashed.fields.notes);
+      setVal('cm-lead-name', stashed.fields.leadName);
+      setVal('cm-lead-email', stashed.fields.leadEmail);
+      setVal('cm-lead-phone', stashed.fields.leadPhone);
+      if (!stashed.isEdit) setVal('cm-stage', stashed.fields.stageSelect);
+    }, 60);
+  });
+  observer.observe(overlay, { attributes: true, attributeFilter: ['class'] });
 }
 
 function _cmContactSearch(q){
@@ -18848,39 +18896,22 @@ async function _cmSaveCard(ev){
   }
 }
 
-async function _cmArchiveCard(ev){
+async function _cmDeleteCard(ev){
   var btn = ev && ev.target;
   if (!_cardModalCtx || !_cardModalCtx.cardId) return;
-  if (!confirm('Archive this card? You can restore it from the archive view later.')) return;
+  if (!confirm('Permanently delete this card? This cannot be undone.')) return;
 
   try {
-    await _withBusyBtn(btn, 'Archiving...', async function(){
-      await journeyCardArchive(_cardModalCtx.cardId, false);
+    await _withBusyBtn(btn, 'Deleting...', async function(){
+      await journeyCardDelete(_cardModalCtx.cardId);
       closeModal();
-      toast('Card archived', 'success');
+      toast('Card deleted', 'success');
       delete _journeyCardsCache[_cardModalCtx.journeyId];
       _cardModalCtx = null;
       await renderJourneys();
     });
   } catch(e) {
-    toast('Failed to archive: ' + e.message, 'error');
-  }
-}
-
-async function _cmRestoreCard(ev){
-  var btn = ev && ev.target;
-  if (!_cardModalCtx || !_cardModalCtx.cardId) return;
-  try {
-    await _withBusyBtn(btn, 'Restoring...', async function(){
-      await journeyCardArchive(_cardModalCtx.cardId, true);
-      closeModal();
-      toast('Card restored', 'success');
-      delete _journeyCardsCache[_cardModalCtx.journeyId];
-      _cardModalCtx = null;
-      await renderJourneys();
-    });
-  } catch(e) {
-    toast('Failed to restore: ' + e.message, 'error');
+    toast('Failed to delete: ' + e.message, 'error');
   }
 }
 
