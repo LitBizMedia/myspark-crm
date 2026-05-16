@@ -18242,6 +18242,8 @@ function _renderJourneyBoard(journey, cards){
     + '.jrn-card:hover { box-shadow:var(--shadow-md); }'
     + '.jrn-card.won { border-left-color:var(--success); opacity:0.85; }'
     + '.jrn-card.lost { border-left-color:var(--danger); opacity:0.75; }'
+    + '.jrn-card.dragging { opacity:0.4; transform:rotate(1deg); }'
+    + '.jrn-col-body.drop-active { background:var(--purple-dim); outline:2px dashed var(--purple); outline-offset:-4px; }'
     + '.jrn-card-title { font-weight:600; font-size:13px; color:var(--main-text); margin-bottom:4px; line-height:1.3; }'
     + '.jrn-card-value { font-size:13px; font-weight:600; color:var(--purple); margin-bottom:4px; }'
     + '.jrn-card-meta { font-size:11px; color:var(--main-text-muted); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }'
@@ -18276,9 +18278,14 @@ function _renderColumnHTML(stage, cards){
 
   var addBtn = '<button class="jrn-col-add" onclick="openCardModal(null,\'' + esc(stage.id) + '\')">+ Add card</button>';
 
+  var bodyAttrs = 'data-stage-id="' + esc(stage.id) + '" '
+    + 'ondragover="_jrnDragOver(event,\'' + esc(stage.id) + '\')" '
+    + 'ondragleave="_jrnDragLeave(event)" '
+    + 'ondrop="_jrnDrop(event,\'' + esc(stage.id) + '\')"';
+
   return '<div class="jrn-col" data-stage-id="' + esc(stage.id) + '">'
     + head
-    + '<div class="jrn-col-body">' + bodyInner + '</div>'
+    + '<div class="jrn-col-body" ' + bodyAttrs + '>' + bodyInner + '</div>'
     + addBtn
     + '</div>';
 }
@@ -18310,7 +18317,14 @@ function _renderCardHTML(card){
   }
   var metaLine = metaParts.length ? '<div class="jrn-card-meta">' + metaParts.join('') + '</div>' : '';
 
-  return '<div class="jrn-card' + statusClass + '" data-card-id="' + esc(card.id) + '" onclick="openCardModal(\'' + esc(card.id) + '\')">'
+  // dragstart sets the cardId payload; ondragend cleans up visual state.
+  // onclick is suppressed via a flag toggled in dragstart to prevent the
+  // edit modal from opening when the user releases a drag.
+  var dragAttrs = 'draggable="true" '
+    + 'ondragstart="_jrnDragStart(event,\'' + esc(card.id) + '\')" '
+    + 'ondragend="_jrnDragEnd(event)"';
+
+  return '<div class="jrn-card' + statusClass + '" data-card-id="' + esc(card.id) + '" ' + dragAttrs + ' onclick="if(!_jrnDragSuppressClick)openCardModal(\'' + esc(card.id) + '\')">'
     + '<div class="jrn-card-title">' + esc(card.title) + '</div>'
     + valueLine
     + metaLine
@@ -18329,6 +18343,136 @@ function _fmtCardDate(dateStr){
   if (diff <= 7) return { label: 'In ' + diff + 'd', color: 'var(--warning-text)' };
   if (diff <= 30) return { label: d.toLocaleDateString('en-US', {month:'short', day:'numeric'}), color: 'var(--main-text-muted)' };
   return null;
+}
+
+// =====================================================
+// DRAG AND DROP (Step 6)
+// =====================================================
+// HTML5 native drag API. Cards drop to position 0 of the target stage.
+// Optimistic UI: the card moves visually before the server confirms;
+// on error we re-render from the cached state to roll back.
+
+var _jrnDragCardId = null;
+var _jrnDragSourceStageId = null;
+var _jrnDragSuppressClick = false;
+
+function _jrnDragStart(ev, cardId){
+  _jrnDragCardId = cardId;
+  _jrnDragSuppressClick = true;
+
+  var found = _findCardInCache(cardId);
+  _jrnDragSourceStageId = found ? found.card.stage_id : null;
+
+  // Style the dragged card
+  var tile = ev.currentTarget;
+  if (tile && tile.classList) tile.classList.add('dragging');
+
+  // dataTransfer payload (some browsers require something to be set)
+  try {
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.dataTransfer.setData('text/plain', cardId);
+  } catch(e){}
+}
+
+function _jrnDragEnd(ev){
+  var tile = ev.currentTarget;
+  if (tile && tile.classList) tile.classList.remove('dragging');
+  // Clear any leftover drop-active state across all columns
+  var actives = document.querySelectorAll('.jrn-col-body.drop-active');
+  for (var i = 0; i < actives.length; i++) actives[i].classList.remove('drop-active');
+  _jrnDragCardId = null;
+  _jrnDragSourceStageId = null;
+  // Release the click suppression after a tick so the pending click on
+  // dragend does not open the modal
+  setTimeout(function(){ _jrnDragSuppressClick = false; }, 50);
+}
+
+function _jrnDragOver(ev, stageId){
+  // Required to allow drop
+  ev.preventDefault();
+  try { ev.dataTransfer.dropEffect = 'move'; } catch(e){}
+  if (_jrnDragSourceStageId === stageId) return; // hover within source: no highlight
+  var body = ev.currentTarget;
+  if (body && body.classList && !body.classList.contains('drop-active')) {
+    body.classList.add('drop-active');
+  }
+}
+
+function _jrnDragLeave(ev){
+  var body = ev.currentTarget;
+  if (!body || !body.classList) return;
+  // Only un-highlight when leaving the body itself, not entering a child
+  // (relatedTarget is the element being entered)
+  if (body.contains(ev.relatedTarget)) return;
+  body.classList.remove('drop-active');
+}
+
+async function _jrnDrop(ev, targetStageId){
+  ev.preventDefault();
+  var body = ev.currentTarget;
+  if (body && body.classList) body.classList.remove('drop-active');
+
+  var cardId = _jrnDragCardId;
+  if (!cardId) return;
+
+  // Find the card's current state from cache for optimistic move + rollback
+  var found = _findCardInCache(cardId);
+  if (!found) {
+    toast('Card not found in cache', 'error');
+    return;
+  }
+  var card = found.card;
+  var journeyId = found.journeyId;
+
+  if (card.stage_id === targetStageId) {
+    return; // Same column, no-op (reorder within column is a future polish)
+  }
+
+  // Find target stage to determine status flip preview
+  var journey = (db.journeys || []).find(function(j){ return j.id === journeyId; });
+  var targetStage = journey && (journey.stages || []).find(function(s){ return s.id === targetStageId; });
+  if (!targetStage) { toast('Target stage not found', 'error'); return; }
+
+  // Snapshot for rollback
+  var prevStageId = card.stage_id;
+  var prevStatus = card.status;
+  var prevWonAt = card.won_at;
+  var prevLostAt = card.lost_at;
+  var prevPosition = card.position;
+
+  // Optimistic update in cache
+  card.stage_id = targetStageId;
+  card.position = 0;
+  if (targetStage.stage_type === 'won') {
+    card.status = 'won';
+    card.won_at = new Date().toISOString();
+    card.lost_at = null;
+  } else if (targetStage.stage_type === 'lost') {
+    card.status = 'lost';
+    card.lost_at = new Date().toISOString();
+    card.won_at = null;
+  } else if (targetStage.stage_type === 'normal' && card.status !== 'open') {
+    card.status = 'open';
+    card.won_at = null;
+    card.lost_at = null;
+  }
+
+  // Re-render board from cache immediately
+  _renderJourneyBoard(journey, _journeyCardsCache[journeyId] || []);
+
+  // Persist via API
+  try {
+    await journeyCardMove({ id: cardId, stage_id: targetStageId, position: 0 });
+  } catch(e) {
+    // Rollback the optimistic change
+    card.stage_id = prevStageId;
+    card.status = prevStatus;
+    card.won_at = prevWonAt;
+    card.lost_at = prevLostAt;
+    card.position = prevPosition;
+    _renderJourneyBoard(journey, _journeyCardsCache[journeyId] || []);
+    toast('Failed to move card: ' + e.message, 'error');
+  }
 }
 
 // =====================================================
@@ -18408,17 +18552,18 @@ function openCardModal(cardId, stageId){
     + '</div>'
     + '</div>'
 
-    + '<div id="cm-lead-fields"' + (showRawLead ? '' : ' style="display:none"') + ' style="grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius)">'
+    + '<div id="cm-lead-fields"' + (showRawLead ? '' : ' style="display:none"') + ' style="grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px;border-left:3px solid var(--purple-dim);background:transparent">'
+    + '  <div style="grid-column:1 / -1;font-size:11px;color:var(--text-muted);margin-bottom:-2px;letter-spacing:0.3px;text-transform:uppercase;font-weight:600">Or capture a raw lead</div>'
     + '  <div class="form-group" style="margin:0">'
-    + '    <label style="font-size:11px">Lead Name (no contact yet)</label>'
+    + '    <label style="font-size:11px">Name</label>'
     + '    <input id="cm-lead-name" type="text" maxlength="200" value="' + esc(card && card.lead_name || '') + '">'
     + '  </div>'
     + '  <div class="form-group" style="margin:0">'
-    + '    <label style="font-size:11px">Lead Email</label>'
+    + '    <label style="font-size:11px">Email</label>'
     + '    <input id="cm-lead-email" type="email" maxlength="200" value="' + esc(card && card.lead_email || '') + '">'
     + '  </div>'
     + '  <div class="form-group" style="margin:0;grid-column:1 / -1">'
-    + '    <label style="font-size:11px">Lead Phone</label>'
+    + '    <label style="font-size:11px">Phone</label>'
     + '    <input id="cm-lead-phone" type="tel" maxlength="40" value="' + esc(card && card.lead_phone || '') + '">'
     + '  </div>'
     + '</div>'
