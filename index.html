@@ -18236,7 +18236,9 @@ function _renderJourneyBoard(journey, cards){
     + '.jrn-col-type.lost { background:var(--danger-dim); color:var(--danger-text); }'
     + '.jrn-col-body { padding:10px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px; }'
     + '.jrn-col-empty { padding:24px 12px; text-align:center; color:var(--main-text-muted); font-size:12px; font-style:italic; }'
-    + '.jrn-card { background:var(--main-bg); border:1px solid var(--main-border); border-left:3px solid var(--main-border); border-radius:var(--radius); padding:10px 12px; cursor:default; transition:box-shadow 0.15s, transform 0.05s; }'
+    + '.jrn-card { background:var(--main-bg); border:1px solid var(--main-border); border-left:3px solid var(--main-border); border-radius:var(--radius); padding:10px 12px; cursor:pointer; transition:box-shadow 0.15s, transform 0.05s; }'
+    + '.jrn-col-add { margin:8px 10px 10px; padding:8px 12px; background:transparent; border:1px dashed var(--main-border); border-radius:var(--radius); color:var(--main-text-muted); font-size:12px; cursor:pointer; transition:background 0.15s, color 0.15s; }'
+    + '.jrn-col-add:hover { background:var(--purple-dim); color:var(--purple); border-color:var(--purple); }'
     + '.jrn-card:hover { box-shadow:var(--shadow-md); }'
     + '.jrn-card.won { border-left-color:var(--success); opacity:0.85; }'
     + '.jrn-card.lost { border-left-color:var(--danger); opacity:0.75; }'
@@ -18272,9 +18274,12 @@ function _renderColumnHTML(stage, cards){
     bodyInner = cards.map(_renderCardHTML).join('');
   }
 
+  var addBtn = '<button class="jrn-col-add" onclick="openCardModal(null,\'' + esc(stage.id) + '\')">+ Add card</button>';
+
   return '<div class="jrn-col" data-stage-id="' + esc(stage.id) + '">'
     + head
     + '<div class="jrn-col-body">' + bodyInner + '</div>'
+    + addBtn
     + '</div>';
 }
 
@@ -18305,7 +18310,7 @@ function _renderCardHTML(card){
   }
   var metaLine = metaParts.length ? '<div class="jrn-card-meta">' + metaParts.join('') + '</div>' : '';
 
-  return '<div class="jrn-card' + statusClass + '" data-card-id="' + esc(card.id) + '">'
+  return '<div class="jrn-card' + statusClass + '" data-card-id="' + esc(card.id) + '" onclick="openCardModal(\'' + esc(card.id) + '\')">'
     + '<div class="jrn-card-title">' + esc(card.title) + '</div>'
     + valueLine
     + metaLine
@@ -18324,6 +18329,295 @@ function _fmtCardDate(dateStr){
   if (diff <= 7) return { label: 'In ' + diff + 'd', color: 'var(--warning-text)' };
   if (diff <= 30) return { label: d.toLocaleDateString('en-US', {month:'short', day:'numeric'}), color: 'var(--main-text-muted)' };
   return null;
+}
+
+// =====================================================
+// CARD MODAL (Step 5)
+// =====================================================
+// State of the card currently being edited or created. Cleared on close.
+var _cardModalCtx = null;
+
+function _findCardInCache(cardId){
+  var keys = Object.keys(_journeyCardsCache);
+  for (var i = 0; i < keys.length; i++) {
+    var arr = _journeyCardsCache[keys[i]] || [];
+    for (var j = 0; j < arr.length; j++) {
+      if (arr[j].id === cardId) return { card: arr[j], journeyId: keys[i] };
+    }
+  }
+  return null;
+}
+
+function openCardModal(cardId, stageId){
+  var activeJourneyId = localStorage.getItem('msp_active_journey_id');
+  var journey = (db.journeys || []).find(function(j){ return j.id === activeJourneyId; });
+  if (!journey) { toast('No active journey', 'error'); return; }
+
+  var card = null;
+  if (cardId) {
+    var found = _findCardInCache(cardId);
+    if (found) card = found.card;
+    if (!card) { toast('Card not found', 'error'); return; }
+  }
+
+  _cardModalCtx = {
+    isEdit: !!card,
+    journeyId: journey.id,
+    cardId: cardId || null,
+    stageId: card ? card.stage_id : stageId,
+    contactId: card ? card.contact_id : null,
+    appointmentId: card ? card.appointment_id : null,
+    contactSearchOpen: false
+  };
+
+  var stages = (journey.stages || []).slice().sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); });
+  var stageOptions = stages.map(function(s){
+    var sel = s.id === _cardModalCtx.stageId ? ' selected' : '';
+    return '<option value="' + esc(s.id) + '"' + sel + '>' + esc(s.name) + '</option>';
+  }).join('');
+
+  var staff = (db.users || []).filter(function(u){ return u.active !== false; });
+  var staffOptions = '<option value="">Unassigned</option>' + staff.map(function(u){
+    var sel = (card && card.assigned_staff_id === u.id) ? ' selected' : '';
+    return '<option value="' + esc(u.id) + '"' + sel + '>' + esc(u.display_name || u.username || 'Staff') + '</option>';
+  }).join('');
+
+  var contactInitialName = '';
+  if (card && card.contact_id) {
+    var c = (db.contacts || []).find(function(x){ return x.id === card.contact_id; });
+    if (c) contactInitialName = c.display_name || c.name || c.email || '';
+  }
+
+  var showRawLead = !_cardModalCtx.contactId;
+
+  var body = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'
+    + '<div class="form-group" style="grid-column:1 / -1">'
+    + '<label>Title</label>'
+    + '<input id="cm-title" type="text" maxlength="500" placeholder="What is this card about?" value="' + esc(card ? card.title : '') + '">'
+    + '</div>'
+
+    + '<div class="form-group" style="grid-column:1 / -1">'
+    + '<label>Contact</label>'
+    + '<div id="cm-contact-wrap" style="position:relative">'
+    + '  <div id="cm-contact-selected"' + (_cardModalCtx.contactId ? '' : ' style="display:none"') + ' style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input)">'
+    + '    <span style="flex:1;font-size:13px">' + esc(contactInitialName) + '</span>'
+    + '    <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="_cmClearContact()">Change</button>'
+    + '  </div>'
+    + '  <input id="cm-contact-search" type="text" placeholder="Search by name or email, or leave blank" autocomplete="off"' + (showRawLead ? '' : ' style="display:none"') + ' oninput="_cmContactSearch(this.value)" onfocus="_cmContactSearch(this.value)">'
+    + '  <div id="cm-contact-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);margin-top:4px"></div>'
+    + '</div>'
+    + '</div>'
+
+    + '<div id="cm-lead-fields"' + (showRawLead ? '' : ' style="display:none"') + ' style="grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius)">'
+    + '  <div class="form-group" style="margin:0">'
+    + '    <label style="font-size:11px">Lead Name (no contact yet)</label>'
+    + '    <input id="cm-lead-name" type="text" maxlength="200" value="' + esc(card && card.lead_name || '') + '">'
+    + '  </div>'
+    + '  <div class="form-group" style="margin:0">'
+    + '    <label style="font-size:11px">Lead Email</label>'
+    + '    <input id="cm-lead-email" type="email" maxlength="200" value="' + esc(card && card.lead_email || '') + '">'
+    + '  </div>'
+    + '  <div class="form-group" style="margin:0;grid-column:1 / -1">'
+    + '    <label style="font-size:11px">Lead Phone</label>'
+    + '    <input id="cm-lead-phone" type="tel" maxlength="40" value="' + esc(card && card.lead_phone || '') + '">'
+    + '  </div>'
+    + '</div>'
+
+    + '<div class="form-group">'
+    + '<label>Stage</label>'
+    + (card ? '<input type="text" disabled value="' + esc((stages.find(function(s){return s.id===card.stage_id;})||{name:''}).name) + '" title="Use drag and drop to move between stages">' : '<select id="cm-stage">' + stageOptions + '</select>')
+    + '</div>'
+
+    + '<div class="form-group">'
+    + '<label>Value ($)</label>'
+    + '<input id="cm-value" type="number" min="0" step="0.01" placeholder="0.00" value="' + (card && card.value ? esc(String(card.value)) : '') + '">'
+    + '</div>'
+
+    + '<div class="form-group">'
+    + '<label>Assigned Staff</label>'
+    + '<select id="cm-staff">' + staffOptions + '</select>'
+    + '</div>'
+
+    + '<div class="form-group">'
+    + '<label>Expected Close Date</label>'
+    + '<input id="cm-close" type="date" value="' + esc(card && card.expected_close_date || '') + '">'
+    + '</div>'
+
+    + '<div class="form-group" style="grid-column:1 / -1">'
+    + '<label>Source</label>'
+    + '<input id="cm-source" type="text" maxlength="200" placeholder="Where did this lead come from?" value="' + esc(card && card.source || '') + '">'
+    + '</div>'
+
+    + '<div class="form-group" style="grid-column:1 / -1">'
+    + '<label>Notes</label>'
+    + '<textarea id="cm-notes" rows="3" placeholder="Internal notes about this card">' + esc(card && card.notes || '') + '</textarea>'
+    + '</div>'
+    + '</div>';
+
+  if (card) {
+    body += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--main-border);display:flex;justify-content:flex-end">'
+      + '<button class="btn btn-ghost" style="color:var(--danger);border:1px solid var(--danger)" onclick="_cmArchiveCard(event)">Archive Card</button>'
+      + '</div>';
+  }
+
+  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="_cmSaveCard(event)">' + (card ? 'Save Changes' : 'Create Card') + '</button>';
+
+  openModal(card ? 'Edit Card' : 'New Card', body, footer, 'modal-lg');
+
+  // Focus title on create
+  if (!card) {
+    setTimeout(function(){ var t = document.getElementById('cm-title'); if (t) t.focus(); }, 50);
+  }
+}
+
+function _cmClearContact(){
+  if (!_cardModalCtx) return;
+  _cardModalCtx.contactId = null;
+  var sel = document.getElementById('cm-contact-selected');
+  var search = document.getElementById('cm-contact-search');
+  var lead = document.getElementById('cm-lead-fields');
+  if (sel) sel.style.display = 'none';
+  if (search) { search.style.display = ''; search.value = ''; setTimeout(function(){ search.focus(); }, 30); }
+  if (lead) lead.style.display = 'grid';
+}
+
+function _cmContactSearch(q){
+  var results = document.getElementById('cm-contact-results');
+  if (!results) return;
+  q = (q || '').trim().toLowerCase();
+  if (!q) {
+    results.style.display = 'none';
+    return;
+  }
+
+  var contacts = db.contacts || [];
+  if (contacts.length === 0) {
+    results.innerHTML = '<div style="padding:10px;color:var(--main-text-muted);font-size:12px;font-style:italic">Loading contacts...</div>';
+    results.style.display = 'block';
+    return;
+  }
+
+  var matches = [];
+  for (var i = 0; i < contacts.length && matches.length < 8; i++) {
+    var c = contacts[i];
+    var name = (c.display_name || c.name || '').toLowerCase();
+    var email = (c.email || '').toLowerCase();
+    if (name.indexOf(q) >= 0 || email.indexOf(q) >= 0) matches.push(c);
+  }
+
+  if (matches.length === 0) {
+    results.innerHTML = '<div style="padding:10px;color:var(--main-text-muted);font-size:12px">No matches. The fields below will save as a raw lead.</div>';
+    results.style.display = 'block';
+    return;
+  }
+
+  results.innerHTML = matches.map(function(c){
+    var label = c.display_name || c.name || c.email || '(no name)';
+    var sub = c.email && c.email !== label ? c.email : '';
+    return '<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--main-border)" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'\'" onclick="_cmPickContact(\'' + esc(c.id) + '\',\'' + esc(label).replace(/\\/g,'').replace(/'/g,"\\'") + '\')">'
+      + '<div style="font-size:13px;color:var(--main-text)">' + esc(label) + '</div>'
+      + (sub ? '<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">' + esc(sub) + '</div>' : '')
+      + '</div>';
+  }).join('');
+  results.style.display = 'block';
+}
+
+function _cmPickContact(contactId, label){
+  if (!_cardModalCtx) return;
+  _cardModalCtx.contactId = contactId;
+  var sel = document.getElementById('cm-contact-selected');
+  var search = document.getElementById('cm-contact-search');
+  var results = document.getElementById('cm-contact-results');
+  var lead = document.getElementById('cm-lead-fields');
+  if (sel) {
+    sel.style.display = 'flex';
+    var span = sel.querySelector('span');
+    if (span) span.textContent = label;
+  }
+  if (search) { search.style.display = 'none'; search.value = ''; }
+  if (results) results.style.display = 'none';
+  if (lead) lead.style.display = 'none';
+}
+
+async function _cmSaveCard(ev){
+  var btn = ev && ev.target;
+  if (!_cardModalCtx) return;
+
+  var title = (document.getElementById('cm-title')||{}).value;
+  title = (title||'').trim();
+  if (!title) { toast('Title is required', 'error'); return; }
+
+  var valueRaw = (document.getElementById('cm-value')||{}).value;
+  var value = valueRaw === '' ? 0 : parseFloat(valueRaw);
+  if (!Number.isFinite(value) || value < 0) { toast('Value must be a non-negative number', 'error'); return; }
+
+  var staffId = (document.getElementById('cm-staff')||{}).value || null;
+  var closeDate = (document.getElementById('cm-close')||{}).value || null;
+  var source = ((document.getElementById('cm-source')||{}).value || '').trim();
+  var notes = ((document.getElementById('cm-notes')||{}).value || '').trim();
+  var stageEl = document.getElementById('cm-stage');
+  var stageId = _cardModalCtx.isEdit ? _cardModalCtx.stageId : (stageEl ? stageEl.value : _cardModalCtx.stageId);
+
+  var leadName = null, leadEmail = null, leadPhone = null;
+  if (!_cardModalCtx.contactId) {
+    leadName = ((document.getElementById('cm-lead-name')||{}).value || '').trim() || null;
+    leadEmail = ((document.getElementById('cm-lead-email')||{}).value || '').trim() || null;
+    leadPhone = ((document.getElementById('cm-lead-phone')||{}).value || '').trim() || null;
+  }
+
+  var payload = {
+    title: title,
+    value: value,
+    contact_id: _cardModalCtx.contactId || null,
+    appointment_id: _cardModalCtx.appointmentId || null,
+    assigned_staff_id: staffId,
+    lead_name: leadName,
+    lead_email: leadEmail,
+    lead_phone: leadPhone,
+    source: source || null,
+    notes: notes || null,
+    expected_close_date: closeDate
+  };
+
+  if (_cardModalCtx.isEdit) {
+    payload.id = _cardModalCtx.cardId;
+  } else {
+    payload.journey_id = _cardModalCtx.journeyId;
+    payload.stage_id = stageId;
+  }
+
+  try {
+    await _withBusyBtn(btn, _cardModalCtx.isEdit ? 'Saving...' : 'Creating...', async function(){
+      await journeyCardUpsert(payload);
+      closeModal();
+      toast(_cardModalCtx.isEdit ? 'Card updated' : 'Card created', 'success');
+      delete _journeyCardsCache[_cardModalCtx.journeyId];
+      _cardModalCtx = null;
+      await renderJourneys();
+    });
+  } catch(e) {
+    toast('Failed to save: ' + e.message, 'error');
+  }
+}
+
+async function _cmArchiveCard(ev){
+  var btn = ev && ev.target;
+  if (!_cardModalCtx || !_cardModalCtx.cardId) return;
+  if (!confirm('Archive this card? You can restore it from the archive view later.')) return;
+
+  try {
+    await _withBusyBtn(btn, 'Archiving...', async function(){
+      await journeyCardArchive(_cardModalCtx.cardId, false);
+      closeModal();
+      toast('Card archived', 'success');
+      delete _journeyCardsCache[_cardModalCtx.journeyId];
+      _cardModalCtx = null;
+      await renderJourneys();
+    });
+  } catch(e) {
+    toast('Failed to archive: ' + e.message, 'error');
+  }
 }
 
 function switchJourney(id){
