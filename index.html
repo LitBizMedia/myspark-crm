@@ -1670,8 +1670,43 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         </div>
         <div id="dash-hero"></div>
         <div class="dash-week" id="dash-week"></div>
-        <div class="dash-grid">
-          <div class="dash-grid-left">
+        <style>
+          /* dash-card-flex: drop the 280px lock so card can grow with column */
+          .dash-card-flex { height:auto !important; }
+          /* Last card in each column fills remaining space (equal-height columns) */
+          .dash-grid-col > .dash-card:last-child { flex:1; min-height:0; }
+          .dash-grid-col > #dash-quick-actions { flex:none; }
+          .dash-grid-3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px; }
+          @media(max-width:1280px) { .dash-grid-3 { grid-template-columns: 1fr 1fr; } }
+          @media(max-width:900px) { .dash-grid-3 { grid-template-columns: 1fr; } }
+          .dash-grid-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+          .dash-jb-rows { display:flex; flex-direction:column; gap:2px; }
+          .dash-jb-row { display:grid; grid-template-columns:minmax(0,1fr) 90px 60px; gap:10px; align-items:center; padding:7px 6px; border-radius:var(--radius); cursor:pointer; transition:background 0.15s; }
+          .dash-jb-row:hover { background:var(--main-card-hover); }
+          .dash-jb-label { display:flex; align-items:center; gap:7px; min-width:0; }
+          .dash-jb-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+          .dash-jb-name { font-size:12px; font-weight:500; color:var(--main-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .dash-jb-bar { height:8px; background:var(--main-bg); border-radius:4px; overflow:hidden; }
+          .dash-jb-fill { height:100%; border-radius:4px; transition:width 0.3s ease; }
+          .dash-jb-val { font-size:12px; font-weight:600; color:var(--main-text); text-align:right; }
+          .dash-jb-footer { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:12px; padding-top:10px; border-top:1px solid var(--main-border); font-size:11px; color:var(--main-text-muted); }
+          .dash-jb-footer strong { color:var(--main-text); font-weight:600; }
+          .dash-jb-sep { opacity:0.5; }
+          /* Journeys card sizes to content (no forced stretch) */
+          /* Birthdays widget */
+          #dash-birthdays-card { min-height:220px; }
+          .dash-bd-row { display:flex; align-items:center; gap:10px; padding:8px 6px; border-radius:var(--radius); cursor:pointer; transition:background 0.15s; }
+          .dash-bd-row:hover { background:var(--main-card-hover); }
+          .dash-bd-av { width:32px; height:32px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:12px; }
+          .dash-bd-info { flex:1; min-width:0; }
+          .dash-bd-name { font-size:13px; font-weight:600; color:var(--main-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .dash-bd-date { font-size:11px; color:var(--main-text-muted); }
+          .dash-bd-chip { font-size:10px; padding:2px 8px; border-radius:10px; font-weight:600; flex-shrink:0; }
+          .dash-bd-chip.today { background:var(--warning-dim); color:var(--warning-text); }
+          .dash-bd-chip.soon { background:var(--info-dim); color:var(--info-text); }
+        </style>
+        <div class="dash-grid-3">
+          <div class="dash-grid-col">
             <div class="dash-card dash-card-fixed">
               <div class="dash-card-title-row">
                 <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Today's Appointments</div>
@@ -1686,12 +1721,27 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div id="dash-tasks" class="dash-scroll-list"></div>
             </div>
           </div>
-          <div class="dash-grid-right">
+          <div class="dash-grid-col">
+            <div class="dash-card dash-card-fixed dash-card-flex" id="dash-journeys-card">
+              <div class="dash-card-title-row">
+                <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="7" rx="1"/></svg>Journeys</div>
+                <div id="dash-journeys-controls"></div>
+              </div>
+              <div id="dash-journeys"></div>
+            </div>
+          </div>
+          <div class="dash-grid-col">
             <div class="dash-card dash-card-activity">
               <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Recent Activity</div>
               <div id="dash-activity" class="dash-scroll-list"></div>
             </div>
             <div id="dash-quick-actions" class="dash-quick-actions"></div>
+            <div class="dash-card dash-card-fixed dash-card-flex" id="dash-birthdays-card">
+              <div class="dash-card-title-row">
+                <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M20 21v-7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/><path d="M7 8v3"/><path d="M12 8v3"/><path d="M17 8v3"/><path d="M7 4h.01"/><path d="M12 4h.01"/><path d="M17 4h.01"/></svg>Birthdays This Week</div>
+              </div>
+              <div id="dash-birthdays" class="dash-scroll-list"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -3753,6 +3803,12 @@ function renderDash(){
 
   // Quick actions row
   _renderDashQuickActions(role);
+
+  // Journeys snapshot widget
+  if (typeof _renderDashJourneys === 'function') _renderDashJourneys();
+
+  // Birthdays this week
+  if (typeof _renderDashBirthdays === 'function') _renderDashBirthdays();
 
   // Today's appointments - filter by scope
   const todayAppts=db.appointments.filter(function(a){
@@ -18330,6 +18386,256 @@ function _renderJourneyStats(cards){
     + '<div class="jrn-stat-sub">' + (avgCycle === null ? 'No wins yet' : 'Create to close (90d)') + '</div>'
     + '</div>'
     + '</div>';
+}
+
+// =====================================================
+// DASHBOARD JOURNEYS WIDGET (Step 9)
+// =====================================================
+// Compact pipeline snapshot for the dashboard. Reuses _journeyCardsCache
+// from the Journeys tab so switching tabs doesn't refetch.
+
+var _dashJourneyId = null;
+var _dashJourneyMode = 'count';
+
+async function _renderDashJourneys(){
+  var widget = document.getElementById('dash-journeys');
+  var controls = document.getElementById('dash-journeys-controls');
+  if (!widget || !controls) return;
+
+  _dashJourneyId = localStorage.getItem('msp_dash_journey_id') || null;
+  _dashJourneyMode = localStorage.getItem('msp_dash_journey_mode') || 'count';
+
+  // Load journeys if not cached on db
+  if (!db.journeys || db.journeys.length === 0) {
+    widget.innerHTML = '<div class="dash-empty">Loading journeys...</div>';
+    controls.innerHTML = '';
+    try {
+      var data = await fetchJourneysList();
+      db.journeys = data.journeys || [];
+    } catch(e) {
+      widget.innerHTML = '<div class="dash-empty">Failed to load journeys</div>';
+      return;
+    }
+  }
+
+  if (!db.journeys.length) {
+    controls.innerHTML = '';
+    widget.innerHTML = '<div class="dash-empty" style="text-align:center;padding:30px 12px">'
+      + '<div style="font-size:13px;margin-bottom:10px;color:var(--main-text-muted)">No journeys yet</div>'
+      + '<button class="btn btn-primary btn-sm" onclick="switchPanel(\'journeys\')">Create one</button>'
+      + '</div>';
+    return;
+  }
+
+  // Validate selected id, fall back to first
+  var valid = _dashJourneyId && db.journeys.find(function(j){ return j.id === _dashJourneyId; });
+  if (!valid) {
+    _dashJourneyId = db.journeys[0].id;
+    localStorage.setItem('msp_dash_journey_id', _dashJourneyId);
+  }
+
+  // Render controls
+  var dropdown = '<select onchange="_dashJourneyPick(this.value)" style="padding:4px 8px;border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input);color:var(--main-text);font-size:12px;max-width:150px">'
+    + db.journeys.map(function(j){
+        return '<option value="' + esc(j.id) + '"' + (j.id === _dashJourneyId ? ' selected' : '') + '>' + esc(j.name) + '</option>';
+      }).join('')
+    + '</select>';
+  var toggleBtn = function(mode, label){
+    var on = _dashJourneyMode === mode;
+    return '<button onclick="_dashJourneySetMode(\'' + mode + '\')" style="padding:4px 9px;border:none;background:' + (on ? 'var(--purple)' : 'transparent') + ';color:' + (on ? '#fff' : 'var(--main-text-muted)') + ';cursor:pointer;font-size:11px;font-weight:600">' + label + '</button>';
+  };
+  var toggle = '<div style="display:inline-flex;border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden;margin-left:6px">' + toggleBtn('count','#') + toggleBtn('value','$') + '</div>';
+  controls.innerHTML = '<div style="display:flex;align-items:center;gap:0">' + dropdown + toggle + '</div>';
+
+  // Use cache for instant first paint, then refetch
+  if (typeof _journeyCardsCache !== 'undefined' && _journeyCardsCache[_dashJourneyId]) {
+    _renderDashJourneyBars();
+  } else {
+    widget.innerHTML = '<div class="dash-empty" style="padding:30px 12px;text-align:center;color:var(--main-text-muted);font-size:12px">Loading cards...</div>';
+  }
+
+  try {
+    var d = await fetchJourneyCards(_dashJourneyId);
+    if (typeof _journeyCardsCache === 'undefined') { window._journeyCardsCache = {}; }
+    _journeyCardsCache[_dashJourneyId] = d.cards || [];
+    _renderDashJourneyBars();
+  } catch(e) {
+    widget.innerHTML = '<div class="dash-empty">Failed to load cards</div>';
+  }
+}
+
+function _dashJourneyPick(id){
+  _dashJourneyId = id;
+  localStorage.setItem('msp_dash_journey_id', id);
+  _renderDashJourneys();
+}
+
+function _dashJourneySetMode(mode){
+  _dashJourneyMode = mode;
+  localStorage.setItem('msp_dash_journey_mode', mode);
+  _renderDashJourneys();
+}
+
+function _renderDashJourneyBars(){
+  var widget = document.getElementById('dash-journeys');
+  if (!widget) return;
+  var journey = (db.journeys || []).find(function(j){ return j.id === _dashJourneyId; });
+  if (!journey) { widget.innerHTML = ''; return; }
+
+  var cards = (_journeyCardsCache && _journeyCardsCache[_dashJourneyId]) || [];
+  var stages = (journey.stages || []).slice().sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); });
+
+  var byStage = {};
+  stages.forEach(function(s){ byStage[s.id] = { count: 0, value: 0 }; });
+  cards.forEach(function(c){
+    if (!byStage[c.stage_id]) return;
+    byStage[c.stage_id].count++;
+    byStage[c.stage_id].value += parseFloat(c.value || 0);
+  });
+
+  var max = 0;
+  stages.forEach(function(s){
+    var v = _dashJourneyMode === 'count' ? byStage[s.id].count : byStage[s.id].value;
+    if (v > max) max = v;
+  });
+  if (max === 0) max = 1;
+
+  var rowsHTML = stages.map(function(s){
+    var bs = byStage[s.id];
+    var v = _dashJourneyMode === 'count' ? bs.count : bs.value;
+    var pct = (v / max) * 100;
+    var label = _dashJourneyMode === 'count' ? String(v) : fmt$(v);
+    var color = s.color || '#6b21ea';
+    var typeBadge = '';
+    if (s.stage_type === 'won') typeBadge = '<span style="font-size:9px;padding:1px 5px;background:var(--success-dim);color:var(--success-text);border-radius:3px;margin-left:4px;font-weight:700;letter-spacing:0.3px">W</span>';
+    else if (s.stage_type === 'lost') typeBadge = '<span style="font-size:9px;padding:1px 5px;background:var(--danger-dim);color:var(--danger-text);border-radius:3px;margin-left:4px;font-weight:700;letter-spacing:0.3px">L</span>';
+    return '<div class="dash-jb-row" onclick="_dashJourneyJump(\'' + esc(_dashJourneyId) + '\')" title="Open in Journeys">'
+      + '<div class="dash-jb-label">'
+      + '<span class="dash-jb-dot" style="background:' + esc(color) + '"></span>'
+      + '<span class="dash-jb-name">' + esc(s.name) + '</span>'
+      + typeBadge
+      + '</div>'
+      + '<div class="dash-jb-bar"><div class="dash-jb-fill" style="width:' + pct.toFixed(1) + '%;background:' + esc(color) + '"></div></div>'
+      + '<div class="dash-jb-val">' + esc(label) + '</div>'
+      + '</div>';
+  }).join('');
+
+  // Footer stats
+  var openValue = 0, wonCount = 0, lostCount = 0, wonThisMonthValue = 0;
+  var now = new Date();
+  var monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  var ninetyAgo = Date.now() - (90 * 86400000);
+  cards.forEach(function(c){
+    if (c.status === 'open') openValue += parseFloat(c.value || 0);
+    if (c.status === 'won' && c.won_at) {
+      var t = new Date(c.won_at).getTime();
+      if (t >= monthStart) wonThisMonthValue += parseFloat(c.value || 0);
+      if (t >= ninetyAgo) wonCount++;
+    }
+    if (c.status === 'lost' && c.lost_at && new Date(c.lost_at).getTime() >= ninetyAgo) lostCount++;
+  });
+  var winRate = (wonCount + lostCount > 0) ? Math.round((wonCount / (wonCount + lostCount)) * 100) : null;
+
+  var footer = '<div class="dash-jb-footer">'
+    + '<span><strong>' + fmt$(openValue) + '</strong> open</span>'
+    + '<span class="dash-jb-sep">·</span>'
+    + '<span><strong>' + fmt$(wonThisMonthValue) + '</strong> won this month</span>'
+    + '<span class="dash-jb-sep">·</span>'
+    + '<span><strong>' + (winRate === null ? '–' : (winRate + '%')) + '</strong> win rate</span>'
+    + '</div>';
+
+  widget.innerHTML = '<div class="dash-jb-rows">' + rowsHTML + '</div>' + footer;
+}
+
+function _dashJourneyJump(journeyId){
+  localStorage.setItem('msp_active_journey_id', journeyId);
+  switchPanel('journeys');
+}
+
+// =====================================================
+// DASHBOARD BIRTHDAYS WIDGET
+// =====================================================
+// Shows contacts with birthdays in the next 7 days. Uses date_of_birth
+// from the contacts table. Compares MM-DD, year-agnostic so it works
+// every year without maintenance. Clicking a row opens the contact drawer.
+
+function _renderDashBirthdays(){
+  var widget = document.getElementById('dash-birthdays');
+  if (!widget) return;
+
+  var contacts = (db.contacts || []).filter(function(c){
+    return c.date_of_birth && !c.archived;
+  });
+
+  if (contacts.length === 0) {
+    widget.innerHTML = '<div class="dash-empty">No birthdays on file.</div>';
+    return;
+  }
+
+  // Build a map of MM-DD -> day offset from today (0..6)
+  var today = new Date();
+  var todayMMDD = String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  var offsets = {};
+  for (var d = 0; d < 7; d++) {
+    var dt = new Date(today.getFullYear(), today.getMonth(), today.getDate() + d);
+    var mmdd = String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+    offsets[mmdd] = d;
+  }
+
+  var upcoming = [];
+  contacts.forEach(function(c){
+    var dob = c.date_of_birth;
+    if (typeof dob !== 'string' || dob.length < 10) return;
+    var mmdd = dob.slice(5, 10);
+    if (offsets.hasOwnProperty(mmdd)) {
+      upcoming.push({ contact: c, offset: offsets[mmdd], mmdd: mmdd });
+    }
+  });
+
+  if (upcoming.length === 0) {
+    widget.innerHTML = '<div class="dash-empty">No birthdays in the next 7 days.</div>';
+    return;
+  }
+
+  upcoming.sort(function(a,b){ return a.offset - b.offset; });
+
+  var html = upcoming.slice(0, 6).map(function(item){
+    var c = item.contact;
+    var col = (typeof getUserColor === 'function' && c.id) ? (c.color || 'var(--purple)') : 'var(--purple)';
+    var initialsStr = (typeof initials === 'function') ? initials(c.display_name || c.name || c.email || '?') : '?';
+    var name = c.display_name || c.name || c.email || 'Contact';
+
+    var dobParts = c.date_of_birth.split('-');
+    var monthIdx = parseInt(dobParts[1], 10) - 1;
+    var dayNum = parseInt(dobParts[2], 10);
+    var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var dateLabel = monthNames[monthIdx] + ' ' + dayNum;
+
+    var age = null;
+    if (dobParts[0] && parseInt(dobParts[0],10) > 1900) {
+      var birthYear = parseInt(dobParts[0], 10);
+      var thisYearBday = new Date(today.getFullYear(), monthIdx, dayNum);
+      var turnsAge = today.getFullYear() - birthYear;
+      if (thisYearBday >= today) age = turnsAge;
+      else age = turnsAge + 1; // already had this year's bday, next is +1
+    }
+
+    var chip;
+    if (item.offset === 0) chip = '<div class="dash-bd-chip today">Today</div>';
+    else if (item.offset === 1) chip = '<div class="dash-bd-chip soon">Tomorrow</div>';
+    else chip = '<div class="dash-bd-chip soon">In ' + item.offset + 'd</div>';
+
+    return '<div class="dash-bd-row" onclick="openDrawer(\'' + esc(c.id) + '\')" title="Open contact">'
+      + '<div class="dash-bd-av" style="background:' + esc(col) + '">' + esc(initialsStr) + '</div>'
+      + '<div class="dash-bd-info">'
+      + '<div class="dash-bd-name">' + esc(name) + '</div>'
+      + '<div class="dash-bd-date">' + esc(dateLabel) + (age !== null ? (' · turning ' + age) : '') + '</div>'
+      + '</div>'
+      + chip
+      + '</div>';
+  }).join('');
+
+  widget.innerHTML = html;
 }
 
 function _renderColumnHTML(stage, cards){
