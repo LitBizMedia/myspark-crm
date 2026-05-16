@@ -1618,7 +1618,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       </button>
       <div class="sb-section-label" id="sb-admin-label">Admin</div>
       <button class="sb-item" id="sb-settings" data-panel="settings" onclick="switchPanel('settings')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M21 12h-2M19.07 19.07l-1.41-1.41M12 21v-2M4.93 19.07l1.41-1.41M3 12h2M4.93 4.93l1.41 1.41M12 3v2"/></svg>Settings
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings
       </button>
     </nav>
     <div class="sb-bottom">
@@ -2521,6 +2521,7 @@ let db={
   subscriptionPlanCategories:[],
   forms:[],
   formSubmissions:[],
+  journeys:[],
   customFieldCategories:[],
   customFields:[],
   productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'],
@@ -18041,17 +18042,295 @@ function renderHelp(){
 // =====================================================
 // JOURNEYS
 // =====================================================
-// Kanban-style funnel tracking. Stage 1B step 1: empty shell.
-// Subsequent steps add state load, picker, kanban board, drag/drop,
-// stat cards, card modal, journey settings, archive view.
-function renderJourneys(){
+// Kanban-style funnel tracking. Stage 1B in progress.
+// Step 2: state, fetch, picker, create-journey modal.
+// Next steps: kanban board, drag/drop, cards, stats, archive.
+
+// API helpers matching the _contactApi pattern; supports GET via opts.method.
+async function _journeyApi(path, body, opts){
+  opts = opts || {};
+  var method = opts.method || 'POST';
+  var url = apiUrl('/api/subaccount/' + path);
+  var fetchOpts = { method: method, credentials:'include', headers:{'Content-Type':'application/json'} };
+  if (method === 'GET' && body) {
+    var params = new URLSearchParams(body);
+    url += '?' + params.toString();
+  } else if (body) {
+    fetchOpts.body = JSON.stringify(body);
+  }
+  try {
+    var r = await fetch(url, fetchOpts);
+    var j = await r.json().catch(function(){return{};});
+    if (!r.ok) {
+      throw new Error((j && j.error) || ('Request failed: ' + r.status));
+    }
+    return j;
+  } catch(e) {
+    console.error('_journeyApi error', path, e);
+    throw e;
+  }
+}
+function fetchJourneysList(){ return _journeyApi('journeys-list', null, {method:'GET'}); }
+function journeyUpsert(data){ return _journeyApi('journeys-upsert', data); }
+function journeyDelete(id){ return _journeyApi('journeys-delete', {id:id, confirm:true}); }
+function fetchJourneyCards(journeyId){ return _journeyApi('journey-cards-list', {journey_id:journeyId}, {method:'GET'}); }
+function journeyCardUpsert(data){ return _journeyApi('journey-cards-upsert', data); }
+function journeyCardMove(data){ return _journeyApi('journey-cards-move', data); }
+function journeyCardArchive(id, restore){ return _journeyApi('journey-cards-delete', {id:id, restore: !!restore}); }
+
+// Stale-load guard: if user clicks away and back fast, only the latest load renders.
+var _journeysLoadId = 0;
+
+async function renderJourneys(){
   var el = document.getElementById('panel-journeys');
-  if(!el) return;
-  el.innerHTML = '<div style="padding:60px 40px;text-align:center;color:var(--main-text-muted)">'
-    + '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="opacity:0.4;margin-bottom:16px"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="7" rx="1"/></svg>'
-    + '<div style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:700;color:var(--main-text);margin-bottom:8px">Journeys</div>'
-    + '<div style="font-size:14px;max-width:420px;margin:0 auto">Kanban funnel tracking is wiring up. Full board coming online in the next deploy.</div>'
+  if (!el) return;
+  var thisLoad = ++_journeysLoadId;
+
+  el.innerHTML = '<div style="padding:60px 40px;text-align:center;color:var(--main-text-muted)">Loading journeys...</div>';
+
+  try {
+    var data = await fetchJourneysList();
+    if (thisLoad !== _journeysLoadId) return;
+    db.journeys = data.journeys || [];
+    _renderJourneysUI();
+  } catch(e) {
+    if (thisLoad !== _journeysLoadId) return;
+    el.innerHTML = '<div style="padding:60px 40px;text-align:center;color:var(--danger)">Failed to load journeys. ' + esc(e.message) + '</div>';
+  }
+}
+
+function _renderJourneysUI(){
+  var el = document.getElementById('panel-journeys');
+  if (!el) return;
+  var journeys = db.journeys || [];
+
+  if (journeys.length === 0) {
+    el.innerHTML = '<div style="padding:80px 40px;text-align:center;color:var(--main-text-muted)">'
+      + '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="opacity:0.4;margin-bottom:16px"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="7" rx="1"/></svg>'
+      + '<div style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:700;color:var(--main-text);margin-bottom:8px">No journeys yet</div>'
+      + '<div style="font-size:14px;max-width:480px;margin:0 auto 24px">Track patients, leads, or customers through custom funnels. Each journey has stages you define. Cards move stage to stage as work progresses.</div>'
+      + '<button class="btn btn-primary" onclick="openCreateJourneyModal()">Create your first journey</button>'
+      + '</div>';
+    return;
+  }
+
+  var activeId = localStorage.getItem('msp_active_journey_id');
+  var active = journeys.find(function(j){ return j.id === activeId; }) || journeys[0];
+  localStorage.setItem('msp_active_journey_id', active.id);
+
+  var gearIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+
+  // Per-tab gear: hidden on inactive tabs, visible on hover, always on active.
+  // Style block is included in the panel HTML; re-including on each render is harmless.
+  var styleBlock = '<style>'
+    + '.jrn-tab { display:inline-flex; align-items:center; gap:6px; padding:8px 10px 8px 16px; border-radius:var(--radius); cursor:pointer; font-size:14px; user-select:none; transition:background 0.15s; }'
+    + '.jrn-tab .jrn-gear { opacity:0; transition:opacity 0.15s; display:inline-flex; align-items:center; justify-content:center; padding:3px; border-radius:4px; }'
+    + '.jrn-tab.active .jrn-gear, .jrn-tab:hover .jrn-gear { opacity:1; }'
+    + '.jrn-tab .jrn-gear:hover { background:rgba(0,0,0,0.1); }'
+    + '.jrn-tab.active .jrn-gear:hover { background:rgba(255,255,255,0.2); }'
+    + '</style>';
+
+  var pickerHTML;
+  if (journeys.length <= 3) {
+    pickerHTML = styleBlock + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px">'
+      + journeys.map(function(j){
+          var isActive = j.id === active.id;
+          var tabStyle = 'border:1px solid '
+            + (isActive ? 'var(--purple)' : 'var(--main-border)')
+            + ';background:' + (isActive ? 'var(--purple)' : 'var(--main-card)')
+            + ';color:' + (isActive ? '#fff' : 'var(--main-text)')
+            + ';font-weight:' + (isActive ? '600' : '500');
+          return '<div class="jrn-tab' + (isActive ? ' active' : '') + '" style="' + tabStyle + '" onclick="switchJourney(\'' + j.id + '\')" role="button" tabindex="0">'
+            + '<span>' + esc(j.name) + '</span>'
+            + '<span class="jrn-gear" onclick="event.stopPropagation();openJourneySettingsModal(\'' + j.id + '\')" title="Journey settings">' + gearIcon + '</span>'
+            + '</div>';
+        }).join('')
+      + '<button style="padding:8px 14px;border-radius:var(--radius);border:1px dashed var(--main-border);background:transparent;color:var(--main-text-muted);cursor:pointer;font-size:14px" onclick="openCreateJourneyModal()" title="Create new journey">+ New</button>'
+      + '</div>';
+  } else {
+    var manageBtnStyle = 'padding:8px 10px;border-radius:var(--radius);border:1px solid var(--main-border);background:var(--main-card);color:var(--main-text-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center';
+    pickerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:20px">'
+      + '<select style="padding:8px 12px;border-radius:var(--radius);border:1px solid var(--main-input-border);background:var(--main-input);color:var(--main-text);font-size:14px;min-width:240px" onchange="switchJourney(this.value)">'
+      + journeys.map(function(j){
+          return '<option value="' + j.id + '"' + (j.id === active.id ? ' selected' : '') + '>' + esc(j.name) + '</option>';
+        }).join('')
+      + '</select>'
+      + '<button style="' + manageBtnStyle + '" onclick="openJourneySettingsModal(\'' + active.id + '\')" title="Journey settings">' + gearIcon + '</button>'
+      + '<button class="btn btn-primary btn-sm" onclick="openCreateJourneyModal()">+ New Journey</button>'
+      + '</div>';
+  }
+
+  el.innerHTML = '<div style="padding:24px 30px">'
+    + pickerHTML
+    + '<div style="padding:60px 40px;text-align:center;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);color:var(--main-text-muted)">'
+    + '<div style="font-family:\'Syne\',sans-serif;font-size:18px;font-weight:700;color:var(--main-text);margin-bottom:8px">' + esc(active.name) + '</div>'
+    + '<div style="font-size:13px">Kanban board renders here in next deploy. ' + (active.stages ? active.stages.length : 0) + ' stage' + ((active.stages && active.stages.length === 1) ? '' : 's') + ' configured. ' + (active.card_count || 0) + ' active card' + (active.card_count === 1 ? '' : 's') + '.</div>'
+    + '</div>'
     + '</div>';
+}
+
+function switchJourney(id){
+  localStorage.setItem('msp_active_journey_id', id);
+  _renderJourneysUI();
+}
+
+function openCreateJourneyModal(){
+  var body = '<div class="form-group">'
+    + '<label>Journey Name</label>'
+    + '<input id="jrn-new-name" type="text" placeholder="e.g. New Patient Funnel, Sales Pipeline" maxlength="200">'
+    + '</div>'
+    + '<div class="form-group">'
+    + '<label>Description (optional)</label>'
+    + '<textarea id="jrn-new-desc" rows="2" placeholder="What does this journey track?" maxlength="500"></textarea>'
+    + '</div>'
+    + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">Won and Lost stages are created automatically. Add stages between them after the journey is created.</div>';
+
+  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="saveNewJourney()">Create Journey</button>';
+
+  openModal('New Journey', body, footer);
+  setTimeout(function(){ var inp = document.getElementById('jrn-new-name'); if (inp) inp.focus(); }, 50);
+}
+
+// Disable a button immediately on click and restore on error. Prevents
+// double-clicks creating duplicate records. Caller passes the button el
+// and the work fn; we set inFlight state and re-enable on throw.
+async function _withBusyBtn(btn, busyLabel, fn){
+  if (!btn || btn.disabled) return;
+  var origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = busyLabel;
+  btn.style.opacity = '0.7';
+  try {
+    await fn();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = origText;
+    btn.style.opacity = '';
+    throw e;
+  }
+  // On success the modal usually closes; no need to re-enable.
+}
+
+async function saveNewJourney(ev){
+  var btn = (ev && ev.target) || document.querySelector('.modal-foot .btn-primary');
+  var nameEl = document.getElementById('jrn-new-name');
+  var descEl = document.getElementById('jrn-new-desc');
+  if (!nameEl) return;
+  var name = (nameEl.value || '').trim();
+  var desc = (descEl ? descEl.value : '').trim();
+
+  if (!name) {
+    toast('Please enter a journey name', 'error');
+    nameEl.focus();
+    return;
+  }
+
+  try {
+    await _withBusyBtn(btn, 'Creating...', async function(){
+      var res = await journeyUpsert({ name: name, description: desc || null });
+      closeModal();
+      toast('Journey created', 'success');
+      if (res && res.id) localStorage.setItem('msp_active_journey_id', res.id);
+      await renderJourneys();
+    });
+  } catch(e) {
+    toast('Failed to create journey: ' + e.message, 'error');
+  }
+}
+
+function openJourneySettingsModal(journeyId){
+  var j = (db.journeys || []).find(function(x){ return x.id === journeyId; });
+  if (!j) { toast('Journey not found', 'error'); return; }
+
+  var body = '<div class="form-group">'
+    + '<label>Journey Name</label>'
+    + '<input id="jrn-set-name" type="text" value="' + esc(j.name) + '" maxlength="200">'
+    + '</div>'
+    + '<div class="form-group">'
+    + '<label>Description</label>'
+    + '<textarea id="jrn-set-desc" rows="2" maxlength="500">' + esc(j.description || '') + '</textarea>'
+    + '</div>'
+    + '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--main-border)">'
+    + '<div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:8px">Danger Zone</div>'
+    + '<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:12px">Deleting a journey removes its stages and all cards. This cannot be undone.</div>'
+    + '<button class="btn btn-ghost" style="color:var(--danger);border:1px solid var(--danger)" onclick="confirmDeleteJourney(\'' + j.id + '\', \'' + esc(j.name).replace(/'/g, "\\\'") + '\')">Delete this journey</button>'
+    + '</div>'
+    + '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--main-border);font-size:12px;color:var(--main-text-muted)">'
+    + 'Stage editing coming in next deploy. For now, journeys start with Won and Lost stages.'
+    + '</div>';
+
+  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="saveJourneySettings(event, \'' + j.id + '\')">Save</button>';
+
+  openModal('Journey Settings', body, footer);
+}
+
+async function saveJourneySettings(ev, journeyId){
+  var btn = ev && ev.target;
+  var j = (db.journeys || []).find(function(x){ return x.id === journeyId; });
+  if (!j) { toast('Journey not found', 'error'); return; }
+  var nameEl = document.getElementById('jrn-set-name');
+  var descEl = document.getElementById('jrn-set-desc');
+  var name = (nameEl ? nameEl.value : '').trim();
+  var desc = (descEl ? descEl.value : '').trim();
+
+  if (!name) {
+    toast('Please enter a journey name', 'error');
+    if (nameEl) nameEl.focus();
+    return;
+  }
+
+  try {
+    await _withBusyBtn(btn, 'Saving...', async function(){
+      // Send full stage list so we don't accidentally wipe them.
+      var stages = (j.stages || []).map(function(s){
+        return { id:s.id, name:s.name, stage_type:s.stage_type, color:s.color, sort_order:s.sort_order };
+      });
+      await journeyUpsert({ id: journeyId, name: name, description: desc || null, color: j.color, sort_order: j.sort_order, active: j.active, stages: stages });
+      closeModal();
+      toast('Journey updated', 'success');
+      await renderJourneys();
+    });
+  } catch(e) {
+    toast('Failed to save: ' + e.message, 'error');
+  }
+}
+
+function confirmDeleteJourney(journeyId, journeyName){
+  var j = (db.journeys || []).find(function(x){ return x.id === journeyId; });
+  var cardCount = j ? (j.card_count || 0) : 0;
+  var warning = cardCount > 0
+    ? 'This will permanently delete ' + cardCount + ' card' + (cardCount === 1 ? '' : 's') + ' along with the journey and its stages. This cannot be undone.'
+    : 'This will permanently delete the journey and its stages. This cannot be undone.';
+
+  var body = '<div style="padding:8px 0">'
+    + '<div style="font-size:14px;margin-bottom:12px">Delete journey <strong>' + esc(journeyName) + '</strong>?</div>'
+    + '<div style="font-size:13px;color:var(--main-text-muted);padding:12px;background:var(--danger-dim);color:var(--danger-text);border-radius:var(--radius);border:1px solid var(--danger)">' + esc(warning) + '</div>'
+    + '</div>';
+
+  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" onclick="doDeleteJourney(event, \'' + journeyId + '\')">Delete Journey</button>';
+
+  openModal('Confirm Delete', body, footer);
+}
+
+async function doDeleteJourney(ev, journeyId){
+  var btn = ev && ev.target;
+  try {
+    await _withBusyBtn(btn, 'Deleting...', async function(){
+      await journeyDelete(journeyId);
+      closeModal();
+      toast('Journey deleted', 'success');
+      // Clear active journey from localStorage if it was this one
+      if (localStorage.getItem('msp_active_journey_id') === journeyId) {
+        localStorage.removeItem('msp_active_journey_id');
+      }
+      await renderJourneys();
+    });
+  } catch(e) {
+    toast('Failed to delete: ' + e.message, 'error');
+  }
 }
 
 function renderForms(){
