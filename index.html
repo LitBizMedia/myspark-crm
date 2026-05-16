@@ -18396,9 +18396,25 @@ async function saveNewJourney(ev){
   }
 }
 
+// Local working copy of stages while the settings modal is open. Discarded
+// on Cancel; written back to server on Save.
+var _jrnSettingsStages = [];
+
 function openJourneySettingsModal(journeyId){
   var j = (db.journeys || []).find(function(x){ return x.id === journeyId; });
   if (!j) { toast('Journey not found', 'error'); return; }
+
+  // Deep-copy stages into local working set, sorted by sort_order
+  _jrnSettingsStages = (j.stages || []).map(function(s){
+    return {
+      id: s.id,
+      name: s.name,
+      stage_type: s.stage_type,
+      color: s.color || '#6b21ea',
+      sort_order: s.sort_order,
+      _isNew: false
+    };
+  }).sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); });
 
   var body = '<div class="form-group">'
     + '<label>Journey Name</label>'
@@ -18408,19 +18424,183 @@ function openJourneySettingsModal(journeyId){
     + '<label>Description</label>'
     + '<textarea id="jrn-set-desc" rows="2" maxlength="500">' + esc(j.description || '') + '</textarea>'
     + '</div>'
+    + '<div class="form-group">'
+    + '<label>Stages</label>'
+    + '<div id="jrn-stages-editor"></div>'
+    + '<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="_jrnAddStage()">+ Add Stage</button>'
+    + '<div style="font-size:11px;color:var(--main-text-muted);margin-top:6px">Reorder with the arrow buttons. Won and Lost stages auto-flip card status when cards move into them.</div>'
+    + '</div>'
     + '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--main-border)">'
     + '<div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:8px">Danger Zone</div>'
     + '<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:12px">Deleting a journey removes its stages and all cards. This cannot be undone.</div>'
     + '<button class="btn btn-ghost" style="color:var(--danger);border:1px solid var(--danger)" onclick="confirmDeleteJourney(\'' + j.id + '\', \'' + esc(j.name).replace(/'/g, "\\\'") + '\')">Delete this journey</button>'
-    + '</div>'
-    + '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--main-border);font-size:12px;color:var(--main-text-muted)">'
-    + 'Stage editing coming in next deploy. For now, journeys start with Won and Lost stages.'
     + '</div>';
 
   var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     + '<button class="btn btn-primary" onclick="saveJourneySettings(event, \'' + j.id + '\')">Save</button>';
 
-  openModal('Journey Settings', body, footer);
+  _jrnOpenPaletteIdx = null;
+  openModal('Journey Settings', body, footer, 'modal-lg');
+  _renderJrnStagesEditor();
+}
+
+var JRN_PALETTE = ['#6b21ea','#3b82f6','#06b6d4','#34d399','#84cc16','#eab308','#f59e0b','#ec4899','#f87171','#6b7280'];
+var _jrnOpenPaletteIdx = null;
+
+function _renderJrnStagesEditor(){
+  var el = document.getElementById('jrn-stages-editor');
+  if (!el) return;
+
+  _jrnSettingsStages.sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); });
+
+  var wonCount = _jrnSettingsStages.filter(function(s){ return s.stage_type === 'won'; }).length;
+  var lostCount = _jrnSettingsStages.filter(function(s){ return s.stage_type === 'lost'; }).length;
+
+  var styleBlock = '<style>'
+    + '.jrn-stage-wrap { margin-bottom:6px; }'
+    + '.jrn-stage-row { display:flex; gap:6px; align-items:center; padding:6px; background:var(--main-bg); border:1px solid var(--main-border); border-radius:var(--radius); }'
+    + '.jrn-arrows { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }'
+    + '.jrn-arrows button { padding:1px 6px; font-size:10px; min-width:24px; line-height:1; }'
+    + '.jrn-swatch-btn { width:30px; height:30px; border-radius:50%; border:2px solid var(--main-border); cursor:pointer; flex-shrink:0; padding:0; transition:transform 0.1s ease; }'
+    + '.jrn-swatch-btn:hover { transform:scale(1.08); }'
+    + '.jrn-swatch-btn.open { border-color:var(--main-text); }'
+    + '.jrn-name-input { flex:1; min-width:140px; padding:6px 10px; border:1px solid var(--main-input-border); border-radius:var(--radius); background:var(--main-input); color:var(--main-text); font-size:13px; }'
+    + '.jrn-type-select { flex-shrink:0; width:90px; padding:6px 8px; border:1px solid var(--main-input-border); border-radius:var(--radius); background:var(--main-input); color:var(--main-text); font-size:12px; }'
+    + '.jrn-del-btn { flex-shrink:0; padding:4px 10px; color:var(--danger); font-weight:700; }'
+    + '.jrn-palette { display:flex; flex-wrap:wrap; gap:8px; padding:10px 12px; margin-top:4px; background:var(--main-card); border:1px solid var(--main-border); border-radius:var(--radius); }'
+    + '.jrn-palette .sw { width:28px; height:28px; border-radius:50%; cursor:pointer; border:2px solid transparent; padding:0; transition:transform 0.1s ease; }'
+    + '.jrn-palette .sw:hover { transform:scale(1.15); }'
+    + '.jrn-palette .sw.selected { border-color:var(--main-text); }'
+    + '</style>';
+
+  var rowsHTML = _jrnSettingsStages.map(function(s, i){
+    var isFirst = i === 0;
+    var isLast = i === _jrnSettingsStages.length - 1;
+    var lastOfType = (s.stage_type === 'won' && wonCount === 1) || (s.stage_type === 'lost' && lostCount === 1);
+    var delDisabled = lastOfType ? 'disabled' : '';
+    var delTitle = lastOfType ? 'Cannot delete the last ' + s.stage_type + ' stage' : 'Delete stage';
+    var paletteOpen = _jrnOpenPaletteIdx === i;
+    var swatchOpenCls = paletteOpen ? ' open' : '';
+    var currentColor = s.color || '#6b21ea';
+
+    var paletteHTML = '';
+    if (paletteOpen) {
+      paletteHTML = '<div class="jrn-palette">'
+        + JRN_PALETTE.map(function(c){
+            var selCls = (c.toLowerCase() === currentColor.toLowerCase()) ? ' selected' : '';
+            return '<button type="button" class="sw' + selCls + '" style="background:' + c + '" onclick="_jrnPickColor(' + i + ',\'' + c + '\')" title="' + c + '"></button>';
+          }).join('')
+        + '</div>';
+    }
+
+    return '<div class="jrn-stage-wrap">'
+      + '<div class="jrn-stage-row" data-idx="' + i + '">'
+      + '<div class="jrn-arrows">'
+      + '<button class="btn btn-ghost btn-sm" onclick="_jrnMoveStage(' + i + ',-1)" ' + (isFirst ? 'disabled' : '') + ' title="Move up">▲</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="_jrnMoveStage(' + i + ',1)" ' + (isLast ? 'disabled' : '') + ' title="Move down">▼</button>'
+      + '</div>'
+      + '<button type="button" class="jrn-swatch-btn' + swatchOpenCls + '" style="background:' + esc(currentColor) + '" onclick="_jrnTogglePalette(' + i + ')" title="Choose color"></button>'
+      + '<input type="text" class="jrn-name-input" value="' + esc(s.name) + '" maxlength="100" placeholder="Stage name" onchange="_jrnSetStageName(' + i + ', this.value)">'
+      + '<select class="jrn-type-select" onchange="_jrnSetStageType(' + i + ', this.value)">'
+      + '<option value="normal"' + (s.stage_type === 'normal' ? ' selected' : '') + '>Normal</option>'
+      + '<option value="won"' + (s.stage_type === 'won' ? ' selected' : '') + '>Won</option>'
+      + '<option value="lost"' + (s.stage_type === 'lost' ? ' selected' : '') + '>Lost</option>'
+      + '</select>'
+      + '<button class="btn btn-ghost btn-sm jrn-del-btn" onclick="_jrnDeleteStage(' + i + ')" ' + delDisabled + ' title="' + esc(delTitle) + '">×</button>'
+      + '</div>'
+      + paletteHTML
+      + '</div>';
+  }).join('');
+
+  el.innerHTML = styleBlock + (rowsHTML || '<div style="font-size:12px;color:var(--main-text-muted);padding:8px">No stages. Add one to get started.</div>');
+}
+
+function _jrnTogglePalette(idx){
+  _jrnOpenPaletteIdx = (_jrnOpenPaletteIdx === idx) ? null : idx;
+  _renderJrnStagesEditor();
+}
+
+function _jrnPickColor(idx, color){
+  if (_jrnSettingsStages[idx]) _jrnSettingsStages[idx].color = color;
+  _jrnOpenPaletteIdx = null;
+  _renderJrnStagesEditor();
+}
+
+function _jrnAddStage(){
+  // Insert new normal stage before the first Won/Lost so it lands in the middle
+  var insertIdx = _jrnSettingsStages.findIndex(function(s){ return s.stage_type === 'won' || s.stage_type === 'lost'; });
+  if (insertIdx < 0) insertIdx = _jrnSettingsStages.length;
+
+  var tempId = 'stg_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  _jrnSettingsStages.splice(insertIdx, 0, {
+    id: tempId,
+    name: 'New Stage',
+    stage_type: 'normal',
+    color: '#6b21ea',
+    sort_order: 0,
+    _isNew: true
+  });
+  _jrnNormalizeSortOrders();
+  _renderJrnStagesEditor();
+}
+
+function _jrnDeleteStage(idx){
+  var s = _jrnSettingsStages[idx];
+  if (!s) return;
+  if (s.stage_type === 'won' || s.stage_type === 'lost') {
+    var cnt = _jrnSettingsStages.filter(function(x){ return x.stage_type === s.stage_type; }).length;
+    if (cnt <= 1) {
+      toast('Cannot delete the last ' + s.stage_type + ' stage', 'error');
+      return;
+    }
+  }
+  _jrnSettingsStages.splice(idx, 1);
+  _jrnNormalizeSortOrders();
+  _renderJrnStagesEditor();
+}
+
+function _jrnMoveStage(idx, dir){
+  var target = idx + dir;
+  if (target < 0 || target >= _jrnSettingsStages.length) return;
+  var tmp = _jrnSettingsStages[idx];
+  _jrnSettingsStages[idx] = _jrnSettingsStages[target];
+  _jrnSettingsStages[target] = tmp;
+  _jrnNormalizeSortOrders();
+  _renderJrnStagesEditor();
+}
+
+function _jrnSetStageName(idx, name){
+  if (_jrnSettingsStages[idx]) _jrnSettingsStages[idx].name = name;
+}
+
+function _jrnSetStageColor(idx, color){
+  if (_jrnSettingsStages[idx]) _jrnSettingsStages[idx].color = color;
+}
+
+function _jrnSetStageType(idx, newType){
+  var s = _jrnSettingsStages[idx];
+  if (!s) return;
+  var oldType = s.stage_type;
+  if (oldType === newType) return;
+
+  // Block change if it would leave zero won or zero lost
+  if (oldType === 'won' || oldType === 'lost') {
+    var cnt = _jrnSettingsStages.filter(function(x){ return x.stage_type === oldType; }).length;
+    if (cnt <= 1) {
+      toast('Cannot change the last ' + oldType + ' stage. Add another ' + oldType + ' stage first.', 'error');
+      _renderJrnStagesEditor();
+      return;
+    }
+  }
+
+  s.stage_type = newType;
+  _renderJrnStagesEditor();
+}
+
+function _jrnNormalizeSortOrders(){
+  _jrnSettingsStages.forEach(function(s, i){
+    s.sort_order = i * 10;
+  });
 }
 
 async function saveJourneySettings(ev, journeyId){
@@ -18438,15 +18618,34 @@ async function saveJourneySettings(ev, journeyId){
     return;
   }
 
+  // Validate stages client-side
+  var wonCount = 0, lostCount = 0;
+  var seenNames = {};
+  for (var i = 0; i < _jrnSettingsStages.length; i++) {
+    var s = _jrnSettingsStages[i];
+    var sName = (s.name || '').trim();
+    if (!sName) { toast('All stages must have a name', 'error'); return; }
+    var lc = sName.toLowerCase();
+    if (seenNames[lc]) { toast('Duplicate stage name: ' + sName, 'error'); return; }
+    seenNames[lc] = true;
+    if (s.stage_type === 'won') wonCount++;
+    if (s.stage_type === 'lost') lostCount++;
+  }
+  if (wonCount === 0) { toast('At least one Won stage is required', 'error'); return; }
+  if (lostCount === 0) { toast('At least one Lost stage is required', 'error'); return; }
+
   try {
     await _withBusyBtn(btn, 'Saving...', async function(){
-      // Send full stage list so we don't accidentally wipe them.
-      var stages = (j.stages || []).map(function(s){
-        return { id:s.id, name:s.name, stage_type:s.stage_type, color:s.color, sort_order:s.sort_order };
+      var stages = _jrnSettingsStages.map(function(s){
+        var out = { name: s.name.trim(), stage_type: s.stage_type, color: s.color, sort_order: s.sort_order };
+        if (!s._isNew) out.id = s.id;
+        return out;
       });
       await journeyUpsert({ id: journeyId, name: name, description: desc || null, color: j.color, sort_order: j.sort_order, active: j.active, stages: stages });
       closeModal();
       toast('Journey updated', 'success');
+      // Cards cache is stale if stage_ids changed
+      delete _journeyCardsCache[journeyId];
       await renderJourneys();
     });
   } catch(e) {
