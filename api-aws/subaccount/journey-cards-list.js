@@ -25,7 +25,6 @@ function cardToFrontend(row) {
     value: row.value != null ? parseFloat(row.value) : 0,
     status: row.status,
     position: row.position,
-    archived: !!row.archived,
     notes: row.notes,
     source: row.source,
     expected_close_date: row.expected_close_date instanceof Date ?
@@ -38,7 +37,6 @@ function cardToFrontend(row) {
       row.expected_close_date,
     won_at: row.won_at instanceof Date ? row.won_at.toISOString() : row.won_at,
     lost_at: row.lost_at instanceof Date ? row.lost_at.toISOString() : row.lost_at,
-    archived_at: row.archived_at instanceof Date ? row.archived_at.toISOString() : row.archived_at,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   };
@@ -69,9 +67,9 @@ async function handler(req, res) {
          id, journey_id, stage_id, title,
          contact_id, appointment_id, assigned_staff_id,
          lead_name, lead_email, lead_phone,
-         value, status, position, archived,
+         value, status, position,
          notes, source, expected_close_date,
-         won_at, lost_at, archived_at,
+         won_at, lost_at,
          created_at, updated_at
        FROM journey_cards
        WHERE journey_id = $1 AND subaccount_id = $2

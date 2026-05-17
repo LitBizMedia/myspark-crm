@@ -126,7 +126,7 @@ async function handler(req, res) {
           const cardCheck = await client.query(
             `SELECT stage_id, COUNT(*)::int AS cnt
              FROM journey_cards
-             WHERE stage_id = ANY($1::text[]) AND archived = FALSE
+             WHERE stage_id = ANY($1::text[])
              GROUP BY stage_id`,
             [toDelete]
           );

@@ -68,17 +68,17 @@ async function handler(req, res) {
     // and source = 'manual' so we have an audit trail. The form-submit Lambda
     // sets source = 'form_submission' for consent captured via forms.
     if (consentTouched) {
-      sets.push(`sms_consent_updated_at = ${p}`);
+      sets.push(`sms_consent_updated_at = $${p}`);
       params.push(new Date().toISOString());
       p++;
-      sets.push(`sms_consent_source = ${p}`);
+      sets.push(`sms_consent_source = $${p}`);
       params.push('manual');
       p++;
       changedFields.push('sms_consent_updated_at', 'sms_consent_source');
     }
 
     sets.push(`updated_at = NOW()`);
-    sets.push(`updated_by = ${p}`);
+    sets.push(`updated_by = $${p}`);
     params.push(auth.user_id);
 
     const sql = `UPDATE contacts SET ${sets.join(', ')} WHERE id = $1 AND subaccount_id = $2 RETURNING id, display_name`;

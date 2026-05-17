@@ -48,14 +48,13 @@ async function handler(req, res) {
     const result = await db.transaction(async (client) => {
       // Lock the card row
       const cardRes = await client.query(
-        `SELECT id, stage_id, journey_id, status, archived
+        `SELECT id, stage_id, journey_id, status
          FROM journey_cards
          WHERE id = $1 AND subaccount_id = $2 FOR UPDATE`,
         [body.id, subaccountId]
       );
       if (cardRes.rows.length === 0) throw new HttpError(404, 'Card not found');
       const card = cardRes.rows[0];
-      if (card.archived) throw new HttpError(400, 'Cannot move an archived card');
 
       // Verify target stage belongs to same journey + subaccount
       const stageRes = await client.query(
@@ -102,7 +101,7 @@ async function handler(req, res) {
       // splice the moved card at newPosition.
       const targetCardsRes = await client.query(
         `SELECT id FROM journey_cards
-         WHERE stage_id = $1 AND archived = FALSE AND id != $2
+         WHERE stage_id = $1 AND id != $2
          ORDER BY position ASC, updated_at ASC`,
         [body.stage_id, body.id]
       );
@@ -127,7 +126,7 @@ async function handler(req, res) {
       if (oldStageId !== body.stage_id) {
         const oldRes = await client.query(
           `SELECT id FROM journey_cards
-           WHERE stage_id = $1 AND archived = FALSE
+           WHERE stage_id = $1
            ORDER BY position ASC, updated_at ASC`,
           [oldStageId]
         );

@@ -119,7 +119,7 @@ async function handler(req, res) {
         // Position: append to end of stage
         const posRes = await client.query(
           `SELECT COALESCE(MAX(position), -1) + 1 AS pos
-           FROM journey_cards WHERE stage_id = $1 AND archived = FALSE`,
+           FROM journey_cards WHERE stage_id = $1`,
           [body.stage_id]
         );
         const position = posRes.rows[0].pos;

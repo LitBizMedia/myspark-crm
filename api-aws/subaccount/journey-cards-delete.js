@@ -1,11 +1,10 @@
 // POST /api/subaccount/journey-cards-delete
 //
-// Soft delete: sets archived = TRUE and archived_at = NOW().
-// Card stays in DB and can be restored via journey-cards-upsert if needed
-// (future). Hard delete is intentionally not exposed in Stage 1.
-//
-// Body: { id, restore? }
-//   - restore: true unarchives a previously archived card
+// Hard delete a card row. Position reflow happens on next list load
+// (positions are integers but the renderer sorts and the next move
+// renumbers if needed). For Stage 1 we accept that deleting from the
+// middle of a stage may leave a position gap until the next move; this
+// is harmless because rendering sorts by position and gaps are inert.
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
@@ -25,7 +24,6 @@ async function handler(req, res) {
   if (!isValidUid(body.id)) {
     return res.status(400).json({ error: 'id is required' });
   }
-  const restore = body.restore === true;
 
   try {
     const card = await db.findOne('journey_cards', { id: body.id, subaccount_id: subaccountId });
@@ -33,16 +31,14 @@ async function handler(req, res) {
       return res.status(404).json({ error: 'Card not found' });
     }
 
-    const updated = await db.update(
+    const deleted = await db.deleteWhere(
       'journey_cards',
-      {
-        archived: !restore,
-        archived_at: restore ? null : new Date(),
-        updated_at: new Date()
-      },
       { id: body.id, subaccount_id: subaccountId },
-      { returning: 'id, archived, archived_at' }
+      { returning: 'id' }
     );
+    if (deleted.length === 0) {
+      return res.status(404).json({ error: 'Card not found' });
+    }
 
     await logAudit({
       req,
@@ -50,17 +46,22 @@ async function handler(req, res) {
       actorId: auth.user_id,
       actorUsername: auth.username,
       actorRole: auth.role,
-      action: restore ? 'subaccount.journey_card.restore' : 'subaccount.journey_card.archive',
+      action: 'subaccount.journey_card.delete',
       targetType: 'journey_card',
       targetId: body.id,
       targetSubaccountId: subaccountId,
-      metadata: { title: card.title, value: card.value != null ? parseFloat(card.value) : 0 }
+      metadata: {
+        title: card.title,
+        value: card.value != null ? parseFloat(card.value) : 0,
+        stage_id: card.stage_id,
+        journey_id: card.journey_id
+      }
     });
 
-    return res.status(200).json({ ok: true, id: body.id, archived: updated[0] && updated[0].archived });
+    return res.status(200).json({ ok: true, id: body.id });
   } catch (err) {
     console.error('journey-cards-delete error:', err);
-    return res.status(500).json({ error: 'Failed to update card', detail: err.message });
+    return res.status(500).json({ error: 'Failed to delete card', detail: err.message });
   }
 }
 
