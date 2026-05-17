@@ -21,7 +21,7 @@
 const db = require('./lib/db');
 const contactsLib = require('./lib/contacts');
 const { processSub } = require('./lib/sub-charge');
-const { sendEmail } = require('./lib/ses');
+const { sendEmail } = require('./lib/mailgun');
 const { DEFAULT_TZ } = require('./lib/timezone');
 
 function fmt$(n) {

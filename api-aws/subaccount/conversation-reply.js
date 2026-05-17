@@ -18,7 +18,7 @@
 // Returns: { message: { ...slim conversation_message shape... } }
 
 const db = require('./lib/db');
-const { sendEmail } = require('./lib/ses');
+const { sendEmail } = require('./lib/mailgun');
 const contactsLib = require('./lib/contacts');
 const { wrap } = require('./lib/lambda-adapter');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');

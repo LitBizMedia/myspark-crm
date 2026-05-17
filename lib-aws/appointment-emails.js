@@ -8,7 +8,7 @@
 // Each email is personalized with the client's name. No cancel/reschedule links
 // per current policy ("by call only").
 
-const { sendEmail } = require('./ses');
+const { sendEmail } = require('./mailgun');
 
 function fmtDate(d) {
   if (!d) return '';
