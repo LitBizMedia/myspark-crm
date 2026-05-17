@@ -1,27 +1,42 @@
-// api/auth/forgot-password.js (Lambda version)
+// api/auth/forgot-password.js (Lambda version) - DEBUG VERSION
 //
 // POST /api/auth/forgot-password
 //
-// Generates a secure token, stores it, sends a reset email via Resend.
+// Generates a secure token, stores it, sends a reset email via Mailgun.
 // Always returns success to prevent email enumeration attacks.
 //
-// MIGRATED: Supabase REST → lib/db.js for user lookups and token storage.
+// MIGRATED:
+//   Supabase REST → lib/db.js (Apr 30)
+//   Resend inline fetch → lib/mailgun.js (May 17)
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const crypto = require('crypto');
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const APP_URL = process.env.APP_URL || 'https://mysparkplus.app';
-const FROM_EMAIL = 'noreply@mysparkplus.app';
 const TOKEN_EXPIRY_MINUTES = 60;
 
+// Load mailgun lazily so we can see init errors
+let sendEmail = null;
+let mailgunLoadError = null;
+try {
+  sendEmail = require('./lib/mailgun').sendEmail;
+  console.log('[forgot-password] lib/mailgun loaded successfully');
+} catch (e) {
+  mailgunLoadError = e;
+  console.error('[forgot-password] CRITICAL: lib/mailgun load failed:', e.message, e.stack);
+}
+
 async function handler(req, res) {
+  console.log('[forgot-password] handler entered');
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { email, context, slug } = req.body || {};
+  console.log('[forgot-password] request:', { email, context, slug });
+
   if (!email || !context) {
     return res.status(400).json({ error: 'email and context required' });
   }
@@ -31,13 +46,18 @@ async function handler(req, res) {
 
   const lowerEmail = String(email).toLowerCase();
 
-  // Always return success to prevent email enumeration
   const safeReturn = function() {
     return res.status(200).json({
       success: true,
       message: 'If that email is on file, a reset link is on its way.'
     });
   };
+
+  // Check mailgun loaded
+  if (mailgunLoadError) {
+    console.error('[forgot-password] aborting - mailgun module failed to load:', mailgunLoadError.message);
+    return safeReturn();
+  }
 
   try {
     let userType = null;
@@ -46,22 +66,19 @@ async function handler(req, res) {
     let userName = '';
 
     if (context === 'agency') {
-      // Agency user lookup
+      console.log('[forgot-password] agency lookup for', lowerEmail);
       const u = await db.findOne('agency_users',
         { email: lowerEmail, active: true },
         { select: 'id, name, email' }
       );
+      console.log('[forgot-password] agency user found:', !!u);
       if (!u) return safeReturn();
       userType = 'agency';
       userIdentifier = u.id;
       userName = u.name || '';
-
     } else {
-      // Subaccount user lookup
       if (!slug) return safeReturn();
       const subId = 'sub-' + slug;
-
-      // 1. Try subaccount_users table first
       try {
         const u = await db.findOne('subaccount_users',
           { subaccount_id: subId, email: lowerEmail, active: true },
@@ -72,9 +89,8 @@ async function handler(req, res) {
           userIdentifier = u.id;
           userName = u.display_name || u.username || '';
         }
-      } catch (e) { /* fall through */ }
+      } catch (e) { console.warn('[forgot-password] subaccount_users lookup failed:', e.message); }
 
-      // 2. Legacy fallback: subaccounts.admin_email
       if (!userType) {
         try {
           const sub = await db.findOne('subaccounts',
@@ -86,13 +102,14 @@ async function handler(req, res) {
             userIdentifier = subId + ':' + sub.admin_username;
             userName = sub.name || sub.admin_username || '';
           }
-        } catch (e) { /* swallow */ }
+        } catch (e) { console.warn('[forgot-password] subaccounts lookup failed:', e.message); }
       }
 
       if (!userType) return safeReturn();
     }
 
-    // Generate token, store, email
+    console.log('[forgot-password] user found, generating token. userType:', userType);
+
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MINUTES * 60000).toISOString();
 
@@ -105,16 +122,15 @@ async function handler(req, res) {
         email: lowerEmail,
         expires_at: expiresAt
       });
+      console.log('[forgot-password] token stored');
     } catch (e) {
-      console.error('forgot-password: token store failed', e.message);
+      console.error('[forgot-password] token store failed:', e.message);
       return safeReturn();
     }
 
-    // Build reset link
     const resetPath = (context === 'agency') ? '/agency' : '/' + slug;
     const resetLink = APP_URL + resetPath + '?reset=' + token;
 
-    // Send via Resend
     const html = '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#1a1030">'
       + '<h2 style="color:#6b21ea;margin:0 0 8px">Reset your password</h2>'
       + '<p style="margin:0 0 20px;color:#5a4d7a;font-size:15px">Hi' + (userName ? ' ' + userName : '') + ', we received a request to reset your MySpark+ password.</p>'
@@ -123,24 +139,29 @@ async function handler(req, res) {
       + '<p style="font-size:12px;color:#9b8ec4;margin:0">MySpark+ by LitBiz Media</p>'
       + '</div>';
 
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + RESEND_API_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'MySpark+ <' + FROM_EMAIL + '>',
-        to: [lowerEmail],
+    console.log('[forgot-password] about to call sendEmail');
+
+    try {
+      const result = await sendEmail(null, {
+        scope: 'agency',
+        to: lowerEmail,
         subject: 'Reset your MySpark+ password',
-        html: html
-      })
-    });
+        html: html,
+        templateType: 'password_reset',
+        subaccountId: subaccountSlug ? ('sub-' + subaccountSlug) : null
+      });
+      console.log('[forgot-password] sendEmail returned:', JSON.stringify(result));
+      if (!result.ok) {
+        console.error('[forgot-password] mailgun send failed:', result.error);
+      }
+    } catch (e) {
+      console.error('[forgot-password] sendEmail threw:', e.message, e.stack);
+    }
 
     return safeReturn();
 
   } catch (e) {
-    console.error('forgot-password error:', e);
+    console.error('[forgot-password] OUTER CATCH:', e.message, e.stack);
     return safeReturn();
   }
 }
