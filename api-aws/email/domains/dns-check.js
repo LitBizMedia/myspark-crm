@@ -64,6 +64,31 @@ async function checkRecord(rec) {
       if (!result || !result.length) return { status: 'not_found' };
       const flat = result.map(normTxt);
       const expectedNorm = String(expected).trim();
+
+      // Special case: DMARC records. A valid DMARC record is any TXT starting
+      // with 'v=DMARC1'. Mailgun, the user's own DMARC tools, or our minimal
+      // record all pass. We don't require exact match on policy/reporting.
+      if (rec.purpose === 'authentication' && expectedNorm.indexOf('v=DMARC1') === 0) {
+        const dmarc = flat.find(function(s) { return s.indexOf('v=DMARC1') === 0; });
+        if (dmarc) return { status: 'live', actual: dmarc.length > 60 ? dmarc.slice(0, 60) + '...' : dmarc };
+        return { status: 'not_found' };
+      }
+
+      // Special case: SPF records. Any TXT starting with 'v=spf1' that includes
+      // the expected provider is valid (customer may have extra includes).
+      if (expectedNorm.indexOf('v=spf1') === 0) {
+        const spf = flat.find(function(s) { return s.indexOf('v=spf1') === 0; });
+        if (spf) {
+          // Check if expected includes are present
+          const m = expectedNorm.match(/include:[\S]+/g) || [];
+          const allPresent = m.every(function(inc) { return spf.indexOf(inc) !== -1; });
+          if (allPresent) return { status: 'live', actual: spf.length > 60 ? spf.slice(0, 60) + '...' : spf };
+          return { status: 'mismatch', actual: spf.length > 60 ? spf.slice(0, 60) + '...' : spf };
+        }
+        return { status: 'not_found' };
+      }
+
+      // Normal exact-match path (DKIM keys, other TXT records)
       const match = flat.find(function(s) { return s === expectedNorm; });
       if (match) return { status: 'live', actual: match };
       // Partial match? Useful diagnostic for users with multi-string TXT issues

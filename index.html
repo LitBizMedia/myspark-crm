@@ -12459,12 +12459,18 @@ function renderEmailDomainSettings(){
   var allRecords=(record&&record.dkim_records&&Array.isArray(record.dkim_records))?record.dkim_records:[];
   var sendingRecs=allRecords.filter(function(r){ return r.purpose==='sending' || !r.purpose; });
   var inboundRecs=allRecords.filter(function(r){ return r.purpose==='receiving'; });
+  var authRecs=allRecords.filter(function(r){ return r.purpose==='authentication'; });
 
   // Section-level active state: are ALL records in the section Mailgun-validated?
   var sendingActive=record.sending_mode==='branded';
   var inboundActive=record.inbound_mode==='branded';
 
+  // Authentication (DMARC) is OPTIONAL — section pill stays neutral regardless of state
   var dnsResults=(state.emailDomainDns||{});
+  var authLive = authRecs.length > 0 && authRecs.every(function(r){
+    var k=_emailDnsKey(r);
+    return dnsResults[k] && dnsResults[k].status==='live';
+  });
 
   var html='<div style="max-width:1180px">';
   html+=_emailRenderStatusBanner(mode, record, graceDays);
@@ -12480,6 +12486,9 @@ function renderEmailDomainSettings(){
 
   html+=_emailSection('Sending records', sendingActive, 'Authorize Mailgun to send emails from your domain', sendingRecs, dnsResults);
   html+=_emailSection('Inbound records', inboundActive, 'Route patient replies back into Conversations. Add these MX records to receive replies on your domain.', inboundRecs, dnsResults);
+  if(authRecs.length>0){
+    html+=_emailAuthSection(authLive, authRecs, dnsResults);
+  }
 
   html+='<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--main-border)">';
   html+='<button class="btn btn-ghost btn-sm" onclick="removeEmailDomain(\''+record.id+'\')">Remove Domain</button>';
@@ -12581,6 +12590,35 @@ function _emailRenderStatusBanner(mode, record, graceDays){
       +graceChip
     +'</div>'
     +'<div style="font-size:12px;color:var(--main-text-muted);margin-left:30px;line-height:1.5">'+esc(body)+'</div>'
+    +'</div>';
+}
+
+// Authentication section (DMARC). Optional, so pill says "OPTIONAL" or "LIVE",
+// never "PENDING" or "VERIFIED". Doesn't block anything if user skips it.
+function _emailAuthSection(isLive, records, dnsResults){
+  if(!records.length) return '';
+  var pill = isLive
+    ? '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,.14);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Live</span>'
+    : '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(107,33,234,.10);color:var(--purple);border:1px solid rgba(107,33,234,.25);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Recommended</span>';
+
+  var head='<thead><tr>'
+    +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;width:74px">Type</th>'
+    +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;width:310px">Name / Host</th>'
+    +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px">Value</th>'
+    +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;width:104px">Status</th>'
+    +'</tr></thead>';
+
+  var rows=records.map(function(r){ return _emailRecordRow(r, dnsResults); }).join('');
+
+  return '<div style="margin-bottom:28px">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">'
+      +'<div style="font-size:15px;font-weight:700;color:var(--main-text)">Authentication records</div>'
+      +pill
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:12px;line-height:1.5">DMARC tells inbox providers (Gmail, Yahoo, Outlook) how to handle mail from your domain. Adding this record improves deliverability and meets Google and Yahoo bulk sender requirements. Optional but strongly recommended.</div>'
+    +'<div style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden">'
+      +'<table style="width:100%;border-collapse:collapse;table-layout:fixed">'+head+'<tbody>'+rows+'</tbody></table>'
+    +'</div>'
     +'</div>';
 }
 

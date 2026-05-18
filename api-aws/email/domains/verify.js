@@ -96,6 +96,22 @@ async function handler(req, res) {
       });
     }
 
+    // Preserve any authentication records (DMARC) from the previous state.
+    // Mailgun does not return these so we keep them across re-verifies.
+    const previousRecords = Array.isArray(row.dkim_records) ? row.dkim_records : [];
+    const authRecords = previousRecords.filter(function(r) { return r.purpose === 'authentication'; });
+    if (authRecords.length === 0) {
+      // Re-add minimal DMARC if missing (e.g., row added before DMARC support)
+      allRecords.push({
+        type: 'TXT',
+        name: '_dmarc.' + row.domain,
+        value: 'v=DMARC1; p=none',
+        purpose: 'authentication'
+      });
+    } else {
+      for (const r of authRecords) allRecords.push(r);
+    }
+
     // Mailgun's state=active reflects sending readiness only (SPF+DKIM validated).
     // It does NOT require MX records to validate. We track sending and inbound
     // separately, because the customer must add MX records before patient replies work.

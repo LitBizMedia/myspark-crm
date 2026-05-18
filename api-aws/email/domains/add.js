@@ -176,6 +176,16 @@ async function handler(req, res) {
       });
     }
 
+    // Generate minimal DMARC record. Mailgun does not expose DMARC via API,
+    // so we generate a sensible default ourselves. p=none means monitor only
+    // (zero deliverability risk). Meets Google/Yahoo minimum DMARC requirement.
+    allRecords.push({
+      type: 'TXT',
+      name: '_dmarc.' + sendingDomain,
+      value: 'v=DMARC1; p=none',
+      purpose: 'authentication'
+    });
+
     // Insert or update DB row (store the actual sending domain, which is mg.<root>)
     let row;
     if (existing.rows.length > 0) {
