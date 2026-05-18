@@ -275,9 +275,9 @@ exports.handler = async (event, context) => {
     const headers = event.headers || {};
     const contentType = headers['content-type'] || headers['Content-Type'] || '';
 
-    if (!contentType.includes('multipart/form-data')) {
+    if (!contentType.includes('multipart/form-data') && !contentType.includes('application/x-www-form-urlencoded')) {
       console.warn('mailgun-inbound: unexpected content-type:', contentType);
-      return { statusCode: 400, body: JSON.stringify({ error: 'expected multipart/form-data' }) };
+      return { statusCode: 400, body: JSON.stringify({ error: 'expected multipart or urlencoded' }) };
     }
 
     // API Gateway v2 base64-encodes binary bodies
@@ -285,7 +285,18 @@ exports.handler = async (event, context) => {
       ? Buffer.from(event.body || '', 'base64')
       : Buffer.from(event.body || '', 'utf-8');
 
-    const { fields } = await parseMultipart(rawBody, contentType);
+    let fields;
+    if (contentType.includes('multipart/form-data')) {
+      const parsed = await parseMultipart(rawBody, contentType);
+      fields = parsed.fields;
+    } else if (contentType.includes('application/x-www-form-urlencoded')) {
+      // Mailgun's default "parsed" webhook format
+      const querystring = require('querystring');
+      fields = querystring.parse(rawBody.toString('utf-8'));
+    } else {
+      console.warn('mailgun-inbound: unexpected content-type:', contentType);
+      return { statusCode: 400, body: JSON.stringify({ error: 'expected multipart or urlencoded' }) };
+    }
 
     // Signature verification
     const creds = await getCredentials();
