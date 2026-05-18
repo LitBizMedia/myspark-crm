@@ -12393,9 +12393,11 @@ function switchSettingsTab(tab){
   }
   if(tab==='email'){
     state.emailDomain=undefined;
+    state.emailDomainStatus=null;
     renderEmailDomainSettings();
-    loadEmailDomainStatus().then(function(record){
-      state.emailDomain=record||null;
+    loadEmailDomainStatus().then(function(status){
+      state.emailDomainStatus=status||{mode:'shared',domain:null,grace_days_remaining:14,grace_period_blocked:false};
+      state.emailDomain=status&&status.domain?status.domain:null;
       renderEmailDomainSettings();
     });
     loadEmailTemplates().then(function(){
@@ -12416,70 +12418,68 @@ async function loadEmailDomainStatus(){
     var res=await fetch(apiUrl('/api/subaccount/email-domain-status'),{credentials:'include'});
     if(!res.ok)return null;
     var data=await res.json();
-    return data.domain||null;
+    return data;
   }catch(e){return null;}
 }
 
-// State machine for the Email tab UI.
-function _emailDomainState(record){
-  if(!record) return 'none';
-  if(record.status !== 'verified') return 'dkim_pending';
-  if(record.inbound_status !== 'verified') return 'sending_only';
-  return 'fully_active';
+// Derive 4-state mode from the status response.
+// 'shared'    = no domain, sending via mg.mysparkplus.app
+// 'pending'   = domain added but no Mailgun ID (stale row or just-added)
+// 'verifying' = Mailgun has domain registered but state != active
+// 'verified'  = Mailgun state=active AND sending_mode='branded'
+function _emailMode(){
+  var s=state.emailDomainStatus;
+  if(!s)return 'shared';
+  return s.mode||'shared';
 }
 
-// Per-record DNS status. Held in memory only; refreshed on Check verification.
-// Keyed by record name+type to avoid collisions.
 function _emailDnsKey(rec){ return (rec.type||'')+':'+(rec.name||''); }
 
 function renderEmailDomainSettings(){
   var el=document.getElementById('email-domain-container');
   if(!el)return;
+
+  var status=state.emailDomainStatus;
   var record=state.emailDomain;
 
-  if(record===undefined){
+  if(status===undefined||status===null && record===undefined){
     el.innerHTML='<div style="font-size:13px;color:var(--main-text-muted);padding:14px 0">Loading email domain status...</div>';
     return;
   }
 
-  var status=_emailDomainState(record);
+  var mode=_emailMode();
+  var graceDays=(status&&typeof status.grace_days_remaining==='number')?status.grace_days_remaining:14;
 
-  if(status==='none'){
-    el.innerHTML=
-      '<div style="max-width:520px">'
-      +'<div style="font-size:18px;font-weight:700;color:var(--main-text);margin-bottom:6px">Connect Your Email Domain</div>'
-      +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Emails send from your own domain instead of mysparkplus.app. Patient replies route back into Conversations. You will add a handful of DNS records to your domain provider.</div>'
-      +'<div style="font-size:12px;color:var(--main-text);font-weight:600;margin-bottom:6px">Your domain</div>'
-      +'<input id="email-domain-input" type="text" placeholder="yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-bottom:12px">'
-      +'<button class="btn btn-action" onclick="addEmailDomain()">Add Domain</button>'
-      +'</div>';
+  if(mode==='shared'){
+    el.innerHTML=_emailRenderShared(graceDays);
     return;
   }
 
-  var sendingVerified = record.status === 'verified';
-  var inboundVerified = record.inbound_status === 'verified';
-  var allRecords = (record.dkim_records && Array.isArray(record.dkim_records)) ? record.dkim_records : [];
+  // mode is pending, verifying, or verified
+  var allRecords=(record&&record.dkim_records&&Array.isArray(record.dkim_records))?record.dkim_records:[];
+  var sendingRecs=allRecords.filter(function(r){ return r.purpose==='sending' || !r.purpose; });
+  var inboundRecs=allRecords.filter(function(r){ return r.purpose==='receiving'; });
 
-  var sendingRecs = allRecords.filter(function(r){ return r.group === 'sending'; });
-  var inboundRecs = allRecords.filter(function(r){ return r.group === 'inbound'; });
-  var dmarcRecs = allRecords.filter(function(r){ return r.group === 'dmarc'; });
+  // Section-level active state: are ALL records in the section Mailgun-validated?
+  var sendingActive=record.sending_mode==='branded';
+  var inboundActive=record.inbound_mode==='branded';
 
-  var dnsResults = (state.emailDomainDns || {});
+  var dnsResults=(state.emailDomainDns||{});
 
   var html='<div style="max-width:1180px">';
+  html+=_emailRenderStatusBanner(mode, record, graceDays);
 
-  // Header bar
-  html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">';
+  // Header bar with domain + actions
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:24px 0 8px">';
   html+='<div style="font-size:20px;font-weight:700;color:var(--main-text)">'+esc(record.domain)+'</div>';
   html+='<div style="display:flex;gap:8px;align-items:center">';
   html+='<button class="btn btn-primary btn-sm" onclick="verifyEmailDomain(\''+record.id+'\')">Check verification</button>';
   html+='</div>';
   html+='</div>';
-  html+='<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:24px;line-height:1.6">Add the records below to your domain DNS provider. DNS changes can take 5 to 30 minutes to propagate. Click Check verification to see which records are live.</div>';
+  html+='<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:24px;line-height:1.6">Add the records below at your DNS provider. DNS changes can take 5 to 30 minutes to propagate. Click Check verification to see which records are live.</div>';
 
-  html+=_emailSection('Sending', sendingVerified, 'Emails you send go out signed by your domain', sendingRecs, dnsResults);
-  html+=_emailSection('Inbound replies', inboundVerified, 'Patient replies route into Conversations at '+esc(record.inbound_subdomain || 'reply')+'.'+esc(record.domain), inboundRecs, dnsResults);
-  html+=_emailSection('DMARC (recommended)', null, 'Enables monitoring of who claims to send mail from your domain. Safe to add, does not block delivery.', dmarcRecs, dnsResults);
+  html+=_emailSection('Sending records', sendingActive, 'Authorize Mailgun to send emails from your domain', sendingRecs, dnsResults);
+  html+=_emailSection('Inbound records', inboundActive, 'Route patient replies back into Conversations. Add these MX records to receive replies on your domain.', inboundRecs, dnsResults);
 
   html+='<div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--main-border)">';
   html+='<button class="btn btn-ghost btn-sm" onclick="removeEmailDomain(\''+record.id+'\')">Remove Domain</button>';
@@ -12488,12 +12488,100 @@ function renderEmailDomainSettings(){
   html+='</div>';
   el.innerHTML=html;
 
-  // Auto-check verification on first render after the domain is loaded. The flag
-  // is keyed on the domain id so switching subaccounts re-triggers correctly.
+  // Auto-check verification on first render after the domain is loaded
   if(state._emailAutoCheckedFor !== record.id){
     state._emailAutoCheckedFor = record.id;
     verifyEmailDomain(record.id, true);
   }
+}
+
+// Shared mode landing page with grace countdown
+function _emailRenderShared(graceDays){
+  var graceLabel;
+  var graceColor;
+  if(graceDays<=0){
+    graceLabel='Grace period ended';
+    graceColor='#a16207';  // amber
+  } else if(graceDays<=3){
+    graceLabel=graceDays+' day'+(graceDays===1?'':'s')+' left in grace period';
+    graceColor='#a16207';
+  } else if(graceDays<=7){
+    graceLabel=graceDays+' days left in grace period';
+    graceColor='var(--main-text-muted)';
+  } else {
+    graceLabel=graceDays+' days left to verify your domain';
+    graceColor='var(--main-text-muted)';
+  }
+
+  return '<div style="max-width:520px">'
+    +'<div style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:20px;margin-bottom:24px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Current sender</div>'
+      +'<div style="font-size:14px;color:var(--main-text);font-family:ui-monospace,Menlo,Monaco,Consolas,monospace;margin-bottom:14px">notifications@mg.mysparkplus.app</div>'
+      +'<div style="font-size:12px;color:'+graceColor+';font-weight:600">'+graceLabel+'</div>'
+    +'</div>'
+    +'<div style="font-size:18px;font-weight:700;color:var(--main-text);margin-bottom:6px">Send from your own domain</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:20px;line-height:1.6">Verify your domain to send patient emails from notifications@mg.yourdomain.com instead of mysparkplus.app. Better brand trust, better deliverability. Patient replies still route into Conversations.</div>'
+    +'<div style="font-size:12px;color:var(--main-text);font-weight:600;margin-bottom:6px">Your domain</div>'
+    +'<input id="email-domain-input" type="text" placeholder="yourbusiness.com" style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-size:14px;width:100%;box-sizing:border-box;margin-bottom:8px">'
+    +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:14px;line-height:1.5"><strong>Heads up:</strong> we register a subdomain like mg.yourbusiness.com to keep your existing email setup safe. Your inbox and main domain are not affected.</div>'
+    +'<button class="btn btn-action" onclick="addEmailDomain()">Add Domain</button>'
+    +'</div>';
+}
+
+// Status banner above the records table. Handles 4 micro-states:
+//   - both branded (full verified) -> green Active
+//   - sending branded but inbound shared -> yellow Sending OK
+//   - sending shared but inbound branded -> very rare, treat as verifying
+//   - both shared -> yellow Pending
+function _emailRenderStatusBanner(mode, record, graceDays){
+  var icon, title, body, bg, border, color;
+  var sendingOk=record&&record.sending_mode==='branded';
+  var inboundOk=record&&record.inbound_mode==='branded';
+
+  if(sendingOk && inboundOk){
+    icon='✓';
+    title='Active: sending from notifications@'+(record.domain||'your domain');
+    body='All DNS records are valid. Patient emails go out signed by your domain, and replies route back into Conversations.';
+    bg='rgba(52,211,153,.08)';
+    border='rgba(52,211,153,.3)';
+    color='#059669';
+  } else if(sendingOk && !inboundOk){
+    icon='⚠';
+    title='Sending active, inbound replies not configured';
+    body='Your domain can send patient emails. To route patient replies into Conversations, add the inbound MX records below.';
+    bg='rgba(247,184,1,.08)';
+    border='rgba(247,184,1,.3)';
+    color='#a16207';
+  } else if(mode==='verifying'){
+    icon='⟳';
+    title='Verification in progress';
+    body='Add the DNS records below at your domain provider. When all records are live, click Check verification.';
+    bg='rgba(247,184,1,.08)';
+    border='rgba(247,184,1,.3)';
+    color='#a16207';
+  } else {
+    icon='!';
+    title='Domain added, awaiting Mailgun setup';
+    body='Records are being prepared. Refresh in a moment.';
+    bg='rgba(247,184,1,.08)';
+    border='rgba(247,184,1,.3)';
+    color='#a16207';
+  }
+
+  var graceChip='';
+  if(mode!=='verified'){
+    var graceText=graceDays<=0?'Grace period ended':(graceDays+' day'+(graceDays===1?'':'s')+' left');
+    graceChip='<span style="display:inline-block;background:rgba(0,0,0,.05);color:var(--main-text-muted);border-radius:10px;padding:2px 10px;font-size:11px;font-weight:600;margin-left:8px">'+graceText+'</span>';
+  }
+
+  return '<div style="background:'+bg+';border:1px solid '+border+';border-radius:var(--radius);padding:14px 16px;margin-bottom:8px">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">'
+      +'<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:'+color+';color:#fff;font-size:12px;font-weight:700">'+icon+'</span>'
+      +'<span style="font-size:14px;font-weight:700;color:'+color+'">'+esc(title)+'</span>'
+      +graceChip
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);margin-left:30px;line-height:1.5">'+esc(body)+'</div>'
+    +'</div>';
 }
 
 // Section header + table of records
@@ -12506,7 +12594,6 @@ function _emailSection(title, verified, helpText, records, dnsResults){
     pill='<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(247,184,1,.12);color:#a16207;border:1px solid rgba(247,184,1,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Pending</span>';
   }
 
-  // Table head
   var head='<thead><tr>'
     +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;width:74px">Type</th>'
     +'<th style="text-align:left;font-size:10px;color:var(--main-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;width:310px">Name / Host</th>'
@@ -12528,27 +12615,22 @@ function _emailSection(title, verified, helpText, records, dnsResults){
     +'</div>';
 }
 
-// One record = one row
 function _emailRecordRow(rec, dnsResults){
   var key=_emailDnsKey(rec);
-  var dns=dnsResults[key]; // { status, actual?, error? } or undefined
+  var dns=dnsResults[key];
 
   var typeBadge='<span style="background:var(--purple-dim);color:var(--purple);border-radius:var(--radius-sm);padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">'+esc(rec.type||'')+'</span>'
     +(rec.priority ? '<div style="font-size:10px;color:var(--main-text-muted);margin-top:3px">Pri '+rec.priority+'</div>' : '');
 
   var nameEsc=esc(rec.name||'');
   var valueEsc=esc(rec.value||'');
-
   var nameAttr=String(rec.name||'').replace(/"/g,'&quot;');
   var valueAttr=String(rec.value||'').replace(/"/g,'&quot;');
 
-  var nameCell='<div style="display:flex;align-items:flex-start;gap:6px"><div style="flex:1;font-family:ui-monospace,Menlo,Monaco,Consolas,monospace;font-size:11px;color:var(--main-text);word-break:break-all;line-height:1.4">'+nameEsc+'</div>'+_emailCopyIcon(nameAttr)+'</div>'
-    +(rec.label ? '<div style="font-size:10px;color:var(--main-text-muted);margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+esc(rec.label)+'</div>' : '');
+  var nameCell='<div style="display:flex;align-items:flex-start;gap:6px"><div style="flex:1;font-family:ui-monospace,Menlo,Monaco,Consolas,monospace;font-size:11px;color:var(--main-text);word-break:break-all;line-height:1.4">'+nameEsc+'</div>'+_emailCopyIcon(nameAttr)+'</div>';
 
-  var valueCell='<div style="display:flex;align-items:flex-start;gap:6px"><div style="flex:1;font-family:ui-monospace,Menlo,Monaco,Consolas,monospace;font-size:11px;color:var(--main-text);word-break:break-all;line-height:1.4">'+valueEsc+'</div>'+_emailCopyIcon(valueAttr)+'</div>'
-    +(rec.description ? '<div style="font-size:10px;color:var(--main-text-muted);margin-top:4px;line-height:1.45">'+esc(rec.description)+'</div>' : '');
+  var valueCell='<div style="display:flex;align-items:flex-start;gap:6px"><div style="flex:1;font-family:ui-monospace,Menlo,Monaco,Consolas,monospace;font-size:11px;color:var(--main-text);word-break:break-all;line-height:1.4">'+valueEsc+'</div>'+_emailCopyIcon(valueAttr)+'</div>';
 
-  // Status pill
   var statusPill;
   if(!dns){
     statusPill='<span style="display:inline-block;background:var(--main-bg);color:var(--main-text-muted);border:1px solid var(--main-border);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Not Checked</span>';
@@ -12571,7 +12653,6 @@ function _emailRecordRow(rec, dnsResults){
     +'</tr>';
 }
 
-// Inline copy icon next to a value. Matches the coupon copy-button pattern.
 function _emailCopyIcon(val){
   return '<button class="cpn-copy-btn" data-copy-val="'+val+'" onclick="_emailCopyField(this)" title="Copy" style="background:transparent;border:none;cursor:pointer;padding:3px;color:var(--main-text-muted);display:flex;align-items:center;border-radius:4px;transition:all .15s;flex-shrink:0;margin-top:1px" onmouseover="this.style.background=\'var(--main-bg)\';this.style.color=\'var(--main-text)\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--main-text-muted)\'">'
     +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
@@ -12579,7 +12660,6 @@ function _emailCopyIcon(val){
 }
 
 function _emailCopyField(btn){
-  // If the click landed on the inner SVG, walk up to the button
   while(btn && !btn.hasAttribute('data-copy-val')){ btn=btn.parentElement; }
   if(!btn) return;
   var val=btn.getAttribute('data-copy-val');
@@ -12624,10 +12704,13 @@ async function addEmailDomain(){
     if(!res.ok){ toast(data.error||'Add failed', 'error'); return; }
     state.emailDomain=data.domain;
     if(data.records && data.records.length) state.emailDomain.dkim_records=data.records;
+    // Refresh status to reflect new mode (pending or verifying)
+    var status=await loadEmailDomainStatus();
+    state.emailDomainStatus=status;
     state.emailDomainDns={};
     state._emailAutoCheckedFor = null;
     renderEmailDomainSettings();
-    toast('Domain added. Add the DNS records below.', 'success');
+    toast('Domain added. Add the DNS records below at your provider.', 'success');
   }catch(e){
     toast('Error: '+e.message, 'error');
   }finally{
@@ -12635,15 +12718,13 @@ async function addEmailDomain(){
   }
 }
 
-// Calls /verify (SES identity status) AND /dns-check (live per-record DNS) in parallel.
-// Merges both into state, then re-renders. Single click, full picture.
-// silent=true is used by auto-check on tab load to avoid surprise toasts.
+// Calls /verify (Mailgun verification) AND /dns-check (live per-record DNS) in parallel.
+// Merges both into state, then re-renders.
 async function verifyEmailDomain(domainId, silent){
   var btn=document.querySelector('#email-domain-container .btn-primary');
   if(btn && !silent){ btn.disabled=true; btn.textContent='Checking...'; }
   try{
-    var slug=state.subaccountSlug||'litbiz';
-    var verifyP=fetch(apiUrl('/api/email/domains/verify'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,domainId:domainId})}).then(function(r){return r.json();});
+    var verifyP=fetch(apiUrl('/api/email/domains/verify'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domainId:domainId})}).then(function(r){return r.json();});
     var dnsP=fetch(apiUrl('/api/email/domains/dns-check'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domainId:domainId})}).then(function(r){return r.json();});
 
     var both=await Promise.all([verifyP, dnsP]);
@@ -12656,18 +12737,23 @@ async function verifyEmailDomain(domainId, silent){
       dnsData.results.forEach(function(r){ map[_emailDnsKey(r)]=r; });
       state.emailDomainDns=map;
     }
+    // Refresh status so the banner reflects the new mode
+    var status=await loadEmailDomainStatus();
+    state.emailDomainStatus=status;
 
     renderEmailDomainSettings();
 
     if(!silent){
-      if(verifyData.sending_status==='verified' && verifyData.inbound_status==='verified'){
-        toast('Both sending and inbound verified. You are fully active.', 'success');
-      } else if(verifyData.sending_status==='verified'){
-        toast('Sending verified. Inbound still pending DNS.', 'success');
+      if(verifyData.verified){
+        toast('Domain verified. You are now sending from your own domain.', 'success');
       } else {
         var liveCount=(dnsData.results||[]).filter(function(r){ return r.status==='live'; }).length;
         var totalCount=(dnsData.results||[]).length;
-        toast(liveCount+' of '+totalCount+' records live. See pills below for details.', 'warn');
+        if(totalCount===0){
+          toast('No DNS records to check yet.', 'warn');
+        } else {
+          toast(liveCount+' of '+totalCount+' records live. See status column for details.', 'warn');
+        }
       }
     }
   }catch(e){
@@ -12680,7 +12766,7 @@ async function verifyEmailDomain(domainId, silent){
 function removeEmailDomain(domainId){
   openConfirm({
     title:'Remove Email Domain?',
-    message:'This deletes both sending and inbound configuration from AWS SES. You will go back to sending from mysparkplus.app. You can re-add the domain later.',
+    message:'This deletes your domain from Mailgun. You will go back to sending from notifications@mg.mysparkplus.app and your 14-day grace period will restart. You can re-add the domain later.',
     confirmText:'Remove',
     danger:true,
     onConfirm:function(){ _doRemoveEmailDomain(domainId); }
@@ -12695,8 +12781,11 @@ async function _doRemoveEmailDomain(domainId){
     state.emailDomain=null;
     state.emailDomainDns={};
     state._emailAutoCheckedFor = null;
+    // Reload status to reflect shared mode + new grace
+    var status=await loadEmailDomainStatus();
+    state.emailDomainStatus=status;
     renderEmailDomainSettings();
-    toast('Domain removed.', 'success');
+    toast('Domain removed. Sending from notifications@mg.mysparkplus.app.', 'success');
   }catch(e){
     toast('Error: '+e.message, 'error');
   }

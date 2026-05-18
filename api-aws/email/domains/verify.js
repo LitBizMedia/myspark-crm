@@ -1,67 +1,42 @@
+// api/email/domains/verify.js (Lambda version)
+//
 // POST /api/email/domains/verify
 //
-// Checks SES verification status for BOTH sending and inbound identities.
-// When inbound is newly verified, automatically adds the inbound subdomain to
-// the SES receipt rule recipients list.
+// Tells Mailgun to verify our DNS records. If all records validate, the domain
+// transitions to "active" on Mailgun's side and we mark sending_mode='branded'.
 //
-// Body: { slug, domainId }  (domainId is the row id, not the domain string)
+// Body: { domainId }
 //
-// Returns: { domain: {...db row...}, sending_status, inbound_status }
+// Returns: { domain: {...db row...}, mailgun_state, verified: bool }
+//
+// MIGRATION: SES → Mailgun (May 18, 2026)
 
 const db = require('./lib/db');
-const { SESv2Client, GetEmailIdentityCommand } = require('@aws-sdk/client-sesv2');
-const { SESClient: SESv1Client, DescribeReceiptRuleCommand, UpdateReceiptRuleCommand } = require('@aws-sdk/client-ses');
+const secrets = require('./lib/secrets');
 const { wrap } = require('./lib/lambda-adapter');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 
-const SES_REGION = process.env.AWS_REGION || 'us-east-2';
-const INBOUND_RULE_SET = 'myspark-inbound-ruleset';
-const INBOUND_RULE_NAME = 'catch-reply-subdomain';
+const MAILGUN_SECRET_NAME = 'myspark/integrations/mailgun';
 
-const sesV2 = new SESv2Client({ region: SES_REGION });
-const sesV1 = new SESv1Client({ region: SES_REGION });
+// Tell Mailgun to verify the domain. Returns the updated domain object.
+async function verifyMailgunDomain(domain, apiKey) {
+  const auth = Buffer.from('api:' + apiKey).toString('base64');
+  const url = 'https://api.mailgun.net/v4/domains/' + encodeURIComponent(domain) + '/verify';
 
-async function getIdentityStatus(domain) {
-  try {
-    const got = await sesV2.send(new GetEmailIdentityCommand({ EmailIdentity: domain }));
-    return {
-      exists: true,
-      verified: !!got.VerifiedForSendingStatus,
-      dkim_status: (got.DkimAttributes && got.DkimAttributes.Status) || 'NOT_STARTED'
-    };
-  } catch (e) {
-    if (e.name === 'NotFoundException') {
-      return { exists: false, verified: false, dkim_status: 'NOT_STARTED' };
-    }
-    throw e;
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Authorization': 'Basic ' + auth }
+  });
+
+  let body;
+  try { body = await response.json(); } catch (e) { body = { message: await response.text() }; }
+
+  if (!response.ok) {
+    throw new Error('Mailgun API ' + response.status + ': ' + (body.message || 'unknown error'));
   }
-}
 
-// Add an inbound recipient domain to the catch-reply rule's recipients list.
-// Idempotent: if already present, no-op.
-async function addInboundRecipient(inboundDomain) {
-  const rule = await sesV1.send(new DescribeReceiptRuleCommand({
-    RuleSetName: INBOUND_RULE_SET,
-    RuleName: INBOUND_RULE_NAME
-  }));
-  const current = rule.Rule.Recipients || [];
-  if (current.indexOf(inboundDomain) !== -1) {
-    return { added: false, reason: 'already present' };
-  }
-  const updated = current.concat([inboundDomain]);
-  await sesV1.send(new UpdateReceiptRuleCommand({
-    RuleSetName: INBOUND_RULE_SET,
-    Rule: {
-      Name: rule.Rule.Name,
-      Enabled: rule.Rule.Enabled,
-      TlsPolicy: rule.Rule.TlsPolicy,
-      Recipients: updated,
-      Actions: rule.Rule.Actions,
-      ScanEnabled: rule.Rule.ScanEnabled
-    }
-  }));
-  return { added: true };
+  return body;  // { domain: {...with state...}, sending_dns_records, receiving_dns_records }
 }
 
 async function handler(req, res) {
@@ -70,66 +45,91 @@ async function handler(req, res) {
   const auth = await requireSubaccountAuth(req, res);
   if (!auth) return;
 
-  const subaccountId = auth.subaccount_id;
-  const body = req.body || {};
-  const domainId = body.domainId;
-
+  const { domainId } = req.body || {};
   if (!domainId) return res.status(400).json({ error: 'domainId required' });
 
+  const subaccountId = auth.subaccount_id;
+
   try {
-    // Load existing row, scoped to subaccount
-    const rowQ = await db.query(
-      `SELECT * FROM subaccount_email_domains WHERE id = $1 AND subaccount_id = $2`,
+    // Get the domain row
+    const r = await db.query(
+      'SELECT * FROM subaccount_email_domains WHERE id = $1 AND subaccount_id = $2',
       [domainId, subaccountId]
     );
-    if (!rowQ.rows.length) return res.status(404).json({ error: 'Domain not found' });
-    const row = rowQ.rows[0];
+    if (!r.rows.length) return res.status(404).json({ error: 'Domain not found' });
+    const row = r.rows[0];
 
-    const domain = row.domain;
-    const inboundDomain = (row.inbound_subdomain || 'reply') + '.' + domain;
-
-    const sending = await getIdentityStatus(domain);
-    const inbound = await getIdentityStatus(inboundDomain);
-
-    const sendingStatus = sending.verified ? 'verified' : 'pending';
-    const inboundStatus = inbound.verified ? 'verified' : 'pending';
-
-    // If inbound newly became verified, add it to the receipt rule
-    let receiptRuleUpdate = null;
-    if (inboundStatus === 'verified' && row.inbound_status !== 'verified') {
-      try {
-        receiptRuleUpdate = await addInboundRecipient(inboundDomain);
-      } catch (e) {
-        console.error('Failed to update receipt rule:', e.message);
-        receiptRuleUpdate = { added: false, error: e.message };
-      }
+    if (!row.domain) {
+      return res.status(400).json({ error: 'Domain row has no domain name' });
     }
 
-    // Update DB row to reflect current state
-    const now = new Date().toISOString();
-    const updates = {};
-    if (sendingStatus !== row.status) updates.status = sendingStatus;
-    if (inboundStatus !== row.inbound_status) updates.inbound_status = inboundStatus;
-    if (sendingStatus === 'verified' && !row.verified_at) updates.verified_at = now;
-    if (inboundStatus === 'verified' && !row.inbound_verified_at) updates.inbound_verified_at = now;
+    // Get Mailgun API key
+    const apiKey = await secrets.getKey(MAILGUN_SECRET_NAME, 'MAILGUN_ACCOUNT_API_KEY');
 
-    if (Object.keys(updates).length) {
-      const setClause = Object.keys(updates)
-        .map(function(k, i) { return k + ' = $' + (i + 1); })
-        .join(', ');
-      const vals = Object.values(updates).concat([domainId, subaccountId]);
-      await db.query(
-        `UPDATE subaccount_email_domains SET ${setClause}
-         WHERE id = $${vals.length - 1} AND subaccount_id = $${vals.length}`,
-        vals
-      );
+    // Tell Mailgun to verify
+    const mgResult = await verifyMailgunDomain(row.domain, apiKey);
+    const mgDomain = mgResult.domain || {};
+    const mgState = mgDomain.state || 'unknown';
+    const isVerified = mgState === 'active';
+
+    // Refresh DNS records in case Mailgun updated them
+    const sendingRecords = mgResult.sending_dns_records || [];
+    const receivingRecords = mgResult.receiving_dns_records || [];
+    const allRecords = [];
+    for (const rec of sendingRecords) {
+      allRecords.push({
+        type: rec.record_type,
+        name: rec.name || row.domain,
+        value: rec.value,
+        valid: rec.valid,
+        purpose: 'sending'
+      });
+    }
+    for (const rec of receivingRecords) {
+      allRecords.push({
+        type: rec.record_type,
+        name: rec.name || row.domain,
+        value: rec.value,
+        priority: rec.priority || null,
+        valid: rec.valid,
+        purpose: 'receiving'
+      });
     }
 
-    // Fetch fresh row
-    const fresh = await db.query(
-      `SELECT * FROM subaccount_email_domains WHERE id = $1 AND subaccount_id = $2`,
-      [domainId, subaccountId]
+    // Mailgun's state=active reflects sending readiness only (SPF+DKIM validated).
+    // It does NOT require MX records to validate. We track sending and inbound
+    // separately, because the customer must add MX records before patient replies work.
+    const sendingValid = sendingRecords.length > 0 && sendingRecords.every(function(r) {
+      return r.valid === 'valid';
+    });
+    const inboundValid = receivingRecords.length > 0 && receivingRecords.every(function(r) {
+      return r.valid === 'valid';
+    });
+
+    const newSendingMode = sendingValid ? 'branded' : 'shared';
+    const newInboundMode = inboundValid ? 'branded' : 'shared';
+    // status='verified' only when BOTH sending and inbound are fully valid
+    const newStatus = (sendingValid && inboundValid) ? 'verified' : 'pending';
+
+    const updates = {
+      status: newStatus,
+      sending_mode: newSendingMode,
+      inbound_mode: newInboundMode,
+      dkim_records: JSON.stringify(allRecords),
+      verified_at: newStatus === 'verified' ? new Date().toISOString() : null,
+      mailgun_domain_id: mgDomain.id || row.mailgun_domain_id
+    };
+
+    const updateResult = await db.query(
+      `UPDATE subaccount_email_domains
+       SET status = $1, sending_mode = $2, inbound_mode = $3, dkim_records = $4,
+           verified_at = $5, mailgun_domain_id = $6
+       WHERE id = $7
+       RETURNING *`,
+      [updates.status, updates.sending_mode, updates.inbound_mode, updates.dkim_records,
+       updates.verified_at, updates.mailgun_domain_id, domainId]
     );
+    const updated = updateResult.rows[0];
 
     await logAudit({
       req,
@@ -139,29 +139,26 @@ async function handler(req, res) {
       actorRole: auth.role,
       action: 'subaccount.email_domain.verify',
       targetType: 'email_domain',
-      targetId: domain,
+      targetId: domainId,
       targetSubaccountId: subaccountId,
       metadata: {
-        domain,
-        sending_status: sendingStatus,
-        inbound_status: inboundStatus,
-        sending_dkim: sending.dkim_status,
-        inbound_dkim: inbound.dkim_status,
-        receipt_rule_update: receiptRuleUpdate
+        domain: row.domain,
+        mailgun_state: mgState,
+        verified: isVerified
       }
     });
 
     return res.status(200).json({
-      domain: fresh.rows[0],
-      sending_status: sendingStatus,
-      inbound_status: inboundStatus,
-      sending_dkim: sending.dkim_status,
-      inbound_dkim: inbound.dkim_status,
-      receipt_rule_update: receiptRuleUpdate
+      domain: updated,
+      mailgun_state: mgState,
+      verified: newStatus === 'verified',
+      sending_valid: sendingValid,
+      inbound_valid: inboundValid
     });
-  } catch (err) {
-    console.error('domains/verify error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to verify domain' });
+
+  } catch (e) {
+    console.error('email-domains-verify error:', e.message);
+    return res.status(500).json({ error: e.message || 'Failed to verify domain' });
   }
 }
 

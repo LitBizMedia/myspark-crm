@@ -385,10 +385,10 @@ async function sendEmail(slug, opts) {
 
   const fromDomain = useBranded ? domainConfig.domain : FALLBACK_DOMAIN;
 
-  // Determine API key: per-domain key for branded, default key for shared
-  const apiKey = (useBranded && domainConfig.mailgun_sending_key)
-    ? domainConfig.mailgun_sending_key
-    : creds.MAILGUN_DEFAULT_DOMAIN_KEY;
+  // Use account API key for all sending. Works across all domains in our Mailgun
+  // account. The domain-scoped MAILGUN_DEFAULT_DOMAIN_KEY only works for
+  // mg.mysparkplus.app and 401s when used to send from any other branded domain.
+  const apiKey = creds.MAILGUN_ACCOUNT_API_KEY;
 
   // Determine local part of from address
   let fromLocal;
@@ -420,12 +420,12 @@ async function sendEmail(slug, opts) {
     if (opts.contactId) {
       conversation = await upsertConversation(subaccountId, opts.contactId);
       if (conversation) {
-        // Inbound subdomain selection:
-        //   - Branded domain with verified inbound → reply.{theirdomain}
-        //   - All others → reply.mysparkplus.app (shared inbound)
-        if (useBranded && domainConfig.inbound_status === 'verified' && domainConfig.inbound_mode === 'branded') {
-          const sub = domainConfig.inbound_subdomain || 'reply';
-          replyTo = 'reply+' + conversation.reply_token + '@' + sub + '.' + fromDomain;
+        // Reply-To selection:
+        //   - Branded domain + verified + inbound_mode=branded → reply+token@mg.theirdomain
+        //     (Mailgun route on that domain catches it and POSTs to our shared webhook)
+        //   - All others (shared mode, grace period, unverified) → reply.mysparkplus.app
+        if (useBranded && domainConfig.status === 'verified' && domainConfig.inbound_mode === 'branded') {
+          replyTo = 'reply+' + conversation.reply_token + '@' + fromDomain;
         } else {
           replyTo = 'reply+' + conversation.reply_token + '@reply.mysparkplus.app';
         }

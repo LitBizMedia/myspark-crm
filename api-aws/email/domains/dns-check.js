@@ -1,3 +1,5 @@
+// api/email/domains/dns-check.js (Lambda version)
+//
 // POST /api/email/domains/dns-check
 //
 // Live DNS lookup for each record on a configured domain. Tells the customer
@@ -25,7 +27,14 @@ function norm(s) {
   return String(s).trim().toLowerCase().replace(/\.$/, '');
 }
 
-// Resolve one record. Returns { status, actual?, error? }.
+// For TXT records, DNS returns array of strings (sometimes split chunks).
+// Concatenate them and compare normalized.
+function normTxt(strings) {
+  if (!strings) return '';
+  if (Array.isArray(strings)) return strings.join('').trim();
+  return String(strings).trim();
+}
+
 async function checkRecord(rec) {
   const type = rec.type;
   const name = rec.name;
@@ -34,7 +43,6 @@ async function checkRecord(rec) {
   try {
     if (type === 'CNAME') {
       const result = await dns.resolveCname(name);
-      // resolveCname returns array of CNAME targets
       const actual = result && result.length ? result[0] : null;
       if (!actual) return { status: 'not_found' };
       if (norm(actual) === norm(expected)) {
@@ -45,56 +53,32 @@ async function checkRecord(rec) {
 
     if (type === 'MX') {
       const result = await dns.resolveMx(name);
-      // returns array of {exchange, priority}
       if (!result || !result.length) return { status: 'not_found' };
       const match = result.find(function(r) { return norm(r.exchange) === norm(expected); });
-      if (match) {
-        return { status: 'live', actual: match.exchange + ' (priority ' + match.priority + ')' };
-      }
+      if (match) return { status: 'live', actual: match.exchange };
       return { status: 'mismatch', actual: result.map(function(r) { return r.exchange; }).join(', ') };
     }
 
     if (type === 'TXT') {
       const result = await dns.resolveTxt(name);
-      // returns array of arrays of strings (DNS chunks each TXT into 255-char segments)
       if (!result || !result.length) return { status: 'not_found' };
-      const joined = result.map(function(arr) { return arr.join(''); });
-      const expectedNorm = norm(expected);
-
-      // Exact match
-      const exactMatch = joined.find(function(s) { return norm(s) === expectedNorm; });
-      if (exactMatch) {
-        return { status: 'live', actual: exactMatch };
-      }
-
-      // SPF semantic match: existing record contains our include
-      if (expectedNorm.indexOf('v=spf1') === 0) {
-        const spfRec = joined.find(function(s) { return s.toLowerCase().indexOf('v=spf1') === 0; });
-        if (spfRec) {
-          if (spfRec.toLowerCase().indexOf('include:amazonses.com') !== -1) {
-            return { status: 'live', actual: spfRec };
-          }
-          // SPF record exists but doesn't include amazonses.com - mismatch with actionable hint
-          return { status: 'mismatch', actual: spfRec };
-        }
-      }
-
-      // DMARC semantic match: any valid v=DMARC1 record with a p= policy counts as live
-      if (expectedNorm.indexOf('v=dmarc1') === 0) {
-        const dmarcRec = joined.find(function(s) { return s.toLowerCase().indexOf('v=dmarc1') === 0; });
-        if (dmarcRec && /p\s*=/i.test(dmarcRec)) {
-          return { status: 'live', actual: dmarcRec };
-        }
-      }
-
-      return { status: 'mismatch', actual: joined[0] };
+      const flat = result.map(normTxt);
+      const expectedNorm = String(expected).trim();
+      const match = flat.find(function(s) { return s === expectedNorm; });
+      if (match) return { status: 'live', actual: match };
+      // Partial match? Useful diagnostic for users with multi-string TXT issues
+      const partial = flat.find(function(s) { return s.indexOf(expectedNorm.slice(0, 20)) !== -1; });
+      if (partial) return { status: 'mismatch', actual: partial.length > 60 ? partial.slice(0, 60) + '...' : partial };
+      return { status: 'mismatch', actual: flat[0] ? flat[0].slice(0, 60) + '...' : '(unexpected value)' };
     }
 
-    return { status: 'error', error: 'Unsupported record type: ' + type };
+    return { status: 'error', error: 'unknown record type: ' + type };
+
   } catch (e) {
-    // dns module throws with err.code === 'ENOTFOUND' or 'ENODATA' when no record exists
-    if (e.code === 'ENOTFOUND' || e.code === 'ENODATA') return { status: 'not_found' };
-    return { status: 'error', error: e.message || String(e) };
+    if (e.code === 'ENOTFOUND' || e.code === 'ENODATA') {
+      return { status: 'not_found' };
+    }
+    return { status: 'error', error: e.message };
   }
 }
 
@@ -104,41 +88,34 @@ async function handler(req, res) {
   const auth = await requireSubaccountAuth(req, res);
   if (!auth) return;
 
-  const subaccountId = auth.subaccount_id;
-  const body = req.body || {};
-  const domainId = body.domainId;
-
+  const { domainId } = req.body || {};
   if (!domainId) return res.status(400).json({ error: 'domainId required' });
 
   try {
-    const rowQ = await db.query(
-      `SELECT id, domain, dkim_records FROM subaccount_email_domains WHERE id = $1 AND subaccount_id = $2`,
-      [domainId, subaccountId]
+    const r = await db.query(
+      'SELECT * FROM subaccount_email_domains WHERE id = $1 AND subaccount_id = $2',
+      [domainId, auth.subaccount_id]
     );
-    if (!rowQ.rows.length) return res.status(404).json({ error: 'Domain not found' });
+    if (!r.rows.length) return res.status(404).json({ error: 'Domain not found' });
 
-    const records = rowQ.rows[0].dkim_records || [];
-    if (!Array.isArray(records) || !records.length) {
+    const row = r.rows[0];
+    const records = Array.isArray(row.dkim_records) ? row.dkim_records : [];
+
+    if (records.length === 0) {
       return res.status(200).json({ results: [] });
     }
 
-    // Run all checks in parallel
-    const results = await Promise.all(records.map(async function(rec) {
-      const check = await checkRecord(rec);
-      return Object.assign({
-        type: rec.type,
-        name: rec.name,
-        expected: rec.value,
-        group: rec.group,
-        label: rec.label,
-        priority: rec.priority
-      }, check);
+    // Run all DNS lookups in parallel
+    const checks = await Promise.all(records.map(async function(rec) {
+      const result = await checkRecord(rec);
+      return Object.assign({ type: rec.type, name: rec.name, expected: rec.value, purpose: rec.purpose }, result);
     }));
 
-    return res.status(200).json({ results });
-  } catch (err) {
-    console.error('dns-check error:', err);
-    return res.status(500).json({ error: err.message || 'DNS check failed' });
+    return res.status(200).json({ results: checks });
+
+  } catch (e) {
+    console.error('dns-check error:', e.message);
+    return res.status(500).json({ error: e.message || 'DNS check failed' });
   }
 }
 

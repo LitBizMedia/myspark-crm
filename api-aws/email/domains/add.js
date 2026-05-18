@@ -1,26 +1,23 @@
+// api/email/domains/add.js (Lambda version)
+//
 // POST /api/email/domains/add
 //
-// Provisions BOTH sending and inbound SES identities in one call:
-//   - {domain}: sending identity (DKIM + SPF)
-//   - reply.{domain}: inbound identity (DKIM + MX)
-//
-// Returns the full list of DNS records the customer must add at their DNS provider.
+// Provisions a new sending domain in Mailgun and stores the row + DNS records.
+// One verified domain per subaccount (idempotent if already present).
 //
 // Body: { slug, domain }
 //
-// Returns: { domain: { ...db row... }, records: [...] }
+// Returns: { domain: {...db row...}, records: [...mailgun DNS records...] }
+//
+// MIGRATION: SES → Mailgun (May 18, 2026)
 
 const db = require('./lib/db');
-const { SESv2Client, CreateEmailIdentityCommand, GetEmailIdentityCommand } = require('@aws-sdk/client-sesv2');
+const secrets = require('./lib/secrets');
 const { wrap } = require('./lib/lambda-adapter');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 
-const SES_REGION = process.env.AWS_REGION || 'us-east-2';
-const sesClient = new SESv2Client({ region: SES_REGION });
-
-const INBOUND_SUBDOMAIN = 'reply';
-const SES_INBOUND_HOST = 'inbound-smtp.' + SES_REGION + '.amazonaws.com';
+const MAILGUN_SECRET_NAME = 'myspark/integrations/mailgun';
 
 // Sanitize a domain string. Reject obvious garbage.
 function normalizeDomain(s) {
@@ -34,85 +31,73 @@ function normalizeDomain(s) {
   return cleaned;
 }
 
-// Try to create an SES identity; if it exists, just fetch the existing DKIM tokens.
-// This handles the "re-add" case gracefully.
-async function ensureSESIdentity(domain) {
-  try {
-    await sesClient.send(new CreateEmailIdentityCommand({ EmailIdentity: domain }));
-  } catch (e) {
-    if (e.name !== 'AlreadyExistsException') {
-      throw e;
-    }
+// Call Mailgun POST /v4/domains to register a new sending domain.
+// If domain already exists in Mailgun account, fetches its details instead.
+// Create a Mailgun route that forwards inbound mail for this domain to our shared webhook.
+// Returns the route ID to store in DB so we can delete it on remove.
+async function createMailgunRoute(domain, apiKey) {
+  const auth = Buffer.from('api:' + apiKey).toString('base64');
+  const webhookUrl = (process.env.INBOUND_WEBHOOK_URL || 'https://api.mysparkplus.app/api/email/mailgun-inbound');
+
+  const form = new URLSearchParams();
+  form.append('priority', '10');
+  form.append('description', 'MySpark+ inbound route for ' + domain);
+  form.append('expression', 'match_recipient(".*@' + domain + '")');
+  form.append('action', 'forward("' + webhookUrl + '")');
+  form.append('action', 'stop()');
+
+  const response = await fetch('https://api.mailgun.net/v3/routes', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + auth,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: form.toString()
+  });
+
+  let body;
+  try { body = await response.json(); } catch (e) { body = { message: await response.text() }; }
+  if (!response.ok) {
+    throw new Error('Mailgun routes API ' + response.status + ': ' + (body.message || 'unknown error'));
   }
-  // Fetch tokens (whether just-created or pre-existing)
-  const got = await sesClient.send(new GetEmailIdentityCommand({ EmailIdentity: domain }));
-  const tokens = (got.DkimAttributes && got.DkimAttributes.Tokens) || [];
-  const verified = !!got.VerifiedForSendingStatus;
-  const dkimStatus = (got.DkimAttributes && got.DkimAttributes.Status) || 'NOT_STARTED';
-  return { tokens, verified, dkimStatus };
+  return body.route && body.route.id ? body.route.id : null;
 }
 
-// Build the DNS records the customer needs to add.
-// Returns an array of { type, name, value, priority, group, label, description }
-function buildDnsRecords(domain, sendingTokens, inboundTokens) {
-  const records = [];
+async function ensureMailgunDomain(domain, apiKey) {
+  const auth = Buffer.from('api:' + apiKey).toString('base64');
+  const apiBase = 'https://api.mailgun.net/v4';
 
-  // Sending domain DKIM (3 CNAMEs)
-  sendingTokens.forEach(function(token) {
-    records.push({
-      type: 'CNAME',
-      name: token + '._domainkey.' + domain,
-      value: token + '.dkim.amazonses.com',
-      group: 'sending',
-      label: 'DKIM',
-      description: 'Allows your domain to sign outbound emails (deliverability)'
+  // Try to create
+  const form = new URLSearchParams();
+  form.append('name', domain);
+  form.append('web_scheme', 'https');
+
+  let response = await fetch(apiBase + '/domains', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + auth,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: form.toString()
+  });
+
+  let body;
+  try { body = await response.json(); } catch (e) { body = { message: await response.text() }; }
+
+  // If domain already exists, fetch it
+  if (!response.ok && response.status === 400 && body.message && body.message.toLowerCase().includes('exist')) {
+    console.log('ensureMailgunDomain: domain already exists, fetching: ' + domain);
+    response = await fetch(apiBase + '/domains/' + encodeURIComponent(domain), {
+      headers: { 'Authorization': 'Basic ' + auth }
     });
-  });
+    try { body = await response.json(); } catch (e) { body = { message: await response.text() }; }
+  }
 
-  // Sending SPF (TXT). Customer may need to merge with existing SPF.
-  records.push({
-    type: 'TXT',
-    name: domain,
-    value: 'v=spf1 include:amazonses.com ~all',
-    group: 'sending',
-    label: 'SPF',
-    description: 'Authorizes AWS SES to send mail for your domain. If you have an existing SPF record, merge the "include:amazonses.com" into it instead of adding a second.'
-  });
+  if (!response.ok) {
+    throw new Error('Mailgun API ' + response.status + ': ' + (body.message || 'unknown error'));
+  }
 
-  // Inbound MX (1 record)
-  records.push({
-    type: 'MX',
-    name: INBOUND_SUBDOMAIN + '.' + domain,
-    value: SES_INBOUND_HOST,
-    priority: 10,
-    group: 'inbound',
-    label: 'MX',
-    description: 'Routes patient replies to MySpark+ inbox'
-  });
-
-  // Inbound DKIM (3 CNAMEs)
-  inboundTokens.forEach(function(token) {
-    records.push({
-      type: 'CNAME',
-      name: token + '._domainkey.' + INBOUND_SUBDOMAIN + '.' + domain,
-      value: token + '.dkim.amazonses.com',
-      group: 'inbound',
-      label: 'DKIM',
-      description: 'Authenticates incoming replies'
-    });
-  });
-
-  // DMARC (recommended, not required)
-  records.push({
-    type: 'TXT',
-    name: '_dmarc.' + domain,
-    value: 'v=DMARC1; p=none; rua=mailto:dmarc@' + domain + '; fo=1',
-    group: 'dmarc',
-    label: 'DMARC',
-    description: 'Recommended: enables monitoring of who sends mail claiming to be from your domain. Safe starter posture; does not affect delivery.'
-  });
-
-  return records;
+  return body;  // { domain: {...}, sending_dns_records: [...], receiving_dns_records: [...] }
 }
 
 async function handler(req, res) {
@@ -121,89 +106,107 @@ async function handler(req, res) {
   const auth = await requireSubaccountAuth(req, res);
   if (!auth) return;
 
-  const subaccountId = auth.subaccount_id;
-  const body = req.body || {};
-  const domain = normalizeDomain(body.domain);
+  const { slug, domain: rawDomain } = req.body || {};
+  if (!rawDomain) return res.status(400).json({ error: 'domain required' });
 
-  if (!domain) return res.status(400).json({ error: 'Invalid domain' });
-  if (domain.indexOf(INBOUND_SUBDOMAIN + '.') === 0) {
-    return res.status(400).json({ error: 'Use the root domain, not a subdomain' });
+  const domain = normalizeDomain(rawDomain);
+  if (!domain) return res.status(400).json({ error: 'invalid domain format' });
+
+  const subaccountId = auth.subaccount_id;
+
+  // Check if subaccount already has a domain row (any state)
+  const existing = await db.query(
+    'SELECT * FROM subaccount_email_domains WHERE subaccount_id = $1',
+    [subaccountId]
+  );
+  if (existing.rows.length > 0) {
+    const row = existing.rows[0];
+    // If the same domain, allow re-add (refresh DNS records)
+    if (row.domain !== domain) {
+      return res.status(409).json({
+        error: 'Subaccount already has a domain. Remove ' + row.domain + ' before adding ' + domain + '.'
+      });
+    }
   }
 
   try {
-    // Check if a row already exists for this subaccount - one domain per subaccount for now
-    const existing = await db.query(
-      `SELECT id, domain FROM subaccount_email_domains WHERE subaccount_id = $1`,
-      [subaccountId]
-    );
-    if (existing.rows.length && existing.rows[0].domain !== domain) {
-      return res.status(400).json({
-        error: 'A different domain (' + existing.rows[0].domain + ') is already configured. Remove it first.'
+    // Get Mailgun account API key
+    const apiKey = await secrets.getKey(MAILGUN_SECRET_NAME, 'MAILGUN_ACCOUNT_API_KEY');
+
+    // Auto-prefix mg. subdomain to avoid SPF/DKIM conflicts with the customer's
+    // existing email setup at their root domain (Microsoft 365, Google Workspace, etc).
+    // This matches industry best practice (GHL, Stripe, etc.) and is the only safe
+    // default for healthcare clinics who already have email at root.
+    const sendingDomain = domain.startsWith('mg.') ? domain : 'mg.' + domain;
+
+    // Register or fetch Mailgun domain
+    const mgResult = await ensureMailgunDomain(sendingDomain, apiKey);
+
+    const mgDomain = mgResult.domain || {};
+
+    // Create the Mailgun route for inbound mail (idempotent: if exists, skip)
+    let routeId = null;
+    try {
+      routeId = await createMailgunRoute(sendingDomain, apiKey);
+    } catch (e) {
+      // If route creation fails, log but don't block (admin can manually create later)
+      console.warn('email-domains-add: route create failed for ' + sendingDomain + ':', e.message);
+    }
+    const sendingRecords = mgResult.sending_dns_records || [];
+    const receivingRecords = mgResult.receiving_dns_records || [];
+
+    // Combine into the format the frontend expects
+    // Format: [{ type, name, value, priority? }, ...]
+    const allRecords = [];
+    for (const r of sendingRecords) {
+      allRecords.push({
+        type: r.record_type,
+        name: r.name || domain,
+        value: r.value,
+        purpose: 'sending'
+      });
+    }
+    for (const r of receivingRecords) {
+      allRecords.push({
+        type: r.record_type,
+        name: r.name || domain,
+        value: r.value,
+        priority: r.priority || null,
+        purpose: 'receiving'
       });
     }
 
-    // Provision both SES identities (idempotent if they already exist)
-    const sending = await ensureSESIdentity(domain);
-    const inbound = await ensureSESIdentity(INBOUND_SUBDOMAIN + '.' + domain);
-
-    const records = buildDnsRecords(domain, sending.tokens, inbound.tokens);
-
-    // Status derives from SES verification state
-    const sendingStatus = sending.verified ? 'verified' : 'pending';
-    const inboundStatus = inbound.verified ? 'verified' : 'pending';
-
-    const now = new Date().toISOString();
-    if (existing.rows.length) {
-      // Update existing row to reflect newly provisioned identities
-      await db.query(
+    // Insert or update DB row (store the actual sending domain, which is mg.<root>)
+    let row;
+    if (existing.rows.length > 0) {
+      const updateResult = await db.query(
         `UPDATE subaccount_email_domains
-         SET status = $1,
-             dkim_records = $2,
-             spf_record = $3,
-             inbound_subdomain = $4,
-             inbound_status = $5,
-             inbound_mx_target = $6,
-             inbound_mode = $7
-         WHERE subaccount_id = $8`,
-        [
-          sendingStatus,
-          JSON.stringify(records),
-          'v=spf1 include:amazonses.com ~all',
-          INBOUND_SUBDOMAIN,
-          inboundStatus,
-          SES_INBOUND_HOST,
-          'branded',
-          subaccountId
-        ]
+         SET domain = $1,
+             mailgun_domain_id = $2,
+             mailgun_inbound_route_id = $3,
+             dkim_records = $4,
+             status = 'pending',
+             sending_mode = 'shared',
+             grace_period_ends_at = NOW() + INTERVAL '14 days',
+             grace_period_blocked = false,
+             warning_emails_sent = '[]'::jsonb
+         WHERE subaccount_id = $5
+         RETURNING *`,
+        [sendingDomain, mgDomain.id || null, routeId, JSON.stringify(allRecords), subaccountId]
       );
+      row = updateResult.rows[0];
     } else {
-      // Insert new row. resend_domain_id is NOT NULL so we store a marker.
-      await db.query(
-        `INSERT INTO subaccount_email_domains (
-          subaccount_id, domain, resend_domain_id, status, dkim_records, spf_record,
-          inbound_subdomain, inbound_status, inbound_mx_target, inbound_mode, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          subaccountId,
-          domain,
-          'ses:' + domain,  // legacy column, just a marker for SES-provisioned domains
-          sendingStatus,
-          JSON.stringify(records),
-          'v=spf1 include:amazonses.com ~all',
-          INBOUND_SUBDOMAIN,
-          inboundStatus,
-          SES_INBOUND_HOST,
-          'branded',
-          now
-        ]
+      const insertResult = await db.query(
+        `INSERT INTO subaccount_email_domains
+         (subaccount_id, domain, mailgun_domain_id, mailgun_inbound_route_id, status,
+          dkim_records, sending_mode, inbound_mode, grace_period_ends_at, resend_domain_id)
+         VALUES ($1, $2, $3, $4, 'pending', $5, 'shared', 'shared',
+                 NOW() + INTERVAL '14 days', 'mailgun')
+         RETURNING *`,
+        [subaccountId, sendingDomain, mgDomain.id || null, routeId, JSON.stringify(allRecords)]
       );
+      row = insertResult.rows[0];
     }
-
-    // Fetch the fresh row
-    const fresh = await db.query(
-      `SELECT * FROM subaccount_email_domains WHERE subaccount_id = $1`,
-      [subaccountId]
-    );
 
     await logAudit({
       req,
@@ -213,24 +216,19 @@ async function handler(req, res) {
       actorRole: auth.role,
       action: 'subaccount.email_domain.add',
       targetType: 'email_domain',
-      targetId: domain,
+      targetId: row.id,
       targetSubaccountId: subaccountId,
-      metadata: {
-        domain,
-        sending_dkim_tokens: sending.tokens.length,
-        inbound_dkim_tokens: inbound.tokens.length,
-        sending_status: sendingStatus,
-        inbound_status: inboundStatus
-      }
+      metadata: { domain: sendingDomain, root_domain: domain, mailgun_domain_id: mgDomain.id, mailgun_inbound_route_id: routeId }
     });
 
     return res.status(200).json({
-      domain: fresh.rows[0],
-      records
+      domain: row,
+      records: allRecords
     });
-  } catch (err) {
-    console.error('domains/add error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to add domain' });
+
+  } catch (e) {
+    console.error('email-domains-add error:', e.message);
+    return res.status(500).json({ error: e.message || 'Failed to add domain' });
   }
 }
 
