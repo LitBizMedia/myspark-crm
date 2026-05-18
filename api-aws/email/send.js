@@ -2,11 +2,11 @@
 //
 // POST /api/email/send
 //
-// Sends transactional emails via Resend with template variable substitution.
+// Sends transactional emails via Mailgun with template variable substitution.
 // Accepts subaccount or agency sessions.
 // Plan limit enforcement on email sends (429 if over limit).
 //
-// MIGRATED: No DB calls of its own - delegates to lib/resend, lib/plan-limits.
+// MIGRATED: No DB calls of its own - delegates to lib/mailgun, lib/plan-limits.
 
 const { sendEmail } = require('./lib/mailgun');
 const {

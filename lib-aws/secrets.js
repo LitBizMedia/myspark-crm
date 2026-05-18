@@ -9,18 +9,18 @@
 // instantiated) and cache the result in memory.
 //
 // Secrets are stored as JSON blobs. Example:
-//   secret name: "myspark/integrations/resend"
-//   secret value: {"RESEND_API_KEY":"re_xxx","RESEND_WEBHOOK_SECRET":"whsec_xxx"}
+//   secret name: "myspark/integrations/mailgun"
+//   secret value: {"MAILGUN_ACCOUNT_API_KEY":"...","MAILGUN_WEBHOOK_SIGNING_KEY":"..."}
 //
 // Usage:
 //   const secrets = require('./secrets');
 //
 //   // Load a secret as an object
-//   const resend = await secrets.get('myspark/integrations/resend');
-//   const apiKey = resend.RESEND_API_KEY;
+//   const creds = await secrets.get('myspark/integrations/mailgun');
+//   const apiKey = creds.MAILGUN_ACCOUNT_API_KEY;
 //
 //   // Or pull a specific key with a default fallback to env var
-//   const apiKey = await secrets.getKey('myspark/integrations/resend', 'RESEND_API_KEY');
+//   const apiKey = await secrets.getKey('myspark/integrations/mailgun', 'MAILGUN_ACCOUNT_API_KEY');
 //
 // Behavior:
 //   - First call: hits Secrets Manager (~100ms), caches result
@@ -51,7 +51,7 @@ const inFlight = {};
  * Fetch a secret from AWS Secrets Manager. Returns the parsed JSON object.
  * Caches per Lambda container.
  *
- * @param {string} secretName - e.g. 'myspark/integrations/resend'
+ * @param {string} secretName - e.g. 'myspark/integrations/mailgun'
  * @returns {Promise<Object>} parsed secret value
  */
 async function get(secretName) {

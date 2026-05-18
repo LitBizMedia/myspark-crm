@@ -1,4 +1,4 @@
-// api/auth/forgot-password.js (Lambda version) - DEBUG VERSION
+// api/auth/forgot-password.js (Lambda version)
 //
 // POST /api/auth/forgot-password
 //
@@ -10,32 +10,19 @@
 //   Resend inline fetch → lib/mailgun.js (May 17)
 
 const db = require('./lib/db');
+const { sendEmail } = require('./lib/mailgun');
 const { wrap } = require('./lib/lambda-adapter');
 const crypto = require('crypto');
 
 const APP_URL = process.env.APP_URL || 'https://mysparkplus.app';
 const TOKEN_EXPIRY_MINUTES = 60;
 
-// Load mailgun lazily so we can see init errors
-let sendEmail = null;
-let mailgunLoadError = null;
-try {
-  sendEmail = require('./lib/mailgun').sendEmail;
-  console.log('[forgot-password] lib/mailgun loaded successfully');
-} catch (e) {
-  mailgunLoadError = e;
-  console.error('[forgot-password] CRITICAL: lib/mailgun load failed:', e.message, e.stack);
-}
-
 async function handler(req, res) {
-  console.log('[forgot-password] handler entered');
-
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { email, context, slug } = req.body || {};
-  console.log('[forgot-password] request:', { email, context, slug });
 
   if (!email || !context) {
     return res.status(400).json({ error: 'email and context required' });
@@ -46,18 +33,13 @@ async function handler(req, res) {
 
   const lowerEmail = String(email).toLowerCase();
 
+  // Always returns 200 to prevent email enumeration
   const safeReturn = function() {
     return res.status(200).json({
       success: true,
       message: 'If that email is on file, a reset link is on its way.'
     });
   };
-
-  // Check mailgun loaded
-  if (mailgunLoadError) {
-    console.error('[forgot-password] aborting - mailgun module failed to load:', mailgunLoadError.message);
-    return safeReturn();
-  }
 
   try {
     let userType = null;
@@ -66,12 +48,10 @@ async function handler(req, res) {
     let userName = '';
 
     if (context === 'agency') {
-      console.log('[forgot-password] agency lookup for', lowerEmail);
       const u = await db.findOne('agency_users',
         { email: lowerEmail, active: true },
         { select: 'id, name, email' }
       );
-      console.log('[forgot-password] agency user found:', !!u);
       if (!u) return safeReturn();
       userType = 'agency';
       userIdentifier = u.id;
@@ -79,6 +59,7 @@ async function handler(req, res) {
     } else {
       if (!slug) return safeReturn();
       const subId = 'sub-' + slug;
+
       try {
         const u = await db.findOne('subaccount_users',
           { subaccount_id: subId, email: lowerEmail, active: true },
@@ -89,7 +70,9 @@ async function handler(req, res) {
           userIdentifier = u.id;
           userName = u.display_name || u.username || '';
         }
-      } catch (e) { console.warn('[forgot-password] subaccount_users lookup failed:', e.message); }
+      } catch (e) {
+        console.warn('forgot-password: subaccount_users lookup failed:', e.message);
+      }
 
       if (!userType) {
         try {
@@ -102,13 +85,13 @@ async function handler(req, res) {
             userIdentifier = subId + ':' + sub.admin_username;
             userName = sub.name || sub.admin_username || '';
           }
-        } catch (e) { console.warn('[forgot-password] subaccounts lookup failed:', e.message); }
+        } catch (e) {
+          console.warn('forgot-password: subaccounts lookup failed:', e.message);
+        }
       }
 
       if (!userType) return safeReturn();
     }
-
-    console.log('[forgot-password] user found, generating token. userType:', userType);
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MINUTES * 60000).toISOString();
@@ -122,9 +105,8 @@ async function handler(req, res) {
         email: lowerEmail,
         expires_at: expiresAt
       });
-      console.log('[forgot-password] token stored');
     } catch (e) {
-      console.error('[forgot-password] token store failed:', e.message);
+      console.error('forgot-password: token store failed:', e.message);
       return safeReturn();
     }
 
@@ -139,8 +121,6 @@ async function handler(req, res) {
       + '<p style="font-size:12px;color:#9b8ec4;margin:0">MySpark+ by LitBiz Media</p>'
       + '</div>';
 
-    console.log('[forgot-password] about to call sendEmail');
-
     try {
       const result = await sendEmail(null, {
         scope: 'agency',
@@ -150,18 +130,17 @@ async function handler(req, res) {
         templateType: 'password_reset',
         subaccountId: subaccountSlug ? ('sub-' + subaccountSlug) : null
       });
-      console.log('[forgot-password] sendEmail returned:', JSON.stringify(result));
       if (!result.ok) {
-        console.error('[forgot-password] mailgun send failed:', result.error);
+        console.error('forgot-password: mailgun send failed:', result.error);
       }
     } catch (e) {
-      console.error('[forgot-password] sendEmail threw:', e.message, e.stack);
+      console.error('forgot-password: sendEmail threw:', e.message);
     }
 
     return safeReturn();
 
   } catch (e) {
-    console.error('[forgot-password] OUTER CATCH:', e.message, e.stack);
+    console.error('forgot-password: handler error:', e.message);
     return safeReturn();
   }
 }

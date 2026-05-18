@@ -13,7 +13,7 @@
 //   4. Disable Square card on file (best effort)
 //   5. Disable customer Square cards (saved cards in subaccount's contact records, best effort)
 //   6. Release Twilio number (best effort)
-//   7. Remove Resend domain (best effort)
+//   7. Remove Mailgun domain (best effort)
 //   8. DELETE from non-cascading tables explicitly
 //   9. DELETE from subaccounts row (CASCADE handles 8 properly-FK'd tables)
 //   10. Write follow-up audit log with cleanup_results
@@ -21,16 +21,16 @@
 // audit_log entries persist across subaccount deletion (HIPAA 6-year retention).
 //
 // MIGRATED: Supabase REST → lib/db.js for all DB operations.
-// External APIs (Square via agency-billing, Twilio direct, Resend direct) unchanged.
+// External APIs (Square via agency-billing, Twilio direct, Mailgun via Secrets Manager) unchanged.
 
 const db = require('./db');
+const secrets = require('./secrets');
 const { logAudit } = require('./audit');
 const { agencySquareCall } = require('./agency-billing');
 const { getAllContacts } = require('./contacts');
 
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN  = process.env.TWILIO_AUTH_TOKEN;
-const RESEND_API_KEY     = process.env.RESEND_API_KEY;
 
 // Tables that have NO foreign-key cascade. Must be deleted explicitly.
 // Note: conversations + conversation_messages CASCADE via FK on subaccount_id.
@@ -120,7 +120,7 @@ async function deleteSubaccount(subaccountId, opts) {
     square_billing_card_disabled:   null,
     square_customer_cards_disabled: null,
     twilio_released:                null,
-    resend_removed:                 null,
+    mailgun_removed:                null,
     rows_deleted:                   {}
   };
 
@@ -143,7 +143,7 @@ async function deleteSubaccount(subaccountId, opts) {
       square_card_id:      plan && plan.square_card_id,
       had_email_domain:    !!emailDomain,
       email_domain_name:   emailDomain && emailDomain.domain_name,
-      resend_domain_id:    emailDomain && emailDomain.resend_domain_id,
+      mailgun_domain:      emailDomain && emailDomain.domain,
       had_sms_settings:    !!smsSettings,
       twilio_number:       smsSettings && smsSettings.twilio_phone_number,
       twilio_number_sid:   smsSettings && smsSettings.twilio_number_sid,
@@ -216,23 +216,29 @@ async function deleteSubaccount(subaccountId, opts) {
     cleanupResults.twilio_released = 'no_number_to_release';
   }
 
-  // ── Step 7: Remove Resend domain (best effort, external API) ──
-  if (emailDomain && emailDomain.resend_domain_id) {
+  // ── Step 7: Remove Mailgun domain (best effort, external API) ──
+  if (emailDomain && emailDomain.domain) {
     try {
-      const resendRes = await fetch(
-        'https://api.resend.com/domains/' + emailDomain.resend_domain_id,
-        { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY } }
+      const mgKey = await secrets.getKey(
+        'myspark/integrations/mailgun',
+        'MAILGUN_ACCOUNT_API_KEY'
       );
-      cleanupResults.resend_removed = resendRes.ok;
-      if (!resendRes.ok) {
-        console.error('deleteSubaccount: Resend domain remove failed:', await resendRes.text());
+      const apiBase = 'https://api.mailgun.net/v4';
+      const auth = Buffer.from('api:' + mgKey).toString('base64');
+      const mgRes = await fetch(
+        apiBase + '/domains/' + encodeURIComponent(emailDomain.domain),
+        { method: 'DELETE', headers: { 'Authorization': 'Basic ' + auth } }
+      );
+      cleanupResults.mailgun_removed = mgRes.ok;
+      if (!mgRes.ok) {
+        console.error('deleteSubaccount: Mailgun domain remove failed:', await mgRes.text());
       }
     } catch (e) {
-      cleanupResults.resend_removed = false;
-      console.error('deleteSubaccount: Resend remove threw:', e.message);
+      cleanupResults.mailgun_removed = false;
+      console.error('deleteSubaccount: Mailgun remove threw:', e.message);
     }
   } else {
-    cleanupResults.resend_removed = 'no_domain_to_remove';
+    cleanupResults.mailgun_removed = 'no_domain_to_remove';
   }
 
   // ── Step 8: Delete from non-cascading tables explicitly ──
@@ -278,7 +284,7 @@ async function deleteSubaccount(subaccountId, opts) {
   const externalFailures = (
     cleanupResults.square_billing_card_disabled === false ||
     cleanupResults.twilio_released === false ||
-    cleanupResults.resend_removed === false ||
+    cleanupResults.mailgun_removed === false ||
     (cleanupResults.square_customer_cards_disabled && cleanupResults.square_customer_cards_disabled.failed > 0)
   );
 

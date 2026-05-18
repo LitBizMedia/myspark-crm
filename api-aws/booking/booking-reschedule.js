@@ -8,7 +8,7 @@ const { resolveResourceClaims, replaceClaims } = require('./lib/resource-allocat
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
-const resend = require('./lib/ses');
+const mailgun = require('./lib/mailgun');
 const crypto = require('crypto');
 
 function genActionToken() {
@@ -273,7 +273,7 @@ async function handler(req, res) {
             ` : ''}
             <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
           </div>`;
-        await resend.sendEmail(sub.slug, {
+        await mailgun.sendEmail(sub.slug, {
           scope: 'subaccount',
           source: 'confirmation',
           to: contact.email,

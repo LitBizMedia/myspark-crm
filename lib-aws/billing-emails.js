@@ -12,13 +12,13 @@
 //                 trial_ending_soon | cancellation_confirmed |
 //                 reactivation_confirmed | reactivation_no_charge
 
-const { sendEmail: resendSend } = require('./mailgun');
+const { sendEmail: mailgunSend } = require('./mailgun');
 
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 //
-// Routes through lib/resend.js with scope='agency'. Emails land in
+// Routes through lib/mailgun.js with scope='agency'. Emails land in
 // agency_email_log, not any subaccount's Conversations.
 //
 // Optional 3rd arg `data.subaccountId` populates agency_email_log.recipient_subaccount_id
@@ -31,7 +31,7 @@ async function sendEmail(to, type, data) {
     return { success: false, error: 'unknown template type' };
   }
 
-  const result = await resendSend(null, {
+  const result = await mailgunSend(null, {
     scope: 'agency',
     to,
     subject: template.subject,

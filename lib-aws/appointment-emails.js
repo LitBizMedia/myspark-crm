@@ -1,6 +1,6 @@
 // Appointment confirmation email sender.
 // Used by appointments-upsert AFTER successful save to send confirmation
-// emails to clients. Reuses lib/resend.js for transport and template logic.
+// emails to clients. Uses lib/mailgun.js for transport and template logic.
 //
 // Solo bookings: send to the appointment's contact_id if they have an email.
 // Group bookings: send to every client in appointment_clients that has an email.
@@ -58,12 +58,12 @@ function buildHtml({ clientName, serviceName, dateStr, timeStr, staffName, locat
 // Sends confirmation emails for a saved appointment.
 // opts: {
 //   subaccountId: 'sub-id',
-//   subaccountSlug: 'litbiz', // used to build resend slug
+//   subaccountSlug: 'litbiz',  // used to build subaccount slug
 //   appointmentTitle, appointmentDate, appointmentTime, location,
 //   recipients: [{contact_id, name, email, is_primary}],
 //   staffName, businessName
 // }
-// Skips silently on errors so a Resend hiccup never breaks the booking flow.
+// Skips silently on errors so a Mailgun hiccup never breaks the booking flow.
 async function sendAppointmentConfirmations(opts) {
   const {
     subaccountSlug, appointmentTitle, appointmentDate, appointmentTime,

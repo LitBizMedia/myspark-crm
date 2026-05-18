@@ -26,7 +26,7 @@ const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocat
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
-const resend = require('./lib/ses');
+const mailgun = require('./lib/mailgun');
 const { getSquareCreds, squareHost, squareHeaders } = require('./lib/square');
 const { isTimeAvailable } = require('./lib/schedule');
 const crypto = require('crypto');
@@ -83,7 +83,7 @@ function calcTax(subtotal, taxableFlag, preTaxDiscount, taxSettings) {
 
 async function sendConfirmationEmail(slug, to, subject, html, bizName, contactId) {
   try {
-    const result = await resend.sendEmail(slug, {
+    const result = await mailgun.sendEmail(slug, {
       scope: 'subaccount',
       source: 'widget',
       to, subject, html,

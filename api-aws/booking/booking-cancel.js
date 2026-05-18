@@ -7,7 +7,7 @@
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
-const resend = require('./lib/ses');
+const mailgun = require('./lib/mailgun');
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -135,7 +135,7 @@ async function handler(req, res) {
             <p style="color:#374151">Your appointment has been cancelled. If this was a mistake or you'd like to book again, please contact ${sub.bizName} or visit the booking page.</p>
             <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
           </div>`;
-        await resend.sendEmail(sub.slug, {
+        await mailgun.sendEmail(sub.slug, {
           scope: 'subaccount',
           source: 'cancellation',
           to: contact.email,
