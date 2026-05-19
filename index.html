@@ -19840,6 +19840,104 @@ function switchFormsTab(tab){
 
 
 // =====================================================
+// RICH TEXT EDITOR (used by contract template editor)
+// =====================================================
+
+// Renders a single toolbar button. cmd is execCommand name.
+function rteBtn(cmd, label, title){
+  return '<button type="button" onmousedown="event.preventDefault()" onclick="rteExec(\''+cmd+'\')" title="'+esc(title)+'" '+
+    'style="min-width:28px;height:28px;padding:0 6px;background:none;border:1px solid transparent;border-radius:var(--radius-sm);color:var(--main-text);font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center" '+
+    'onmouseover="this.style.background=\'var(--main-card-hover)\';this.style.borderColor=\'var(--main-border)\'" '+
+    'onmouseout="this.style.background=\'none\';this.style.borderColor=\'transparent\'">'+label+'</button>';
+}
+
+function rteExec(cmd){
+  document.execCommand(cmd, false, null);
+  var body = document.getElementById('contract-tmpl-body');
+  if(body) body.focus();
+}
+
+function rteFormatBlock(tag){
+  if(!tag) return;
+  document.execCommand('formatBlock', false, '<'+tag+'>');
+  var body = document.getElementById('contract-tmpl-body');
+  if(body) body.focus();
+}
+
+function rteLink(){
+  var url = prompt('Enter URL:', 'https://');
+  if(!url) return;
+  // Basic URL validation
+  if(!/^https?:\/\//i.test(url)){
+    toast('URL must start with http:// or https://', 'error');
+    return;
+  }
+  document.execCommand('createLink', false, url);
+  var body = document.getElementById('contract-tmpl-body');
+  if(body) body.focus();
+}
+
+// Paste handler: strip all formatting, insert as plain text only.
+// Prevents pasted Google Docs / Word content from bringing in styles, fonts,
+// and inline color attributes that would render inconsistently in the PDF.
+function rtePasteAsPlain(e){
+  e.preventDefault();
+  var text = (e.clipboardData || window.clipboardData).getData('text/plain');
+  document.execCommand('insertText', false, text);
+}
+
+// Sanitize HTML before saving. Allows a small whitelist of tags/attributes,
+// strips everything else. This is the server-side sanitization too, but we
+// also clean on the frontend so the saved string matches what we display.
+function rteCleanHtml(html){
+  if(!html) return '';
+  // Create a sandboxed parser
+  var doc = new DOMParser().parseFromString('<div>'+html+'</div>', 'text/html');
+  var root = doc.body.firstChild;
+  if(!root) return '';
+
+  var ALLOWED_TAGS = ['P','BR','B','STRONG','I','EM','U','S','STRIKE','H1','H2','H3','UL','OL','LI','A','SPAN','DIV'];
+  var ALLOWED_ATTRS = { 'A': ['href','target','rel'] };
+
+  function clean(node){
+    var i = node.childNodes.length;
+    while(i--){
+      var child = node.childNodes[i];
+      if(child.nodeType === 1){ // Element
+        var tag = child.tagName;
+        if(ALLOWED_TAGS.indexOf(tag) === -1){
+          // Replace disallowed element with its text content
+          var text = doc.createTextNode(child.textContent || '');
+          node.replaceChild(text, child);
+        } else {
+          // Strip all attributes except whitelisted ones for this tag
+          var allowed = ALLOWED_ATTRS[tag] || [];
+          var j = child.attributes.length;
+          while(j--){
+            var attr = child.attributes[j];
+            if(allowed.indexOf(attr.name.toLowerCase()) === -1){
+              child.removeAttribute(attr.name);
+            }
+          }
+          // For <a>, force target=_blank rel=noopener for safety
+          if(tag === 'A' && child.getAttribute('href')){
+            child.setAttribute('target', '_blank');
+            child.setAttribute('rel', 'noopener noreferrer');
+          }
+          clean(child);
+        }
+      } else if(child.nodeType !== 3){
+        // Not element, not text. Remove (comments, etc.)
+        node.removeChild(child);
+      }
+    }
+  }
+  clean(root);
+  return root.innerHTML;
+}
+
+
+// =====================================================
 // CONTRACT TEMPLATES
 // =====================================================
 
@@ -19944,7 +20042,32 @@ function openContractEditorModal(t){
         '</div>'+
         '<div style="margin-bottom:16px">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Document Body</label>'+
-          '<textarea id="contract-tmpl-body" placeholder="Enter the contract content. Rich text editor coming in Step 2C." style="width:100%;min-height:240px;padding:12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px;font-family:Lato,sans-serif;line-height:1.5;resize:vertical">'+esc(t.bodyHtml||'')+'</textarea>'+
+          '<div style="border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input);overflow:hidden">'+
+            '<div id="contract-tmpl-toolbar" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 8px;background:var(--main-card);border-bottom:1px solid var(--main-border)">'+
+              '<select onchange="rteFormatBlock(this.value);this.value=\'\'" style="padding:5px 8px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius-sm);color:var(--main-text);font-size:12px;cursor:pointer">'+
+                '<option value="">Style</option>'+
+                '<option value="H1">Title</option>'+
+                '<option value="H2">Heading</option>'+
+                '<option value="H3">Subheading</option>'+
+                '<option value="P">Paragraph</option>'+
+              '</select>'+
+              '<div style="width:1px;height:18px;background:var(--main-border);margin:0 4px"></div>'+
+              rteBtn("bold","<b>B</b>","Bold (Ctrl+B)")+
+              rteBtn("italic","<i>I</i>","Italic (Ctrl+I)")+
+              rteBtn("underline","<u>U</u>","Underline (Ctrl+U)")+
+              rteBtn("strikeThrough","<s>S</s>","Strikethrough")+
+              '<div style="width:1px;height:18px;background:var(--main-border);margin:0 4px"></div>'+
+              rteBtn("insertUnorderedList","&bull;","Bullet List")+
+              rteBtn("insertOrderedList","1.","Numbered List")+
+              '<div style="width:1px;height:18px;background:var(--main-border);margin:0 4px"></div>'+
+              '<button type="button" onmousedown="event.preventDefault()" onclick="rteLink()" title="Insert Link" style="min-width:28px;height:28px;padding:0 8px;background:none;border:1px solid transparent;border-radius:var(--radius-sm);color:var(--main-text);font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.background=\'var(--main-card-hover)\';this.style.borderColor=\'var(--main-border)\'" onmouseout="this.style.background=\'none\';this.style.borderColor=\'transparent\'">&#128279;</button>'+
+              rteBtn("removeFormat","&#10005;","Clear Formatting")+
+              '<div style="width:1px;height:18px;background:var(--main-border);margin:0 4px"></div>'+
+              rteBtn("undo","&#8630;","Undo (Ctrl+Z)")+
+              rteBtn("redo","&#8631;","Redo (Ctrl+Shift+Z)")+
+            '</div>'+
+            '<div id="contract-tmpl-body" contenteditable="true" style="min-height:240px;max-height:50vh;overflow-y:auto;padding:14px;color:var(--main-text);font-size:14px;font-family:Lato,sans-serif;line-height:1.5;outline:none" onpaste="rtePasteAsPlain(event)">'+(t.bodyHtml||'')+'</div>'+
+          '</div>'+
           '<div style="font-size:11px;color:var(--main-text-muted);margin-top:6px">Use {{contact_name}}, {{business_name}}, etc. Variable picker coming in Step 2D.</div>'+
         '</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'+
@@ -19997,10 +20120,11 @@ async function saveContractTemplate(){
   var saveBtn = document.getElementById('contract-tmpl-save-btn');
 
   var name = (nameEl.value || '').trim();
-  var bodyHtml = (bodyEl.value || '').trim();
+  var bodyHtml = rteCleanHtml(bodyEl.innerHTML || '').trim();
+  var bodyText = (bodyEl.innerText || '').trim();
 
   if(!name){ toast('Template name is required', 'error'); nameEl.focus(); return; }
-  if(!bodyHtml){ toast('Document body is required', 'error'); bodyEl.focus(); return; }
+  if(!bodyText){ toast('Document body is required', 'error'); bodyEl.focus(); return; }
 
   var payload = {
     name: name,
