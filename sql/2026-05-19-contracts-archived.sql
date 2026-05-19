@@ -1,0 +1,3 @@
+ALTER TABLE contract_envelopes ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE contract_envelopes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE contract_envelopes ADD COLUMN IF NOT EXISTS archived_by UUID;

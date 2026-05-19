@@ -52,13 +52,15 @@ async function handler(req, res) {
     const limit = Math.min(parseInt(q.limit, 10) || 100, 200);
     const offset = parseInt(q.offset, 10) || 0;
 
+    const includeArchived = q.include_archived === '1' || q.include_archived === 'true';
+
     const list = await contracts.listEnvelopes(subaccountId, {
-      status, contactId, limit, offset
+      status, contactId, limit, offset, includeArchived
     });
 
     let counts = null;
     if (wantCounts) {
-      counts = await contracts.getEnvelopeStatusCounts(subaccountId);
+      counts = await contracts.getEnvelopeStatusCounts(subaccountId, { includeArchived });
     }
 
     await logAudit({
