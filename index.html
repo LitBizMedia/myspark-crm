@@ -18682,6 +18682,16 @@ function _renderJourneysUI(){
     + '</style>';
 
   var pickerHTML;
+  if(state.journeyStaffF==null)state.journeyStaffF='';
+  var jrnStaffUsers_t = (db.users || []).filter(function(u){ return u.active !== false; });
+  var jrnStaffSelStyle_t = 'margin-left:auto;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--main-input-border);background:var(--main-input);color:var(--main-text);font-size:14px;min-width:160px';
+  var jrnStaffOpts_t = '<option value=""' + (state.journeyStaffF==='' ? ' selected' : '') + '>All Staff</option>'
+    + '<option value="_unassigned"' + (state.journeyStaffF==='_unassigned' ? ' selected' : '') + '>Unassigned</option>'
+    + jrnStaffUsers_t.map(function(u){
+        var fn = ((u.name || u.display_name || u.username || 'Staff').split(' ')[0]) || 'Staff';
+        return '<option value="' + esc(u.id) + '"' + (state.journeyStaffF===u.id ? ' selected' : '') + '>' + esc(fn) + '</option>';
+      }).join('');
+  var jrnStaffDropdownHTML_t = '<select style="' + jrnStaffSelStyle_t + '" onchange="_journeyApplyStaffFilter(this.value, \'' + active.id + '\')">' + jrnStaffOpts_t + '</select>';
   if (journeys.length <= 3) {
     pickerHTML = styleBlock + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px">'
       + journeys.map(function(j){
@@ -18697,6 +18707,7 @@ function _renderJourneysUI(){
             + '</div>';
         }).join('')
       + '<button style="padding:8px 14px;border-radius:var(--radius);border:1px dashed var(--main-border);background:transparent;color:var(--main-text-muted);cursor:pointer;font-size:14px" onclick="openCreateJourneyModal()" title="Create new journey">+ New</button>'
+      + jrnStaffDropdownHTML_t
       + '</div>';
   } else {
     var manageBtnStyle = 'padding:8px 10px;border-radius:var(--radius);border:1px solid var(--main-border);background:var(--main-card);color:var(--main-text-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center';
