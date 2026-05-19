@@ -19938,6 +19938,147 @@ function rteCleanHtml(html){
 
 
 // =====================================================
+// CONTRACT VARIABLE PICKER + LIVE PREVIEW
+// =====================================================
+
+// Variable catalog grouped by category. Each item: { token, label, sample }.
+// Token is what gets inserted (without braces). Sample is what shows in preview.
+var CONTRACT_VARIABLES = [
+  { group: 'Contact', items: [
+    { token: 'contact_name',       label: 'Full Name',     sample: 'Sarah Johnson' },
+    { token: 'contact_first_name', label: 'First Name',    sample: 'Sarah' },
+    { token: 'contact_last_name',  label: 'Last Name',     sample: 'Johnson' },
+    { token: 'contact_email',      label: 'Email',         sample: 'sarah.johnson@example.com' },
+    { token: 'contact_phone',      label: 'Phone',         sample: '(555) 123-4567' },
+    { token: 'contact_dob',        label: 'Date of Birth', sample: 'March 15, 1985' },
+    { token: 'contact_address',    label: 'Full Address',  sample: '1234 Elm Street, Springfield, IL 62701' }
+  ]},
+  { group: 'Business', items: [
+    { token: 'business_name',    label: 'Business Name',    sample: '[your business name]' },
+    { token: 'business_phone',   label: 'Business Phone',   sample: '[your business phone]' },
+    { token: 'business_email',   label: 'Business Email',   sample: '[your business email]' },
+    { token: 'business_address', label: 'Business Address', sample: '[your business address]' }
+  ]},
+  { group: 'Appointment', items: [
+    { token: 'appointment_date',     label: 'Appointment Date',     sample: 'April 22, 2026' },
+    { token: 'appointment_time',     label: 'Appointment Time',     sample: '2:30 PM' },
+    { token: 'appointment_service',  label: 'Service',              sample: 'Hydrafacial Treatment' },
+    { token: 'appointment_staff',    label: 'Provider',             sample: 'Dr. Emma Williams' },
+    { token: 'appointment_duration', label: 'Duration',             sample: '60 min' }
+  ]},
+  { group: 'Sender', items: [
+    { token: 'sender_name',  label: 'Your Name',  sample: '[your name]' },
+    { token: 'sender_email', label: 'Your Email', sample: '[your email]' },
+    { token: 'staff_name',   label: 'Staff Name', sample: 'Dr. Emma Williams' }
+  ]},
+  { group: 'Dates', items: [
+    { token: 'today_date',      label: "Today's Date",   sample: 'TODAY' },
+    { token: 'signing_date',    label: 'Signing Date',   sample: 'TODAY' },
+    { token: 'expiration_date', label: 'Expiration Date', sample: 'EXPIRATION' }
+  ]}
+];
+
+function toggleContractVarPicker(e){
+  if(e){ e.stopPropagation(); }
+  var menu = document.getElementById('contract-tmpl-varmenu');
+  if(!menu) return;
+  if(menu.style.display === 'block'){
+    menu.style.display = 'none';
+    return;
+  }
+  // Build menu content
+  var html = '';
+  CONTRACT_VARIABLES.forEach(function(grp){
+    html += '<div style="padding:8px 12px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);background:var(--main-card)">'+esc(grp.group)+'</div>';
+    grp.items.forEach(function(v){
+      html += '<div onclick="insertContractVariable(\''+esc(v.token)+'\')" style="padding:8px 12px;font-size:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--main-text);border-top:1px solid var(--main-border)" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'">';
+      html += '<span>'+esc(v.label)+'</span>';
+      html += '<code style="font-size:10px;color:var(--purple);background:var(--purple-dim);padding:2px 5px;border-radius:3px;font-family:Menlo,monospace">{{'+esc(v.token)+'}}</code>';
+      html += '</div>';
+    });
+  });
+  menu.innerHTML = html;
+  menu.style.display = 'block';
+}
+
+function closeContractVarPickerOnOutside(e){
+  var menu = document.getElementById('contract-tmpl-varmenu');
+  if(!menu || menu.style.display !== 'block') return;
+  // If click is inside the menu or on the toggle button, ignore
+  if(menu.contains(e.target)) return;
+  if(e.target.closest && e.target.closest('button') && e.target.textContent.indexOf('Insert Variable') !== -1) return;
+  menu.style.display = 'none';
+}
+
+function insertContractVariable(token){
+  var body = document.getElementById('contract-tmpl-body');
+  if(!body) return;
+  body.focus();
+  var token_text = '{{'+token+'}}';
+  // insertText is reliable across browsers and respects current selection
+  document.execCommand('insertText', false, token_text);
+  // Close menu
+  var menu = document.getElementById('contract-tmpl-varmenu');
+  if(menu) menu.style.display = 'none';
+  // Live refresh preview
+  refreshContractPreview();
+}
+
+// Build the sample-data context for preview rendering.
+// today_date and expiration_date use real dates so admins see realistic output.
+function buildContractSampleContext(){
+  var ctx = {};
+  CONTRACT_VARIABLES.forEach(function(grp){
+    grp.items.forEach(function(v){
+      ctx[v.token] = v.sample;
+    });
+  });
+  // Real date substitution
+  var today = new Date();
+  var todayStr = today.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  ctx.today_date = todayStr;
+  ctx.signing_date = todayStr;
+  var expEl = document.getElementById('contract-tmpl-expiration');
+  var days = expEl ? (parseInt(expEl.value, 10) || 30) : 30;
+  var exp = new Date(today.getTime() + days * 86400000);
+  ctx.expiration_date = exp.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  return ctx;
+}
+
+// Substitute {{tokens}} in html with values from ctx.
+// Unknown tokens are left as-is (matching the spec's missing-variable behavior).
+function substituteContractTokens(html, ctx){
+  if(!html) return '';
+  return html.replace(/\{\{([a-z_][a-z0-9_]*(?::[a-z_][a-z0-9_]*)?)\}\}/gi, function(match, token){
+    var key = token.toLowerCase();
+    // Custom field passthrough: {{custom:field_key}}
+    if(key.indexOf('custom:') === 0){
+      return '[custom field value]';
+    }
+    if(ctx[key] !== undefined && ctx[key] !== null){
+      return esc(String(ctx[key]));
+    }
+    return match;
+  });
+}
+
+// Refresh the preview pane from the current editor content.
+function refreshContractPreview(){
+  var bodyEl = document.getElementById('contract-tmpl-body');
+  var previewEl = document.getElementById('contract-tmpl-preview');
+  if(!bodyEl || !previewEl) return;
+  var rawHtml = bodyEl.innerHTML || '';
+  var ctx = buildContractSampleContext();
+  var rendered = substituteContractTokens(rawHtml, ctx);
+  if(!rendered.trim()){
+    previewEl.innerHTML = '<div style="color:#9ca3af;font-style:italic;font-size:13px">Preview will appear here as you type.</div>';
+    return;
+  }
+  previewEl.innerHTML = rendered;
+}
+
+
+// =====================================================
 // CONTRACT TEMPLATES
 // =====================================================
 
@@ -20026,12 +20167,13 @@ function openContractEditorModal(t){
   var titleText = contractEditorState.isNew ? 'New Contract Template' : 'Edit Contract Template';
 
   backdrop.innerHTML =
-    '<div style="background:var(--main-bg);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
+    '<div style="background:var(--main-bg);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
       '<div style="padding:18px 24px;border-bottom:1px solid var(--main-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
         '<div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700;color:var(--main-text)">'+esc(titleText)+'</div>'+
         '<button onclick="closeContractEditorModal()" style="background:none;border:none;color:var(--main-text-muted);cursor:pointer;font-size:22px;line-height:1;padding:4px 8px">&times;</button>'+
       '</div>'+
-      '<div style="padding:20px 24px;overflow-y:auto;flex:1">'+
+      '<div style="padding:20px 24px;overflow:hidden;flex:1;display:flex;gap:20px;min-height:0">'+
+        '<div style="flex:1.2;display:flex;flex-direction:column;overflow-y:auto;min-width:0">'+
         '<div style="margin-bottom:16px">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Template Name</label>'+
           '<input id="contract-tmpl-name" type="text" placeholder="e.g. Treatment Consent Form" value="'+esc(t.name||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
@@ -20041,7 +20183,13 @@ function openContractEditorModal(t){
           '<input id="contract-tmpl-description" type="text" placeholder="Brief description for admins" value="'+esc(t.description||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
         '</div>'+
         '<div style="margin-bottom:16px">'+
-          '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Document Body</label>'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
+            '<label style="font-size:12px;font-weight:600;color:var(--main-text)">Document Body</label>'+
+            '<div style="position:relative">'+
+              '<button type="button" onclick="toggleContractVarPicker(event)" style="padding:5px 10px;background:var(--purple-dim);color:var(--purple);border:1px solid var(--purple-border);border-radius:var(--radius-sm);font-size:11px;font-weight:600;cursor:pointer">+ Insert Variable</button>'+
+              '<div id="contract-tmpl-varmenu" style="display:none;position:absolute;right:0;top:30px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);width:260px;max-height:340px;overflow-y:auto;z-index:10"></div>'+
+            '</div>'+
+          '</div>'+
           '<div style="border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input);overflow:hidden">'+
             '<div id="contract-tmpl-toolbar" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 8px;background:var(--main-card);border-bottom:1px solid var(--main-border)">'+
               '<select onchange="rteFormatBlock(this.value);this.value=\'\'" style="padding:5px 8px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius-sm);color:var(--main-text);font-size:12px;cursor:pointer">'+
@@ -20080,6 +20228,14 @@ function openContractEditorModal(t){
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Agreement statement</label>'+
           '<textarea id="contract-tmpl-agree" placeholder="Shown above the signature field" style="width:100%;min-height:60px;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:13px;font-family:Lato,sans-serif;resize:vertical">'+esc(t.defaultAgreeText||'')+'</textarea>'+
         '</div>'+
+        '</div>'+
+        '<div style="flex:1;display:flex;flex-direction:column;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;min-width:0">'+
+          '<div style="padding:10px 14px;background:var(--main-card);border-bottom:1px solid var(--main-border);display:flex;align-items:center;justify-content:space-between">'+
+            '<div style="font-family:Exo 2,sans-serif;font-size:12px;font-weight:700;color:var(--main-text);letter-spacing:.04em;text-transform:uppercase">Live Preview</div>'+
+            '<div style="font-size:10px;color:var(--main-text-muted)">Sample data</div>'+
+          '</div>'+
+          '<div id="contract-tmpl-preview" style="flex:1;overflow-y:auto;padding:24px;background:#fff;color:#1a1030;font-family:Lato,sans-serif;font-size:13px;line-height:1.6"></div>'+
+        '</div>'+
       '</div>'+
       '<div style="padding:14px 24px;border-top:1px solid var(--main-border);display:flex;justify-content:space-between;gap:12px;flex-shrink:0">'+
         '<div>'+
@@ -20104,11 +20260,30 @@ function openContractEditorModal(t){
     var nameEl = document.getElementById('contract-tmpl-name');
     if(nameEl) nameEl.focus();
   }, 50);
+
+  // Wire live preview: render on open, then on any input
+  setTimeout(function(){
+    refreshContractPreview();
+    var bodyEl = document.getElementById('contract-tmpl-body');
+    if(bodyEl){
+      bodyEl.addEventListener('input', refreshContractPreview);
+    }
+    var expEl = document.getElementById('contract-tmpl-expiration');
+    if(expEl){
+      expEl.addEventListener('input', refreshContractPreview);
+    }
+  }, 60);
+
+  // Close var picker on outside click
+  setTimeout(function(){
+    document.addEventListener('click', closeContractVarPickerOnOutside);
+  }, 100);
 }
 
 function closeContractEditorModal(){
   var b = document.getElementById('contract-editor-backdrop');
   if(b) b.remove();
+  document.removeEventListener('click', closeContractVarPickerOnOutside);
 }
 
 async function saveContractTemplate(){
