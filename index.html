@@ -19399,7 +19399,8 @@ function openCardModal(cardId, stageId){
   var staff = (db.users || []).filter(function(u){ return u.active !== false; });
   var staffOptions = '<option value="">Unassigned</option>' + staff.map(function(u){
     var sel = (card && card.assigned_staff_id === u.id) ? ' selected' : '';
-    return '<option value="' + esc(u.id) + '"' + sel + '>' + esc(u.display_name || u.username || 'Staff') + '</option>';
+    var firstName = ((u.display_name || u.username || 'Staff').split(' ')[0]) || 'Staff';
+    return '<option value="' + esc(u.id) + '"' + sel + '>' + esc(firstName) + '</option>';
   }).join('');
 
   var contactInitialName = '';
