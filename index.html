@@ -19936,26 +19936,26 @@ function openContractEditorModal(t){
       '<div style="padding:20px 24px;overflow-y:auto;flex:1">'+
         '<div style="margin-bottom:16px">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Template Name</label>'+
-          '<input id="ct-name" type="text" placeholder="e.g. Treatment Consent Form" value="'+esc(t.name||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+          '<input id="contract-tmpl-name" type="text" placeholder="e.g. Treatment Consent Form" value="'+esc(t.name||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
         '</div>'+
         '<div style="margin-bottom:16px">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Description <span style="color:var(--main-text-muted);font-weight:400">(internal only)</span></label>'+
-          '<input id="ct-description" type="text" placeholder="Brief description for admins" value="'+esc(t.description||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+          '<input id="contract-tmpl-description" type="text" placeholder="Brief description for admins" value="'+esc(t.description||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
         '</div>'+
         '<div style="margin-bottom:16px">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Document Body</label>'+
-          '<textarea id="ct-body" placeholder="Enter the contract content. Rich text editor coming in Step 2C." style="width:100%;min-height:240px;padding:12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px;font-family:Lato,sans-serif;line-height:1.5;resize:vertical">'+esc(t.bodyHtml||'')+'</textarea>'+
+          '<textarea id="contract-tmpl-body" placeholder="Enter the contract content. Rich text editor coming in Step 2C." style="width:100%;min-height:240px;padding:12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px;font-family:Lato,sans-serif;line-height:1.5;resize:vertical">'+esc(t.bodyHtml||'')+'</textarea>'+
           '<div style="font-size:11px;color:var(--main-text-muted);margin-top:6px">Use {{contact_name}}, {{business_name}}, etc. Variable picker coming in Step 2D.</div>'+
         '</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'+
           '<div>'+
             '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Default expiration (days)</label>'+
-            '<input id="ct-expiration" type="number" min="1" max="365" value="'+(t.defaultExpirationDays||30)+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+            '<input id="contract-tmpl-expiration" type="number" min="1" max="365" value="'+(t.defaultExpirationDays||30)+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
           '</div>'+
         '</div>'+
         '<div style="margin-bottom:8px">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Agreement statement</label>'+
-          '<textarea id="ct-agree" placeholder="Shown above the signature field" style="width:100%;min-height:60px;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:13px;font-family:Lato,sans-serif;resize:vertical">'+esc(t.defaultAgreeText||'')+'</textarea>'+
+          '<textarea id="contract-tmpl-agree" placeholder="Shown above the signature field" style="width:100%;min-height:60px;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:13px;font-family:Lato,sans-serif;resize:vertical">'+esc(t.defaultAgreeText||'')+'</textarea>'+
         '</div>'+
       '</div>'+
       '<div style="padding:14px 24px;border-top:1px solid var(--main-border);display:flex;justify-content:space-between;gap:12px;flex-shrink:0">'+
@@ -19964,7 +19964,7 @@ function openContractEditorModal(t){
         '</div>'+
         '<div style="display:flex;gap:8px">'+
           '<button onclick="closeContractEditorModal()" style="padding:9px 16px;background:none;color:var(--main-text);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Cancel</button>'+
-          '<button id="ct-save-btn" onclick="saveContractTemplate()" style="padding:9px 18px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Save Template</button>'+
+          '<button id="contract-tmpl-save-btn" onclick="saveContractTemplate()" style="padding:9px 18px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Save Template</button>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -19978,7 +19978,7 @@ function openContractEditorModal(t){
 
   // Focus name field
   setTimeout(function(){
-    var nameEl = document.getElementById('ct-name');
+    var nameEl = document.getElementById('contract-tmpl-name');
     if(nameEl) nameEl.focus();
   }, 50);
 }
@@ -19989,12 +19989,12 @@ function closeContractEditorModal(){
 }
 
 async function saveContractTemplate(){
-  var nameEl = document.getElementById('ct-name');
-  var descEl = document.getElementById('ct-description');
-  var bodyEl = document.getElementById('ct-body');
-  var expEl = document.getElementById('ct-expiration');
-  var agreeEl = document.getElementById('ct-agree');
-  var saveBtn = document.getElementById('ct-save-btn');
+  var nameEl = document.getElementById('contract-tmpl-name');
+  var descEl = document.getElementById('contract-tmpl-description');
+  var bodyEl = document.getElementById('contract-tmpl-body');
+  var expEl = document.getElementById('contract-tmpl-expiration');
+  var agreeEl = document.getElementById('contract-tmpl-agree');
+  var saveBtn = document.getElementById('contract-tmpl-save-btn');
 
   var name = (nameEl.value || '').trim();
   var bodyHtml = (bodyEl.value || '').trim();
