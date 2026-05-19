@@ -257,6 +257,44 @@ async function getEnvelopeByTokenHash(envelopeId, tokenHash) {
   return envelopeToFrontend(r.rows[0]);
 }
 
+// Counts envelopes per status for the current subaccount.
+// Returns { sent, viewed, signed, expired, voided, draft }.
+async function getEnvelopeStatusCounts(subaccountId) {
+  if (!subaccountId) throw new Error('subaccountId required');
+  const r = await db.query(
+    `SELECT status, COUNT(*)::int AS n
+       FROM contract_envelopes
+       WHERE subaccount_id = $1
+       GROUP BY status`,
+    [subaccountId]
+  );
+  const counts = { draft: 0, sent: 0, viewed: 0, signed: 0, expired: 0, voided: 0 };
+  for (const row of r.rows) {
+    counts[row.status] = row.n;
+  }
+  return counts;
+}
+
+// Void an envelope. Returns the updated row or null if not found.
+// Only allowed when status is draft, sent, or viewed. Signed envelopes
+// cannot be voided (they are legal records).
+async function voidEnvelope(subaccountId, id, voidedBy, voidReason) {
+  if (!subaccountId || !id) throw new Error('subaccountId and id required');
+  const r = await db.query(
+    `UPDATE contract_envelopes
+       SET status = 'voided',
+           voided_at = NOW(),
+           voided_by = $1,
+           void_reason = $2
+       WHERE subaccount_id = $3
+         AND id = $4
+         AND status IN ('draft', 'sent', 'viewed')
+       RETURNING *`,
+    [voidedBy || null, (voidReason || '').slice(0, 500) || null, subaccountId, id]
+  );
+  return envelopeToFrontend(r.rows[0]);
+}
+
 // ============================================================================
 // MODULE EXPORTS
 // ============================================================================
@@ -274,6 +312,8 @@ module.exports = {
   listEnvelopes,
   getEnvelope,
   getEnvelopeByTokenHash,
+  getEnvelopeStatusCounts,
+  voidEnvelope,
 
   // Mappers (exported for any future cross-module reuse)
   templateToFrontend,
