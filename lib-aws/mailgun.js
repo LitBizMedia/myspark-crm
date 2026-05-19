@@ -216,7 +216,7 @@ async function logAgencyMessage(fields) {
 
 // ─── Raw MIME builder (for threading + custom headers) ────────────
 
-async function buildRawMime({ from, to, subject, html, text, replyTo, messageId, inReplyTo, references }) {
+async function buildRawMime({ from, to, subject, html, text, replyTo, messageId, inReplyTo, references, attachments }) {
   const transport = nodemailer.createTransport({ streamTransport: true, buffer: true });
   const mailOptions = {
     from,
@@ -229,6 +229,7 @@ async function buildRawMime({ from, to, subject, html, text, replyTo, messageId,
   if (replyTo) mailOptions.replyTo = replyTo;
   if (inReplyTo) mailOptions.inReplyTo = inReplyTo;
   if (references && references.length) mailOptions.references = references;
+  if (attachments && attachments.length) mailOptions.attachments = attachments;
 
   return new Promise(function(resolve, reject) {
     transport.sendMail(mailOptions, function(err, info) {
@@ -481,7 +482,8 @@ async function sendEmail(slug, opts) {
       replyTo,
       messageId: messageIdHeader,
       inReplyTo,
-      references
+      references,
+      attachments: opts.attachments
     });
 
     const mgResult = await mailgunSendMime({
