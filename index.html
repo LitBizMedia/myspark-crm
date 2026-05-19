@@ -19991,7 +19991,7 @@ function toggleContractVarPicker(e){
   CONTRACT_VARIABLES.forEach(function(grp){
     html += '<div style="padding:8px 12px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);background:var(--main-card)">'+esc(grp.group)+'</div>';
     grp.items.forEach(function(v){
-      html += '<div onclick="insertContractVariable(\''+esc(v.token)+'\')" style="padding:8px 12px;font-size:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--main-text);border-top:1px solid var(--main-border)" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'">';
+      html += '<div onmousedown="event.preventDefault()" onclick="insertContractVariable(\''+esc(v.token)+'\')" style="padding:8px 12px;font-size:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--main-text);border-top:1px solid var(--main-border)" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'">';
       html += '<span>'+esc(v.label)+'</span>';
       html += '<code style="font-size:10px;color:var(--purple);background:var(--purple-dim);padding:2px 5px;border-radius:3px;font-family:Menlo,monospace">{{'+esc(v.token)+'}}</code>';
       html += '</div>';
@@ -20235,7 +20235,7 @@ function openContractEditorModal(t){
           '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
             '<label style="font-size:12px;font-weight:600;color:var(--main-text)">Document Body</label>'+
             '<div style="position:relative">'+
-              '<button type="button" onclick="toggleContractVarPicker(event)" style="padding:5px 10px;background:var(--purple-dim);color:var(--purple);border:1px solid var(--purple-border);border-radius:var(--radius-sm);font-size:11px;font-weight:600;cursor:pointer">+ Insert Variable</button>'+
+              '<button type="button" onmousedown="event.preventDefault()" onclick="toggleContractVarPicker(event)" style="padding:5px 10px;background:var(--purple-dim);color:var(--purple);border:1px solid var(--purple-border);border-radius:var(--radius-sm);font-size:11px;font-weight:600;cursor:pointer">+ Insert Variable</button>'+
               '<div id="contract-tmpl-varmenu" style="display:none;position:absolute;right:0;top:30px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);width:260px;max-height:340px;overflow-y:auto;z-index:10"></div>'+
             '</div>'+
           '</div>'+
