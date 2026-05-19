@@ -16,6 +16,13 @@ const { logAudit } = require('./lib/audit');
 const db = require('./lib/db');
 const tokens = require('./lib/contract-tokens');
 const mailgun = require('./lib/mailgun');
+const contractPdf = require('./lib/contract-pdf');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
+const CONTRACTS_BUCKET = 'myspark-contracts';
+const KMS_KEY_ARN = 'arn:aws:kms:us-east-2:993939946677:key/559c69e7-115b-41fb-b0c0-1080e04f3df1';
+const s3Client = new S3Client({ region: 'us-east-2' });
 
 const CODE_EXPIRY_MINUTES = 10;
 const MAX_VERIFY_ATTEMPTS = 5;
@@ -368,11 +375,52 @@ async function handleSign(req, res){
   var ua = getUserAgent(req);
   var signedAt = new Date();
 
-  // PDF GENERATION STUB (Step 4 wires this up properly)
-  // For now we mark envelope signed and skip the PDF.
-  // signed_pdf_s3_key and signed_pdf_sha256 stay null until Step 4.
+  // Fetch supporting data needed for the PDF
+  var sub = await fetchSubaccountSummary(env.subaccount_id);
+  var businessName = (sub && sub.settings && (sub.settings.businessName || sub.settings.business_name)) || (sub && sub.name) || 'Document';
+
+  // Generate PDF
   var s3Key = null;
   var pdfSha256 = null;
+  try {
+    var pdfResult = await contractPdf.generateContractPdf({
+      envelopeId: env.id,
+      title: env.title,
+      businessName: businessName,
+      recipientName: env.recipient_name,
+      recipientEmail: env.recipient_email,
+      senderName: env.sender_name,
+      sentAt: env.sent_at,
+      signedAt: signedAt,
+      signedTypedName: typedName,
+      signedIp: ip,
+      signedUserAgent: ua,
+      agreeText: env.agree_text,
+      bodyHtml: env.body_html
+    });
+
+    // Upload to S3 with KMS encryption
+    var year = signedAt.getUTCFullYear();
+    s3Key = env.subaccount_id + '/' + year + '/' + env.id + '/signed.pdf';
+    await s3Client.send(new PutObjectCommand({
+      Bucket: CONTRACTS_BUCKET,
+      Key: s3Key,
+      Body: pdfResult.buffer,
+      ContentType: 'application/pdf',
+      ServerSideEncryption: 'aws:kms',
+      SSEKMSKeyId: KMS_KEY_ARN,
+      Metadata: {
+        envelope_id: env.id,
+        sha256: pdfResult.sha256,
+        signed_at: signedAt.toISOString()
+      }
+    }));
+    pdfSha256 = pdfResult.sha256;
+  } catch (e) {
+    console.error('PDF generation/upload failed (non-fatal, envelope still signs):', e);
+    // Don't block signing on PDF failure. Envelope still flips to signed.
+    // Admin can regenerate from dashboard later (Stage 5 feature).
+  }
 
   await db.query(
     `UPDATE contract_envelopes
@@ -435,11 +483,57 @@ async function handleSign(req, res){
     console.warn('post-sign email block failed:', e.message);
   }
 
+  // Generate presigned download URL (7-day expiry, generous for email links)
+  var downloadUrl = null;
+  if (s3Key) {
+    try {
+      downloadUrl = await getSignedUrl(s3Client, new GetObjectCommand({
+        Bucket: CONTRACTS_BUCKET,
+        Key: s3Key
+      }), { expiresIn: 7 * 24 * 60 * 60 });
+    } catch (e) {
+      console.warn('presigned URL generation failed:', e.message);
+    }
+  }
+
   return res.status(200).json({
     ok: true,
     signed_at: signedAt.toISOString(),
     signed_at_formatted: formatDate(signedAt),
-    pdf_download_url: null // populated in Step 4
+    pdf_download_url: downloadUrl
+  });
+}
+
+// ----- GET verify endpoint -----
+
+async function handleVerify(req, res){
+  var q = req.query || {};
+  var envelopeId = q.envelope_id;
+  if (!envelopeId) return res.status(400).json({ error: 'envelope_id required' });
+
+  var r = await db.query(
+    `SELECT id, status, signed_at, signed_typed_name, signed_pdf_sha256, recipient_email, title, subaccount_id
+       FROM contract_envelopes WHERE id = $1`,
+    [envelopeId]
+  );
+  var env = r.rows[0];
+  if (!env) return res.status(404).json({ error: 'Document not found' });
+  if (env.status !== 'signed') {
+    return res.status(400).json({ error: 'This document has not been signed.', status: env.status });
+  }
+
+  var sub = await fetchSubaccountSummary(env.subaccount_id);
+
+  return res.status(200).json({
+    envelope_id: env.id,
+    title: env.title,
+    status: env.status,
+    signed_at: env.signed_at,
+    signed_at_formatted: formatDate(env.signed_at),
+    signed_typed_name: env.signed_typed_name,
+    pdf_sha256: env.signed_pdf_sha256,
+    business_name: sub ? sub.name : '',
+    instructions: 'Compute SHA-256 of your downloaded PDF and compare to pdf_sha256. If they match, the document is unaltered.'
   });
 }
 
@@ -465,6 +559,9 @@ async function handler(req, res){
     }
     if(method === 'POST' && path.endsWith('/sign')){
       return await handleSign(req, res);
+    }
+    if(method === 'GET' && path.endsWith('/verify')){
+      return await handleVerify(req, res);
     }
     return res.status(404).json({ error: 'Not found' });
   } catch(e){
