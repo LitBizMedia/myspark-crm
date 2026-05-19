@@ -20021,7 +20021,7 @@ function openContractEditorModal(t){
 
   var backdrop = document.createElement('div');
   backdrop.id = 'contract-editor-backdrop';
-  backdrop.style.cssText = 'position:fixed;inset:0;background:var(--overlay);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  backdrop.style.cssText = 'position:fixed;inset:0;background:var(--overlay);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px';
 
   var titleText = contractEditorState.isNew ? 'New Contract Template' : 'Edit Contract Template';
 
@@ -20094,10 +20094,10 @@ function openContractEditorModal(t){
 
   document.body.appendChild(backdrop);
 
-  // Close on backdrop click (but not on modal click)
-  backdrop.addEventListener('click', function(e){
-    if(e.target === backdrop) closeContractEditorModal();
-  });
+  // NOTE: Backdrop click-to-close intentionally disabled.
+  // Editing a contract template is high-effort work, and accidental clicks
+  // outside the modal would discard unsaved changes. Use Cancel or the X button.
+  // ESC key support could be added later if desired.
 
   // Focus name field
   setTimeout(function(){
