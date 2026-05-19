@@ -60,6 +60,102 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
    Belt-and-suspenders: even if JS gating misses, the CSS hides them. */
 body:not(.role-admin) #sb-admin-label,
 body:not(.role-admin) #sb-settings{display:none!important}
+body:not(.subaccount-litbiz) #sb-agency-tools{display:none!important}
+/* ── AGENCY TOOLS PANEL ─────────────────────────────────── */
+#panel-agency-tools{padding:24px 28px 60px}
+.at-sec-label{display:flex;align-items:center;gap:10px;margin:28px 0 14px}
+.at-sec-label:first-child{margin-top:0}
+.at-sec-label-text{font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.12em}
+.at-sec-label-line{flex:1;height:1px;background:var(--main-border)}
+
+.at-tools-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+@media(max-width:1280px){.at-tools-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:768px){.at-tools-grid{grid-template-columns:repeat(2,1fr)}}
+.at-tool-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;display:flex;flex-direction:column;gap:8px;text-decoration:none;color:var(--main-text);position:relative;overflow:hidden;transition:all .15s;cursor:pointer;box-shadow:var(--shadow-sm)}
+.at-tool-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--tc-color,var(--purple))}
+.at-tool-card:hover{border-color:var(--purple);transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.at-tool-icon{font-size:22px;margin-bottom:2px}
+.at-tool-name{font-family:'Exo 2',sans-serif;font-size:13px;font-weight:800;color:var(--main-text);line-height:1.2}
+.at-tool-desc{font-size:11px;color:var(--main-text-muted);line-height:1.5;flex:1}
+.at-tool-btn{font-size:11px;font-weight:700;color:var(--tc-color,var(--purple));text-transform:uppercase;letter-spacing:.05em;margin-top:auto}
+.at-tool-soon{position:absolute;top:8px;right:8px;background:var(--orange-dim);color:var(--orange);font-size:9px;font-weight:700;padding:3px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.06em}
+
+.at-main-grid{display:grid;grid-template-columns:1fr 340px;gap:14px}
+@media(max-width:1100px){.at-main-grid{grid-template-columns:1fr}}
+.at-main-left,.at-main-right{display:flex;flex-direction:column;gap:14px}
+
+.at-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
+.at-card-hdr{padding:13px 16px;border-bottom:1px solid var(--main-border);display:flex;align-items:center;gap:10px;background:var(--main-bg)}
+.at-card-hdr-title{font-family:'Exo 2',sans-serif;font-size:12px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.09em;flex:1}
+.at-card-hdr-sub{font-size:11px;color:var(--main-text-muted)}
+.at-card-body{padding:14px 16px}
+
+.at-focus-input{width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:12px 14px;font-family:Lato,sans-serif;font-size:15px;font-weight:500;transition:border-color .15s,box-shadow .15s;outline:none}
+.at-focus-input:focus{border-color:var(--purple);box-shadow:var(--focus-ring)}
+.at-focus-sync{font-size:10px;color:var(--main-text-muted);margin-top:6px;text-align:right;height:14px}
+
+.at-qa-list{display:flex;flex-direction:column;gap:6px}
+.at-qa-list-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+@media(max-width:900px){.at-qa-list-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.at-qa-list-grid{grid-template-columns:1fr}}
+.at-iframe-wrap{margin-top:8px}
+.at-iframe-bar{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.at-iframe{width:100%;height:calc(100vh - 140px);border:1px solid var(--main-border);border-radius:var(--radius-lg);background:#fff}
+.at-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px}
+@media(max-width:900px){.at-stats{grid-template-columns:repeat(2,1fr)}}
+.at-stat{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:14px 16px;box-shadow:var(--shadow-sm)}
+.at-stat-val{font-family:'Exo 2',sans-serif;font-size:28px;font-weight:800;color:var(--main-text);line-height:1}
+.at-stat-val.alert{color:var(--danger)}
+.at-stat-val.warn{color:var(--warning)}
+.at-stat-val.good{color:var(--success)}
+.at-stat-val.brand{color:var(--purple)}
+.at-stat-lbl{font-size:11px;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-top:6px;font-weight:600}
+.at-stat-loading{color:var(--main-text-muted);opacity:.4}
+.at-qa-btn{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);background:var(--main-bg);border:1px solid var(--main-border);text-decoration:none;color:var(--main-text);font-size:13px;font-weight:500;transition:all .15s}
+.at-qa-btn:hover{border-color:var(--purple);background:var(--main-card-hover)}
+.at-qa-icon{font-size:14px}
+.at-qa-text{flex:1}
+.at-qa-arrow{color:var(--main-text-muted);font-size:13px}
+
+/* Service tier panels */
+.at-svc-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.at-svc-tab{padding:7px 14px;border-radius:var(--radius);background:var(--main-card);border:1px solid var(--main-border);color:var(--main-text);font-family:'Exo 2',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.at-svc-tab:hover{border-color:var(--purple)}
+.at-svc-tab.active{background:var(--purple);border-color:var(--purple);color:#fff}
+.at-svc-panel{display:none}
+.at-svc-panel.active{display:block}
+.at-svc-panel-hdr{padding:14px 16px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;border-bottom:none}
+.at-svc-panel-name{font-family:'Exo 2',sans-serif;font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px}
+.at-svc-panel-desc{font-size:12px;color:var(--main-text-muted);line-height:1.5}
+.at-tiers-grid{display:grid;gap:12px;padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-top:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);grid-template-columns:repeat(3,1fr)}
+@media(max-width:1100px){.at-tiers-grid{grid-template-columns:repeat(2,1fr)!important}}
+@media(max-width:700px){.at-tiers-grid{grid-template-columns:1fr!important}}
+.at-tier-card{padding:16px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);display:flex;flex-direction:column}
+.at-tier-card.featured{border-color:var(--purple);box-shadow:0 0 0 1px var(--purple)}
+.at-tier-name{font-family:'Exo 2',sans-serif;font-size:13px;font-weight:700;color:var(--main-text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.at-tier-price{font-family:'Exo 2',sans-serif;font-size:24px;font-weight:800;color:var(--purple);margin-bottom:6px;line-height:1}
+.at-tier-price span{font-size:12px;font-weight:500;color:var(--main-text-muted);margin-left:2px}
+.at-tier-note{font-size:11px;color:var(--main-text-muted);margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--main-border);line-height:1.5}
+.at-tier-features{list-style:none;padding:0;margin:0;font-size:12px;color:var(--main-text);line-height:1.7}
+.at-tier-features li{padding-left:14px;position:relative}
+.at-tier-features li::before{content:'';position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--purple)}
+
+/* Accordion (SOP, Playbook) */
+.at-acc-list{display:flex;flex-direction:column;gap:6px}
+.at-acc-item{border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden;background:var(--main-bg)}
+.at-acc-hdr{padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;transition:background .15s}
+.at-acc-hdr:hover{background:var(--main-card-hover)}
+.at-acc-num{width:26px;height:26px;border-radius:50%;background:var(--purple);color:#fff;font-family:'Exo 2',sans-serif;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.at-acc-title{flex:1;font-family:'Exo 2',sans-serif;font-size:13px;font-weight:700;color:var(--main-text)}
+.at-acc-badge{font-size:10px;font-weight:600;color:var(--main-text-muted);background:var(--main-card);padding:3px 8px;border-radius:4px;border:1px solid var(--main-border)}
+.at-acc-arrow{color:var(--main-text-muted);font-size:11px;transition:transform .15s}
+.at-acc-item.open .at-acc-arrow{transform:rotate(180deg)}
+.at-acc-body{display:none;padding:0 14px 14px 50px;font-size:13px;color:var(--main-text);line-height:1.6}
+.at-acc-item.open .at-acc-body{display:block}
+.at-acc-body ul{margin:6px 0 0;padding-left:20px}
+.at-acc-body li{margin-bottom:4px}
+.at-acc-note{margin-top:10px;padding:9px 12px;background:var(--orange-dim);border-left:3px solid var(--orange);border-radius:4px;font-size:12px;color:var(--main-text);line-height:1.5}
+
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--purple-border);border-radius:3px}
 
@@ -1586,6 +1682,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <button class="sb-item active" data-panel="dashboard" onclick="switchPanel('dashboard')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard
       </button>
+      <button class="sb-item" id="sb-agency-tools" data-panel="agency-tools" onclick="switchPanel('agency-tools')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>Agency Tools
+      </button>
       <button class="sb-item" id="sb-contacts" data-panel="contacts" onclick="switchPanel('contacts')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Contacts
       </button>
@@ -1747,6 +1846,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       </div>
 
       <!-- CONTACTS -->
+      <div id="panel-agency-tools" class="panel hidden">
+        <div id="agency-tools-mount"></div>
+      </div>
       <div id="panel-contacts" class="panel hidden">
         <div class="page-header">
           <div><div class="page-title">Contacts</div><div class="page-subtitle" id="contacts-sub"></div></div>
@@ -2239,7 +2341,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="forms-panel-tabs">
           <button class="forms-panel-tab active" id="fpt-forms" onclick="switchFormsTab('forms')">Forms</button>
           <button class="forms-panel-tab" id="fpt-contracts" onclick="switchFormsTab('contracts')">Contracts</button>
-          <button class="forms-panel-tab" id="fpt-documents" onclick="switchFormsTab('documents')">Documents</button>
         </div>
         <div id="forms-forms-view"></div>
         <div id="forms-contracts-view" class="hidden">
@@ -2247,15 +2348,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <span class="coming-soon-badge">Coming Soon</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             <h3>Contracts</h3>
-            <p>Create, send, and collect legally binding contracts and agreements. Powered by DocuSign integration. Signed documents are stored and linked to the contact record.</p>
-          </div>
-        </div>
-        <div id="forms-documents-view" class="hidden">
-          <div class="coming-soon-wrap">
-            <span class="coming-soon-badge">Coming Soon</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            <h3>Documents</h3>
-            <p>Upload and store documents, signed contracts, client files, and supporting materials. Attach documents directly to contact records for easy access.</p>
+            <p>Build templates, send for signature, and store signed documents linked to the contact record. Fully integrated with MySpark+ automation.</p>
           </div>
         </div>
       </div>
@@ -3712,7 +3805,9 @@ function handleLogout(){
 // =====================================================
 // initApp defined below (server-aware version at line ~3180)
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',journeys:'Journeys',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',journeys:'Journeys',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings',
+  'agency-tools':'Agency Tools'
+};
 function renderPanel(){
   const fns={dashboard:renderDash,contacts:renderContacts,conversations:renderConversations,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,journeys:renderJourneys,staff:renderStaff,settings:renderSettings,products:renderProducts,media:renderMedia,help:renderHelp};
   if(fns[state.panel])fns[state.panel]();
@@ -3729,6 +3824,7 @@ function switchPanel(name){
     // Users can access payments but not transactions tab - handled via tab hide
   }
   if(name==='contacts'&&_r==='practitioner'){toast('Access denied.','error');return;}
+  if(name==='agency-tools'&&state.subaccountSlug!=='litbiz'){toast('Access denied.','error');return;}
   state.panel=name;
   document.querySelectorAll('.sb-item').forEach(i=>i.classList.toggle('active',i.dataset.panel===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('hidden',p.id!=='panel-'+name));
@@ -3740,6 +3836,7 @@ function switchPanel(name){
   renderPanel();
   if(name==='settings')renderSquareCard();
   if(name==='help')showHelpView('#help-mount');
+  if(name==='agency-tools')renderAgencyTools();
 }
 
 // =====================================================
@@ -19728,7 +19825,7 @@ function renderForms(){
 
 function switchFormsTab(tab){
   state.formsTab=tab;
-  ['forms','contracts','documents'].forEach(t=>{
+  ['forms','contracts'].forEach(t=>{
     const btn=document.getElementById('fpt-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
     const v=document.getElementById('forms-'+t+'-view');
@@ -31557,6 +31654,517 @@ function canManageGiftCards(){ return hasRole('admin','manager'); }
 function canManageCoupons(){ return hasRole('admin','manager'); }
 function canRefundVoid(){ return hasRole('admin','manager'); }
 
+// =====================================================
+// AGENCY TOOLS PANEL (LitBiz only, gated by subaccountSlug)
+// =====================================================
+
+var _agencyFocusTimer = null;
+
+function renderAgencyTools(){
+  var mount = document.getElementById('agency-tools-mount');
+  if(!mount) return;
+  mount.innerHTML = _agencyToolsHTML();
+  _agencyLoadSopStats();
+}
+
+function _agencyToolsHTML(){
+  return ''
+    + _agencySopStatsHTML()
+    + _agencyToolGridHTML()
+    + _agencyQuickToolsCardHTML()
+    + _agencyServicesHTML()
+    + _agencyOnboardingHTML()
+    + _agencyPlaybookHTML();
+}
+
+function _agencyToolGridHTML(){
+  var tools = [
+    {file:'seo-report.html',      icon:'📈', name:'SEO Report Builder',  desc:'Generate branded monthly SEO performance reports with month-over-month comparison.', color:'#059669', soon:false, newTab:true,  inFrame:false},
+    {file:'social-report.html',   icon:'📱', name:'Social Media Reports',desc:'Platform-specific reports with engagement rate, reach, and month-over-month data.', color:'#C13584', soon:false, newTab:true,  inFrame:false},
+    {file:'ads-report.html',      icon:'💰', name:'Paid Ads Reports',    desc:'Google, Meta, and TikTok ad reporting with auto-calculated CPC, CTR, CPM, and CPA.', color:'#4285F4', soon:false, newTab:true,  inFrame:false},
+    {file:'marketing-audit.html', icon:'🔍', name:'Marketing Audit',     desc:'Full 10-category weighted audit across brand, SEO, GBP, social, ads, and more.', color:'#EA580C', soon:false, newTab:true,  inFrame:false},
+    {file:'sop-tracker.html',     icon:'✅', name:'SOP Tracker',         desc:'Per-client task management with auto-reset cycles based on service mix.', color:'#7C3AED', soon:false, newTab:false, inFrame:true}
+  ];
+  var cards = tools.map(function(t){
+    var attrs = t.inFrame
+      ? 'onclick="_agencyOpenInFrame(\''+t.file+'\',\''+t.name+'\')" style="--tc-color:'+t.color+';cursor:pointer"'
+      : 'href="/litbiz/'+t.file+'" '+(t.newTab?'target="_blank" rel="noopener" ':'')+'style="--tc-color:'+t.color+'"';
+    return '<a class="at-tool-card" '+attrs+'>'
+      + (t.soon ? '<span class="at-tool-soon">Stage 2</span>' : '')
+      + '<div class="at-tool-icon">'+t.icon+'</div>'
+      + '<div class="at-tool-name">'+t.name+'</div>'
+      + '<div class="at-tool-desc">'+t.desc+'</div>'
+      + '<div class="at-tool-btn">Open Tool &rarr;</div>'
+      + '</a>';
+  }).join('');
+  return ''
+    + '<div class="at-sec-label"><div class="at-sec-label-text">Your Tools</div><div class="at-sec-label-line"></div></div>'
+    + '<div class="at-tools-grid">'+cards+'</div>';
+}
+
+function _agencyMainGridHTML(){
+  return ''
+    + '<div class="at-sec-label"><div class="at-sec-label-text">Daily Workspace</div><div class="at-sec-label-line"></div></div>'
+    + '<div class="at-main-grid">'
+      + '<div class="at-main-left">'
+        + _agencyFocusCardHTML()
+        + _agencyPlaybookHTML()
+      + '</div>'
+      + '<div class="at-main-right">'
+        + _agencyQuickToolsCardHTML()
+        + _agencyResourcesCardHTML()
+      + '</div>'
+    + '</div>';
+}
+
+function _agencyFocusCardHTML(){
+  return ''
+    + '<div class="at-card">'
+      + '<div class="at-card-hdr">'
+        + '<div class="at-card-hdr-title">Daily Focus</div>'
+        + '<div class="at-card-hdr-sub">What is your number one priority today?</div>'
+      + '</div>'
+      + '<div class="at-card-body">'
+        + '<input class="at-focus-input" id="at-focus-input" type="text" placeholder="e.g. Finish Smith Dental SEO report" oninput="_agencyToolsOnFocusInput()">'
+        + '<div class="at-focus-sync" id="at-focus-sync"></div>'
+      + '</div>'
+    + '</div>';
+}
+
+function _agencyQuickToolsCardHTML(){
+  var items = [
+    {icon:'⚡', text:'PageSpeed Insights',  href:'https://pagespeed.web.dev/'},
+    {icon:'🌐', text:'WhatsMyDNS',          href:'https://www.whatsmydns.net/'},
+    {icon:'🔒', text:'Namecheap',           href:'https://www.namecheap.com/myaccount/login/?ReturnUrl=%2fdashboard'},
+    {icon:'✅', text:'Rich Results Test',   href:'https://search.google.com/test/rich-results'},
+    {icon:'🔤', text:'WhatTheFont',         href:'https://www.myfonts.com/pages/whatthefont/'},
+    {icon:'📐', text:'Typescale',           href:'https://typescale.net/'}
+  ];
+  var rows = items.map(function(it){
+    return '<a class="at-qa-btn" href="'+it.href+'" target="_blank" rel="noopener">'
+      + '<span class="at-qa-icon">'+it.icon+'</span>'
+      + '<span class="at-qa-text">'+it.text+'</span>'
+      + '<span class="at-qa-arrow">&UpperRightArrow;</span>'
+      + '</a>';
+  }).join('');
+  return ''
+    + '<div class="at-sec-label"><div class="at-sec-label-text">Quick Tools</div><div class="at-sec-label-line"></div></div>'
+    + '<div class="at-card"><div class="at-card-body"><div class="at-qa-list-grid">'+rows+'</div></div></div>';
+}
+
+function _agencyResourcesCardHTML(){
+  var items = [
+    {icon:'💳', text:'Stripe Dashboard',  href:'https://dashboard.stripe.com/'},
+    {icon:'🟦', text:'Square Balances',   href:'https://app.squareup.com/dashboard/balances'},
+    {icon:'🔗', text:'LinkBuilding HQ',   href:'https://app.linkbuildinghq.com/login'},
+    {icon:'🐸', text:'Outreach Frog',     href:'https://buy.outreachfrog.com/'}
+  ];
+  return _agencyQuickListCard('Resources', items);
+}
+
+function _agencyQuickListCard(title, items){
+  var rows = items.map(function(it){
+    return '<a class="at-qa-btn" href="'+it.href+'" target="_blank" rel="noopener">'
+      + '<span class="at-qa-icon">'+it.icon+'</span>'
+      + '<span class="at-qa-text">'+it.text+'</span>'
+      + '<span class="at-qa-arrow">&UpperRightArrow;</span>'
+      + '</a>';
+  }).join('');
+  return ''
+    + '<div class="at-card">'
+      + '<div class="at-card-hdr"><div class="at-card-hdr-title">'+title+'</div></div>'
+      + '<div class="at-card-body"><div class="at-qa-list">'+rows+'</div></div>'
+    + '</div>';
+}
+
+function _agencyServicesHTML(){
+  var SOCIAL = {id:'social', name:'Social Media', label:'Social Media Management',
+    desc:'Full-service organic social media management across Facebook, Instagram, LinkedIn, TikTok, YouTube, and Google Business Profile. Content creation, scheduling, engagement, and monthly reporting.',
+    tiers:[
+      {name:'Essentials',price:'$895',period:'/mo',featured:false,
+       note:'Best for solo practitioners, new practices, or providers wanting to establish a consistent professional social presence before scaling.',
+       features:['Up to 2 platforms','12 posts per month','1 short-form video or reel per month','Monthly content calendar','Posts repurposing for multi-platform','Comprehensive social media strategy','Profile optimization','Basic comment monitoring','Monthly reporting']},
+      {name:'Growth',price:'$1,500',period:'/mo',featured:true,
+       note:'Best for growing practices ready to increase patient inquiries, improve engagement, and convert social reach to appointments.',
+       features:['Everything in Essentials plus:','Up to 3 platforms','16 to 20 posts per month','4 short-form videos or reels per month','Video editing and repurposing','Monthly planning call','Community engagement (monitoring and responses)']},
+      {name:'Authority Builder',price:'$2,400',period:'/mo',featured:false,
+       note:'Best for established practices and multi-provider groups looking to dominate their local market and be recognized as a trusted authority.',
+       features:['Everything in Growth plus:','Up to 4 platforms','20 to 25 posts per month','6 short-form videos or reels per month','Strategic direction and video scripting','Trend monitoring and suggestions','Boosted posts (ad spend billed separately)']},
+      {name:'Enterprise',price:'$3,800',period:'/mo',featured:false,
+       note:'Best for high-volume practices or healthcare organizations that need full-service management and a dedicated strategic partner.',
+       features:['Everything in Authority plus:','Up to 5 platforms','25 to 30 posts per month','10 short-form videos or reels per month','Full community management','Dedicated account manager','Weekly check-ins']}
+    ]};
+  var SEO = {id:'seo', name:'SEO', label:'Search Engine Optimization',
+    desc:'Local and national SEO including technical audits, on-page optimization, content strategy, link building, Google Business Profile optimization, citation management, and AI search (GEO) optimization.',
+    tiers:[
+      {name:'Content Only',price:'$200',period:'/mo',featured:false,
+       note:'Keep your practice information accurate, visible, and consistent across the web.',
+       features:['Topic and keyword research','2 to 3 new blog posts per month (SEO optimized and compliant)','Minor on-page optimizations and linking','Monthly reporting']},
+      {name:'Local Practice SEO',price:'$750',period:'/mo',featured:true,
+       note:'For small practices that need consistent visibility in local search and Google Maps.',
+       features:['Keyword research focused on local intent (service plus city)','On-page optimization for up to 10 key pages (titles, meta, headers, schema)','2 new blog posts per month (SEO optimized and compliant)','GBP optimization and posting (2 posts per month)','Local citations setup and corrections','Site speed and mobile performance audit (quarterly)','Backlink building','Local area exclusivity','AI search (GEO) optimization included','Monthly ranking and traffic report']},
+      {name:'Enterprise SEO',price:'$1,700',period:'/mo',featured:false,
+       note:'For multi-provider or established practices ready to expand reach.',
+       features:['Comprehensive keyword strategy (local, regional, service-specific)','On-page optimization for up to 25 pages','4 new blog posts per month (SEO optimized and compliant)','GBP optimization and posting (2 posts per month)','Local citations setup and corrections','Site speed and mobile performance audit (quarterly)','Ongoing backlink acquisition','Advanced schema markup for services and providers','Local area exclusivity','Full AI search (GEO) optimization','Monthly ranking and traffic report']}
+    ]};
+  var ADS = {id:'ads', name:'Ads', label:'Paid Advertising',
+    desc:'Full-service paid advertising across Google, Meta (Facebook/Instagram), and TikTok. Includes campaign strategy, creative, audience targeting, conversion tracking, automation, and monthly performance reporting. Ad spend is billed separately.',
+    tiers:[
+      {name:'Local Impact',price:'$500',period:'/mo',featured:false,
+       note:'Plus ad spend up to $1,000. Ideal for small clinics or solo providers focusing on local reach.',
+       features:['Single platform','One campaign','Up to 2 ad creatives','Audience targeting','Conversion tracking','Monthly performance tracking','Basic comment monitoring','Monthly reporting']},
+      {name:'Growth Accelerator',price:'$1,200',period:'/mo',featured:true,
+       note:'Plus ad spend up to $10,000. For clinics ready to scale awareness, drive more leads, and test messaging.',
+       features:['Multiple platforms and campaigns','Up to 6 ad creatives','Initial contact (SMS, Email)','Appointment confirmations','Follow up and nurture campaigns','Reactivation campaign','Automation management','Complete CRM software access','Lead generating web chat widget']},
+      {name:'Rapid Expansion',price:'$2,500',period:'/mo',featured:false,
+       note:'Plus ad spend $10,000 plus. For multi-location or established practices aiming for dominance and lead optimization.',
+       features:['Multiple platforms and campaigns','Up to 10 ad creatives','Initial contact (SMS, Email)','Appointment confirmations','Follow up and nurture campaigns','Reactivation campaign','Automation management','Complete CRM software access','Lead generating web chat widget','Appointment setting']}
+    ]};
+  var WEB = {id:'website', name:'Website Mgmt', label:'Website Management and Hosting',
+    desc:'Managed WordPress hosting and ongoing website care including security updates, backups, performance optimization, content edits, and expert support. Built on Oxygen Builder with Breakdance Elements.',
+    tiers:[
+      {name:'Standard Hosting',price:'$25',period:'/mo',featured:false,
+       note:'Keeps your site healthy and cared for with the core essentials, from security updates and dependable backups to a handful of email addresses and small monthly tweaks when you need them.',
+       features:['Unlimited webspace and bandwidth','Up to 5 company email addresses','Monthly edits and minor updates','Daily backups','Ongoing security updates','Monthly maintenance','Up to 5 subdomains','Free SSL','CDN and edge caching','Domain setup','Free website and email migration','Expert support']},
+      {name:'Advanced Hosting',price:'$149',period:'/mo',featured:true,
+       note:'Adds more muscle and momentum. Everything in Standard plus unlimited email accounts and ongoing SEO-driven content creation that helps your site grow.',
+       features:['Unlimited webspace and bandwidth','Unlimited company email addresses','Monthly edits and minor updates','Monthly content creation','Daily backups','Ongoing security updates','Monthly maintenance','Up to 20 subdomains','Free SSL','CDN and edge caching','Domain setup','Free website and email migration','Priority support']}
+    ]};
+  var AI = {id:'ai', name:'AI Employee', label:'AI Employee',
+    desc:'AI-powered lead capture, appointment booking, follow-up sequences, and customer communication built on MySpark+. Handles inbound inquiries 24/7 so your clients never miss a lead.',
+    tiers:[
+      {name:'AI Employee',price:'$375',period:'/mo',featured:true,
+       note:'One flat monthly rate. Your clients get a 24/7 AI-powered team member that never misses an inquiry, books appointments automatically, and keeps leads warm without any manual follow-up.',
+       features:['AI web chat on website','AI SMS and email responses','Custom AI persona and voice','Lead capture and qualification','Appointment booking automation','Multi-channel follow-up sequences','MySpark+ CRM integration','GHL workflow build-out','Reactivation campaigns','Monthly performance review']}
+    ]};
+  var MS = {id:'myspark', name:'MySpark+', label:'MySpark+ CRM Platform',
+    desc:'White-label GoHighLevel CRM platform for healthcare practices. Includes lead management, reputation management, appointment booking, automated follow-up, and a branded client portal.',
+    tiers:[
+      {name:'MySpark+',price:'$197',period:'/mo',featured:true,
+       note:'One flat monthly rate. A fully built CRM and automation platform designed specifically for healthcare practices. Replaces multiple tools with one streamlined system.',
+       features:['CRM and pipeline management','Reputation management','Review request automation','Appointment booking','SMS and email automation','2-way texting','Custom pipelines','Contact database','Lead generating web chat widget','Advanced reporting']}
+    ]};
+
+  var groups = [SOCIAL, SEO, ADS, WEB, AI, MS];
+
+  var tabs = groups.map(function(g, i){
+    return '<button class="at-svc-tab'+(i===0?' active':'')+'" onclick="_agencyShowSvc(\''+g.id+'\',this)">'+g.name+'</button>';
+  }).join('');
+
+  var panels = groups.map(function(g, i){
+    var tierCards = g.tiers.map(function(t){
+      var feats = t.features.map(function(f){ return '<li>'+f+'</li>'; }).join('');
+      return ''
+        + '<div class="at-tier-card'+(t.featured?' featured':'')+'">'
+          + '<div class="at-tier-name">'+t.name+'</div>'
+          + '<div class="at-tier-price">'+t.price+'<span>'+t.period+'</span></div>'
+          + '<div class="at-tier-note">'+t.note+'</div>'
+          + '<ul class="at-tier-features">'+feats+'</ul>'
+        + '</div>';
+    }).join('');
+    var gridStyle = '';
+    if(g.tiers.length===1) gridStyle = ' style="grid-template-columns:1fr"';
+    else if(g.tiers.length===2) gridStyle = ' style="grid-template-columns:repeat(2,1fr)"';
+    else if(g.tiers.length===4) gridStyle = ' style="grid-template-columns:repeat(4,1fr)"';
+    return ''
+      + '<div id="at-svc-'+g.id+'" class="at-svc-panel'+(i===0?' active':'')+'">'
+        + '<div class="at-svc-panel-hdr">'
+          + '<div class="at-svc-panel-name">'+g.label+'</div>'
+          + '<div class="at-svc-panel-desc">'+g.desc+'</div>'
+        + '</div>'
+        + '<div class="at-tiers-grid"'+gridStyle+'>'+tierCards+'</div>'
+      + '</div>';
+  }).join('');
+
+  return ''
+    + '<div class="at-sec-label"><div class="at-sec-label-text">Services and Tiers</div><div class="at-sec-label-line"></div></div>'
+    + '<div class="at-svc-tabs">'+tabs+'</div>'
+    + panels;
+}
+
+function _agencyOnboardingHTML(){
+  var steps = [
+    {n:1, title:'Sign Up', badge:'Day 1',
+     tasks:['Collect payment and set up subscription while on the phone',
+            'Make sure the client is assigned to you in LitBiz Spark',
+            'Send the service agreement to the client',
+            'Move the opportunity to the Won, Send Agreement stage in the pipeline (automated agreement form will be emailed to the client)',
+            'Inform the client they will receive an onboarding email within 24 hours of signing their agreement. Advise them to complete the questionnaire and schedule their launch call. Scheduling options for a launch call will be provided at the end of the onboarding form.',
+            'Advise the client to submit any other requested information before the launch call to ensure the project can start promptly.']},
+    {n:2, title:'Research and Prep', badge:'Days 2 to 3',
+     tasks:['Research campaign ideas and gather relevant details',
+            "Conduct an audit of the client's current digital presence",
+            'Create marketing plans tailored to their goals and services',
+            'Confirm onboarding documents are complete and agreement is signed']},
+    {n:3, title:'Launch Call', badge:'Days 3 to 5', note:'Do not launch any paid campaigns without explicit client approval on budget, targeting, and creative.',
+     tasks:['Answer any outstanding questions from the client',
+            'Ensure the client is happy and expectations are clear',
+            'Discuss responsibilities on both sides',
+            'Go over the marketing plan in detail',
+            'Agree on offers to run',
+            'Manage expectations around timelines and deliverables',
+            'Gain access to all required platforms',
+            'Ensure all content has been received',
+            'Inform the client of when to expect the first draft of the project',
+            'Assign tasks to team members as needed']},
+    {n:4, title:'Build and Launch', badge:'Day 5 plus',
+     tasks:['Build all systems and campaign assets',
+            'Send the client their first draft of the project for review',
+            'Go live after client approval is received']},
+    {n:5, title:'Week After Launch', badge:'Week 2', note:'This is a critical window. Over-communicate and demonstrate momentum early.',
+     tasks:['Check in with the client to confirm everything is running smoothly',
+            'Provide an update on progress and any early results']},
+    {n:6, title:'End of Month 1', badge:'Month 1',
+     tasks:['Send the first monthly report',
+            'Hold end-of-month check-in call to review the report together']},
+    {n:7, title:'30-Day Check-In', badge:'Day 30',
+     tasks:['Formal 30-day check-in call with the client',
+            'Assess satisfaction, address any concerns, confirm direction']},
+    {n:8, title:'90-Day Check-In', badge:'Day 90',
+     tasks:['Formal 90-day strategy review call',
+            'Review performance against initial goals',
+            'Identify opportunities to expand or adjust services',
+            'Confirm continued alignment and client satisfaction']}
+  ];
+
+  var items = steps.map(function(s){
+    var tasks = s.tasks.map(function(t){ return '<li>'+t+'</li>'; }).join('');
+    var noteHTML = s.note ? '<div class="at-acc-note">'+s.note+'</div>' : '';
+    var openClass = s.n===1 ? ' open' : '';
+    return ''
+      + '<div class="at-acc-item'+openClass+'" id="at-onb-'+s.n+'">'
+        + '<div class="at-acc-hdr" onclick="_agencyToggleAcc(\'at-onb-'+s.n+'\')">'
+          + '<div class="at-acc-num">'+s.n+'</div>'
+          + '<div class="at-acc-title">'+s.title+'</div>'
+          + '<div class="at-acc-badge">'+s.badge+'</div>'
+          + '<div class="at-acc-arrow">&#9660;</div>'
+        + '</div>'
+        + '<div class="at-acc-body"><ul>'+tasks+'</ul>'+noteHTML+'</div>'
+      + '</div>';
+  }).join('');
+
+  return ''
+    + '<div class="at-sec-label"><div class="at-sec-label-text">Client Onboarding SOP</div><div class="at-sec-label-line"></div></div>'
+    + '<div class="at-card"><div class="at-card-body"><div class="at-acc-list">'+items+'</div></div></div>';
+}
+
+function _agencyPlaybookHTML(){
+  var sections = [
+    {id:'about', title:'About LitBiz Media',
+     html:'<p>LitBiz Media designs custom digital and operational systems for healthcare professionals who are underserved by cookie-cutter solutions. By recognizing patterns others miss, we create calm, efficient, and future-ready experiences that feel refreshing to work within. Healthcare professionals do not need more marketing. They need systems that respect how complex their reality actually is.</p>'},
+    {id:'mission', title:'Mission and Values',
+     html:'<p style="font-weight:700;margin-bottom:6px">Our Mission</p>'
+        + '<p style="margin-bottom:14px">Our mission is to reimagine the digital and operational experience for healthcare professionals by designing marketing systems that honor the complexity of their work. We identify what others overlook, then quietly build solutions that reduce friction, create clarity, and allow care providers to focus on what truly matters.</p>'
+        + '<p style="font-weight:700;margin-bottom:6px">Our Values</p>'
+        + '<ul><li>Excellence in service</li><li>Complete transparency</li><li>Passion for every project</li><li>Commitment to results</li><li>Integrity in every action</li></ul>'},
+    {id:'contacts', title:'Key Contacts',
+     html:'<ul><li><strong>Patrick</strong>, Owner and Strategist, 317-500-4698</li><li>Add team member contacts here as your team grows</li></ul>'},
+    {id:'tools', title:'Tools and Access Guide',
+     html:'<ul>'
+        + '<li>MySpark+, primary CRM and automation platform</li>'
+        + '<li>WordPress plus Oxygen Builder plus Breakdance, website builds</li>'
+        + '<li>Adobe Photoshop and Express, graphic design</li>'
+        + '<li>GA4, GTM, GSC, analytics and tracking</li>'
+        + '<li>Google Ads, Meta Ads, TikTok Ads, paid media</li>'
+        + '<li>SiteGuru, website SEO auditing</li>'
+        + '<li>My20i, hosting management</li>'
+        + '<li>Canva, quick social graphics and client assets</li>'
+        + '</ul>'},
+    {id:'brand', title:'Brand Standards',
+     html:'<ul>'
+        + '<li>Primary color: #ff4000 (Flame Orange)</li>'
+        + '<li>Secondary color: #5e17eb (Electric Purple)</li>'
+        + '<li>Headings font: Exo 2</li>'
+        + '<li>Body font: Lato</li>'
+        + '<li>Tone: Professional, direct, consultative, and warm</li>'
+        + '</ul>'}
+  ];
+
+  var items = sections.map(function(s, i){
+    var openClass = i===0 ? ' open' : '';
+    return ''
+      + '<div class="at-acc-item'+openClass+'" id="at-pb-'+s.id+'">'
+        + '<div class="at-acc-hdr" onclick="_agencyToggleAcc(\'at-pb-'+s.id+'\')">'
+          + '<div class="at-acc-title" style="margin-left:0">'+s.title+'</div>'
+          + '<div class="at-acc-arrow">&#9660;</div>'
+        + '</div>'
+        + '<div class="at-acc-body" style="padding-left:14px">'+s.html+'</div>'
+      + '</div>';
+  }).join('');
+
+  return ''
+    + '<div class="at-sec-label"><div class="at-sec-label-text">LitBiz Playbook</div><div class="at-sec-label-line"></div></div>'
+    + '<div class="at-card"><div class="at-card-body"><div class="at-acc-list">'+items+'</div></div></div>';
+}
+
+function _agencyOpenInFrame(file, title){
+  var mount = document.getElementById('agency-tools-mount');
+  if(!mount) return;
+  mount.innerHTML = ''
+    + '<div class="at-iframe-wrap">'
+      + '<div class="at-iframe-bar">'
+        + '<button class="btn btn-ghost btn-sm" onclick="renderAgencyTools()">&larr; Back to Agency Tools</button>'
+        + '<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.09em">'+title+'</div>'
+      + '</div>'
+      + '<iframe class="at-iframe" src="/litbiz/'+file+'" title="'+title+'"></iframe>'
+    + '</div>';
+}
+
+function _agencySopStatsHTML(){
+  return ''
+    + '<div class="at-stats" id="at-sop-stats">'
+      + _agencyStatCard('—', 'Active Clients', 'brand at-stat-loading', 'st-clients')
+      + _agencyStatCard('—', 'Daily Tasks Pending', 'at-stat-loading', 'st-daily')
+      + _agencyStatCard('—', 'Weekly Tasks Pending', 'at-stat-loading', 'st-weekly')
+      + _agencyStatCard('—', 'Reports Due Soon', 'at-stat-loading', 'st-reports')
+    + '</div>';
+}
+
+function _agencyStatCard(val, lbl, cls, id){
+  return '<div class="at-stat">'
+    + '<div class="at-stat-val ' + (cls||'') + '" id="' + id + '">' + val + '</div>'
+    + '<div class="at-stat-lbl">' + lbl + '</div>'
+    + '</div>';
+}
+
+// Period helpers, mirror SOP tracker logic
+function _agSopTodayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _agSopMonday(s){ var d=new Date(s+'T12:00:00'); var day=d.getDay(); var diff=(day===0)?-6:1-day; d.setDate(d.getDate()+diff); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _agSopMonthKey(s){ var d=new Date(s+'T12:00:00'); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function _agSopQuarterKey(s){ var d=new Date(s+'T12:00:00'); return d.getFullYear()+'-Q'+(Math.floor(d.getMonth()/3)+1); }
+function _agSopIsDone(doneDate, freq){
+  if(!doneDate) return false;
+  var t = _agSopTodayStr();
+  var dd = String(doneDate).slice(0,10);
+  if(freq==='onboarding') return true;
+  if(freq==='daily')     return dd===t;
+  if(freq==='weekly')    return _agSopMonday(dd)===_agSopMonday(t);
+  if(freq==='monthly')   return _agSopMonthKey(dd)===_agSopMonthKey(t);
+  if(freq==='quarterly') return _agSopQuarterKey(dd)===_agSopQuarterKey(t);
+  return false;
+}
+function _agSopDaysUntilReport(dueDay){
+  var now=new Date();
+  var m=now.getMonth(), y=now.getFullYear();
+  var d=new Date(y,m,dueDay);
+  if(d<=now){ m++; if(m>11){m=0;y++;} d=new Date(y,m,dueDay); }
+  var n=new Date(); n.setHours(0,0,0,0);
+  return Math.round((d-n)/86400000);
+}
+
+// Task counts per service per period, hardcoded to match SOP tracker catalog.
+// Source of truth lives in /litbiz/sop-tracker.html. If you ever change the
+// task lists there, update these counts to match.
+var _AG_SOP_COUNTS = {
+  social:  {onboarding:10, daily:3, weekly:5, monthly:6, quarterly:5},
+  ppc:     {onboarding:13, daily:3, weekly:5, monthly:6, quarterly:6},
+  smads:   {onboarding:10, daily:3, weekly:5, monthly:5, quarterly:5},
+  seo:     {onboarding:12, daily:2, weekly:5, monthly:7, quarterly:6},
+  website: {onboarding:10, daily:2, weekly:4, monthly:7, quarterly:6}
+};
+
+function _agSopPeriodStats(client, svcId, freq){
+  var counts = _AG_SOP_COUNTS[svcId];
+  var total = counts ? (counts[freq] || 0) : 0;
+  var tasks = client.tasks || {};
+  var done = 0;
+  for(var i = 0; i < total; i++){
+    var ts = tasks[svcId + ':' + freq + ':' + i];
+    if(ts && _agSopIsDone(ts.done_date, freq)) done++;
+  }
+  return {done: done, total: total};
+}
+
+function _agSopComputeStats(clients){
+  var dailyPending = 0, weeklyPending = 0, reportsDueSoon = 0;
+  for(var i = 0; i < clients.length; i++){
+    var c = clients[i];
+    var svcs = c.services || [];
+    for(var j = 0; j < svcs.length; j++){
+      var ds = _agSopPeriodStats(c, svcs[j], 'daily');
+      var ws = _agSopPeriodStats(c, svcs[j], 'weekly');
+      dailyPending += (ds.total - ds.done);
+      weeklyPending += (ws.total - ws.done);
+    }
+    if(c.report_due_day){
+      var days = _agSopDaysUntilReport(c.report_due_day);
+      if(days <= 5) reportsDueSoon++;
+    }
+  }
+  return {
+    clients: clients.length,
+    dailyPending: dailyPending,
+    weeklyPending: weeklyPending,
+    reportsDueSoon: reportsDueSoon
+  };
+}
+
+function _agencyLoadSopStats(){
+  fetch(apiUrl('/api/subaccount/litbiz/sop/data'), {credentials:'include'})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if(!d || !Array.isArray(d.clients)) return;
+      var s = _agSopComputeStats(d.clients);
+      _agencyUpdateStatCard('st-clients', s.clients, s.clients>0 ? 'brand' : '');
+      _agencyUpdateStatCard('st-daily',   s.dailyPending, s.dailyPending>0 ? 'alert' : 'good');
+      _agencyUpdateStatCard('st-weekly',  s.weeklyPending, s.weeklyPending>0 ? 'warn' : 'good');
+      _agencyUpdateStatCard('st-reports', s.reportsDueSoon, s.reportsDueSoon>0 ? 'warn' : 'good');
+    })
+    .catch(function(){});
+}
+
+function _agencyUpdateStatCard(id, val, colorCls){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.textContent = val;
+  el.className = 'at-stat-val ' + (colorCls || '');
+}
+
+function _agencyShowSvc(id, btn){
+  var tabs = document.querySelectorAll('.at-svc-tab');
+  for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
+  if(btn) btn.classList.add('active');
+  var panels = document.querySelectorAll('.at-svc-panel');
+  for(var j=0;j<panels.length;j++) panels[j].classList.remove('active');
+  var p = document.getElementById('at-svc-'+id);
+  if(p) p.classList.add('active');
+}
+
+function _agencyToggleAcc(id){
+  var el = document.getElementById(id);
+  if(el) el.classList.toggle('open');
+}
+
+function _agencyToolsLoadFocus(){
+  fetch(apiUrl('/api/subaccount/litbiz/daily-focus'),{credentials:'include'})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      var el = document.getElementById('at-focus-input');
+      if(el && d && typeof d.focus === 'string') el.value = d.focus;
+    })
+    .catch(function(){});
+}
+
+function _agencyToolsOnFocusInput(){
+  var el = document.getElementById('at-focus-input');
+  var sync = document.getElementById('at-focus-sync');
+  if(!el) return;
+  if(sync) sync.textContent = 'Saving...';
+  if(_agencyFocusTimer) clearTimeout(_agencyFocusTimer);
+  _agencyFocusTimer = setTimeout(function(){
+    fetch(apiUrl('/api/subaccount/litbiz/daily-focus'),{
+      method:'PUT',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({focus: el.value})
+    })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){ if(sync) sync.textContent = (d && d.success) ? 'Saved' : 'Save failed'; })
+    .catch(function(){ if(sync) sync.textContent = 'Save failed'; });
+  }, 800);
+}
+
+
 function applyRolePermissions(){
   var r=userRole();
   var adm=r==='admin';
@@ -31564,6 +32172,7 @@ function applyRolePermissions(){
   var prac=r==='practitioner';
   // Body class drives the admin-only CSS rules at the top of the file.
   document.body.classList.toggle('role-admin',adm);
+  document.body.classList.toggle('subaccount-litbiz',state.subaccountSlug==='litbiz');
   function hide(id,hidden){var el=document.getElementById(id);if(el)el.classList.toggle('hidden',hidden);}
   hide('sb-contacts',   prac);
   hide('sb-tasks',      prac);
