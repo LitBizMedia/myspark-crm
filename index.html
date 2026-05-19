@@ -2397,69 +2397,80 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="page-header"><div><div class="page-title">Settings</div></div></div>
         <div class="settings-tab-bar">
           <button class="stab active" id="stab-general" onclick="switchSettingsTab('general')">General</button>
+          <button class="stab" id="stab-billing" onclick="switchSettingsTab('billing')">Billing</button>
+          <button class="stab" id="stab-customization" onclick="switchSettingsTab('customization')">Customization</button>
           <button class="stab" id="stab-email" onclick="switchSettingsTab('email')">Email</button>
           <button class="stab" id="stab-sms" onclick="switchSettingsTab('sms')">SMS</button>
           <button class="stab hidden" id="stab-activity" onclick="switchSettingsTab('activity')">Activity Log</button>
         </div>
+        <div id="stab-content-billing" class="hidden" style="padding-top:4px"><div id="billing-container"></div></div>
+        <div id="stab-content-customization" class="hidden" style="padding-top:4px"><div id="customization-container"></div></div>
         <div id="stab-content-email" class="hidden" style="padding-top:4px"><div id="email-domain-container"></div><div id="email-templates-container" style="margin-top:32px"></div></div>
         <div id="stab-content-sms" class="hidden" style="padding-top:4px"><div id="sms-settings-container"></div></div>
         <div id="stab-content-activity" class="hidden" style="padding-top:4px"><div id="activity-log-container"></div></div>
         <div class="settings-grid" id="stab-content-general">
 
-          <div class="s-card">
-            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Timezone</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Sets the timezone for your calendar, booking availability, and client-facing scheduling. All appointment times display in this timezone.</div>
-            <div class="form-group" style="max-width:320px"><select id="biz-timezone" onchange="saveTimezone()"><option value="">Select timezone...</option></select></div>
-          </div>
-          <div class="s-card">
-            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Business Hours</div>
-            <div id="bh-grid"></div>
-            <button class="btn btn-purple btn-sm" style="margin-top:10px" onclick="saveBH()">Save Hours</button>
-          </div>
-          <div class="s-card">
-            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="14" x2="9.01" y2="14"/><line x1="15" y1="14" x2="15.01" y2="14"/></svg>Blackout Dates</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Block bookings on holidays or other closed days. Applies to all booking widgets and disables online booking for these dates.</div>
-            <div id="blackout-list"></div>
-            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
-              <div class="form-group" style="margin:0"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Date</label><input type="date" id="blackout-date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none"></div>
-              <div class="form-group" style="margin:0;flex:1;min-width:180px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Reason (optional)</label><input type="text" id="blackout-reason" placeholder="Christmas Day" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box"></div>
-              <button class="btn btn-ghost btn-sm" onclick="addBlackoutDate()">Add</button>
-            </div>
-          </div>
-          <div class="s-card">
-            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Contact Tags</div>
-            <div class="tag-mgr" id="tag-mgr"></div>
-            <button class="btn btn-ghost btn-sm" onclick="openTagModal()">+ Add Tag</button>
-          </div>
-          <div class="s-card">
-            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Square Integration</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Connect your Square account via OAuth. Your app secret stays on the server. Nothing sensitive is stored in the browser.</div>
-            <div id="sq-connected-panel" class="hidden">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-                <div style="width:9px;height:9px;border-radius:50%;background:var(--success-light);flex-shrink:0"></div>
-                <span style="font-size:13px;font-weight:600;color:var(--success-light)">Square Connected</span>
-              </div>
-              <div style="font-size:12px;color:var(--text-muted);margin-bottom:3px">Merchant ID: <span id="sq-merchant-display" style="color:var(--text);font-family:monospace;font-size:11px"></span></div>
-              <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Environment: <span id="sq-env-display" style="color:var(--text)"></span></div>
-              <div style="display:flex;gap:8px;margin-top:2px;flex-wrap:wrap">
-                <button class="btn btn-purple btn-sm" id="sync-contacts-btn" onclick="syncContactsToSquare()">Sync Contacts to Square</button>
-                <button class="btn btn-purple btn-sm" onclick="importFromSquare()">Sync Cards from Square</button>
-                <button class="btn btn-danger btn-sm" onclick="disconnectSquare()">Disconnect Square</button>
-              </div>
-              <div id="sq-unlinked-status" style="font-size:11px;color:var(--text-muted);margin-top:8px"></div>
-            </div>
-            <div id="sq-connect-panel">
-              <button class="btn btn-purple btn-sm" onclick="connectSquare()">Connect Square Account</button>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:8px">You will be redirected to Square to authorize access.</div>
-            </div>
-          </div>
           <div class="s-card full">
-            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Custom Fields</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Create reusable custom fields. They appear in form builders and in expandable sections on contact records. Organize them by category.</div>
-            <div id="cf-cats-list"></div>
-            <div style="display:flex;gap:8px;margin-top:10px">
-              <input id="cf-new-cat" type="text" placeholder="New category name..." style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none" onkeydown="if(event.key==='Enter')cfAddCategory()">
-              <button class="btn btn-purple btn-sm" onclick="cfAddCategory()">Add Category</button>
+            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>Business Information</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Used in email signatures, invoice headers, booking widget footers, and patient communications. Update once, applies everywhere.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;max-width:720px">
+              <div class="form-group" style="grid-column:span 2"><label>Business Name</label><input id="bi-name" type="text" placeholder="Acme Health Clinic" onchange="saveBusinessInfo()"></div>
+              <div class="form-group" style="grid-column:span 2"><label>Address Line 1</label><input id="bi-addr1" type="text" placeholder="123 Main St" onchange="saveBusinessInfo()"></div>
+              <div class="form-group" style="grid-column:span 2"><label>Address Line 2</label><input id="bi-addr2" type="text" placeholder="Suite 200 (optional)" onchange="saveBusinessInfo()"></div>
+              <div class="form-group"><label>City</label><input id="bi-city" type="text" onchange="saveBusinessInfo()"></div>
+              <div class="form-group"><label>State</label><input id="bi-state" type="text" maxlength="2" placeholder="IN" onchange="saveBusinessInfo()"></div>
+              <div class="form-group"><label>ZIP Code</label><input id="bi-zip" type="text" maxlength="10" onchange="saveBusinessInfo()"></div>
+              <div class="form-group"><label>Phone</label><input id="bi-phone" type="tel" placeholder="(555) 123-4567" onchange="saveBusinessInfo()"></div>
+              <div class="form-group"><label>Email</label><input id="bi-email" type="email" placeholder="hello@clinic.com" onchange="saveBusinessInfo()"></div>
+              <div class="form-group"><label>Website</label><input id="bi-website" type="url" placeholder="https://" onchange="saveBusinessInfo()"></div>
+              <div class="form-group" style="grid-column:span 2"><label>Tax ID / EIN (optional)</label><input id="bi-taxid" type="text" placeholder="For invoice display" onchange="saveBusinessInfo()"></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
+              <button class="btn btn-purple btn-sm" onclick="saveBusinessInfo(true)">Save Business Info</button>
+              <div id="bi-save-status" style="font-size:11px;color:var(--text-muted);min-height:14px"></div>
+            </div>
+          </div>
+
+          <div class="s-card full">
+            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Business Logo</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Appears on invoices, email templates, and booking widget defaults. PNG, JPG, or SVG. 2MB max.</div>
+            <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+              <div id="bi-logo-preview" style="width:200px;height:80px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;overflow:hidden">
+                <span style="font-size:11px;color:var(--text-dim)">No logo</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <input type="file" id="bi-logo-input" accept="image/png,image/jpeg,image/jpg,image/svg+xml" style="display:none" onchange="uploadBusinessLogo(event)">
+                <button class="btn btn-purple btn-sm" onclick="document.getElementById('bi-logo-input').click()">Upload Logo</button>
+                <button class="btn btn-ghost btn-sm" id="bi-logo-remove" onclick="removeBusinessLogo()" style="display:none">Remove</button>
+                <div id="bi-logo-status" style="font-size:11px;color:var(--text-muted);min-height:14px"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="s-card full">
+            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Business Schedule</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">Your timezone, weekly hours, and blackout dates. Controls calendar display, booking availability, and patient-facing scheduling.</div>
+
+            <div style="margin-bottom:24px">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Timezone</div>
+              <div class="form-group" style="max-width:320px;margin:0"><select id="biz-timezone" onchange="saveTimezone()"><option value="">Select timezone...</option></select></div>
+            </div>
+
+            <div style="margin-bottom:24px">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Weekly Hours</div>
+              <div id="bh-grid"></div>
+              <button class="btn btn-purple btn-sm" style="margin-top:10px" onclick="saveBH()">Save Hours</button>
+            </div>
+
+            <div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Blackout Dates</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Block bookings on holidays or other closed days. Applies to all booking widgets.</div>
+              <div id="blackout-list"></div>
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
+                <div class="form-group" style="margin:0"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Date</label><input type="date" id="blackout-date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none"></div>
+                <div class="form-group" style="margin:0;flex:1;min-width:180px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Reason (optional)</label><input type="text" id="blackout-reason" placeholder="Christmas Day" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box"></div>
+                <button class="btn btn-ghost btn-sm" onclick="addBlackoutDate()">Add</button>
+              </div>
             </div>
           </div>
           <div class="s-card full" id="notif-settings-card">
@@ -2692,6 +2703,7 @@ let db={
   customFields:[],
   productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'],
   settings:{
+    businessInfo:{name:'',addressLine1:'',addressLine2:'',city:'',state:'',zip:'',phone:'',email:'',website:'',taxId:'',logoUrl:'',logoKey:'',logoFileId:''},
     businessHours:JSON.parse(JSON.stringify(DEF_BH)),
     square:{appId:'',accessToken:'',locationId:'',sandbox:true},
     notifSettings:{types:{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true},taskAdvanceDays:7,apptAdvanceHours:24},
@@ -11044,6 +11056,23 @@ function loadData(){
         formSubmissions:p.formSubmissions||[],
         customFieldCategories:p.customFieldCategories||[],
         customFields:p.customFields||[],
+        // businessInfo migration: copy legacy businessName into structured object if missing
+        // Migration is idempotent; keeps existing businessName intact for backward compatibility
+        _bizInfoMigrated:(function(){
+          if(p.settings&&!p.settings.businessInfo){
+            p.settings.businessInfo={
+              name:p.settings.businessName||'',
+              addressLine1:'',addressLine2:'',city:'',state:'',zip:'',
+              phone:'',email:'',website:'',taxId:'',logoUrl:'',logoKey:'',logoFileId:''
+            };
+          } else if(p.settings&&p.settings.businessInfo){
+            // Forward-compat: add new fields if missing on already-migrated records
+            var bi=p.settings.businessInfo;
+            if(typeof bi.logoKey==='undefined')bi.logoKey='';
+            if(typeof bi.logoFileId==='undefined')bi.logoFileId='';
+          }
+          return true;
+        })(),
         productCategories:p.productCategories||['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services','Software & Tools','Healthcare Marketing'],
         settings:{...db.settings,...p.settings,
           businessHours:p.settings&&p.settings.businessHours||JSON.parse(JSON.stringify(DEF_BH)),
@@ -11570,10 +11599,223 @@ function renderUserList(){
 }
 
 // =====================================================
+// BUSINESS INFORMATION (General tab card)
+// =====================================================
+function renderBusinessInfo(){
+  if(!db.settings)return;
+  if(!db.settings.businessInfo)db.settings.businessInfo={name:'',addressLine1:'',addressLine2:'',city:'',state:'',zip:'',phone:'',email:'',website:'',taxId:'',logoUrl:'',logoKey:'',logoFileId:''};
+  var bi=db.settings.businessInfo;
+  function setVal(id,val){var el=document.getElementById(id);if(el)el.value=val||'';}
+  setVal('bi-name',bi.name);
+  setVal('bi-addr1',bi.addressLine1);
+  setVal('bi-addr2',bi.addressLine2);
+  setVal('bi-city',bi.city);
+  setVal('bi-state',bi.state);
+  setVal('bi-zip',bi.zip);
+  setVal('bi-phone',bi.phone);
+  setVal('bi-email',bi.email);
+  setVal('bi-website',bi.website);
+  setVal('bi-taxid',bi.taxId);
+}
+
+function saveBusinessInfo(explicit){
+  if(!db.settings.businessInfo)db.settings.businessInfo={};
+  var bi=db.settings.businessInfo;
+  function getVal(id){var el=document.getElementById(id);return el?(el.value||'').trim():'';}
+  bi.name=getVal('bi-name');
+  bi.addressLine1=getVal('bi-addr1');
+  bi.addressLine2=getVal('bi-addr2');
+  bi.city=getVal('bi-city');
+  bi.state=getVal('bi-state').toUpperCase();
+  bi.zip=getVal('bi-zip');
+  bi.phone=getVal('bi-phone');
+  bi.email=getVal('bi-email');
+  bi.website=getVal('bi-website');
+  bi.taxId=getVal('bi-taxid');
+  // Sync legacy businessName field for backward compatibility with the 10 existing call sites
+  db.settings.businessName=bi.name;
+  saveData();
+  var s=document.getElementById('bi-save-status');
+  if(s){
+    s.textContent=explicit===true?'Business info saved.':'Auto-saved.';
+    s.style.color='var(--success-light)';
+    clearTimeout(window._biStatusTimer);
+    window._biStatusTimer=setTimeout(function(){s.textContent='';},explicit===true?2500:1500);
+  }
+  if(explicit===true&&typeof toast==='function')toast('Business info saved.','success');
+}
+
+// =====================================================
+// BUSINESS LOGO (General tab card)
+// =====================================================
+function renderBusinessLogo(){
+  if(!db.settings)return;
+  if(!db.settings.businessInfo)db.settings.businessInfo={};
+  var bi=db.settings.businessInfo;
+  var preview=document.getElementById('bi-logo-preview');
+  var removeBtn=document.getElementById('bi-logo-remove');
+  if(!preview)return;
+  if(bi.logoUrl){
+    preview.innerHTML='<img src="'+esc(bi.logoUrl)+'" alt="Business logo" style="max-width:100%;max-height:100%;object-fit:contain">';
+    if(removeBtn)removeBtn.style.display='';
+  } else {
+    preview.innerHTML='<span style="font-size:11px;color:var(--text-dim)">No logo</span>';
+    if(removeBtn)removeBtn.style.display='none';
+  }
+}
+
+async function uploadBusinessLogo(event){
+  var file=event&&event.target&&event.target.files&&event.target.files[0];
+  if(!file)return;
+  var statusEl=document.getElementById('bi-logo-status');
+  function setStatus(msg,kind){
+    if(!statusEl)return;
+    statusEl.textContent=msg||'';
+    statusEl.style.color=kind==='error'?'var(--danger-light)':(kind==='ok'?'var(--success-light)':'var(--text-muted)');
+  }
+  // Validate size 2MB
+  if(file.size>2*1024*1024){setStatus('File too large. Maximum 2MB.','error');event.target.value='';return;}
+  // Validate type
+  var allowed=['image/png','image/jpeg','image/jpg','image/svg+xml'];
+  if(allowed.indexOf(file.type)<0){setStatus('Unsupported file type. Use PNG, JPG, or SVG.','error');event.target.value='';return;}
+  setStatus('Preparing upload...','');
+  try {
+    // Step 1: presigned PUT
+    var presignRes=await fetch(apiUrl('/api/media/upload-url'),{
+      credentials:'include',
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fileName:file.name,fileType:file.type||'image/png',fileSize:file.size,folder:'Branding'})
+    });
+    var presignData=await presignRes.json().catch(function(){return{error:'Server error'};});
+    if(!presignRes.ok){setStatus('Could not start upload: '+(presignData.error||'Status '+presignRes.status),'error');event.target.value='';return;}
+    // Step 2: PUT to S3
+    setStatus('Uploading...','');
+    await new Promise(function(resolve,reject){
+      var xhr=new XMLHttpRequest();
+      xhr.open('PUT',presignData.uploadUrl);
+      xhr.setRequestHeader('Content-Type',file.type||'image/png');
+      xhr.onload=function(){if(xhr.status>=200&&xhr.status<300)resolve();else reject(new Error('S3 upload failed: '+xhr.status));};
+      xhr.onerror=function(){reject(new Error('Upload network error'));};
+      xhr.send(file);
+    });
+    // Step 3: refresh media list to get a fresh presigned GET URL for preview
+    var listRes=await fetch(apiUrl('/api/media/list'),{credentials:'include'});
+    var listData=await listRes.json().catch(function(){return{files:[]};});
+    var newRow=(listData.files||[]).find(function(f){return f.id===presignData.fileId;});
+    if(!newRow){setStatus('Upload succeeded but preview failed. Refresh page.','error');event.target.value='';return;}
+    // Step 4: save to settings
+    if(!db.settings.businessInfo)db.settings.businessInfo={};
+    db.settings.businessInfo.logoUrl=newRow.url||'';
+    db.settings.businessInfo.logoKey=presignData.fileKey||'';
+    db.settings.businessInfo.logoFileId=presignData.fileId||'';
+    saveData();
+    renderBusinessLogo();
+    setStatus('Logo uploaded.','ok');
+    clearTimeout(window._biLogoStatusTimer);
+    window._biLogoStatusTimer=setTimeout(function(){setStatus('','');},2500);
+    event.target.value='';
+  } catch(e){
+    setStatus('Upload failed: '+e.message,'error');
+    event.target.value='';
+  }
+}
+
+function removeBusinessLogo(){
+  if(!db.settings.businessInfo)return;
+  // Note: leaves the S3 object orphaned. The media_files row remains in the library.
+  // Cleanup is intentional future work; deleting could break cached email templates.
+  db.settings.businessInfo.logoUrl='';
+  db.settings.businessInfo.logoKey='';
+  db.settings.businessInfo.logoFileId='';
+  saveData();
+  renderBusinessLogo();
+  var s=document.getElementById('bi-logo-status');
+  if(s){s.textContent='Logo removed.';s.style.color='var(--text-muted)';
+    clearTimeout(window._biLogoStatusTimer);
+    window._biLogoStatusTimer=setTimeout(function(){s.textContent='';},2000);
+  }
+}
+
+// =====================================================
+// BILLING TAB (MySpark+ subscription placeholder + Square integration)
+// =====================================================
+function renderBillingTab(){
+  var el=document.getElementById('billing-container');
+  if(!el)return;
+  el.innerHTML=
+    '<div class="settings-grid">'
+    +'<div class="s-card full">'
+    +'<div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>MySpark+ Subscription</div>'
+    +'<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:14px 16px;display:flex;gap:12px;align-items:flex-start">'
+    +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;color:var(--purple);margin-top:1px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+    +'<div>'
+    +'<div style="font-size:14px;font-weight:600;color:var(--main-text);margin-bottom:4px">Self-serve billing coming soon</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);line-height:1.6">Manage your MySpark+ subscription plan, payment method on file, invoices, and usage here. Contact your account manager for plan changes in the meantime.</div>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +'<div class="s-card full">'
+    +'<div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Square Integration</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Connect your Square account via OAuth to charge clients. Your app secret stays on the server. Nothing sensitive is stored in the browser.</div>'
+    +'<div id="sq-connected-panel" class="hidden">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+    +'<div style="width:9px;height:9px;border-radius:50%;background:var(--success-light);flex-shrink:0"></div>'
+    +'<span style="font-size:13px;font-weight:600;color:var(--success-light)">Square Connected</span>'
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:3px">Merchant ID: <span id="sq-merchant-display" style="color:var(--text);font-family:monospace;font-size:11px"></span></div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Environment: <span id="sq-env-display" style="color:var(--text)"></span></div>'
+    +'<div style="display:flex;gap:8px;margin-top:2px;flex-wrap:wrap">'
+    +'<button class="btn btn-purple btn-sm" id="sync-contacts-btn" onclick="syncContactsToSquare()">Sync Contacts to Square</button>'
+    +'<button class="btn btn-purple btn-sm" onclick="importFromSquare()">Sync Cards from Square</button>'
+    +'<button class="btn btn-danger btn-sm" onclick="disconnectSquare()">Disconnect Square</button>'
+    +'</div>'
+    +'<div id="sq-unlinked-status" style="font-size:11px;color:var(--text-muted);margin-top:8px"></div>'
+    +'</div>'
+    +'<div id="sq-connect-panel">'
+    +'<button class="btn btn-purple btn-sm" onclick="connectSquare()">Connect Square Account</button>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:8px">You will be redirected to Square to authorize access.</div>'
+    +'</div>'
+    +'</div>'
+    +'</div>';
+  // Repopulate Square card state from db.settings.square
+  if(typeof renderSquareCard==='function')renderSquareCard();
+}
+
+// =====================================================
+// CUSTOMIZATION TAB (Contact Tags + Custom Fields)
+// =====================================================
+function renderCustomizationTab(){
+  var el=document.getElementById('customization-container');
+  if(!el)return;
+  el.innerHTML=
+    '<div class="settings-grid">'
+    +'<div class="s-card full">'
+    +'<div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Contact Tags</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Tag your contacts for filtering, segmentation, and automation. Pick a color so they pop visually across the app.</div>'
+    +'<div class="tag-mgr" id="tag-mgr"></div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="openTagModal()">+ Add Tag</button>'
+    +'</div>'
+    +'<div class="s-card full">'
+    +'<div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Custom Fields</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">Create reusable custom fields. They appear in form builders and in expandable sections on contact records. Organize them by category.</div>'
+    +'<div id="cf-cats-list"></div>'
+    +'<div style="display:flex;gap:8px;margin-top:10px">'
+    +'<input id="cf-new-cat" type="text" placeholder="New category name..." style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-family:Lato,sans-serif;font-size:13px;outline:none" onkeydown="if(event.key===String.fromCharCode(69,110,116,101,114))cfAddCategory()">'
+    +'<button class="btn btn-purple btn-sm" onclick="cfAddCategory()">Add Category</button>'
+    +'</div>'
+    +'</div>'
+    +'</div>';
+  // Repopulate Tags and Custom Fields from db.tags and db.customFields
+  if(typeof renderTagMgr==='function')renderTagMgr();
+  if(typeof cfRenderSettings==='function')cfRenderSettings();
+}
+
+// =====================================================
 // OVERRIDE: renderSettings — include notification settings
 // =====================================================
 function renderSettings(){
-  renderUserList();renderTagMgr();renderBH();renderBlackoutList();renderNotifSettings();cfRenderSettings();renderSquareCard();renderTimezoneSelect();
+  renderUserList();renderTagMgr();renderBH();renderBlackoutList();renderNotifSettings();cfRenderSettings();renderSquareCard();renderTimezoneSelect();renderBusinessInfo();renderBusinessLogo();
   // Activity Log tab visible only for admins
   var actBtn=document.getElementById('stab-activity');
   if(actBtn){
@@ -12502,12 +12744,18 @@ async function toggleSmsEnabled(){
 }
 
 function switchSettingsTab(tab){
-  ['general','email','sms','activity'].forEach(function(t){
+  ['general','billing','customization','email','sms','activity'].forEach(function(t){
     var btn=document.getElementById('stab-'+t);
     var content=document.getElementById('stab-content-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
     if(content)content.classList.toggle('hidden',t!==tab);
   });
+  if(tab==='billing'){
+    renderBillingTab();
+  }
+  if(tab==='customization'){
+    renderCustomizationTab();
+  }
   if(tab==='activity'){
     renderActivityLog();
   }
@@ -31483,6 +31731,7 @@ async function createSubaccount(){
     productCategories:['Web Design','SEO & Marketing','Monthly Retainers','Consulting','One-Time Services'],
     products:[],
     settings:{
+      businessInfo:{name:name,addressLine1:'',addressLine2:'',city:'',state:'',zip:'',phone:'',email:'',website:'',taxId:'',logoUrl:'',logoKey:'',logoFileId:''},
       businessName:name,
       businessHours:{
         mon:{open:true,start:'08:00',end:'18:00'},tue:{open:true,start:'08:00',end:'18:00'},
