@@ -18700,6 +18700,15 @@ function _renderJourneysUI(){
       + '</div>';
   } else {
     var manageBtnStyle = 'padding:8px 10px;border-radius:var(--radius);border:1px solid var(--main-border);background:var(--main-card);color:var(--main-text-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center';
+    if(state.journeyStaffF==null)state.journeyStaffF='';
+    var jrnStaffUsers = (db.users || []).filter(function(u){ return u.active !== false; });
+    var jrnStaffSelStyle = 'margin-left:auto;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--main-input-border);background:var(--main-input);color:var(--main-text);font-size:14px;min-width:160px';
+    var jrnStaffOpts = '<option value=""' + (state.journeyStaffF==='' ? ' selected' : '') + '>All Staff</option>'
+      + '<option value="_unassigned"' + (state.journeyStaffF==='_unassigned' ? ' selected' : '') + '>Unassigned</option>'
+      + jrnStaffUsers.map(function(u){
+          var fn = ((u.name || u.display_name || u.username || 'Staff').split(' ')[0]) || 'Staff';
+          return '<option value="' + esc(u.id) + '"' + (state.journeyStaffF===u.id ? ' selected' : '') + '>' + esc(fn) + '</option>';
+        }).join('');
     pickerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:20px">'
       + '<select style="padding:8px 12px;border-radius:var(--radius);border:1px solid var(--main-input-border);background:var(--main-input);color:var(--main-text);font-size:14px;min-width:240px" onchange="switchJourney(this.value)">'
       + journeys.map(function(j){
@@ -18708,6 +18717,7 @@ function _renderJourneysUI(){
       + '</select>'
       + '<button style="' + manageBtnStyle + '" onclick="openJourneySettingsModal(\'' + active.id + '\')" title="Journey settings">' + gearIcon + '</button>'
       + '<button class="btn btn-primary btn-sm" onclick="openCreateJourneyModal()">+ New Journey</button>'
+      + '<select style="' + jrnStaffSelStyle + '" onchange="_journeyApplyStaffFilter(this.value, \'' + active.id + '\')">' + jrnStaffOpts + '</select>'
       + '</div>';
   }
 
@@ -18747,6 +18757,14 @@ async function _loadJourneyCards(journey){
   }
 }
 
+function _journeyApplyStaffFilter(value, journeyId){
+  state.journeyStaffF = value;
+  var journey = (db.journeys || []).find(function(j){ return j.id === journeyId; });
+  if (!journey) return;
+  var cards = (typeof _journeyCardsCache !== 'undefined' && _journeyCardsCache[journeyId]) || [];
+  _renderJourneyBoard(journey, cards);
+}
+
 function _renderJourneyBoard(journey, cards){
   var board = document.getElementById('jrn-board');
   if (!board) return;
@@ -18758,6 +18776,14 @@ function _renderJourneyBoard(journey, cards){
   if (stages.length === 0) {
     board.innerHTML = '<div style="padding:60px 40px;text-align:center;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);color:var(--main-text-muted)">This journey has no stages. Use the gear icon to add stages.</div>';
     return;
+  }
+
+  // Apply staff filter (in-memory, resets on refresh)
+  var jrnStaffF = state.journeyStaffF || '';
+  if (jrnStaffF === '_unassigned') {
+    cards = cards.filter(function(c){ return !c.assigned_staff_id; });
+  } else if (jrnStaffF) {
+    cards = cards.filter(function(c){ return c.assigned_staff_id === jrnStaffF; });
   }
 
   // Group cards by stage_id
