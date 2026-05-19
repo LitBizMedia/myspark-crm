@@ -20747,12 +20747,31 @@ function drawContractEnvelopeDetail(env){
         (canVoid ? '<button onclick="voidContractEnvelopeFromDrawer(\''+esc(env.id)+'\')" style="padding:9px 16px;background:none;color:var(--danger);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Void</button>' : '')+
       '</div>'+
       '<div style="display:flex;gap:8px">'+
-        (canDownload ? '<button onclick="toast(\'Download available after Stage 4 ships\', \'info\')" style="padding:9px 16px;background:var(--purple);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Download PDF</button>' : '')+
+        (canDownload ? '<button onclick="downloadContractPdf(\''+esc(env.id)+'\')" style="padding:9px 16px;background:var(--purple);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Download PDF</button>' : '')+
         '<button onclick="closeContractEnvelopeDetail()" style="padding:9px 16px;background:none;color:var(--main-text);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Close</button>'+
       '</div>'+
     '</div>';
 
   document.getElementById('ced-panel').innerHTML = html;
+}
+
+async function downloadContractPdf(envelopeId){
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/contracts/download?id=' + encodeURIComponent(envelopeId)), {
+      credentials: 'include'
+    });
+    var data = await r.json();
+    if(!r.ok){
+      toast(data.error || 'Could not generate download link', 'error');
+      return;
+    }
+    if(data.download_url){
+      window.open(data.download_url, '_blank', 'noopener');
+    }
+  } catch(e){
+    console.error('downloadContractPdf error:', e);
+    toast('Failed to download PDF', 'error');
+  }
 }
 
 function voidContractEnvelopeFromDrawer(envelopeId){
