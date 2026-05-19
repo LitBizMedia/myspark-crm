@@ -20933,6 +20933,13 @@ function openContractEditorModal(t){
             '<input id="contract-tmpl-expiration" type="number" min="1" max="365" value="'+(t.defaultExpirationDays||30)+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
           '</div>'+
         '</div>'+
+        '<div style="margin-bottom:16px;padding:12px 14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)">'+
+          '<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13px;color:var(--main-text)">'+
+          '<input type="checkbox" id="contract-tmpl-require-verify" '+(t.requireEmailVerification?'checked':'')+' style="margin-top:3px;flex-shrink:0;width:16px;height:16px;cursor:pointer;accent-color:var(--purple)">'+
+          '<span><strong>Require email verification</strong><br>'+
+          '<span style="color:var(--main-text-muted);font-size:12px;line-height:1.5">Recipient receives a 6-digit code to enter before viewing the document. Recommended for HIPAA-sensitive consent forms. Most documents do not need this.</span></span>'+
+          '</label>'+
+        '</div>'+
         '<div style="margin-bottom:8px">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Agreement statement</label>'+
           '<textarea id="contract-tmpl-agree" placeholder="Shown above the signature field" style="width:100%;min-height:60px;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:13px;font-family:Lato,sans-serif;resize:vertical">'+esc(t.defaultAgreeText||'')+'</textarea>'+
@@ -21019,6 +21026,7 @@ async function saveContractTemplate(){
     description: (descEl.value || '').trim() || null,
     bodyHtml: bodyHtml,
     defaultExpirationDays: parseInt(expEl.value, 10) || 30,
+    requireEmailVerification: (function(){ var el = document.getElementById('contract-tmpl-require-verify'); return el ? el.checked : false; })(),
     defaultAgreeText: (agreeEl.value || '').trim() || undefined
   };
   if(!contractEditorState.isNew && contractEditorState.id){
