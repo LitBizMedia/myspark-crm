@@ -20010,17 +20010,66 @@ function closeContractVarPickerOnOutside(e){
   menu.style.display = 'none';
 }
 
+// Tracks the last known caret/selection position inside the contenteditable.
+// Required because clicking the Insert Variable button moves focus off the
+// editor, which would otherwise reset the caret to position 0.
+var contractEditorSavedRange = null;
+
+function saveContractEditorSelection(){
+  var body = document.getElementById('contract-tmpl-body');
+  if(!body) return;
+  var sel = window.getSelection();
+  if(sel && sel.rangeCount > 0){
+    var range = sel.getRangeAt(0);
+    if(body.contains(range.commonAncestorContainer)){
+      contractEditorSavedRange = range.cloneRange();
+    }
+  }
+}
+
+function restoreContractEditorSelection(){
+  var body = document.getElementById('contract-tmpl-body');
+  if(!body) return false;
+  body.focus();
+  if(contractEditorSavedRange){
+    try {
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(contractEditorSavedRange);
+      return true;
+    } catch(e){
+      // Range invalid (DOM changed underneath), fall through to fallback
+    }
+  }
+  return false;
+}
+
 function insertContractVariable(token){
   var body = document.getElementById('contract-tmpl-body');
   if(!body) return;
-  body.focus();
+
+  var restored = restoreContractEditorSelection();
+
+  // No saved selection (admin clicked Insert Variable before clicking in
+  // editor). Fallback: place caret at end of editor content.
+  if(!restored){
+    var range = document.createRange();
+    range.selectNodeContents(body);
+    range.collapse(false);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
   var token_text = '{{'+token+'}}';
-  // insertText is reliable across browsers and respects current selection
   document.execCommand('insertText', false, token_text);
-  // Close menu
+
+  // Capture the new position so successive inserts work
+  saveContractEditorSelection();
+
   var menu = document.getElementById('contract-tmpl-varmenu');
   if(menu) menu.style.display = 'none';
-  // Live refresh preview
+
   refreshContractPreview();
 }
 
@@ -20261,12 +20310,16 @@ function openContractEditorModal(t){
     if(nameEl) nameEl.focus();
   }, 50);
 
-  // Wire live preview: render on open, then on any input
+  // Wire live preview + selection tracking
   setTimeout(function(){
+    contractEditorSavedRange = null; // reset from any previous modal
     refreshContractPreview();
     var bodyEl = document.getElementById('contract-tmpl-body');
     if(bodyEl){
       bodyEl.addEventListener('input', refreshContractPreview);
+      bodyEl.addEventListener('mouseup', saveContractEditorSelection);
+      bodyEl.addEventListener('keyup', saveContractEditorSelection);
+      bodyEl.addEventListener('focus', saveContractEditorSelection);
     }
     var expEl = document.getElementById('contract-tmpl-expiration');
     if(expEl){
