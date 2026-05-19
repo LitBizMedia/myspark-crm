@@ -267,15 +267,15 @@ async function handler(req, res) {
          sender_id, sender_name,
          title, body_html, variables_snapshot, agree_text,
          status, token_hash, expires_at,
-         sent_at, appointment_id)
+         sent_at, appointment_id, require_email_verification)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-               'sent', $13, $14, NOW(), $15)`,
+               'sent', $13, $14, NOW(), $15, $16)`,
       [
         envelopeId, subaccountId, template_id, contact_id,
         recipientName, contact.email,
         senderId, senderName,
         tmpl.name, cleanHtml, JSON.stringify(rendered.snapshot), tmpl.defaultAgreeText,
-        tokenHash, expiresAt, appointment_id
+        tokenHash, expiresAt, appointment_id, !!tmpl.requireEmailVerification
       ]
     );
   } catch (e) {

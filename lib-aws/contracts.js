@@ -128,7 +128,7 @@ async function createTemplate(subaccountId, createdBy, data) {
     `INSERT INTO contract_templates (
        id, subaccount_id, name, description, active,
        body_html, body_plaintext,
-       default_expiration_days, default_signature_required, default_agree_text,
+       default_expiration_days, default_signature_required, default_agree_text, require_email_verification,
        created_by
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      RETURNING *`,
@@ -160,6 +160,7 @@ async function updateTemplate(subaccountId, id, data) {
     body_html: data.bodyHtml,
     body_plaintext: data.bodyPlaintext,
     default_expiration_days: data.defaultExpirationDays,
+    require_email_verification: data.requireEmailVerification === true,
     default_signature_required: data.defaultSignatureRequired,
     default_agree_text: data.defaultAgreeText
   };
