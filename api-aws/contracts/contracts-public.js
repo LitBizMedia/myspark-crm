@@ -540,11 +540,6 @@ async function handleVerify(req, res){
 // ----- Router -----
 
 async function handler(req, res){
-  // Wide-open CORS (handled by adapter via ALLOWED_ORIGINS, but public needs *)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   var method = (req.method || '').toUpperCase();
   if(method === 'OPTIONS') return res.status(204).end();
 
