@@ -19896,12 +19896,170 @@ function drawContractsList(){
   container.innerHTML = html;
 }
 
+// State for the currently-open template editor
+var contractEditorState = { id: null, isNew: false };
+
 function openNewContractTemplate(){
-  toast('Template editor coming in Step 2B', 'info');
+  contractEditorState = { id: null, isNew: true };
+  openContractEditorModal({
+    name: '',
+    description: '',
+    bodyHtml: '',
+    defaultExpirationDays: 30,
+    defaultAgreeText: 'I agree to electronically sign this document and confirm that the information provided is accurate.'
+  });
 }
 
 function openEditContractTemplate(id){
-  toast('Template editor coming in Step 2B', 'info');
+  var t = contractTemplates.find(function(x){ return x.id === id; });
+  if(!t){ toast('Template not found', 'error'); return; }
+  contractEditorState = { id: id, isNew: false };
+  openContractEditorModal(t);
+}
+
+function openContractEditorModal(t){
+  var existing = document.getElementById('contract-editor-backdrop');
+  if(existing) existing.remove();
+
+  var backdrop = document.createElement('div');
+  backdrop.id = 'contract-editor-backdrop';
+  backdrop.style.cssText = 'position:fixed;inset:0;background:var(--overlay);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  var titleText = contractEditorState.isNew ? 'New Contract Template' : 'Edit Contract Template';
+
+  backdrop.innerHTML =
+    '<div style="background:var(--main-bg);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="padding:18px 24px;border-bottom:1px solid var(--main-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
+        '<div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700;color:var(--main-text)">'+esc(titleText)+'</div>'+
+        '<button onclick="closeContractEditorModal()" style="background:none;border:none;color:var(--main-text-muted);cursor:pointer;font-size:22px;line-height:1;padding:4px 8px">&times;</button>'+
+      '</div>'+
+      '<div style="padding:20px 24px;overflow-y:auto;flex:1">'+
+        '<div style="margin-bottom:16px">'+
+          '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Template Name</label>'+
+          '<input id="ct-name" type="text" placeholder="e.g. Treatment Consent Form" value="'+esc(t.name||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+        '</div>'+
+        '<div style="margin-bottom:16px">'+
+          '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Description <span style="color:var(--main-text-muted);font-weight:400">(internal only)</span></label>'+
+          '<input id="ct-description" type="text" placeholder="Brief description for admins" value="'+esc(t.description||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+        '</div>'+
+        '<div style="margin-bottom:16px">'+
+          '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Document Body</label>'+
+          '<textarea id="ct-body" placeholder="Enter the contract content. Rich text editor coming in Step 2C." style="width:100%;min-height:240px;padding:12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px;font-family:Lato,sans-serif;line-height:1.5;resize:vertical">'+esc(t.bodyHtml||'')+'</textarea>'+
+          '<div style="font-size:11px;color:var(--main-text-muted);margin-top:6px">Use {{contact_name}}, {{business_name}}, etc. Variable picker coming in Step 2D.</div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'+
+          '<div>'+
+            '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Default expiration (days)</label>'+
+            '<input id="ct-expiration" type="number" min="1" max="365" value="'+(t.defaultExpirationDays||30)+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+          '</div>'+
+        '</div>'+
+        '<div style="margin-bottom:8px">'+
+          '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Agreement statement</label>'+
+          '<textarea id="ct-agree" placeholder="Shown above the signature field" style="width:100%;min-height:60px;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:13px;font-family:Lato,sans-serif;resize:vertical">'+esc(t.defaultAgreeText||'')+'</textarea>'+
+        '</div>'+
+      '</div>'+
+      '<div style="padding:14px 24px;border-top:1px solid var(--main-border);display:flex;justify-content:space-between;gap:12px;flex-shrink:0">'+
+        '<div>'+
+          (contractEditorState.isNew ? '' : '<button onclick="deleteContractTemplate()" style="padding:9px 16px;background:none;color:var(--danger);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Delete</button>')+
+        '</div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button onclick="closeContractEditorModal()" style="padding:9px 16px;background:none;color:var(--main-text);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Cancel</button>'+
+          '<button id="ct-save-btn" onclick="saveContractTemplate()" style="padding:9px 18px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Save Template</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+
+  document.body.appendChild(backdrop);
+
+  // Close on backdrop click (but not on modal click)
+  backdrop.addEventListener('click', function(e){
+    if(e.target === backdrop) closeContractEditorModal();
+  });
+
+  // Focus name field
+  setTimeout(function(){
+    var nameEl = document.getElementById('ct-name');
+    if(nameEl) nameEl.focus();
+  }, 50);
+}
+
+function closeContractEditorModal(){
+  var b = document.getElementById('contract-editor-backdrop');
+  if(b) b.remove();
+}
+
+async function saveContractTemplate(){
+  var nameEl = document.getElementById('ct-name');
+  var descEl = document.getElementById('ct-description');
+  var bodyEl = document.getElementById('ct-body');
+  var expEl = document.getElementById('ct-expiration');
+  var agreeEl = document.getElementById('ct-agree');
+  var saveBtn = document.getElementById('ct-save-btn');
+
+  var name = (nameEl.value || '').trim();
+  var bodyHtml = (bodyEl.value || '').trim();
+
+  if(!name){ toast('Template name is required', 'error'); nameEl.focus(); return; }
+  if(!bodyHtml){ toast('Document body is required', 'error'); bodyEl.focus(); return; }
+
+  var payload = {
+    name: name,
+    description: (descEl.value || '').trim() || null,
+    bodyHtml: bodyHtml,
+    defaultExpirationDays: parseInt(expEl.value, 10) || 30,
+    defaultAgreeText: (agreeEl.value || '').trim() || undefined
+  };
+  if(!contractEditorState.isNew && contractEditorState.id){
+    payload.id = contractEditorState.id;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
+
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/contracts/templates'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if(!r.ok){
+      var err = await r.json().catch(function(){ return {}; });
+      toast(err.error || 'Failed to save template', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Template';
+      return;
+    }
+    toast(contractEditorState.isNew ? 'Template created' : 'Template updated', 'success');
+    closeContractEditorModal();
+    renderContractsList();
+  } catch(e){
+    console.error('saveContractTemplate error:', e);
+    toast('Failed to save template', 'error');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Template';
+  }
+}
+
+async function deleteContractTemplate(){
+  if(!contractEditorState.id) return;
+  if(!confirm('Delete this template? Existing signed contracts using it are not affected.')) return;
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/contracts/templates?id=' + encodeURIComponent(contractEditorState.id)), {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    if(!r.ok){
+      toast('Failed to delete template', 'error');
+      return;
+    }
+    toast('Template deleted', 'success');
+    closeContractEditorModal();
+    renderContractsList();
+  } catch(e){
+    console.error('deleteContractTemplate error:', e);
+    toast('Failed to delete template', 'error');
+  }
 }
 
 
