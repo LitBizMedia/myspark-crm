@@ -20257,9 +20257,354 @@ function drawContractsEnvelopesList(){
   listEl.innerHTML = html;
 }
 
-// Stubs (filled in Step 3F-B and 3F-C)
+// State for the open Send Contract modal
+var sendContractState = {
+  templateId: null,
+  contactId: null,
+  appointmentId: null,
+  expirationDays: 30
+};
+
 function openSendContractModal(){
-  toast('Send Contract modal coming in Step 3F-B', 'info');
+  // Reset state
+  sendContractState = { templateId: null, contactId: null, appointmentId: null, expirationDays: 30 };
+
+  // Make sure templates are loaded
+  if(!contractTemplates || contractTemplates.length === 0){
+    toast('Create a contract template first', 'warn');
+    return;
+  }
+
+  var existing = document.getElementById('send-contract-backdrop');
+  if(existing) existing.remove();
+
+  var backdrop = document.createElement('div');
+  backdrop.id = 'send-contract-backdrop';
+  backdrop.style.cssText = 'position:fixed;inset:0;background:var(--overlay);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  backdrop.innerHTML =
+    '<div style="background:var(--main-bg);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="padding:18px 24px;border-bottom:1px solid var(--main-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
+        '<div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700;color:var(--main-text)">Send Contract</div>'+
+        '<button onclick="closeSendContractModal()" style="background:none;border:none;color:var(--main-text-muted);cursor:pointer;font-size:22px;line-height:1;padding:4px 8px">&times;</button>'+
+      '</div>'+
+      '<div style="padding:20px 24px;overflow:hidden;flex:1;display:flex;gap:20px;min-height:0">'+
+        '<div style="flex:1;display:flex;flex-direction:column;overflow-y:auto;min-width:0;gap:16px">'+
+          '<div>'+
+            '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Template</label>'+
+            '<select id="sc-template" onchange="onSendContractTemplateChange()" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+              '<option value="">Select a template...</option>'+
+              contractTemplates.map(function(t){ return '<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>'; }).join('')+
+            '</select>'+
+          '</div>'+
+          '<div>'+
+            '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Recipient</label>'+
+            '<div id="sc-contact-picked" style="display:none;padding:9px 12px;background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);font-size:13px;color:var(--main-text);display:none;align-items:center;justify-content:space-between"></div>'+
+            '<div id="sc-contact-search-wrap" style="position:relative">'+
+              '<input id="sc-contact-search" type="text" placeholder="Search by name, email, or phone..." oninput="onSendContractContactSearch()" autocomplete="off" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+              '<div id="sc-contact-results" style="display:none;position:absolute;left:0;right:0;top:42px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);max-height:280px;overflow-y:auto;z-index:10"></div>'+
+            '</div>'+
+          '</div>'+
+          '<div id="sc-appointment-wrap" style="display:none">'+
+            '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Link to appointment <span style="color:var(--main-text-muted);font-weight:400">(optional)</span></label>'+
+            '<select id="sc-appointment" onchange="onSendContractAppointmentChange()" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px"></select>'+
+          '</div>'+
+          '<div>'+
+            '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Expires in (days)</label>'+
+            '<input id="sc-expiration" type="number" min="1" max="365" value="30" oninput="onSendContractExpirationChange()" style="width:120px;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
+          '</div>'+
+        '</div>'+
+        '<div style="flex:1.2;display:flex;flex-direction:column;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;min-width:0">'+
+          '<div style="padding:10px 14px;background:var(--main-card);border-bottom:1px solid var(--main-border);display:flex;align-items:center;justify-content:space-between">'+
+            '<div style="font-family:Exo 2,sans-serif;font-size:12px;font-weight:700;color:var(--main-text);letter-spacing:.04em;text-transform:uppercase">Preview</div>'+
+            '<div style="font-size:10px;color:var(--main-text-muted)">Real data</div>'+
+          '</div>'+
+          '<div id="sc-preview" style="flex:1;overflow-y:auto;padding:24px;background:#fff;color:#1a1030;font-family:Lato,sans-serif;font-size:13px;line-height:1.6"><div style="color:#9ca3af;font-style:italic">Select a template and recipient to see the preview.</div></div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="padding:14px 24px;border-top:1px solid var(--main-border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0">'+
+        '<button onclick="closeSendContractModal()" style="padding:9px 16px;background:none;color:var(--main-text);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Cancel</button>'+
+        '<button id="sc-send-btn" onclick="submitSendContract()" style="padding:9px 18px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px;opacity:.6" disabled>Send Contract</button>'+
+      '</div>'+
+    '</div>';
+
+  document.body.appendChild(backdrop);
+
+  // Close contact dropdown on outside click
+  setTimeout(function(){
+    document.addEventListener('click', closeSendContractResultsOnOutside);
+  }, 100);
+}
+
+function closeSendContractModal(){
+  var b = document.getElementById('send-contract-backdrop');
+  if(b) b.remove();
+  document.removeEventListener('click', closeSendContractResultsOnOutside);
+}
+
+function closeSendContractResultsOnOutside(e){
+  var box = document.getElementById('sc-contact-results');
+  if(!box || box.style.display !== 'block') return;
+  var wrap = document.getElementById('sc-contact-search-wrap');
+  if(wrap && wrap.contains(e.target)) return;
+  box.style.display = 'none';
+}
+
+function onSendContractTemplateChange(){
+  var sel = document.getElementById('sc-template');
+  sendContractState.templateId = sel.value || null;
+  // Update expiration default from template
+  if(sendContractState.templateId){
+    var tmpl = contractTemplates.find(function(t){ return t.id === sendContractState.templateId; });
+    if(tmpl && tmpl.defaultExpirationDays){
+      var expEl = document.getElementById('sc-expiration');
+      expEl.value = tmpl.defaultExpirationDays;
+      sendContractState.expirationDays = tmpl.defaultExpirationDays;
+    }
+  }
+  refreshSendContractPreview();
+  updateSendContractButton();
+}
+
+function onSendContractContactSearch(){
+  var input = document.getElementById('sc-contact-search');
+  var box = document.getElementById('sc-contact-results');
+  var q = (input.value || '').trim().toLowerCase();
+  if(!q || q.length < 1){
+    box.style.display = 'none';
+    return;
+  }
+  // Search across active, non-archived contacts with email
+  var matches = (db.contacts || []).filter(function(c){
+    if(c.archived) return false;
+    var hay = ((c.display_name||'') + ' ' + (c.first_name||'') + ' ' + (c.last_name||'') + ' ' + (c.email||'') + ' ' + (c.phone||'')).toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }).slice(0, 10);
+
+  if(matches.length === 0){
+    box.innerHTML = '<div style="padding:12px;color:var(--main-text-muted);font-size:12px;text-align:center">No contacts match.</div>';
+    box.style.display = 'block';
+    return;
+  }
+  var html = '';
+  matches.forEach(function(c){
+    var name = c.display_name || ((c.first_name||'') + ' ' + (c.last_name||'')).trim() || 'Unnamed';
+    var hasEmail = !!c.email;
+    var disabled = !hasEmail;
+    var rowStyle = disabled
+      ? 'padding:9px 12px;border-top:1px solid var(--main-border);font-size:13px;color:var(--main-text-muted);opacity:.55;cursor:not-allowed'
+      : 'padding:9px 12px;border-top:1px solid var(--main-border);font-size:13px;cursor:pointer;color:var(--main-text)';
+    var click = disabled ? '' : 'onclick="pickSendContractContact(\''+esc(c.id)+'\')"';
+    var hover = disabled ? '' : 'onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'"';
+    html += '<div '+click+' '+hover+' style="'+rowStyle+'">';
+    html += '<div style="font-weight:600">'+esc(name)+'</div>';
+    html += '<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(c.email || 'No email')+(c.phone ? ' · '+esc(c.phone) : '')+'</div>';
+    if(disabled) html += '<div style="font-size:10px;color:var(--danger);margin-top:2px">Cannot send: no email on file</div>';
+    html += '</div>';
+  });
+  box.innerHTML = html;
+  box.style.display = 'block';
+}
+
+function pickSendContractContact(contactId){
+  var c = (db.contacts || []).find(function(x){ return x.id === contactId; });
+  if(!c) return;
+  sendContractState.contactId = contactId;
+
+  // Hide search, show chip
+  document.getElementById('sc-contact-search-wrap').style.display = 'none';
+  var chip = document.getElementById('sc-contact-picked');
+  var name = c.display_name || ((c.first_name||'') + ' ' + (c.last_name||'')).trim() || 'Unnamed';
+  chip.innerHTML =
+    '<div><div style="font-weight:600">'+esc(name)+'</div><div style="font-size:11px;color:var(--main-text-muted)">'+esc(c.email||'')+'</div></div>'+
+    '<button onclick="clearSendContractContact()" style="background:none;border:none;color:var(--main-text-muted);font-size:18px;cursor:pointer;padding:0 4px">&times;</button>';
+  chip.style.display = 'flex';
+
+  // Populate appointments if any
+  populateSendContractAppointments(contactId);
+
+  refreshSendContractPreview();
+  updateSendContractButton();
+}
+
+function clearSendContractContact(){
+  sendContractState.contactId = null;
+  sendContractState.appointmentId = null;
+  document.getElementById('sc-contact-search-wrap').style.display = 'block';
+  document.getElementById('sc-contact-picked').style.display = 'none';
+  document.getElementById('sc-contact-search').value = '';
+  document.getElementById('sc-appointment-wrap').style.display = 'none';
+  refreshSendContractPreview();
+  updateSendContractButton();
+}
+
+function populateSendContractAppointments(contactId){
+  var wrap = document.getElementById('sc-appointment-wrap');
+  var sel = document.getElementById('sc-appointment');
+  var appts = (db.appointments || []).filter(function(a){
+    return a.contactId === contactId || a.contact_id === contactId;
+  }).sort(function(a, b){
+    return (b.date || '').localeCompare(a.date || '');
+  }).slice(0, 20);
+
+  if(appts.length === 0){
+    wrap.style.display = 'none';
+    return;
+  }
+  var html = '<option value="">No appointment link</option>';
+  appts.forEach(function(a){
+    var dateStr = a.date || '';
+    var timeStr = a.time || '';
+    var title = a.title || 'Appointment';
+    html += '<option value="'+esc(a.id)+'">'+esc(dateStr+' '+timeStr+' — '+title)+'</option>';
+  });
+  sel.innerHTML = html;
+  sel.value = '';
+  wrap.style.display = 'block';
+}
+
+function onSendContractAppointmentChange(){
+  var sel = document.getElementById('sc-appointment');
+  sendContractState.appointmentId = sel.value || null;
+  refreshSendContractPreview();
+}
+
+function onSendContractExpirationChange(){
+  var el = document.getElementById('sc-expiration');
+  var v = parseInt(el.value, 10);
+  sendContractState.expirationDays = (isNaN(v) || v < 1) ? 30 : Math.min(v, 365);
+}
+
+function buildSendContractRealContext(){
+  // Build sample-style context but using real values
+  if(!sendContractState.contactId) return null;
+  var c = (db.contacts || []).find(function(x){ return x.id === sendContractState.contactId; });
+  if(!c) return null;
+
+  var ctx = {
+    contact_name: c.display_name || ((c.first_name||'') + ' ' + (c.last_name||'')).trim(),
+    contact_first_name: c.first_name || '',
+    contact_last_name: c.last_name || '',
+    contact_email: c.email || '',
+    contact_phone: c.phone || '',
+    contact_dob: c.date_of_birth || '',
+    contact_address: [c.address_line1, c.address_line2, c.city, c.state, c.postal_code].filter(Boolean).join(', '),
+    contact_address_line1: c.address_line1 || '',
+    contact_city: c.city || '',
+    contact_state: c.state || '',
+    contact_zip: c.postal_code || '',
+    business_name: (state.subaccount && state.subaccount.name) || '',
+    business_email: (state.subaccount && state.subaccount.admin_email) || '',
+    business_phone: '',
+    business_address: '',
+    sender_name: (state.user && (state.user.display_name || state.user.username)) || '',
+    sender_email: (state.user && state.user.email) || '',
+    staff_name: (state.user && state.user.display_name) || ''
+  };
+
+  var today = new Date();
+  ctx.today_date = today.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  ctx.signing_date = ctx.today_date;
+  var days = sendContractState.expirationDays || 30;
+  var exp = new Date(today.getTime() + days * 86400000);
+  ctx.expiration_date = exp.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+  // Appointment
+  if(sendContractState.appointmentId){
+    var appt = (db.appointments || []).find(function(a){ return a.id === sendContractState.appointmentId; });
+    if(appt){
+      ctx.appointment_date = appt.date || '';
+      ctx.appointment_time = appt.time || '';
+      ctx.appointment_service = appt.title || '';
+      ctx.appointment_staff = '';
+      ctx.appointment_duration = appt.duration ? (appt.duration + ' min') : '';
+    }
+  }
+
+  // Custom fields
+  var custom = c.custom_field_values || {};
+  Object.keys(custom).forEach(function(k){
+    ctx['custom:' + k] = custom[k] != null ? String(custom[k]) : '';
+  });
+
+  return ctx;
+}
+
+function refreshSendContractPreview(){
+  var pre = document.getElementById('sc-preview');
+  if(!pre) return;
+  if(!sendContractState.templateId){
+    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Select a template to see the preview.</div>';
+    return;
+  }
+  var tmpl = contractTemplates.find(function(t){ return t.id === sendContractState.templateId; });
+  if(!tmpl){
+    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Template not found.</div>';
+    return;
+  }
+  if(!sendContractState.contactId){
+    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Pick a recipient to see the preview with their info.</div>';
+    return;
+  }
+  var ctx = buildSendContractRealContext();
+  if(!ctx){
+    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Could not build preview.</div>';
+    return;
+  }
+  // Reuse the existing substituteContractTokens function (defined in template editor section)
+  var html = substituteContractTokens(tmpl.bodyHtml || '', ctx);
+  if(!html.trim()){
+    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Template body is empty.</div>';
+    return;
+  }
+  pre.innerHTML = html;
+}
+
+function updateSendContractButton(){
+  var btn = document.getElementById('sc-send-btn');
+  if(!btn) return;
+  var ok = !!(sendContractState.templateId && sendContractState.contactId);
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? '1' : '.6';
+}
+
+async function submitSendContract(){
+  var btn = document.getElementById('sc-send-btn');
+  if(!sendContractState.templateId || !sendContractState.contactId){
+    toast('Template and recipient are required', 'error');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/contracts/send'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        template_id: sendContractState.templateId,
+        contact_id: sendContractState.contactId,
+        appointment_id: sendContractState.appointmentId,
+        expiration_days: sendContractState.expirationDays
+      })
+    });
+    var data = await r.json();
+    if(!r.ok){
+      toast(data.error || 'Failed to send contract', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Send Contract';
+      return;
+    }
+    toast('Contract sent to ' + (data.recipient && data.recipient.name || 'recipient'), 'success');
+    closeSendContractModal();
+    renderContractsEnvelopes();
+  } catch(e){
+    console.error('submitSendContract error:', e);
+    toast('Failed to send contract', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Send Contract';
+  }
 }
 
 function openContractEnvelopeDetail(id){
