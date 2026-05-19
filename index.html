@@ -816,7 +816,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .empty-state p{font-size:13px;color:var(--main-text-muted)}
 
 /* TOAST */
-#toast-container{position:fixed;bottom:20px;right:20px;z-index:600;display:flex;flex-direction:column;gap:7px}
+#toast-container{position:fixed;bottom:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:7px}
 .toast{background:var(--bg-card);border:1px solid var(--purple-border);border-radius:var(--radius);
   padding:10px 14px;font-size:13px;color:var(--text);box-shadow:var(--shadow);
   animation:toastIn .3s ease;display:flex;align-items:center;gap:8px;max-width:280px}
@@ -20021,7 +20021,7 @@ function openContractEditorModal(t){
 
   var backdrop = document.createElement('div');
   backdrop.id = 'contract-editor-backdrop';
-  backdrop.style.cssText = 'position:fixed;inset:0;background:var(--overlay);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px';
+  backdrop.style.cssText = 'position:fixed;inset:0;background:var(--overlay);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
 
   var titleText = contractEditorState.isNew ? 'New Contract Template' : 'Edit Contract Template';
 
@@ -20165,25 +20165,34 @@ async function saveContractTemplate(){
   }
 }
 
-async function deleteContractTemplate(){
+function deleteContractTemplate(){
   if(!contractEditorState.id) return;
-  if(!confirm('Delete this template? Existing signed contracts using it are not affected.')) return;
-  try {
-    var r = await fetch(apiUrl('/api/subaccount/contracts/templates?id=' + encodeURIComponent(contractEditorState.id)), {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-    if(!r.ok){
-      toast('Failed to delete template', 'error');
-      return;
+  var templateId = contractEditorState.id;
+  openConfirm({
+    title: 'Delete this template?',
+    message: 'Existing signed contracts using this template are not affected.',
+    confirmText: 'Delete',
+    cancelText: 'Keep Template',
+    danger: true,
+    onConfirm: async function(){
+      try {
+        var r = await fetch(apiUrl('/api/subaccount/contracts/templates?id=' + encodeURIComponent(templateId)), {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        if(!r.ok){
+          toast('Failed to delete template', 'error');
+          return;
+        }
+        toast('Template deleted', 'success');
+        closeContractEditorModal();
+        renderContractsList();
+      } catch(e){
+        console.error('deleteContractTemplate error:', e);
+        toast('Failed to delete template', 'error');
+      }
     }
-    toast('Template deleted', 'success');
-    closeContractEditorModal();
-    renderContractsList();
-  } catch(e){
-    console.error('deleteContractTemplate error:', e);
-    toast('Failed to delete template', 'error');
-  }
+  });
 }
 
 
