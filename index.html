@@ -1044,6 +1044,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .forms-panel-tab:hover{color:#ffffff}
 .forms-panel-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
 
+@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}
 /* COMING SOON PLACEHOLDER */
 .coming-soon-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;text-align:center}
 .coming-soon-wrap svg{width:44px;height:44px;opacity:.18;margin-bottom:16px}
@@ -20607,8 +20608,182 @@ async function submitSendContract(){
   }
 }
 
-function openContractEnvelopeDetail(id){
-  toast('Envelope detail drawer coming in Step 3F-C', 'info');
+async function openContractEnvelopeDetail(id){
+  // Close any existing drawer
+  var existing = document.getElementById('contract-envelope-drawer');
+  if(existing) existing.remove();
+
+  // Build drawer shell with loading state
+  var drawer = document.createElement('div');
+  drawer.id = 'contract-envelope-drawer';
+  drawer.innerHTML =
+    '<div id="ced-backdrop" onclick="closeContractEnvelopeDetail()" style="position:fixed;inset:0;background:var(--overlay);z-index:999"></div>'+
+    '<div id="ced-panel" style="position:fixed;top:0;right:0;bottom:0;width:100%;max-width:640px;background:var(--main-bg);border-left:1px solid var(--main-border);box-shadow:var(--shadow-lg);z-index:1000;display:flex;flex-direction:column;animation:slideInRight .2s ease-out">'+
+      '<div id="ced-content" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--main-text-muted);font-size:13px">Loading...</div>'+
+    '</div>';
+  document.body.appendChild(drawer);
+
+  // Fetch envelope detail
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/contracts/envelopes?id=' + encodeURIComponent(id)), { credentials: 'include' });
+    if(!r.ok){
+      document.getElementById('ced-content').innerHTML = '<div style="color:var(--danger)">Failed to load envelope (status '+r.status+').</div>';
+      return;
+    }
+    var data = await r.json();
+    var env = data.envelope;
+    if(!env){
+      document.getElementById('ced-content').innerHTML = '<div style="color:var(--danger)">Envelope not found.</div>';
+      return;
+    }
+    drawContractEnvelopeDetail(env);
+  } catch(e){
+    console.error('openContractEnvelopeDetail error:', e);
+    document.getElementById('ced-content').innerHTML = '<div style="color:var(--danger)">Failed to load envelope.</div>';
+  }
+}
+
+function closeContractEnvelopeDetail(){
+  var d = document.getElementById('contract-envelope-drawer');
+  if(d) d.remove();
+}
+
+function fmtContractDateTime(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })
+    + ' at '
+    + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+}
+
+function drawContractEnvelopeDetail(env){
+  var canVoid = (env.status === 'sent' || env.status === 'viewed' || env.status === 'draft');
+  var canDownload = (env.status === 'signed');
+
+  // Timeline events in order
+  var timeline = [];
+  if(env.createdAt) timeline.push({ label: 'Created',  ts: env.createdAt,  icon: '+' });
+  if(env.sentAt) timeline.push({ label: 'Sent',  ts: env.sentAt,  icon: '↗' });
+  if(env.firstViewedAt) timeline.push({ label: 'First viewed',  ts: env.firstViewedAt,  icon: '👁' });
+  if(env.lastViewedAt && env.lastViewedAt !== env.firstViewedAt) timeline.push({ label: 'Last viewed ('+env.viewCount+' total)',  ts: env.lastViewedAt,  icon: '👁' });
+  if(env.signedAt) timeline.push({ label: 'Signed',  ts: env.signedAt,  icon: '✓' });
+  if(env.voidedAt) timeline.push({ label: 'Voided' + (env.voidReason ? ' ('+env.voidReason+')' : ''),  ts: env.voidedAt,  icon: '✕' });
+
+  var html =
+    '<div style="padding:18px 24px;border-bottom:1px solid var(--main-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
+      '<div style="display:flex;align-items:center;gap:12px;min-width:0">'+
+        '<div style="min-width:0;flex:1">'+
+          '<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(env.title)+'</div>'+
+          '<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px;font-family:Menlo,monospace">'+esc(env.id)+'</div>'+
+        '</div>'+
+        contractStatusBadge(env.status)+
+      '</div>'+
+      '<button onclick="closeContractEnvelopeDetail()" style="background:none;border:none;color:var(--main-text-muted);cursor:pointer;font-size:22px;line-height:1;padding:4px 8px;margin-left:8px">&times;</button>'+
+    '</div>'+
+
+    '<div style="padding:20px 24px;overflow-y:auto;flex:1">'+
+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">'+
+        '<div>'+
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:6px">Recipient</div>'+
+          '<div style="font-size:14px;font-weight:600;color:var(--main-text)">'+esc(env.recipientName||'—')+'</div>'+
+          '<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">'+esc(env.recipientEmail||'')+'</div>'+
+        '</div>'+
+        '<div>'+
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:6px">Sent By</div>'+
+          '<div style="font-size:14px;font-weight:600;color:var(--main-text)">'+esc(env.senderName||'—')+'</div>'+
+        '</div>'+
+      '</div>'+
+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">'+
+        '<div>'+
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:6px">Sent</div>'+
+          '<div style="font-size:13px;color:var(--main-text)">'+esc(fmtContractDateTime(env.sentAt) || '—')+'</div>'+
+        '</div>'+
+        '<div>'+
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:6px">Expires</div>'+
+          '<div style="font-size:13px;color:var(--main-text)">'+esc(fmtContractDateTime(env.expiresAt) || '—')+'</div>'+
+        '</div>'+
+      '</div>'+
+
+      (timeline.length > 0 ?
+        '<div style="margin-bottom:24px">'+
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:10px">Timeline</div>'+
+          '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden">'+
+            timeline.map(function(t, i){
+              return '<div style="padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--main-text)'+(i > 0 ? ';border-top:1px solid var(--main-border)' : '')+'">'+
+                '<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:var(--purple-dim);color:var(--purple);border-radius:50%;font-size:11px;font-weight:700">'+t.icon+'</span>'+
+                '<span style="flex:1">'+esc(t.label)+'</span>'+
+                '<span style="font-size:12px;color:var(--main-text-muted)">'+esc(fmtContractDateTime(t.ts))+'</span>'+
+              '</div>';
+            }).join('')+
+          '</div>'+
+        '</div>'
+      : '')+
+
+      (env.signedAt ?
+        '<div style="margin-bottom:24px">'+
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:6px">Signature Evidence</div>'+
+          '<div style="background:var(--success-dim);border:1px solid var(--success);border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--main-text)">'+
+            '<div><strong>Signed name:</strong> '+esc(env.signedTypedName||'')+'</div>'+
+            (env.signedIp ? '<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">IP: '+esc(env.signedIp)+'</div>' : '')+
+          '</div>'+
+        '</div>'
+      : '')+
+
+      '<div>'+
+        '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:6px">Document</div>'+
+        '<div style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);padding:20px;color:#1a1030;font-family:Lato,sans-serif;font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto">'+
+          (env.bodyHtml || '<div style="color:#9ca3af;font-style:italic">No body content</div>')+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--main-text-muted);margin-top:6px">Agreement text: <span style="font-style:italic">"'+esc(env.agreeText||'')+'"</span></div>'+
+      '</div>'+
+
+    '</div>'+
+
+    '<div style="padding:14px 24px;border-top:1px solid var(--main-border);display:flex;justify-content:'+(canVoid || canDownload ? 'space-between' : 'flex-end')+';gap:8px;flex-shrink:0">'+
+      '<div>'+
+        (canVoid ? '<button onclick="voidContractEnvelopeFromDrawer(\''+esc(env.id)+'\')" style="padding:9px 16px;background:none;color:var(--danger);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Void</button>' : '')+
+      '</div>'+
+      '<div style="display:flex;gap:8px">'+
+        (canDownload ? '<button onclick="toast(\'Download available after Stage 4 ships\', \'info\')" style="padding:9px 16px;background:var(--purple);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Download PDF</button>' : '')+
+        '<button onclick="closeContractEnvelopeDetail()" style="padding:9px 16px;background:none;color:var(--main-text);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Close</button>'+
+      '</div>'+
+    '</div>';
+
+  document.getElementById('ced-panel').innerHTML = html;
+}
+
+function voidContractEnvelopeFromDrawer(envelopeId){
+  openConfirm({
+    title: 'Void this contract?',
+    message: 'The recipient will no longer be able to sign. This cannot be undone.',
+    confirmText: 'Void',
+    cancelText: 'Keep',
+    danger: true,
+    onConfirm: async function(){
+      try {
+        var r = await fetch(apiUrl('/api/subaccount/contracts/void'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ envelope_id: envelopeId })
+        });
+        var data = await r.json();
+        if(!r.ok){
+          toast(data.error || 'Failed to void contract', 'error');
+          return;
+        }
+        toast('Contract voided', 'success');
+        closeContractEnvelopeDetail();
+        renderContractsEnvelopes();
+      } catch(e){
+        console.error('voidContractEnvelopeFromDrawer error:', e);
+        toast('Failed to void contract', 'error');
+      }
+    }
+  });
 }
 
 
