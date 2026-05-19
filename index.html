@@ -2344,11 +2344,15 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         </div>
         <div id="forms-forms-view"></div>
         <div id="forms-contracts-view" class="hidden">
-          <div class="coming-soon-wrap">
-            <span class="coming-soon-badge">Coming Soon</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            <h3>Contracts</h3>
-            <p>Build templates, send for signature, and store signed documents linked to the contact record. Fully integrated with MySpark+ automation.</p>
+          <div id="contracts-templates-section" style="padding:24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+              <div>
+                <h2 style="margin:0;font-family:Exo 2,sans-serif;font-size:20px;font-weight:700;color:var(--main-text)">Contract Templates</h2>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--main-text-muted)">Build reusable templates to send for signature.</p>
+              </div>
+              <button onclick="openNewContractTemplate()" style="padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px;transition:background .15s" onmouseover="this.style.background='var(--orange-hover)'" onmouseout="this.style.background='var(--orange)'">+ New Template</button>
+            </div>
+            <div id="contracts-templates-list"></div>
           </div>
         </div>
       </div>
@@ -19831,6 +19835,73 @@ function switchFormsTab(tab){
     const v=document.getElementById('forms-'+t+'-view');
     if(v)v.classList.toggle('hidden',t!==tab);
   });
+  if(tab==='contracts')renderContractsList();
+}
+
+
+// =====================================================
+// CONTRACT TEMPLATES
+// =====================================================
+
+// Cached list of templates for the current subaccount
+var contractTemplates = [];
+
+async function renderContractsList(){
+  var container = document.getElementById('contracts-templates-list');
+  if(!container) return;
+  container.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--main-text-muted);font-size:13px">Loading templates...</div>';
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/contracts/templates'), { credentials: 'include' });
+    if(!r.ok){
+      container.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--danger);font-size:13px">Failed to load templates (status '+r.status+').</div>';
+      return;
+    }
+    var data = await r.json();
+    contractTemplates = data.templates || [];
+    drawContractsList();
+  } catch(e){
+    console.error('renderContractsList error:', e);
+    container.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--danger);font-size:13px">Failed to load templates.</div>';
+  }
+}
+
+function drawContractsList(){
+  var container = document.getElementById('contracts-templates-list');
+  if(!container) return;
+  if(contractTemplates.length === 0){
+    container.innerHTML =
+      '<div style="padding:60px 20px;text-align:center;background:var(--main-card);border:1px dashed var(--main-border);border-radius:var(--radius-lg)">'+
+      '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--main-text-muted);margin-bottom:12px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'+
+      '<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);margin-bottom:6px">No templates yet</div>'+
+      '<div style="font-size:13px;color:var(--main-text-muted);max-width:340px;margin:0 auto 16px">Create your first contract template to start sending documents for signature.</div>'+
+      '<button onclick="openNewContractTemplate()" style="padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">+ New Template</button>'+
+      '</div>';
+    return;
+  }
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">';
+  contractTemplates.forEach(function(t){
+    var updated = t.updatedAt ? new Date(t.updatedAt).toLocaleDateString() : '';
+    html += '<div onclick="openEditContractTemplate(\''+esc(t.id)+'\')" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:16px;cursor:pointer;transition:all .15s" onmouseover="this.style.background=\'var(--main-card-hover)\';this.style.borderColor=\'var(--purple-border)\'" onmouseout="this.style.background=\'var(--main-card)\';this.style.borderColor=\'var(--main-border)\'">';
+    html += '<div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.name)+'</div>';
+    if(t.description){
+      html += '<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:12px;max-height:36px;overflow:hidden">'+esc(t.description)+'</div>';
+    }
+    html += '<div style="display:flex;gap:12px;font-size:11px;color:var(--main-text-muted);margin-top:12px;padding-top:12px;border-top:1px solid var(--main-border)">';
+    html += '<div>Sent: <span style="color:var(--main-text);font-weight:600">'+(t.sendCount||0)+'</span></div>';
+    html += '<div>Signed: <span style="color:var(--main-text);font-weight:600">'+(t.signCount||0)+'</span></div>';
+    if(updated) html += '<div style="margin-left:auto">'+esc(updated)+'</div>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function openNewContractTemplate(){
+  toast('Template editor coming in Step 2B', 'info');
+}
+
+function openEditContractTemplate(id){
+  toast('Template editor coming in Step 2B', 'info');
 }
 
 
