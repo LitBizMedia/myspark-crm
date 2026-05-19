@@ -2344,7 +2344,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         </div>
         <div id="forms-forms-view"></div>
         <div id="forms-contracts-view" class="hidden">
-          <div id="contracts-templates-section" style="padding:24px">
+          <div id="contracts-templates-section" style="padding:24px 24px 0">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
               <div>
                 <h2 style="margin:0;font-family:Exo 2,sans-serif;font-size:20px;font-weight:700;color:var(--main-text)">Contract Templates</h2>
@@ -2353,6 +2353,17 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <button onclick="openNewContractTemplate()" style="padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px;transition:background .15s" onmouseover="this.style.background='var(--orange-hover)'" onmouseout="this.style.background='var(--orange)'">+ New Template</button>
             </div>
             <div id="contracts-templates-list"></div>
+          </div>
+          <div id="contracts-envelopes-section" style="padding:32px 24px 24px;margin-top:16px;border-top:1px solid var(--main-border)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+              <div>
+                <h2 style="margin:0;font-family:Exo 2,sans-serif;font-size:20px;font-weight:700;color:var(--main-text)">Sent Contracts</h2>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--main-text-muted)">Track signing status of every contract sent.</p>
+              </div>
+              <button onclick="openSendContractModal()" style="padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px;transition:background .15s" onmouseover="this.style.background='var(--orange-hover)'" onmouseout="this.style.background='var(--orange)'">+ Send Contract</button>
+            </div>
+            <div id="contracts-envelopes-filters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+            <div id="contracts-envelopes-list"></div>
           </div>
         </div>
       </div>
@@ -19835,7 +19846,10 @@ function switchFormsTab(tab){
     const v=document.getElementById('forms-'+t+'-view');
     if(v)v.classList.toggle('hidden',t!==tab);
   });
-  if(tab==='contracts')renderContractsList();
+  if(tab==='contracts'){
+    renderContractsList();
+    renderContractsEnvelopes();
+  }
 }
 
 
@@ -20124,6 +20138,132 @@ function refreshContractPreview(){
     return;
   }
   previewEl.innerHTML = rendered;
+}
+
+
+// =====================================================
+// CONTRACT ENVELOPES (sent contracts)
+// =====================================================
+
+var contractEnvelopes = [];
+var contractEnvelopeCounts = { draft: 0, sent: 0, viewed: 0, signed: 0, expired: 0, voided: 0 };
+var contractEnvelopeFilter = 'all'; // 'all' | 'pending' (sent+viewed) | 'signed' | 'expired' | 'voided'
+
+async function renderContractsEnvelopes(){
+  var listEl = document.getElementById('contracts-envelopes-list');
+  if(!listEl) return;
+  listEl.innerHTML = '<div style="padding:30px 20px;text-align:center;color:var(--main-text-muted);font-size:13px">Loading...</div>';
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/contracts/envelopes?counts=1'), { credentials: 'include' });
+    if(!r.ok){
+      listEl.innerHTML = '<div style="padding:30px 20px;text-align:center;color:var(--danger);font-size:13px">Failed to load sent contracts (status '+r.status+').</div>';
+      return;
+    }
+    var data = await r.json();
+    contractEnvelopes = data.envelopes || [];
+    contractEnvelopeCounts = data.counts || contractEnvelopeCounts;
+    drawContractEnvelopeFilters();
+    drawContractsEnvelopesList();
+  } catch(e){
+    console.error('renderContractsEnvelopes error:', e);
+    listEl.innerHTML = '<div style="padding:30px 20px;text-align:center;color:var(--danger);font-size:13px">Failed to load sent contracts.</div>';
+  }
+}
+
+function drawContractEnvelopeFilters(){
+  var box = document.getElementById('contracts-envelopes-filters');
+  if(!box) return;
+  var c = contractEnvelopeCounts;
+  var pendingCount = (c.sent || 0) + (c.viewed || 0);
+  var totalCount = pendingCount + (c.signed || 0) + (c.expired || 0) + (c.voided || 0);
+  var filters = [
+    { key: 'all',     label: 'All',     count: totalCount },
+    { key: 'pending', label: 'Pending', count: pendingCount },
+    { key: 'signed',  label: 'Signed',  count: c.signed || 0 },
+    { key: 'expired', label: 'Expired', count: c.expired || 0 },
+    { key: 'voided',  label: 'Voided',  count: c.voided || 0 }
+  ];
+  var html = '';
+  filters.forEach(function(f){
+    var active = (contractEnvelopeFilter === f.key);
+    var bg = active ? 'var(--purple)' : 'var(--main-card)';
+    var color = active ? '#ffffff' : 'var(--main-text)';
+    var border = active ? 'var(--purple)' : 'var(--main-border)';
+    html += '<button onclick="setContractEnvelopeFilter(\''+f.key+'\')" style="padding:6px 14px;background:'+bg+';color:'+color+';border:1px solid '+border+';border-radius:999px;font-size:12px;font-weight:600;cursor:pointer">'+esc(f.label)+' <span style="opacity:.7;margin-left:4px">'+f.count+'</span></button>';
+  });
+  box.innerHTML = html;
+}
+
+function setContractEnvelopeFilter(key){
+  contractEnvelopeFilter = key;
+  drawContractEnvelopeFilters();
+  drawContractsEnvelopesList();
+}
+
+function filteredContractEnvelopes(){
+  if(contractEnvelopeFilter === 'all') return contractEnvelopes;
+  if(contractEnvelopeFilter === 'pending') {
+    return contractEnvelopes.filter(function(e){ return e.status === 'sent' || e.status === 'viewed'; });
+  }
+  return contractEnvelopes.filter(function(e){ return e.status === contractEnvelopeFilter; });
+}
+
+function contractStatusBadge(status){
+  var map = {
+    draft:   { bg: 'rgba(156,163,175,.15)', color: 'var(--text-muted)', label: 'Draft' },
+    sent:    { bg: 'var(--info-dim)',       color: 'var(--info-text)',  label: 'Sent' },
+    viewed:  { bg: 'var(--warning-dim)',    color: 'var(--warning-text)', label: 'Viewed' },
+    signed:  { bg: 'var(--success-dim)',    color: 'var(--success-text)', label: 'Signed' },
+    expired: { bg: 'rgba(156,163,175,.15)', color: 'var(--text-muted)', label: 'Expired' },
+    voided:  { bg: 'var(--danger-dim)',     color: 'var(--danger-text)', label: 'Voided' }
+  };
+  var s = map[status] || map.draft;
+  return '<span style="display:inline-block;padding:3px 9px;background:'+s.bg+';color:'+s.color+';border-radius:999px;font-size:11px;font-weight:600">'+esc(s.label)+'</span>';
+}
+
+function drawContractsEnvelopesList(){
+  var listEl = document.getElementById('contracts-envelopes-list');
+  if(!listEl) return;
+  var rows = filteredContractEnvelopes();
+  if(rows.length === 0){
+    var msg = contractEnvelopes.length === 0
+      ? 'No contracts sent yet. Click + Send Contract above to send your first one.'
+      : 'No contracts match this filter.';
+    listEl.innerHTML = '<div style="padding:40px 20px;text-align:center;background:var(--main-card);border:1px dashed var(--main-border);border-radius:var(--radius-lg);color:var(--main-text-muted);font-size:13px">'+esc(msg)+'</div>';
+    return;
+  }
+  var html = '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden">';
+  html += '<div style="display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1fr 1fr;gap:12px;padding:10px 16px;background:var(--main-bg);border-bottom:1px solid var(--main-border);font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.04em">';
+  html += '<div>Recipient</div><div>Template</div><div>Status</div><div>Sent</div><div>Activity</div>';
+  html += '</div>';
+  rows.forEach(function(e){
+    var sent = e.sentAt ? new Date(e.sentAt).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '—';
+    var lastActivity = '';
+    if(e.signedAt) lastActivity = 'Signed ' + new Date(e.signedAt).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    else if(e.voidedAt) lastActivity = 'Voided ' + new Date(e.voidedAt).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    else if(e.lastViewedAt) lastActivity = 'Viewed ' + new Date(e.lastViewedAt).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    else if(e.status === 'sent') lastActivity = 'Awaiting view';
+    else lastActivity = '—';
+
+    html += '<div onclick="openContractEnvelopeDetail(\''+esc(e.id)+'\')" style="display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1fr 1fr;gap:12px;padding:12px 16px;border-top:1px solid var(--main-border);font-size:13px;cursor:pointer;align-items:center;color:var(--main-text)" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<div><div style="font-weight:600">'+esc(e.recipientName||'—')+'</div><div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(e.recipientEmail||'')+'</div></div>';
+    html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e.title||'')+'</div>';
+    html += '<div>'+contractStatusBadge(e.status)+'</div>';
+    html += '<div style="color:var(--main-text-muted);font-size:12px">'+esc(sent)+'</div>';
+    html += '<div style="color:var(--main-text-muted);font-size:12px">'+esc(lastActivity)+'</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  listEl.innerHTML = html;
+}
+
+// Stubs (filled in Step 3F-B and 3F-C)
+function openSendContractModal(){
+  toast('Send Contract modal coming in Step 3F-B', 'info');
+}
+
+function openContractEnvelopeDetail(id){
+  toast('Envelope detail drawer coming in Step 3F-C', 'info');
 }
 
 
