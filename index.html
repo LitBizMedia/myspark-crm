@@ -19138,9 +19138,379 @@ function _renderAutomationsUI(){
   el.innerHTML = headerHTML + tableHTML;
 }
 
+// Editor state (single-edit at a time)
+var _autoEdit = null;
+
+function _autoDefaultEdit(){
+  return {
+    id: null,
+    name: '',
+    description: '',
+    active: true,
+    trigger_type: '',
+    trigger_config: {},
+    action_type: '',
+    action_config: {},
+    idempotency_rule: 'once_per_target',
+    idempotency_window_days: null,
+    is_transactional: false
+  };
+}
+
+function _autoAvailableVars(triggerType){
+  var base = ['contact.first_name','contact.last_name','contact.display_name','contact.email','contact.phone','business.name','business.phone','business.email','business.address','business.website'];
+  if (!triggerType) return base;
+  if (triggerType === 'payment_received') return base.concat(['payment.amount','payment.method','payment.items']);
+  if (triggerType === 'form_submitted') return base.concat(['form.name','form.submitted_at']);
+  if (triggerType.indexOf('appointment') !== -1 || triggerType === 'class_registration_completed' || triggerType === 'days_after_first_booking' || triggerType === 'days_after_last_booking') {
+    return base.concat(['appointment.date','appointment.time','appointment.service_name','appointment.staff_name','appointment.duration','appointment.status']);
+  }
+  return base;
+}
+
+function _autoTriggerNeedsDays(t){
+  return t === 'contact_age_days' || t === 'days_after_appointment' || t === 'days_after_first_booking' || t === 'days_after_last_booking' || t === 'days_before_appointment';
+}
+
+function _autoTriggerDaysLabel(t){
+  if (t === 'days_before_appointment') return 'Days before appointment';
+  if (t === 'contact_age_days') return 'Days after contact created';
+  if (t === 'days_after_appointment') return 'Days after appointment';
+  if (t === 'days_after_first_booking') return 'Days after first booking';
+  if (t === 'days_after_last_booking') return 'Days after last booking';
+  return 'Days';
+}
+
+function _autoTriggerDaysField(t){
+  return (t === 'days_before_appointment') ? 'days_before' : 'days_after';
+}
+
+function _renderAutoTriggerConfig(){
+  var t = _autoEdit.trigger_type;
+  var cfg = _autoEdit.trigger_config || {};
+  var html = '';
+
+  if (_autoTriggerNeedsDays(t)) {
+    var field = _autoTriggerDaysField(t);
+    var label = _autoTriggerDaysLabel(t);
+    html += '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">' + esc(label) + '</label>'
+      + '<input type="number" min="0" value="' + esc(cfg[field] != null ? cfg[field] : '') + '" onchange="_autoSetTriggerCfg(\'' + field + '\', this.value)" class="msp-input" style="width:120px">'
+      + '</div>';
+  }
+  if (t === 'appointment_booked' || t === 'days_before_appointment' || t === 'days_after_appointment') {
+    var services = (db.services || []).filter(function(s){ return s.active !== false; });
+    var opts = '<option value="">Any service</option>' + services.map(function(s){
+      return '<option value="' + esc(s.id) + '"' + (cfg.service_id === s.id ? ' selected' : '') + '>' + esc(s.name || s.title || 'Untitled') + '</option>';
+    }).join('');
+    html += '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Filter by service (optional)</label>'
+      + '<select onchange="_autoSetTriggerCfg(\'service_id\', this.value)" class="msp-input" style="width:100%">' + opts + '</select>'
+      + '</div>';
+  }
+  if (t === 'appointment_booked') {
+    html += '<div style="margin-top:12px">'
+      + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--main-text);cursor:pointer">'
+      + '<input type="checkbox" ' + (cfg.only_first_booking ? 'checked' : '') + ' onchange="_autoSetTriggerCfg(\'only_first_booking\', this.checked)">'
+      + 'Only fire on first-ever booking for this contact</label></div>';
+  }
+  if (t === 'appointment_status_changed') {
+    var statusOpts = ['','scheduled','confirmed','pending','completed','cancelled','no_show'];
+    var fromOpts = statusOpts.map(function(s){ return '<option value="' + esc(s) + '"' + (cfg.from_status === s ? ' selected' : '') + '>' + (s ? esc(s) : 'Any') + '</option>'; }).join('');
+    var toOpts = statusOpts.map(function(s){ return '<option value="' + esc(s) + '"' + (cfg.to_status === s ? ' selected' : '') + '>' + (s ? esc(s) : 'Any') + '</option>'; }).join('');
+    html += '<div style="margin-top:12px;display:flex;gap:12px">'
+      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">From status</label>'
+      + '<select onchange="_autoSetTriggerCfg(\'from_status\', this.value)" class="msp-input" style="width:100%">' + fromOpts + '</select></div>'
+      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">To status</label>'
+      + '<select onchange="_autoSetTriggerCfg(\'to_status\', this.value)" class="msp-input" style="width:100%">' + toOpts + '</select></div>'
+      + '</div>';
+  }
+  if (t === 'payment_received') {
+    html += '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Minimum amount (optional)</label>'
+      + '<input type="number" min="0" step="0.01" value="' + esc(cfg.min_amount != null ? cfg.min_amount : '') + '" onchange="_autoSetTriggerCfg(\'min_amount\', this.value === \'\' ? null : parseFloat(this.value))" class="msp-input" style="width:140px" placeholder="$0.00">'
+      + '</div>';
+  }
+  if (t === 'form_submitted') {
+    var forms = (db.forms || []);
+    var fopts = '<option value="">Any form</option>' + forms.map(function(f){
+      return '<option value="' + esc(f.id) + '"' + (cfg.form_id === f.id ? ' selected' : '') + '>' + esc(f.name || 'Untitled form') + '</option>';
+    }).join('');
+    html += '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Filter by form (optional)</label>'
+      + '<select onchange="_autoSetTriggerCfg(\'form_id\', this.value)" class="msp-input" style="width:100%">' + fopts + '</select>'
+      + '</div>';
+  }
+  if (t === 'contact_tagged') {
+    html += '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Filter by tag (optional)</label>'
+      + '<input type="text" value="' + esc(cfg.tag || '') + '" oninput="_autoSetTriggerCfg(\'tag\', this.value)" class="msp-input" style="width:100%" placeholder="VIP, Lead, New patient...">'
+      + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">Leave blank to fire on any tag added</div>'
+      + '</div>';
+  }
+  if (t === 'class_registration_completed') {
+    var classSvcs = (db.services || []).filter(function(s){ return s.type === 'class'; });
+    var copts = '<option value="">Any class</option>' + classSvcs.map(function(s){
+      return '<option value="' + esc(s.id) + '"' + (cfg.class_service_id === s.id ? ' selected' : '') + '>' + esc(s.name || 'Untitled class') + '</option>';
+    }).join('');
+    html += '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Filter by class (optional)</label>'
+      + '<select onchange="_autoSetTriggerCfg(\'class_service_id\', this.value)" class="msp-input" style="width:100%">' + copts + '</select>'
+      + '</div>';
+  }
+  return html;
+}
+
+function _autoSetTriggerCfg(key, val){
+  if (!_autoEdit.trigger_config) _autoEdit.trigger_config = {};
+  if (val === '' || val == null) delete _autoEdit.trigger_config[key];
+  else _autoEdit.trigger_config[key] = val;
+}
+
+function _autoSetTrigger(t){
+  _autoEdit.trigger_type = t;
+  _autoEdit.trigger_config = {};
+  _renderAutoEditor();
+}
+
+function _autoSetAction(a){
+  _autoEdit.action_type = a;
+  _autoEdit.action_config = {};
+  _renderAutoEditor();
+}
+
+function _renderAutoActionConfig(){
+  var a = _autoEdit.action_type;
+  var cfg = _autoEdit.action_config || {};
+  var t = _autoEdit.trigger_type;
+  if (!a) return '<div style="color:var(--main-text-muted);font-size:13px;padding:8px 0">Select an action to configure it.</div>';
+
+  if (a === 'send_email') {
+    var vars = _autoAvailableVars(t);
+    var chips = vars.map(function(v){
+      return '<button type="button" onclick="_autoInsertVar(\'auto-body\',\'' + v + '\')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px">{{' + esc(v) + '}}</button>';
+    }).join(' ');
+    return '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Subject</label>'
+      + '<input type="text" id="auto-subject" value="' + esc(cfg.subject || '') + '" oninput="_autoEdit.action_config.subject = this.value" class="msp-input" style="width:100%" placeholder="e.g. Happy Birthday {{contact.first_name}}!">'
+      + '</div>'
+      + '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Body (HTML supported)</label>'
+      + '<div style="margin-bottom:6px;padding:8px;background:var(--main-card-hover);border:1px solid var(--main-border);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:4px">'
+      + '<div style="font-size:11px;color:var(--main-text-muted);margin-right:6px;align-self:center;font-weight:600">Insert variable:</div>' + chips
+      + '</div>'
+      + '<textarea id="auto-body" oninput="_autoEdit.action_config.body_html = this.value" class="msp-input" rows="10" style="width:100%;font-family:monospace;font-size:13px" placeholder="<p>Hi {{contact.first_name}}, ...</p>">' + esc(cfg.body_html || '') + '</textarea>'
+      + '</div>';
+  }
+  if (a === 'send_sms') {
+    var vars2 = _autoAvailableVars(t);
+    var chips2 = vars2.map(function(v){
+      return '<button type="button" onclick="_autoInsertVar(\'auto-sms-body\',\'' + v + '\')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px">{{' + esc(v) + '}}</button>';
+    }).join(' ');
+    return '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">SMS Body</label>'
+      + '<div style="margin-bottom:6px;padding:8px;background:var(--main-card-hover);border:1px solid var(--main-border);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:4px">'
+      + '<div style="font-size:11px;color:var(--main-text-muted);margin-right:6px;align-self:center;font-weight:600">Insert variable:</div>' + chips2
+      + '</div>'
+      + '<textarea id="auto-sms-body" oninput="_autoEdit.action_config.body = this.value" class="msp-input" rows="5" style="width:100%;font-size:13px" placeholder="Hi {{contact.first_name}}, ...">' + esc(cfg.body || '') + '</textarea>'
+      + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">Keep SMS short. Long messages split into multiple charges.</div>'
+      + '</div>';
+  }
+  if (a === 'add_tag' || a === 'remove_tag') {
+    var labelTag = (a === 'add_tag') ? 'Tag to add' : 'Tag to remove';
+    return '<div style="margin-top:12px">'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">' + labelTag + '</label>'
+      + '<input type="text" value="' + esc(cfg.tag || '') + '" oninput="_autoEdit.action_config.tag = this.value" class="msp-input" style="width:100%" placeholder="VIP, Welcomed, Onboarded...">'
+      + '</div>';
+  }
+  return '';
+}
+
+function _autoInsertVar(textareaId, varName){
+  var ta = document.getElementById(textareaId);
+  if (!ta) return;
+  var start = ta.selectionStart || 0;
+  var end = ta.selectionEnd || 0;
+  var insert = '{{' + varName + '}}';
+  ta.value = ta.value.slice(0, start) + insert + ta.value.slice(end);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = start + insert.length;
+  // Fire input event so model updates
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function openAutomationEditor(id){
-  // Editor modal lands in phase 4D. Placeholder for now.
-  toast(id ? 'Editor opening soon (phase 4D)' : 'Editor opening soon (phase 4D)', 'info');
+  _autoEdit = _autoDefaultEdit();
+  if (id) {
+    _autoEdit.id = id;
+    var existing = _automationsCache.find(function(a){ return a.id === id; });
+    if (existing) {
+      _autoEdit.name = existing.name || '';
+      _autoEdit.description = existing.description || '';
+      _autoEdit.active = existing.active !== false;
+      _autoEdit.trigger_type = existing.triggerType || '';
+      _autoEdit.trigger_config = existing.triggerConfig || {};
+      _autoEdit.action_type = existing.actionType || '';
+      _autoEdit.action_config = existing.actionConfig || {};
+      _autoEdit.idempotency_rule = existing.idempotencyRule || 'once_per_target';
+      _autoEdit.idempotency_window_days = existing.idempotencyWindowDays || null;
+      _autoEdit.is_transactional = !!existing.isTransactional;
+    }
+  }
+  _renderAutoEditor();
+}
+
+function _renderAutoEditor(){
+  var e = _autoEdit;
+  var title = e.id ? 'Edit Automation' : 'New Automation';
+
+  var triggerOpts = '<option value="">Select a trigger...</option>' + Object.keys(AUTOMATION_TRIGGER_LABELS).map(function(k){
+    return '<option value="' + k + '"' + (e.trigger_type === k ? ' selected' : '') + '>' + esc(AUTOMATION_TRIGGER_LABELS[k]) + '</option>';
+  }).join('');
+
+  var actionOpts = '<option value="">Select an action...</option>' + Object.keys(AUTOMATION_ACTION_LABELS).map(function(k){
+    return '<option value="' + k + '"' + (e.action_type === k ? ' selected' : '') + '>' + esc(AUTOMATION_ACTION_LABELS[k]) + '</option>';
+  }).join('');
+
+  var idempotencyOpts = [
+    { v: 'once_per_target', label: 'Once per event (recommended)', help: 'Fires once per appointment, payment, form submission, etc.' },
+    { v: 'once_per_year', label: 'Once per contact per year', help: 'Use for birthdays and annual messages.' },
+    { v: 'once_ever', label: 'Once per contact, ever', help: 'Use for welcome series. Will never repeat.' },
+    { v: 'once_per_period', label: 'Once per contact every N days', help: 'Use for lapsed-customer messages.' }
+  ];
+  var idempotencyHTML = idempotencyOpts.map(function(o){
+    var checked = (e.idempotency_rule === o.v) ? 'checked' : '';
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid ' + (e.idempotency_rule === o.v ? 'var(--purple)' : 'var(--main-border)') + ';border-radius:var(--radius);cursor:pointer;margin-bottom:6px;background:' + (e.idempotency_rule === o.v ? 'var(--purple-dim)' : 'transparent') + '">'
+      + '<input type="radio" name="auto-idem" value="' + o.v + '" ' + checked + ' onchange="_autoEdit.idempotency_rule = this.value; _renderAutoEditor()" style="margin-top:2px">'
+      + '<div><div style="font-size:13px;font-weight:600;color:var(--main-text)">' + esc(o.label) + '</div>'
+      + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">' + esc(o.help) + '</div></div>'
+      + '</label>';
+  }).join('');
+
+  var periodInput = (e.idempotency_rule === 'once_per_period')
+    ? '<div style="margin-top:8px;padding-left:24px"><label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:4px">Window in days</label>'
+      + '<input type="number" min="1" value="' + esc(e.idempotency_window_days || 30) + '" onchange="_autoEdit.idempotency_window_days = parseInt(this.value, 10) || null" class="msp-input" style="width:100px"></div>'
+    : '';
+
+  var body =
+    '<div style="display:flex;flex-direction:column;gap:18px;max-height:70vh;overflow-y:auto;padding-right:8px">'
+
+    // Section 1: Identity
+    + '<div>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Identity</div>'
+    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Name</label>'
+    + '<input type="text" value="' + esc(e.name) + '" oninput="_autoEdit.name = this.value" class="msp-input" style="width:100%" placeholder="e.g. Birthday email">'
+    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin:12px 0 6px">Description (optional)</label>'
+    + '<input type="text" value="' + esc(e.description) + '" oninput="_autoEdit.description = this.value" class="msp-input" style="width:100%" placeholder="What does this automation do?">'
+    + '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--main-text);cursor:pointer">'
+    + '<input type="checkbox" ' + (e.active ? 'checked' : '') + ' onchange="_autoEdit.active = this.checked">'
+    + 'Active (uncheck to pause without deleting)</label>'
+    + '</div>'
+
+    // Section 2: Trigger
+    + '<div>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Trigger</div>'
+    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">When this happens</label>'
+    + '<select onchange="_autoSetTrigger(this.value)" class="msp-input" style="width:100%">' + triggerOpts + '</select>'
+    + _renderAutoTriggerConfig()
+    + '</div>'
+
+    // Section 3: Action
+    + '<div>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Action</div>'
+    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Do this</label>'
+    + '<select onchange="_autoSetAction(this.value)" class="msp-input" style="width:100%">' + actionOpts + '</select>'
+    + _renderAutoActionConfig()
+    + '</div>'
+
+    // Section 4: Idempotency
+    + '<div>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">How often can it fire</div>'
+    + idempotencyHTML
+    + periodInput
+    + '</div>'
+
+    // Section 5: Advanced
+    + '<div>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Advanced</div>'
+    + '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--main-text);cursor:pointer">'
+    + '<input type="checkbox" ' + (e.is_transactional ? 'checked' : '') + ' onchange="_autoEdit.is_transactional = this.checked" style="margin-top:2px">'
+    + '<div><div style="font-weight:600">This is a transactional message</div>'
+    + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">Transactional messages bypass marketing consent. Use only for receipts, appointment confirmations, and critical operational messages. NEVER use for promotional content.</div></div>'
+    + '</label>'
+    + '</div>'
+
+    // Test send section (only when editing existing)
+    + (e.id ? ('<div style="border-top:1px solid var(--main-border);padding-top:14px">'
+      + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Test send</div>'
+      + '<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:8px">Send a test to a specific contact (bypasses idempotency and consent checks for testing purposes only).</div>'
+      + '<div style="display:flex;gap:8px;align-items:flex-end">'
+      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:4px">Contact ID</label>'
+      + '<input type="text" id="auto-test-contact" class="msp-input" style="width:100%" placeholder="Paste contact ID"></div>'
+      + '<button class="btn btn-ghost" onclick="_autoTestSend()">Send test</button>'
+      + '</div></div>') : '')
+
+    + '</div>';
+
+  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-action" onclick="_autoSave()">Save Automation</button>';
+
+  openModal(title, body, footer, 'modal-xl');
+}
+
+async function _autoSave(){
+  var e = _autoEdit;
+  if (!e.name || !e.name.trim()) { toast('Name is required', 'error'); return; }
+  if (!e.trigger_type) { toast('Trigger is required', 'error'); return; }
+  if (!e.action_type) { toast('Action is required', 'error'); return; }
+
+  // Client-side validation, server validates again
+  if (e.action_type === 'send_email') {
+    if (!e.action_config.subject || !e.action_config.subject.trim()) { toast('Email subject is required', 'error'); return; }
+    if (!e.action_config.body_html || !e.action_config.body_html.trim()) { toast('Email body is required', 'error'); return; }
+  }
+  if (e.action_type === 'send_sms') {
+    if (!e.action_config.body || !e.action_config.body.trim()) { toast('SMS body is required', 'error'); return; }
+  }
+  if (e.action_type === 'add_tag' || e.action_type === 'remove_tag') {
+    if (!e.action_config.tag || !e.action_config.tag.trim()) { toast('Tag is required', 'error'); return; }
+  }
+
+  try {
+    var payload = {
+      id: e.id || undefined,
+      name: e.name.trim(),
+      description: e.description ? e.description.trim() : null,
+      active: e.active,
+      trigger_type: e.trigger_type,
+      trigger_config: e.trigger_config || {},
+      action_type: e.action_type,
+      action_config: e.action_config || {},
+      idempotency_rule: e.idempotency_rule,
+      idempotency_window_days: e.idempotency_window_days,
+      is_transactional: !!e.is_transactional
+    };
+    await automationUpsert(payload);
+    toast(e.id ? 'Automation updated' : 'Automation created', 'success');
+    closeModal();
+    renderAutomations();
+  } catch (err) {
+    toast('Save failed: ' + err.message, 'error');
+  }
+}
+
+async function _autoTestSend(){
+  var contactId = (document.getElementById('auto-test-contact') || {}).value;
+  if (!contactId || !contactId.trim()) { toast('Contact ID required for test', 'error'); return; }
+  try {
+    var result = await automationTestSend(_autoEdit.id, contactId.trim());
+    var status = result.result && result.result.status;
+    if (status === 'success') toast('Test sent successfully', 'success');
+    else if (status) toast('Test result: ' + status, 'info');
+    else toast('Test fired', 'info');
+  } catch (e) {
+    toast('Test failed: ' + e.message, 'error');
+  }
 }
 
 async function confirmDeleteAutomation(id, name){
