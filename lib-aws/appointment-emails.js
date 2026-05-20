@@ -34,19 +34,28 @@ function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function buildHtml({ clientName, serviceName, dateStr, timeStr, staffName, location, businessName }) {
+function buildHtml({ clientName, serviceName, dateStr, timeStr, staffName, location, businessName, rescheduleFromDateStr, rescheduleFromTimeStr }) {
   const locRow = location
     ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Location</td><td style="padding:8px 0;font-weight:600">' + escHtml(location) + '</td></tr>'
     : '';
   const staffRow = staffName
     ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">With</td><td style="padding:8px 0;font-weight:600">' + escHtml(staffName) + '</td></tr>'
     : '';
+  const isReschedule = !!(rescheduleFromDateStr);
+  const heading = isReschedule ? 'Appointment Rescheduled' : 'Appointment Confirmed';
+  const intro = isReschedule
+    ? 'Hi ' + escHtml(clientName) + ', your appointment has been moved to a new date and time.'
+    : 'Hi ' + escHtml(clientName) + ', your appointment has been confirmed.';
+  const fromRow = isReschedule
+    ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Was</td><td style="padding:8px 0;color:#5a4d7a;text-decoration:line-through">' + escHtml(rescheduleFromDateStr) + (rescheduleFromTimeStr ? ' at ' + escHtml(rescheduleFromTimeStr) : '') + '</td></tr>'
+    : '';
   return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
-    + '<h2 style="color:#6b21ea;margin:0 0 8px">Appointment Confirmed</h2>'
-    + '<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">Hi ' + escHtml(clientName) + ', your appointment has been confirmed.</p>'
+    + '<h2 style="color:#6b21ea;margin:0 0 8px">' + heading + '</h2>'
+    + '<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">' + intro + '</p>'
     + '<table style="width:100%;border-collapse:collapse;margin:0 0 24px">'
     + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Service</td><td style="padding:8px 0;font-weight:600">' + escHtml(serviceName) + '</td></tr>'
-    + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Date</td><td style="padding:8px 0;font-weight:600">' + escHtml(dateStr) + '</td></tr>'
+    + fromRow
+    + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">' + (isReschedule ? 'Now' : 'Date') + '</td><td style="padding:8px 0;font-weight:600">' + escHtml(dateStr) + '</td></tr>'
     + (timeStr ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Time</td><td style="padding:8px 0;font-weight:600">' + escHtml(timeStr) + '</td></tr>' : '')
     + staffRow + locRow
     + '</table>'
@@ -67,7 +76,12 @@ function buildHtml({ clientName, serviceName, dateStr, timeStr, staffName, locat
 async function sendAppointmentConfirmations(opts) {
   const {
     subaccountSlug, appointmentTitle, appointmentDate, appointmentTime,
-    location, recipients, staffName, businessName
+    location, recipients, staffName, businessName,
+    // Optional overrides used by reschedule flow (and any future variant).
+    // If subjectOverride is set, it replaces the default 'Appointment Confirmed: ...'.
+    // If oldDate/oldTime are set, the email body and vars include the previous slot.
+    // templateTypeOverride changes the email_log templateType for tracking.
+    subjectOverride, oldDate, oldTime, templateTypeOverride
   } = opts;
 
   if (!Array.isArray(recipients) || !recipients.length) return { sent: 0 };
@@ -75,6 +89,9 @@ async function sendAppointmentConfirmations(opts) {
 
   const dateStr = fmtDate(appointmentDate);
   const timeStr = fmtTime(appointmentTime);
+  const oldDateStr = oldDate ? fmtDate(oldDate) : '';
+  const oldTimeStr = oldTime ? fmtTime(oldTime) : '';
+  const isReschedule = !!(oldDate && oldTime);
   let sent = 0;
 
   for (const r of recipients) {
@@ -83,17 +100,19 @@ async function sendAppointmentConfirmations(opts) {
       clientName: r.name || 'there',
       serviceName: appointmentTitle,
       dateStr, timeStr, staffName, location,
-      businessName: businessName || 'MySpark+'
+      businessName: businessName || 'MySpark+',
+      rescheduleFromDateStr: isReschedule ? oldDateStr : '',
+      rescheduleFromTimeStr: isReschedule ? oldTimeStr : ''
     });
     try {
       const result = await sendEmail(subaccountSlug, {
         scope: 'subaccount',
-        source: 'confirmation',
+        source: isReschedule ? 'reschedule' : 'confirmation',
         to: r.email,
-        subject: 'Appointment Confirmed: ' + appointmentTitle + ' on ' + dateStr,
+        subject: subjectOverride || ('Appointment Confirmed: ' + appointmentTitle + ' on ' + dateStr),
         html,
         fromName: businessName || 'MySpark+',
-        templateType: 'appt-confirmation',
+        templateType: templateTypeOverride || 'appt-confirmation',
         contactId: r.contact_id,
         vars: {
           contact_name: r.name || '',
@@ -102,7 +121,9 @@ async function sendAppointmentConfirmations(opts) {
           appointment_time: timeStr,
           appointment_service: appointmentTitle,
           staff_name: staffName || '',
-          business_name: businessName || 'MySpark+'
+          business_name: businessName || 'MySpark+',
+          rescheduled_from_date: oldDateStr,
+          rescheduled_from_time: oldTimeStr
         }
       });
       if (result && result.ok) sent++;
