@@ -514,6 +514,8 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
   overflow:hidden;cursor:pointer;z-index:1;border:1px solid rgba(255,255,255,.15);color:#fff;transition:filter .15s;line-height:1.3}
 .timed-ev:hover{filter:brightness(1.15)}
 .timed-ev-cancelled{opacity:.45}
+.timed-ev-rescheduled{opacity:.45;text-decoration:line-through;background:#9ca3af !important;cursor:pointer}
+.appt-row-sm.rescheduled{border-left-color:var(--text-dim);opacity:.5;text-decoration:line-through}
 .timed-ev-time{font-size:10px;opacity:.8;white-space:nowrap}
 .timed-ev-title{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .timed-ev-client{font-size:10px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
@@ -4524,7 +4526,14 @@ function renderDrawer(){
     const aHTML=arr=>arr.map(a=>{
       const u=a.assignedTo?getUserById(a.assignedTo):null,uc=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
       const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
-      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px">'+apptStatusBadge(a.status)+''+payPill+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
+      var rsFromHTML = '';
+      if(a.rescheduled_from_id){
+        var origAppt = (db.appointments||[]).find(function(x){return x.id===a.rescheduled_from_id;});
+        if(origAppt){
+          rsFromHTML = '<div style="font-size:10px;color:var(--main-text-muted);font-style:italic;margin-top:2px">Rescheduled from '+esc(origAppt.date)+(origAppt.time?' at '+esc(fmtTime(origAppt.time)):'')+'</div>';
+        }
+      }
+      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+rsFromHTML+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px">'+apptStatusBadge(a.status)+''+payPill+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
     }).join('');
     // Sub-tab pill row + Book button on the right. Sticky so chips stay
     // visible while the list scrolls (esp. helpful on small screens after
@@ -5843,9 +5852,51 @@ function _classSessionAsAppt(s){
 function _calEventClick(id){
   if((db.classSessions||[]).find(function(s){return s.id===id;})){
     openRosterModal(id);
-  } else {
-    openApptModal(null,id);
+    return;
   }
+  // Rescheduled originals get a read-only info modal instead of the edit modal.
+  // The "working" appointment is the new one (status='scheduled' with this row's
+  // id in rescheduled_from_id), so the original is historical context only.
+  var a = (db.appointments||[]).find(function(x){return x.id===id;});
+  if(a && a.status==='rescheduled'){
+    openRescheduledInfoModal(id);
+    return;
+  }
+  openApptModal(null,id);
+}
+
+// Read-only modal for rescheduled originals. Shows the abandoned slot context
+// and links to the new appointment (the one with rescheduled_from_id = id).
+function openRescheduledInfoModal(originalId){
+  var orig = (db.appointments||[]).find(function(x){return x.id===originalId;});
+  if(!orig){toast('Appointment not found.','error');return;}
+  var next = (db.appointments||[]).find(function(x){return x.rescheduled_from_id===originalId;});
+  var u = orig.assignedTo ? getUserById(orig.assignedTo) : null;
+  var c = orig.contactId ? getContact(orig.contactId) : null;
+
+  var body = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);font-size:13px">'
+    + '<div style="font-weight:600;margin-bottom:6px;color:var(--main-text-muted);text-decoration:line-through">Original slot (abandoned)</div>'
+    + '<div><strong>'+esc(orig.title)+'</strong></div>'
+    + '<div style="color:var(--main-text-muted);margin-top:2px">'+esc(orig.date)+(orig.time?' at '+esc(fmtTime(orig.time)):'')+'</div>'
+    + (c?'<div style="color:var(--main-text-muted);margin-top:2px">Patient: '+esc(c.name)+'</div>':'')
+    + (u?'<div style="color:var(--main-text-muted);margin-top:2px">With: '+esc(u.name||u.username)+'</div>':'')
+    + '</div>';
+
+  if(next){
+    body += '<div style="padding:10px 12px;background:var(--success-dim);color:var(--success-text);border:1px solid var(--success);border-radius:var(--radius);font-size:13px">'
+      + '<div style="font-weight:600;margin-bottom:6px">Rescheduled to</div>'
+      + '<div><strong>'+esc(next.date)+(next.time?' at '+esc(fmtTime(next.time)):'')+'</strong></div>'
+      + '</div>';
+  } else {
+    body += '<div style="padding:10px 12px;background:var(--warning-dim);color:var(--warning-text);border:1px solid var(--warning);border-radius:var(--radius);font-size:13px">'
+      + 'The replacement appointment could not be found. It may have been deleted.'
+      + '</div>';
+  }
+
+  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
+    + (next ? '<button class="btn btn-primary" onclick="closeModal();setTimeout(function(){openApptModal(null,\''+next.id+'\');},50)">Open new appointment</button>' : '');
+
+  openModal('Rescheduled Appointment', body, footer);
 }
 
 function renderMonthCal(){
@@ -5977,7 +6028,8 @@ function buildTimedCol(dateStr,appts,allHours){
     var bufApx=Math.round((parseInt(a.buffer_after)||0)/60*68);
     var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
-    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
+    var isRescheduled=a.status==='rescheduled';
+    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+_apptWarningBadgeHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
@@ -6017,7 +6069,8 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var bufApxU=Math.round((parseInt(a.buffer_after)||0)/60*68);
     var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
-    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+'">'
+    var isRescheduledU=a.status==='rescheduled';
+    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+_apptWarningBadgeHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
