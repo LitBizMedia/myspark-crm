@@ -126,7 +126,7 @@ async function handler(req, res) {
       let n = parseInt(body.trialDays, 10);
       if (isNaN(n) || n < 0) n = 0;
       if (n > 365) n = 365;
-      updates.push(`trial_days = ${i++}`); params.push(n);
+      updates.push(`trial_days = $${i++}`); params.push(n);
     }
     // Setup fee: enabled and amount are paired. Caller may send one or both.
     // Resolve the final pair, then write both columns to keep them consistent.
