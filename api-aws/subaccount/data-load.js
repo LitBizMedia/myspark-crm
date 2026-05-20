@@ -47,6 +47,7 @@ function appointmentToFrontend(row) {
     booked_via: row.booked_via || null,
     widget_id: row.widget_id || null,
     addons: Array.isArray(row.addons) ? row.addons : (row.addons ? row.addons : []),
+    rescheduled_from_id: row.rescheduled_from_id || null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   };
