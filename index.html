@@ -10093,6 +10093,24 @@ function syncAppointment(appt, deleted, override){
 }
 
 // Backward-compat alias for renamed function. Drop in future cleanup.
+// Centralized appointment date validation. Used by saveAppt (create/edit) and
+// submitReschedule. Adding future rules (no Sundays, no more than 6 months out, etc.)
+// only requires editing this one function.
+//
+// Rule today: new date cannot be in the past. Exception: editing an appointment
+// whose existing saved date is already in the past stays allowed (staff fixing
+// notes/status on yesterday's record).
+function isValidApptDate(newDate, opts){
+  opts = opts || {};
+  if(!newDate){return {ok:false, message:'Date is required.'};}
+  var existingDate = opts.existingDate || null;
+  var existingAlreadyPast = existingDate && existingDate < todayStr();
+  if(newDate < todayStr() && !existingAlreadyPast){
+    return {ok:false, message:'Date cannot be in the past.'};
+  }
+  return {ok:true};
+}
+
 // Open the compact reschedule picker. originalApptId is the appointment to move.
 // On submit, calls the appointments-reschedule endpoint which creates a new
 // row pointing at the original via rescheduled_from_id.
@@ -10133,10 +10151,13 @@ async function submitReschedule(originalApptId){
   var newTimeRaw = (timeEl.value||'').trim();
   if(!newDate || !newTimeRaw){toast('New date and time are required.','error');return;}
 
-  // Past-date validation. Comparing against today's date in local time.
-  // Same-day reschedules are allowed (the time itself might still be future).
-  if(newDate < todayStr()){
-    toast('New date cannot be in the past.','error');
+  // Past-date validation via shared helper. originalApptId always exists here
+  // so we pass its existing date in case the appointment is already in the past
+  // (rare but possible if someone is reorganizing historical records).
+  var origAppt = (db.appointments||[]).find(function(x){return x.id===originalApptId;});
+  var rsValid = isValidApptDate(newDate, {existingDate: origAppt && origAppt.date});
+  if(!rsValid.ok){
+    toast(rsValid.message,'error');
     return;
   }
 
@@ -10199,6 +10220,13 @@ async function submitReschedule(originalApptId){
 function saveAppt(){
   const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
   if(!title||!date){toast('Title and date required.','error');return}
+  // Past-date validation. Edits of already-past appointments stay allowed so staff
+  // can fix notes/status on historical records.
+  var _existingAppt = state.modal && state.modal.id
+    ? (db.appointments||[]).find(function(x){return x.id===state.modal.id;})
+    : null;
+  var _dateValid = isValidApptDate(date, {existingDate: _existingAppt && _existingAppt.date});
+  if(!_dateValid.ok){toast(_dateValid.message,'error');return;}
   // Capture service link based on current mode.
   var serviceId=null, variationId=null;
   if(state.apptMode==='service'){
