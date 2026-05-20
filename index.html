@@ -34192,7 +34192,76 @@ function getTaxSettings(){
   if(!t||!t.enabled)return null;
   var rate=parseFloat(t.rate)||0;
   if(rate<=0)return null;
-  return {enabled:true, rate:rate, label:t.label||'Sales Tax'};
+  return {
+    enabled:true,
+    rate:rate,
+    label:t.label||'Sales Tax',
+    sections:t.sections||{},
+    posDefaultTaxable:t.posDefaultTaxable!==false
+  };
+}
+
+// =====================================================
+// Tax policy helpers (Stage 1: schema only, unused).
+// MUST stay in sync with lib-aws/tax.js on the backend.
+// =====================================================
+
+// Sections that participate in section policy.
+var TAX_POLICY_SECTIONS=['services','products','sessionPacks'];
+
+// Sections that are ALWAYS per-item (no section policy applies).
+var TAX_PER_ITEM_ONLY_SECTIONS=['subscription','appointmentType'];
+
+// Sections that are ALWAYS non-taxable (locked off, no UI).
+var TAX_LOCKED_NON_TAXABLE_SECTIONS=['giftCard','tip','fee','credit'];
+
+// Returns 'all' | 'none' | 'per_item' for a given section.
+// Defaults to 'per_item' when section policy is missing.
+function getSectionPolicy(section){
+  var t=db.paySettings&&db.paySettings.tax;
+  if(!t||!t.sections)return 'per_item';
+  var v=t.sections[section];
+  if(v==='all'||v==='none'||v==='per_item')return v;
+  return 'per_item';
+}
+
+// The core decision: should this line item be taxed?
+// Encodes the three-tier logic (global, section, per-item) in one place.
+function isLineTaxable(section,item){
+  // Tier 0: tax collection disabled entirely
+  if(!getTaxSettings())return false;
+
+  // Locked off: gift card sales, tips, fees, credits
+  if(TAX_LOCKED_NON_TAXABLE_SECTIONS.indexOf(section)!==-1)return false;
+
+  // Pure per-item: subscriptions, appointment types
+  if(TAX_PER_ITEM_ONLY_SECTIONS.indexOf(section)!==-1){
+    return !!(item&&item.taxable!==false);
+  }
+
+  // POS custom items: always per-item (staff toggles per line)
+  if(section==='pos'){
+    return !!(item&&item.taxable!==false);
+  }
+
+  // Section-policy-driven: services, products, sessionPacks
+  if(TAX_POLICY_SECTIONS.indexOf(section)!==-1){
+    var policy=getSectionPolicy(section);
+    if(policy==='all')return true;
+    if(policy==='none')return false;
+    return !!(item&&item.taxable!==false);
+  }
+
+  // Unknown section: conservative fallback to per-item
+  return !!(item&&item.taxable!==false);
+}
+
+// Default taxable flag for a NEW POS custom item at creation time.
+// Honors paySettings.tax.posDefaultTaxable (defaults true).
+function defaultPosTaxable(){
+  var t=db.paySettings&&db.paySettings.tax;
+  if(!t)return true;
+  return t.posDefaultTaxable!==false;
 }
 
 // Computes tax on a list of items respecting per-item taxable flag and any
