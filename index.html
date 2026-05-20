@@ -15253,17 +15253,28 @@ async function saveSub(){
     try{createRes=await apiSubCreate(payload);}
     catch(e){toast(e.message,'error');return;}
 
-    // If the backend ran an immediate charge (start_date <= today), surface the
-    // result so Patrick knows whether the card actually hit.
-    if(createRes&&createRes.immediate_charge){
-      const ic=createRes.immediate_charge;
+    // Surface what actually got charged. Setup fee always charges at enrollment
+    // (when present). Recurring charges immediately only when start_date <= today
+    // and no trial; otherwise the cron picks it up later.
+    const setupFee=createRes&&createRes.setup_fee;
+    const ic=createRes&&createRes.immediate_charge;
+    const parts=[];
+    if(setupFee&&setupFee.total>0){
+      parts.push('setup fee '+fmt$(setupFee.total));
+    }
+    if(ic){
       if(ic.success){
-        toast('Subscription created and charged '+fmt$(ic.breakdown?ic.breakdown.total:0)+'.','success');
-      }else if(ic.skipped){
-        toast('Subscription created. Charge skipped: '+(ic.reason||'zero total'),'success');
-      }else{
-        toast('Subscription created but charge failed: '+(ic.error||'unknown'),'error');
+        parts.push('recurring '+fmt$(ic.breakdown?ic.breakdown.total:0));
+      }else if(!ic.skipped){
+        // Setup fee succeeded but recurring charge failed. Sub still exists.
+        toast('Subscription created. Setup fee '+(setupFee&&setupFee.total>0?'charged ('+fmt$(setupFee.total)+').':'n/a.')+' Recurring charge failed: '+(ic.error||'unknown')+'. Card will retry on next cron run.','error');
+        await fetchFromServer();
+        _closeSubModal();
+        return;
       }
+    }
+    if(parts.length>0){
+      toast('Subscription created and charged: '+parts.join(' + ')+'.','success');
     }else{
       toast('Subscription created.','success');
     }
