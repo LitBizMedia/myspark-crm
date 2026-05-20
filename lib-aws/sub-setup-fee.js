@@ -108,6 +108,65 @@ async function chargeSquare({ creds, customerId, cardId, cents, idempotencyKey, 
   return { ok: true, payment: data.payment };
 }
 
+// Pending variant: writes a payment row with status='pending' and payment_method='other'.
+// Used when there's no card on file and the customer will be billed manually.
+// Caller must invoke this inside its own transaction.
+async function writePendingSetupFeePayment(ctx, contact, breakdown, ownerName) {
+  const paymentId = 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const planNames = breakdown.items.map(it => it.name.replace(/^Setup fee:\s*/, '')).join(', ');
+  const notesText = 'Setup fee (manual processing, pending collection): ' + planNames;
+
+  await db.query(
+    "INSERT INTO payments ("
+    + "id, subaccount_id,"
+    + "contact_id, contact_name,"
+    + "staff_id, staff_name, tip_staff_id,"
+    + "payment_type, payment_method, status,"
+    + "items, subtotal, after_discount, total,"
+    + "coupon_discount, coupon_code, coupon_id,"
+    + "discount_amount, discount_type, discount_val, discount_note,"
+    + "fee_amount, tax_amount, taxable_amount, tip_amount, credit_applied,"
+    + "gift_card_applied, refunded_amount,"
+    + "is_session_pack_sale, is_gift_card_sale,"
+    + "square_payment_id, square_receipt_url, card_last4, card_brand,"
+    + "subscription_id, notes,"
+    + "created_at, updated_at"
+    + ") VALUES ("
+    + "$1, $2,"
+    + "$3, $4,"
+    + "$5, $6, NULL,"
+    + "'setup_fee', 'other', 'pending',"
+    + "$7::jsonb, $8, $9, $10,"
+    + "0, NULL, NULL,"
+    + "0, NULL, NULL, NULL,"
+    + "0, $11, $12, 0, 0,"
+    + "0, 0,"
+    + "FALSE, FALSE,"
+    + "NULL, NULL, NULL, NULL,"
+    + "$13, $14,"
+    + "NOW(), NOW()"
+    + ") ON CONFLICT (id) DO NOTHING",
+    [
+      paymentId,
+      ctx.subaccountId,
+      ctx.contactId,
+      (contact && contact.name) || null,
+      ctx.ownerUserId || null,
+      ownerName || null,
+      JSON.stringify(breakdown.items),
+      breakdown.subtotal,
+      breakdown.afterDiscount,
+      breakdown.total,
+      breakdown.taxAmount,
+      breakdown.taxableAmount,
+      ctx.subId,
+      notesText
+    ]
+  );
+
+  return paymentId;
+}
+
 async function writeSetupFeePayment(ctx, contact, card, breakdown, squarePayment, ownerName) {
   const paymentId = 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const cardDetails = squarePayment && squarePayment.card_details && squarePayment.card_details.card;
@@ -207,7 +266,16 @@ async function chargeSetupFees(ctx) {
       return result;
     }
 
-    if (!ctx.cardId) throw new Error('No card on file selected for this subscription');
+    // No card on file: defer the charge. Setup fee creates a pending payment
+    // record that staff marks paid later via the transactions UI.
+    if (!ctx.cardId) {
+      const contact = await getContactById(ctx.subaccountId, ctx.contactId);
+      result.success = true;
+      result.deferred = true;
+      result.reason = 'manual_processing';
+      result.contact = contact;
+      return result;
+    }
 
     const contact = await getContactById(ctx.subaccountId, ctx.contactId);
     if (!contact) throw new Error('Contact not found');
@@ -252,5 +320,6 @@ async function chargeSetupFees(ctx) {
 module.exports = {
   computeSetupFeeBreakdown,
   chargeSetupFees,
-  writeSetupFeePayment
+  writeSetupFeePayment,
+  writePendingSetupFeePayment
 };

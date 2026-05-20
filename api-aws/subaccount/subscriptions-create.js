@@ -15,7 +15,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const { processSub } = require('./lib/sub-charge');
-const { chargeSetupFees, writeSetupFeePayment } = require('./lib/sub-setup-fee');
+const { chargeSetupFees, writeSetupFeePayment, writePendingSetupFeePayment } = require('./lib/sub-setup-fee');
 const { todayInTz, DEFAULT_TZ } = require('./lib/timezone');
 
 const VALID_CYCLES = ['weekly', 'monthly', 'quarterly', 'annual'];
@@ -274,7 +274,8 @@ async function handler(req, res) {
 
       // Setup fee payment record + event, inside the transaction so it commits
       // atomically with the subscription row.
-      if (setupFeeResult && setupFeeResult.success && !setupFeeResult.skipped) {
+      if (setupFeeResult && setupFeeResult.success && !setupFeeResult.skipped && !setupFeeResult.deferred) {
+        // Charged path: real Square payment record
         const setupFeePaymentId = await writeSetupFeePayment(
           {
             subaccountId,
@@ -303,6 +304,40 @@ async function handler(req, res) {
               square_payment_id: setupFeeResult.squarePayment.id,
               total: setupFeeResult.breakdown.total,
               tax: setupFeeResult.breakdown.taxAmount,
+              breakdown: setupFeeResult.breakdown
+            })
+          ]
+        );
+
+        setupFeeResult._paymentId = setupFeePaymentId;
+      } else if (setupFeeResult && setupFeeResult.success && setupFeeResult.deferred) {
+        // Deferred path: no card, write pending payment for manual collection
+        const setupFeePaymentId = await writePendingSetupFeePayment(
+          {
+            subaccountId,
+            subId: id,
+            contactId,
+            ownerUserId: b.ownerUserId
+          },
+          setupFeeResult.contact,
+          setupFeeResult.breakdown,
+          null
+        );
+
+        await db.query(
+          `INSERT INTO subscription_events (
+            id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, payment_id, metadata, created_at
+          ) VALUES ($1, $2, $3, 'setup_fee_deferred', $4, 'user', $5, $6::jsonb, NOW())`,
+          [
+            `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id, subaccountId,
+            auth.user_id,
+            setupFeePaymentId,
+            JSON.stringify({
+              payment_id: setupFeePaymentId,
+              total: setupFeeResult.breakdown.total,
+              tax: setupFeeResult.breakdown.taxAmount,
+              reason: 'manual_processing',
               breakdown: setupFeeResult.breakdown
             })
           ]
@@ -363,7 +398,8 @@ async function handler(req, res) {
         total: setupFeeResult.breakdown.total,
         tax: setupFeeResult.breakdown.taxAmount,
         subtotal: setupFeeResult.breakdown.subtotal,
-        items: setupFeeResult.breakdown.items
+        items: setupFeeResult.breakdown.items,
+        deferred: !!setupFeeResult.deferred
       } : null
     });
   } catch (e) {
