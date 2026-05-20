@@ -1709,6 +1709,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <button class="sb-item" id="sb-journeys" data-panel="journeys" onclick="switchPanel('journeys')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="7" rx="1"/></svg>Journeys
       </button>
+      <button class="sb-item" id="sb-automations" data-panel="automations" onclick="switchPanel('automations')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>Automations
+      </button>
       <button class="sb-item" id="sb-media" data-panel="media" onclick="switchPanel('media')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Media Library
       </button>
@@ -2340,6 +2343,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
       <!-- FORMS -->
       <div id="panel-journeys" class="panel hidden"></div>
+      <div id="panel-automations" class="panel hidden"></div>
       <div id="panel-forms" class="panel hidden">
         <div class="forms-panel-tabs">
           <button class="forms-panel-tab active" id="fpt-forms" onclick="switchFormsTab('forms')">Forms</button>
@@ -3842,11 +3846,11 @@ function handleLogout(){
 // =====================================================
 // initApp defined below (server-aware version at line ~3180)
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',journeys:'Journeys',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings',
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',journeys:'Journeys',automations:'Automations',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings',
   'agency-tools':'Agency Tools'
 };
 function renderPanel(){
-  const fns={dashboard:renderDash,contacts:renderContacts,conversations:renderConversations,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,journeys:renderJourneys,staff:renderStaff,settings:renderSettings,products:renderProducts,media:renderMedia,help:renderHelp};
+  const fns={dashboard:renderDash,contacts:renderContacts,conversations:renderConversations,calendar:()=>switchCalTab(state.calTab||'calendar'),tasks:renderTasks,payments:renderPayments,forms:renderForms,journeys:renderJourneys,automations:renderAutomations,staff:renderStaff,settings:renderSettings,products:renderProducts,media:renderMedia,help:renderHelp};
   if(fns[state.panel])fns[state.panel]();
 }
 
@@ -3854,7 +3858,7 @@ function switchPanel(name){
   var _r=state.user&&state.user.role||'user';
   var _am=_r==='admin'||_r==='manager';
   if(name==='settings'&&_r!=='admin'){toast('Access denied.','error');return;}
-  if((name==='products'||name==='staff')&&!_am){toast('Access denied.','error');return;}
+  if((name==='products'||name==='staff'||name==='automations')&&!_am){toast('Access denied.','error');return;}
   if(name==='forms'&&_r==='practitioner'){toast('Access denied.','error');return;}
   if((name==='tasks'||name==='payments')&&_r==='practitioner'){toast('Access denied.','error');return;}
   if(name==='payments'&&_r==='user'){
@@ -18984,6 +18988,172 @@ async function _journeyApi(path, body, opts){
     throw e;
   }
 }
+// ============================================================================
+// AUTOMATIONS (session 4)
+// ============================================================================
+async function _automationApi(path, body, opts){
+  opts = opts || {};
+  var method = opts.method || 'POST';
+  var resp = await fetch(apiUrl('/api/subaccount/' + path), {
+    method: method,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== null ? JSON.stringify(body || {}) : undefined
+  });
+  var data = await resp.json().catch(function(){ return {}; });
+  if (!resp.ok || data.error) {
+    throw new Error(data.error || ('HTTP ' + resp.status));
+  }
+  return data;
+}
+function fetchAutomationsList(){ return _automationApi('automations-list', {}); }
+function fetchAutomation(id){ return _automationApi('automations-get', { id: id }); }
+function automationUpsert(data){ return _automationApi('automations-upsert', data); }
+function automationDelete(id){ return _automationApi('automations-delete', { id: id }); }
+function automationTestSend(automationId, contactId){
+  return _automationApi('automations-test-send', { automation_id: automationId, contact_id: contactId });
+}
+
+var _automationsLoadId = 0;
+var _automationsCache = [];
+
+var AUTOMATION_TRIGGER_LABELS = {
+  contact_birthday: 'Contact birthday',
+  contact_age_days: 'X days after contact created',
+  days_before_appointment: 'X days before appointment',
+  days_after_appointment: 'X days after appointment',
+  days_after_first_booking: 'X days after first booking',
+  days_after_last_booking: 'X days after last booking',
+  contact_created: 'When contact is created',
+  contact_tagged: 'When contact is tagged',
+  appointment_booked: 'When appointment is booked',
+  appointment_status_changed: 'When appointment status changes',
+  payment_received: 'When payment is received',
+  form_submitted: 'When form is submitted',
+  class_registration_completed: 'When class registration completes'
+};
+
+var AUTOMATION_ACTION_LABELS = {
+  send_email: 'Send email',
+  send_sms: 'Send SMS',
+  add_tag: 'Add tag to contact',
+  remove_tag: 'Remove tag from contact'
+};
+
+function _fmtAutomationLastRun(ts){
+  if (!ts) return 'Never run';
+  try {
+    var d = new Date(ts);
+    var now = new Date();
+    var diffMs = now - d;
+    var diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'Just now';
+    if (diffMin < 60) return diffMin + ' min ago';
+    var diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return diffHr + ' hr ago';
+    var diffDay = Math.floor(diffHr / 24);
+    if (diffDay < 7) return diffDay + ' day' + (diffDay === 1 ? '' : 's') + ' ago';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch (e) { return ''; }
+}
+
+async function renderAutomations(){
+  var el = document.getElementById('panel-automations');
+  if (!el) return;
+  var thisLoad = ++_automationsLoadId;
+
+  el.innerHTML = '<div style="padding:60px 40px;text-align:center;color:var(--main-text-muted)">Loading automations...</div>';
+
+  try {
+    var data = await fetchAutomationsList();
+    if (thisLoad !== _automationsLoadId) return;
+    _automationsCache = data.automations || [];
+    _renderAutomationsUI();
+  } catch (e) {
+    if (thisLoad !== _automationsLoadId) return;
+    el.innerHTML = '<div style="padding:60px 40px;text-align:center;color:var(--danger)">Failed to load automations. ' + esc(e.message) + '</div>';
+  }
+}
+
+function _renderAutomationsUI(){
+  var el = document.getElementById('panel-automations');
+  if (!el) return;
+  var list = _automationsCache || [];
+
+  var headerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:24px 32px 16px;border-bottom:1px solid var(--main-border)">'
+    + '<div>'
+    + '<div style="font-family:\'Syne\',sans-serif;font-size:24px;font-weight:700;color:var(--main-text)">Automations</div>'
+    + '<div style="font-size:13px;color:var(--main-text-muted);margin-top:4px">Trigger emails, SMS, and tag changes when events happen.</div>'
+    + '</div>'
+    + '<button class="btn btn-action" onclick="openAutomationEditor(null)">+ New Automation</button>'
+    + '</div>';
+
+  if (list.length === 0) {
+    el.innerHTML = headerHTML
+      + '<div style="padding:80px 40px;text-align:center;color:var(--main-text-muted)">'
+      + '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="opacity:0.4;margin-bottom:16px"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>'
+      + '<div style="font-family:\'Syne\',sans-serif;font-size:22px;font-weight:700;color:var(--main-text);margin-bottom:8px">No automations yet</div>'
+      + '<div style="font-size:14px;max-width:520px;margin:0 auto 24px">Set up rules that fire when something happens. Send a birthday email, an intake form to new patients, a thank you after payment. Build it once, runs forever.</div>'
+      + '<button class="btn btn-action" onclick="openAutomationEditor(null)">Create your first automation</button>'
+      + '</div>';
+    return;
+  }
+
+  var rowsHTML = list.map(function(a){
+    var triggerLabel = AUTOMATION_TRIGGER_LABELS[a.triggerType] || a.triggerType;
+    var actionLabel = AUTOMATION_ACTION_LABELS[a.actionType] || a.actionType;
+    var statusDot = a.active
+      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px"></span>Active'
+      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-disabled);margin-right:6px"></span>Paused';
+    return '<tr style="border-bottom:1px solid var(--main-border)">'
+      + '<td style="padding:14px 16px"><div style="font-weight:600;color:var(--main-text)">' + esc(a.name) + '</div>'
+        + (a.description ? '<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">' + esc(a.description) + '</div>' : '')
+      + '</td>'
+      + '<td style="padding:14px 16px;font-size:13px;color:var(--main-text-muted)">' + esc(triggerLabel) + '</td>'
+      + '<td style="padding:14px 16px;font-size:13px;color:var(--main-text-muted)">' + esc(actionLabel) + '</td>'
+      + '<td style="padding:14px 16px;font-size:13px;color:var(--main-text-muted)">' + statusDot + '</td>'
+      + '<td style="padding:14px 16px;font-size:13px;color:var(--main-text-muted)">' + esc(_fmtAutomationLastRun(a.lastRanAt)) + '</td>'
+      + '<td style="padding:14px 16px;font-size:13px;color:var(--main-text-muted);text-align:right">' + (a.totalRuns || 0) + '</td>'
+      + '<td style="padding:14px 16px;text-align:right;white-space:nowrap">'
+      +   '<button class="btn btn-ghost btn-sm" onclick="openAutomationEditor(\'' + esc(a.id) + '\')">Edit</button> '
+      +   '<button class="btn btn-ghost btn-sm" onclick="confirmDeleteAutomation(\'' + esc(a.id) + '\',\'' + esc(a.name).replace(/\\/g,'\\\\').replace(/\'/g,'\\\'') + '\')" style="color:var(--danger)">Delete</button>'
+      + '</td>'
+      + '</tr>';
+  }).join('');
+
+  var tableHTML = '<div style="padding:24px 32px">'
+    + '<table style="width:100%;border-collapse:collapse;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)">'
+    + '<thead><tr style="background:var(--main-card-hover);border-bottom:1px solid var(--main-border)">'
+    + '<th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px">Name</th>'
+    + '<th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px">Trigger</th>'
+    + '<th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px">Action</th>'
+    + '<th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px">Status</th>'
+    + '<th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px">Last Run</th>'
+    + '<th style="padding:12px 16px;text-align:right;font-size:12px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px">Runs</th>'
+    + '<th style="padding:12px 16px;text-align:right;font-size:12px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px"></th>'
+    + '</tr></thead>'
+    + '<tbody>' + rowsHTML + '</tbody>'
+    + '</table></div>';
+
+  el.innerHTML = headerHTML + tableHTML;
+}
+
+function openAutomationEditor(id){
+  // Editor modal lands in phase 4D. Placeholder for now.
+  toast(id ? 'Editor opening soon (phase 4D)' : 'Editor opening soon (phase 4D)', 'info');
+}
+
+async function confirmDeleteAutomation(id, name){
+  if (!confirm('Delete automation "' + name + '"? This cannot be undone.')) return;
+  try {
+    await automationDelete(id);
+    toast('Automation deleted', 'success');
+    renderAutomations();
+  } catch (e) {
+    toast('Delete failed: ' + e.message, 'error');
+  }
+}
+
 function fetchJourneysList(){ return _journeyApi('journeys-list', null, {method:'GET'}); }
 function journeyUpsert(data){ return _journeyApi('journeys-upsert', data); }
 function journeyDelete(id){ return _journeyApi('journeys-delete', {id:id, confirm:true}); }
