@@ -64,6 +64,11 @@ function rowToCamel(row) {
     sms_consent_marketing: !!row.sms_consent_marketing,
     sms_consent_updated_at: row.sms_consent_updated_at instanceof Date ? row.sms_consent_updated_at.toISOString() : row.sms_consent_updated_at,
     sms_consent_source: row.sms_consent_source,
+    email_suppressed: !!row.email_suppressed,
+    email_suppression_reason: row.email_suppression_reason,
+    email_marketing_consent: row.email_marketing_consent == null ? true : !!row.email_marketing_consent,
+    email_marketing_consent_updated_at: row.email_marketing_consent_updated_at instanceof Date ? row.email_marketing_consent_updated_at.toISOString() : row.email_marketing_consent_updated_at,
+    email_marketing_consent_source: row.email_marketing_consent_source,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     createdBy: row.created_by,
@@ -82,6 +87,8 @@ const CONTACT_COLUMNS = `
   source, type, status, archived, tags, custom_field_values,
   credit_balance, square_customer_id, square_cards,
   sms_consent_transactional, sms_consent_marketing, sms_consent_updated_at, sms_consent_source,
+  email_suppressed, email_suppression_reason,
+  email_marketing_consent, email_marketing_consent_updated_at, email_marketing_consent_source,
   created_at, updated_at, created_by, updated_by
 `;
 
