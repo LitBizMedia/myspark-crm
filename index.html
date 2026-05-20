@@ -28460,7 +28460,7 @@ function txnRenderSummary(){
   //   refunded share = (refundedAmt / total) * gross  if total > 0, else refundedAmt
   // This nets refunds out of the revenue figure proportionally.
   function revFor(p){
-    if(p.status === 'voided') return 0;
+    if(p.status === 'voided' || p.status === 'pending' || p.status === 'failed') return 0;
     var gross = (p.afterDiscount != null) ? parseFloat(p.afterDiscount)
               : (p.subtotal != null ? parseFloat(p.subtotal) : (parseFloat(p.amount)||0));
     var refunded = parseFloat(p.refundedAmount) || 0;
@@ -28624,9 +28624,61 @@ function txnMethodLabel(t){
   return '<span style="display:inline-flex;align-items:center;color:var(--main-text-muted)">'+icon+label+'</span>';
 }
 
+// =====================================================
+// Mark-as-Paid flow for pending manual-processing payments
+// =====================================================
+function openMarkPaidModal(paymentId){
+  if(!canManageSubscriptions()){toast('Only admins and managers can record manual payments.','error');return;}
+  var p = (db.payments || []).find(function(x){ return x.id === paymentId; });
+  if(!p){toast('Payment not found.','error');return;}
+  if(p.status !== 'pending'){toast('Payment is not pending.','error');return;}
+
+  var body = '<div style="font-size:14px;line-height:1.7;color:var(--text)">'
+    +'<p>Record collection of <strong>'+fmt$(p.total||0)+'</strong>?</p>'
+    +'<p style="margin-top:4px;color:var(--text-muted);font-size:12px">'+esc(p.notes||'Manual processing payment')+'</p>'
+    +'</div>'
+    +'<div class="form-group" style="margin-top:14px"><label>Collection Method *</label>'
+    +'<select id="mp-method" style="width:100%">'
+    +'<option value="cash">Cash</option>'
+    +'<option value="check">Check</option>'
+    +'<option value="card">Card (manual entry)</option>'
+    +'<option value="other">Other</option>'
+    +'</select></div>'
+    +'<div class="form-group" style="margin-top:10px"><label>Reference (optional)</label>'
+    +'<input id="mp-ref" type="text" placeholder="Check number, card last 4, txn ID..." maxlength="100" style="width:100%"></div>';
+
+  state.modal = {type:'mark-paid', id: paymentId};
+  openModal('Mark Payment Received', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="confirmMarkPaid(\''+paymentId+'\')">Record Payment</button>');
+}
+
+async function confirmMarkPaid(paymentId){
+  var methodEl = document.getElementById('mp-method');
+  var refEl = document.getElementById('mp-ref');
+  var method = methodEl ? methodEl.value : 'other';
+  var ref = refEl ? (refEl.value || '').trim() : '';
+  try{
+    var r = await fetch(apiUrl('/api/subaccount/payments-mark-paid'),{
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({id: paymentId, paymentMethod: method, paymentRef: ref || null})
+    });
+    var j = await r.json().catch(function(){return {};});
+    if(!r.ok){toast(j.error||'Failed to record payment.','error');return;}
+    closeModal();
+    toast('Payment recorded as '+method+'.','success');
+    await fetchFromServer();
+    if(typeof renderTransactions === 'function') renderTransactions();
+  }catch(e){
+    toast('Network error: '+e.message,'error');
+  }
+}
+
 function txnStatusBadge(status){
   var map = {
     completed:     {bg:'rgba(52,211,153,.15)',  color:'var(--success-light)', label:'Completed'},
+    pending:       {bg:'rgba(245,158,11,.15)',   color:'var(--warning-light)', label:'Pending'},
     voided:        {bg:'rgba(239,68,68,.12)',    color:'var(--danger-light)', label:'Voided'},
     refunded:      {bg:'rgba(245,158,11,.12)',   color:'var(--warning-light)', label:'Refunded'},
     partial_refund:{bg:'rgba(245,158,11,.12)',   color:'var(--warning-light)', label:'Partial Refund'},
@@ -28696,6 +28748,7 @@ function txnOpenDetail(id){
   var footBtns = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
   if(canVoid&&canRefundVoid()) footBtns += '<button class="btn btn-danger" onclick="txnVoid(\''+id+'\')">Void</button>';
   if(canRefund&&canRefundVoid()) footBtns += '<button class="btn btn-purple" onclick="txnRefund(\''+id+'\')">Refund</button>';
+  if(t.status==='pending'&&canManageSubscriptions()) footBtns += '<button class="btn btn-primary" onclick="openMarkPaidModal(\''+id+'\')">Mark Paid</button>';
   state.modal = {type:'txn-detail', id: id};
   openModal('Transaction Details', body, footBtns, 'modal-lg');
 }
