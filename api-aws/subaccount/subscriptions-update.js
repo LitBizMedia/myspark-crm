@@ -22,6 +22,7 @@ const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
+const { chargeSetupFees, writeSetupFeePayment } = require('./lib/sub-setup-fee');
 
 // Validate and normalize one item being added (catalog or custom)
 async function buildItem(rawItem, billingCycle, subaccountId, addedAt) {
@@ -54,6 +55,7 @@ async function buildItem(rawItem, billingCycle, subaccountId, addedAt) {
     description = plan.description || '';
     taxable = plan.taxable !== false;
     price = parseFloat(cfg.price);
+    var _setupFee = (plan.setup_fee_enabled && parseFloat(plan.setup_fee_amount) > 0) ? parseFloat(plan.setup_fee_amount) : 0;
     id = rawItem.id || `si-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-p`;
   } else {
     name = String(rawItem.name || '').trim();
@@ -63,13 +65,15 @@ async function buildItem(rawItem, billingCycle, subaccountId, addedAt) {
     description = String(rawItem.description || '').trim();
     taxable = rawItem.taxable !== false;
     planId = null;
+    var _setupFee = 0;
     id = rawItem.id || `si-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-c`;
   }
   return {
     id, planId, name, description, taxable, price, qty,
     discountType, discountValue, discountNote, discountRecurring,
     addedAt: addedAt || new Date().toISOString(),
-    billingEndsAt: null
+    billingEndsAt: null,
+    setupFeeAmount: planId ? _setupFee : 0
   };
 }
 
@@ -112,6 +116,7 @@ async function handler(req, res) {
     let eventType = null;
     let eventMeta = {};
     let updates = []; // { sql: 'col = $N', value }
+    let setupFeeResult = null;  // populated by add_item when plan has setup fee
 
     switch (action) {
       case 'edit': {
@@ -182,6 +187,41 @@ async function handler(req, res) {
         } catch (e) {
           return res.status(400).json({ error: e.message });
         }
+
+        // Setup fee: charge BEFORE we queue the UPDATE. On failure, item is not
+        // added and the sub is unchanged. On success, the payment record + event
+        // get written inside the transaction wrapper below.
+        if (parseFloat(newItem.setupFeeAmount) > 0) {
+          // Fetch paySettings from blob for tax math
+          let payBlob;
+          try {
+            const blobRes = await db.query(
+              'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
+              [subaccountId]
+            );
+            payBlob = blobRes.rows[0]?.data || {};
+          } catch (_) {
+            payBlob = {};
+          }
+
+          setupFeeResult = await chargeSetupFees({
+            subaccountId,
+            subId: sub.id,
+            contactId: sub.contact_id,
+            cardId: sub.card_id,
+            ownerUserId: sub.owner_user_id,
+            items: [newItem],
+            paySettings: payBlob.paySettings || {},
+            idempotencyTag: 'additem-' + newItem.id
+          });
+          if (!setupFeeResult.success) {
+            return res.status(400).json({
+              error: 'Setup fee charge failed: ' + (setupFeeResult.error || 'unknown'),
+              setup_fee_breakdown: setupFeeResult.breakdown || null
+            });
+          }
+        }
+
         const items = [...(sub.items || []), newItem];
         const newCyclePrice = recomputeCyclePrice(items);
         updates.push({ sql: 'items = ?::jsonb', value: JSON.stringify(items) });
@@ -276,19 +316,71 @@ async function handler(req, res) {
 
     const sql = `UPDATE subscriptions SET ${setClauses.join(', ')} WHERE id = $${p++} AND subaccount_id = $${p}`;
     params.push(id, subaccountId);
-    await db.query(sql, params);
 
-    // Log lifecycle event
-    if (eventType) {
-      await db.query(
-        `INSERT INTO subscription_events (
-          id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, metadata, created_at
-        ) VALUES ($1, $2, $3, $4, $5, 'user', $6::jsonb, NOW())`,
-        [
-          `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          id, subaccountId, eventType, auth.user_id, JSON.stringify(eventMeta)
-        ]
-      );
+    // Wrap UPDATE + events + setup fee payment in one transaction.
+    // For non-setup-fee paths this is a 1-statement transaction (near-zero cost).
+    // For setup fee paths it ensures the UPDATE, the lifecycle event, the
+    // setup_fee_charged event, and the payment record all commit atomically.
+    await db.query('BEGIN');
+    try {
+      await db.query(sql, params);
+
+      // Log lifecycle event
+      if (eventType) {
+        await db.query(
+          `INSERT INTO subscription_events (
+            id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, metadata, created_at
+          ) VALUES ($1, $2, $3, $4, $5, 'user', $6::jsonb, NOW())`,
+          [
+            `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id, subaccountId, eventType, auth.user_id, JSON.stringify(eventMeta)
+          ]
+        );
+      }
+
+      // Setup fee payment record + event (only when add_item charged a setup fee)
+      if (setupFeeResult && setupFeeResult.success && !setupFeeResult.skipped) {
+        const setupFeePaymentId = await writeSetupFeePayment(
+          {
+            subaccountId,
+            subId: id,
+            contactId: sub.contact_id,
+            ownerUserId: sub.owner_user_id
+          },
+          setupFeeResult.contact,
+          setupFeeResult.card,
+          setupFeeResult.breakdown,
+          setupFeeResult.squarePayment,
+          null
+        );
+
+        await db.query(
+          `INSERT INTO subscription_events (
+            id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, payment_id, metadata, created_at
+          ) VALUES ($1, $2, $3, 'setup_fee_charged', $4, 'user', $5, $6::jsonb, NOW())`,
+          [
+            `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id, subaccountId,
+            auth.user_id,
+            setupFeePaymentId,
+            JSON.stringify({
+              payment_id: setupFeePaymentId,
+              square_payment_id: setupFeeResult.squarePayment.id,
+              total: setupFeeResult.breakdown.total,
+              tax: setupFeeResult.breakdown.taxAmount,
+              breakdown: setupFeeResult.breakdown,
+              trigger: 'add_item'
+            })
+          ]
+        );
+
+        setupFeeResult._paymentId = setupFeePaymentId;
+      }
+
+      await db.query('COMMIT');
+    } catch (txErr) {
+      await db.query('ROLLBACK');
+      throw txErr;
     }
 
     await logAudit({
@@ -305,7 +397,17 @@ async function handler(req, res) {
     });
 
     const verify = await db.query('SELECT * FROM subscriptions WHERE id = $1', [id]);
-    return res.status(200).json({ success: true, subscription: verify.rows[0] });
+    return res.status(200).json({
+      success: true,
+      subscription: verify.rows[0],
+      setup_fee: setupFeeResult && !setupFeeResult.skipped ? {
+        payment_id: setupFeeResult._paymentId || null,
+        total: setupFeeResult.breakdown.total,
+        tax: setupFeeResult.breakdown.taxAmount,
+        subtotal: setupFeeResult.breakdown.subtotal,
+        items: setupFeeResult.breakdown.items
+      } : null
+    });
   } catch (e) {
     console.error('subscriptions-update error:', e.message);
     return res.status(500).json({ error: 'Failed to update subscription' });
