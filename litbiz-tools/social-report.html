@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- LitBiz auth gate (Stage 1) -->
+<style id="litbiz-auth-gate">html{visibility:hidden}</style>
+<script>
+(async function(){
+  try{
+    const r = await fetch('https://api.mysparkplus.app/api/subaccount/litbiz/whoami',{credentials:'include'});
+    if(!r.ok) throw 0;
+    const d = await r.json();
+    if(!d.ok) throw 0;
+    window.__litbizUser = d;
+    var g = document.getElementById('litbiz-auth-gate');
+    if(g) g.remove();
+  }catch(e){
+    window.location.replace('https://mysparkplus.app/');
+  }
+})();
+</script>
+<!-- end LitBiz auth gate -->
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LitBiz Media | Social Media Report Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --purple:       #4C1D95;
+  --purple-dark:  #2E1065;
+  --purple-mid:   #6D28D9;
+  --purple-light: #EDE9FE;
+  --orange:       #EA580C;
+  --orange-light: #FB923C;
+  --white:        #ffffff;
+  --surface:      #F5F3FF;
+  --border:       #DDD6FE;
+  --text-dark:    #1E1B4B;
+  --text-mid:     #4C4980;
+  --text-light:   #8B88B0;
+  --font-display: 'Syne', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --radius:       10px;
+  --shadow:       0 2px 14px rgba(76,29,149,0.09);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--surface); color: var(--text-dark); font-size: 15px; line-height: 1.5; }
+
+/* FORM */
+.form-view { max-width: 880px; margin: 0 auto; padding: 36px 24px 60px; }
+.form-header { margin-bottom: 36px; }
+.form-logo { font-family: var(--font-display); font-weight: 800; font-size: 15px; color: var(--text-light); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+.form-logo span { color: var(--orange); }
+.form-title { font-family: var(--font-display); font-size: 30px; font-weight: 800; color: var(--text-dark); margin-bottom: 6px; }
+.form-subtitle { font-size: 14px; color: var(--text-mid); }
+.section-card { background: white; border-radius: var(--radius); padding: 26px 28px; margin-bottom: 18px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+.section-title { font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--purple); letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 9px; }
+.section-title::before { content: ''; display: inline-block; width: 4px; height: 15px; background: var(--orange); border-radius: 2px; flex-shrink: 0; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+label { font-size: 12px; font-weight: 600; color: var(--text-mid); }
+input[type="text"], input[type="number"], textarea { font-family: var(--font-body); font-size: 14px; color: var(--text-dark); background: var(--surface); border: 1.5px solid var(--border); border-radius: 6px; padding: 9px 12px; transition: border-color 0.15s, box-shadow 0.15s; outline: none; width: 100%; }
+input:focus, textarea:focus { border-color: var(--purple-mid); box-shadow: 0 0 0 3px rgba(109,40,217,0.1); background: white; }
+textarea { resize: vertical; min-height: 96px; }
+
+/* Chips */
+.platform-chips { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 22px; }
+.platform-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 15px; border-radius: 24px; font-size: 13px; font-weight: 600; cursor: pointer; border: 2px solid var(--border); background: white; color: var(--text-light); transition: all 0.15s; user-select: none; font-family: var(--font-body); }
+.platform-chip.active { border-color: var(--chip-color); color: var(--chip-color); background: color-mix(in srgb, var(--chip-color) 8%, transparent); }
+.platform-chip .pdot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.15s; flex-shrink: 0; }
+.platform-chip.active .pdot { background: var(--chip-color); }
+.btn-add-platform { display: inline-flex; align-items: center; gap: 6px; padding: 7px 15px; border-radius: 24px; font-size: 13px; font-weight: 600; cursor: pointer; border: 2px dashed var(--border); background: white; color: var(--text-light); transition: all 0.15s; font-family: var(--font-body); }
+.btn-add-platform:hover { border-color: var(--purple-mid); color: var(--purple-mid); }
+
+/* Platform cards */
+.platform-card { border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+.platform-card-header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; background: var(--surface); border-bottom: 1px solid var(--border); border-left: 4px solid var(--card-color, var(--purple)); }
+.platform-card-name { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--text-dark); }
+.platform-card-body { padding: 18px 20px; }
+.metric-cols-header { display: grid; grid-template-columns: 170px 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+.metric-cols-header div:not(:first-child) { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.06em; }
+.metric-group-label { font-size: 11px; font-weight: 700; color: var(--orange); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; margin-top: 4px; }
+.metric-group-label.second { margin-top: 16px; }
+.metric-input-row { display: grid; grid-template-columns: 170px 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }
+.metric-input-label { font-size: 13px; font-weight: 500; color: var(--text-mid); }
+.metric-input-row input { padding: 8px 10px; font-size: 13px; }
+.metric-input-single { display: grid; grid-template-columns: 170px 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }
+.metric-input-single input { padding: 8px 10px; font-size: 13px; }
+
+/* Posts */
+.post-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+.btn-remove { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 16px; padding: 5px; border-radius: 5px; transition: all 0.15s; flex-shrink: 0; }
+.btn-remove:hover { background: #FEE2E2; color: #DC2626; }
+.btn-add { margin-top: 12px; background: none; border: 1.5px dashed var(--border); color: var(--purple-mid); font-family: var(--font-body); font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 7px; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-add:hover { border-color: var(--purple-mid); background: var(--purple-light); }
+.empty-platforms { font-size: 14px; color: var(--text-light); padding: 12px 0 4px; font-style: italic; }
+.btn-generate { width: 100%; padding: 16px; background: linear-gradient(135deg, var(--purple-dark) 0%, var(--purple-mid) 100%); color: white; border: none; border-radius: var(--radius); font-family: var(--font-display); font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 10px; box-shadow: 0 6px 22px rgba(76,29,149,0.3); }
+.btn-generate:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(76,29,149,0.38); }
+
+/* REPORT */
+#report-view { display: none; }
+.report-wrapper { max-width: 880px; margin: 0 auto; }
+.report-actions { display: flex; align-items: center; gap: 12px; padding: 16px 24px; background: white; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.report-actions-label { font-size: 13px; color: var(--text-light); margin-right: auto; }
+.btn-back { padding: 9px 18px; background: white; border: 1.5px solid var(--border); border-radius: 6px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--text-mid); cursor: pointer; transition: all 0.15s; }
+.btn-back:hover { border-color: var(--purple); color: var(--purple); }
+.btn-print { padding: 9px 20px; background: var(--orange); border: none; border-radius: 6px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: white; cursor: pointer; }
+.btn-print:hover { background: #C2410C; }
+.report { background: white; }
+
+/* Report header */
+.report-header { background: var(--purple-dark); padding: 52px 56px 44px; position: relative; overflow: hidden; }
+.rh-circle-1 { position: absolute; right: -50px; top: -50px; width: 240px; height: 240px; border-radius: 50%; background: rgba(234,88,12,0.18); }
+.rh-circle-2 { position: absolute; right: 80px; bottom: -70px; width: 180px; height: 180px; border-radius: 50%; background: rgba(109,40,217,0.25); }
+.report-agency { font-family: var(--font-display); font-weight: 800; font-size: 13px; color: rgba(255,255,255,0.4); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 16px; position: relative; z-index: 1; }
+.report-agency span { color: var(--orange-light); }
+.report-main-title { font-family: var(--font-display); font-size: 42px; font-weight: 800; color: white; line-height: 1.05; margin-bottom: 28px; position: relative; z-index: 1; }
+.report-divider { width: 48px; height: 3px; background: var(--orange); border-radius: 2px; margin-bottom: 24px; position: relative; z-index: 1; }
+.report-client-info { display: flex; flex-wrap: wrap; gap: 28px; position: relative; z-index: 1; }
+.report-client-chip { display: flex; flex-direction: column; gap: 3px; }
+.rcc-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
+.rcc-value { font-size: 15px; font-weight: 600; color: white; font-family: var(--font-display); }
+
+/* Report body */
+.report-body { padding: 52px 56px 44px; }
+.report-section { margin-bottom: 52px; }
+.report-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--orange); margin-bottom: 8px; }
+.report-section-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-dark); margin-bottom: 24px; padding-bottom: 14px; border-bottom: 2px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.report-sub-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-light); margin-bottom: 10px; margin-top: 20px; }
+.report-sub-label:first-of-type { margin-top: 0; }
+
+/* Metric cards */
+.metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+.metric-grid.two { grid-template-columns: repeat(2, 1fr); }
+.metric-grid.four { grid-template-columns: repeat(4, 1fr); }
+.metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 20px 18px; position: relative; overflow: hidden; }
+.metric-card-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.metric-label { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+.metric-value { font-family: var(--font-display); font-size: 32px; font-weight: 800; color: var(--text-dark); line-height: 1; margin-bottom: 10px; }
+.metric-comparison { font-size: 12px; color: var(--text-light); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.metric-change { font-weight: 700; font-size: 11px; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+.metric-change.up   { background: #D1FAE5; color: #065F46; }
+.metric-change.down { background: #FEE2E2; color: #991B1B; }
+.metric-change.same { background: var(--border); color: var(--text-mid); }
+
+/* Engagement rate banner */
+.eng-rate-banner { background: var(--purple-dark); border-radius: var(--radius); padding: 20px 26px; display: flex; align-items: center; gap: 24px; margin-bottom: 14px; }
+.erb-rate { font-family: var(--font-display); font-size: 40px; font-weight: 800; color: white; line-height: 1; flex-shrink: 0; }
+.erb-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.45); margin-bottom: 4px; }
+.erb-comparison { font-size: 13px; color: rgba(255,255,255,0.55); display: flex; align-items: center; gap: 8px; }
+.erb-formula { margin-left: auto; font-size: 11px; color: rgba(255,255,255,0.28); text-align: right; line-height: 1.7; }
+
+/* Engagement table */
+.engagement-table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.engagement-table-label { padding: 10px 16px; background: var(--surface); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-light); border-bottom: 1px solid var(--border); }
+.engagement-table { width: 100%; border-collapse: collapse; }
+.engagement-table th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-light); padding: 10px 16px; text-align: left; background: var(--surface); border-bottom: 2px solid var(--border); }
+.engagement-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.engagement-table tr:last-child td { border-bottom: none; }
+.engagement-total td { background: var(--purple-dark); color: white; font-weight: 700; }
+.engagement-total td:first-child { font-family: var(--font-display); font-size: 13px; }
+
+/* GBP */
+.gbp-review-row { display: flex; gap: 14px; margin-top: 0; }
+
+/* Top posts */
+.top-posts-list { list-style: none; }
+.top-post-item { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+.top-post-item:last-child { border-bottom: none; }
+.top-post-num { min-width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--purple-dark), var(--purple-mid)); color: white; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); flex-shrink: 0; }
+.top-post-content { flex: 1; }
+.top-post-desc { font-size: 14px; color: var(--text-dark); font-weight: 500; margin-bottom: 5px; }
+.top-post-platform { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 4px; }
+.top-post-engagement { text-align: right; flex-shrink: 0; }
+.tpe-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-light); margin-bottom: 2px; }
+.tpe-value { font-family: var(--font-display); font-size: 20px; font-weight: 800; color: var(--text-dark); }
+
+.notes-box { background: var(--surface); border-left: 4px solid var(--orange); border-radius: 0 var(--radius) var(--radius) 0; padding: 20px 24px; font-size: 14px; line-height: 1.75; color: var(--text-mid); white-space: pre-wrap; }
+
+.report-footer { background: var(--purple-dark); padding: 28px 56px; display: flex; justify-content: space-between; align-items: center; }
+.footer-brand { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: rgba(255,255,255,0.5); }
+.footer-brand span { color: var(--orange-light); }
+.footer-url { font-size: 12px; color: rgba(255,255,255,0.28); margin-top: 3px; }
+.footer-right { text-align: right; font-size: 12px; color: rgba(255,255,255,0.32); line-height: 1.7; }
+
+@media print {
+  .report-actions { display: none !important; }
+  #form-view { display: none !important; }
+  #report-view { display: block !important; }
+  body { background: white; }
+  .report-wrapper { padding: 0; margin: 0; max-width: 100%; }
+  .report-header, .report-footer, .metric-card-accent, .top-post-num,
+  .metric-change, .notes-box, .engagement-total td, .top-post-platform,
+  .eng-rate-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .report-section { page-break-inside: avoid; }
+  .engagement-table-wrap { page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<div id="form-view" class="form-view">
+  <div class="form-header">
+    <div class="form-logo">LitBiz<span>.</span>Media</div>
+    <div class="form-title">Social Media Report Builder</div>
+    <div class="form-subtitle">Toggle platforms on or off, fill in the data, and generate a print-ready monthly report.</div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">Client Information</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Client Name</label><input type="text" id="clientName" placeholder="e.g. Harmony Dental Care"></div>
+      <div class="form-group"><label>Website</label><input type="text" id="clientUrl" placeholder="e.g. harmonydental.com"></div>
+      <div class="form-group"><label>Reporting Month</label><input type="text" id="reportMonth" placeholder="e.g. March 2025"></div>
+      <div class="form-group"><label>Previous Month</label><input type="text" id="prevMonth" placeholder="e.g. February 2025"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">Platforms</div>
+    <div class="platform-chips" id="platformChips"></div>
+    <div id="platformCards"></div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">Top Performing Posts</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 32px;gap:10px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">Post Description</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">Platform</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">Engagement</div>
+      <div></div>
+    </div>
+    <div id="postItems"></div>
+    <button class="btn-add" id="addPostBtn">+ Add Post</button>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">Key Wins This Month</div>
+    <div class="form-group"><label>Highlights across all platforms</label><textarea id="keyWins" placeholder="Instagram reach up 22%. Engagement rate crossed 4% on Facebook. GBP phone calls up 11%."></textarea></div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-title">Recommendations &amp; Next Steps</div>
+    <div class="form-group"><label>What you're focusing on next month</label><textarea id="recommendations" placeholder="Test Reels 3x per week to boost Instagram reach. Schedule GBP posts weekly."></textarea></div>
+  </div>
+
+  <button class="btn-generate" onclick="generateReport()">Generate Report</button>
+</div>
+
+<div id="report-view">
+  <div class="report-wrapper">
+    <div class="report-actions">
+      <span class="report-actions-label">Preview your report below. Use Print / Save as PDF to export.</span>
+      <button class="btn-back" onclick="goBack()">&#8592; Back to Edit</button>
+      <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+    <div class="report"></div>
+  </div>
+</div>
+
+<script>
+const CONFIGS = {
+  facebook: {
+    name: 'Facebook', color: '#1877F2', type: 'standard',
+    growthFields:     [{ id:'follow', label:'Page Likes' }, { id:'reach', label:'Reach' }, { id:'imp', label:'Impressions' }],
+    extraFields:      [{ id:'story', label:'Story Views' }, { id:'video', label:'Video Views' }, { id:'profile', label:'Profile Visits' }, { id:'clicks', label:'Link Clicks' }],
+    engagementFields: [{ id:'likes', label:'Likes' }, { id:'comments', label:'Comments' }, { id:'shares', label:'Shares' }],
+    engRateBy: 'reach',
+  },
+  instagram: {
+    name: 'Instagram', color: '#C13584', type: 'standard',
+    growthFields:     [{ id:'follow', label:'Followers' }, { id:'reach', label:'Reach' }, { id:'imp', label:'Impressions' }],
+    extraFields:      [{ id:'story', label:'Story Views' }, { id:'video', label:'Reel Views' }, { id:'profile', label:'Profile Visits' }, { id:'clicks', label:'Link Clicks' }],
+    engagementFields: [{ id:'likes', label:'Likes' }, { id:'comments', label:'Comments' }, { id:'shares', label:'Shares' }, { id:'saves', label:'Saves' }],
+    engRateBy: 'reach',
+  },
+  linkedin: {
+    name: 'LinkedIn', color: '#0A66C2', type: 'standard',
+    growthFields:     [{ id:'follow', label:'Followers' }, { id:'reach', label:'Reach' }, { id:'imp', label:'Impressions' }],
+    extraFields:      [{ id:'profile', label:'Page Views' }, { id:'clicks', label:'Link Clicks' }],
+    engagementFields: [{ id:'likes', label:'Reactions' }, { id:'comments', label:'Comments' }, { id:'shares', label:'Shares' }],
+    engRateBy: 'reach',
+  },
+  gbp: {
+    name: 'Google Business', color: '#4285F4', type: 'gbp',
+  },
+  tiktok: {
+    name: 'TikTok', color: '#FF0050', type: 'standard',
+    growthFields:     [{ id:'follow', label:'Followers' }, { id:'reach', label:'Reach' }, { id:'video', label:'Video Views' }, { id:'profile', label:'Profile Visits' }],
+    extraFields:      [],
+    engagementFields: [{ id:'likes', label:'Likes' }, { id:'comments', label:'Comments' }, { id:'shares', label:'Shares' }],
+    engRateBy: 'reach',
+  },
+  youtube: {
+    name: 'YouTube', color: '#FF0000', type: 'standard',
+    growthFields:     [{ id:'follow', label:'Subscribers' }, { id:'reach', label:'Reach' }, { id:'video', label:'Views' }, { id:'watchtime', label:'Watch Time (hrs)' }],
+    extraFields:      [],
+    engagementFields: [{ id:'likes', label:'Likes' }, { id:'comments', label:'Comments' }, { id:'shares', label:'Shares' }],
+    engRateBy: 'reach',
+  },
+};
+
+const PLATFORM_ORDER = ['facebook','instagram','linkedin','gbp','tiktok','youtube'];
+const CUSTOM_COLORS  = ['#7C3AED','#059669','#D97706','#DB2777','#0891B2','#65A30D'];
+
+let activePlatforms = ['facebook','instagram'];
+let customConfigs   = {};
+let customCount     = 0;
+
+function allConfigs()     { return Object.assign({}, CONFIGS, customConfigs); }
+function allPlatformIds() { return [...PLATFORM_ORDER, ...Object.keys(customConfigs)]; }
+
+/* INIT */
+function init() {
+  renderChips();
+  renderCards();
+  addPostRow();
+  addPostRow();
+  document.getElementById('addPostBtn').addEventListener('click', addPostRow);
+}
+
+/* CHIPS */
+function renderChips() {
+  const c = document.getElementById('platformChips');
+  c.innerHTML = '';
+  allPlatformIds().forEach(id => {
+    const cfg = allConfigs()[id];
+    if (!cfg) return;
+    const active = activePlatforms.includes(id);
+    const btn = document.createElement('button');
+    btn.className = 'platform-chip' + (active ? ' active' : '');
+    btn.style.setProperty('--chip-color', cfg.color);
+    btn.innerHTML = `<span class="pdot"></span>${cfg.name}`;
+    btn.onclick = () => togglePlatform(id);
+    c.appendChild(btn);
+  });
+  const add = document.createElement('button');
+  add.className = 'btn-add-platform';
+  add.innerHTML = '+ Add Platform';
+  add.onclick = addCustomPlatform;
+  c.appendChild(add);
+}
+
+function togglePlatform(id) {
+  activePlatforms = activePlatforms.includes(id)
+    ? activePlatforms.filter(x => x !== id)
+    : [...activePlatforms, id];
+  renderChips();
+  renderCards();
+}
+
+function addCustomPlatform() {
+  const name = prompt('Platform name (e.g. Pinterest, X, Nextdoor):');
+  if (!name || !name.trim()) return;
+  customCount++;
+  const id = 'custom_' + customCount;
+  customConfigs[id] = {
+    name: name.trim(), color: CUSTOM_COLORS[(customCount-1) % CUSTOM_COLORS.length], type: 'standard',
+    growthFields:     [{ id:'follow', label:'Followers' }, { id:'reach', label:'Reach' }, { id:'imp', label:'Impressions' }],
+    extraFields:      [{ id:'profile', label:'Profile Visits' }, { id:'clicks', label:'Link Clicks' }],
+    engagementFields: [{ id:'likes', label:'Likes' }, { id:'comments', label:'Comments' }, { id:'shares', label:'Shares' }],
+    engRateBy: 'reach',
+  };
+  activePlatforms.push(id);
+  renderChips();
+  renderCards();
+}
+
+/* CARDS */
+function renderCards() {
+  const c = document.getElementById('platformCards');
+  c.innerHTML = '';
+  if (!activePlatforms.length) { c.innerHTML = '<p class="empty-platforms">No platforms selected. Click a platform above to add it.</p>'; return; }
+  activePlatforms.forEach(id => {
+    const cfg = allConfigs()[id];
+    if (!cfg) return;
+    const card = document.createElement('div');
+    card.className = 'platform-card';
+    card.innerHTML = cfg.type === 'gbp' ? buildGBPCard(id) : buildStandardCard(cfg, id);
+    c.appendChild(card);
+  });
+}
+
+function rowHTML(pid, f) {
+  return `<div class="metric-input-row">
+    <div class="metric-input-label">${f.label}</div>
+    <input type="number" id="${pid}-${f.id}-cur" placeholder="0" min="0">
+    <input type="number" id="${pid}-${f.id}-prev" placeholder="0" min="0">
+  </div>`;
+}
+
+function buildStandardCard(cfg, pid) {
+  const gRows = cfg.growthFields.map(f => rowHTML(pid, f)).join('');
+  const eRows = cfg.extraFields.length ? cfg.extraFields.map(f => rowHTML(pid, f)).join('') : '';
+  const nRows = cfg.engagementFields.map(f => rowHTML(pid, f)).join('');
+  return `
+    <div class="platform-card-header" style="--card-color:${cfg.color}">
+      <span class="pdot" style="width:10px;height:10px;background:${cfg.color}"></span>
+      <span class="platform-card-name">${cfg.name}</span>
+    </div>
+    <div class="platform-card-body">
+      <div class="metric-cols-header"><div></div><div>This Month</div><div>Previous Month</div></div>
+      <div class="metric-group-label">Growth</div>${gRows}
+      ${eRows ? `<div class="metric-group-label second">Content &amp; Activity</div>${eRows}` : ''}
+      <div class="metric-group-label second">Engagement</div>${nRows}
+    </div>`;
+}
+
+function buildGBPCard(pid) {
+  const r = (id, lbl) => `<div class="metric-input-row"><div class="metric-input-label">${lbl}</div><input type="number" id="${pid}-${id}-cur" placeholder="0" min="0"><input type="number" id="${pid}-${id}-prev" placeholder="0" min="0"></div>`;
+  const s = (id, lbl, ph) => `<div class="metric-input-single"><div class="metric-input-label">${lbl}</div><input type="number" id="${pid}-${id}" placeholder="${ph}" step="0.1" min="0" max="5"></div>`;
+  return `
+    <div class="platform-card-header" style="--card-color:#4285F4">
+      <span class="pdot" style="width:10px;height:10px;background:#4285F4"></span>
+      <span class="platform-card-name">Google Business Profile</span>
+    </div>
+    <div class="platform-card-body">
+      <div class="metric-cols-header"><div></div><div>This Month</div><div>Previous Month</div></div>
+      <div class="metric-group-label">Visibility</div>
+      ${r('searches','Searches')}${r('views','Profile Views')}
+      <div class="metric-group-label second">Customer Actions</div>
+      ${r('clicks','Website Clicks')}${r('directions','Direction Requests')}${r('calls','Phone Calls')}
+      <div class="metric-group-label second">Reviews</div>
+      ${r('reviews','New Reviews')}
+      <div style="margin-top:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Average Rating (out of 5)</div>
+        ${s('ratingcur','Current Rating','e.g. 4.7')}${s('ratingprev','Previous Rating','e.g. 4.5')}
+        <div class="metric-input-single"><div class="metric-input-label">Total Reviews</div><input type="number" id="${pid}-totalrev" placeholder="Total count" min="0"></div>
+      </div>
+    </div>`;
+}
+
+/* POSTS */
+function addPostRow() {
+  const c = document.getElementById('postItems');
+  const d = document.createElement('div');
+  d.className = 'post-item';
+  d.innerHTML = `
+    <input type="text" class="post-desc" placeholder="Brief description of the post" style="flex:2">
+    <input type="text" class="post-platform" placeholder="Platform" style="flex:1">
+    <input type="number" class="post-eng" placeholder="Engagement" min="0" style="flex:1">
+    <button class="btn-remove" onclick="this.closest('.post-item').remove()">&#x2715;</button>`;
+  c.appendChild(d);
+}
+
+/* HELPERS */
+const $ = id => document.getElementById(id);
+const gn = id => { const el = $(id); return el ? parseFloat(el.value) || 0 : 0; };
+const gv = id => { const el = $(id); return el ? el.value.trim() : ''; };
+
+function pct(cur, prev) {
+  if (!prev) return null;
+  return ((cur - prev) / prev * 100).toFixed(1);
+}
+
+function chip(cur, prev, higher = true) {
+  const p = pct(cur, prev);
+  if (p === null) return '<span style="color:var(--text-light);font-size:12px">—</span>';
+  const n = parseFloat(p);
+  const pos = higher ? n > 0 : n < 0;
+  const neg = higher ? n < 0 : n > 0;
+  const cls = pos ? 'up' : neg ? 'down' : 'same';
+  const arrow = n > 0 ? '&#8593;' : n < 0 ? '&#8595;' : '&#8594;';
+  return `<span class="metric-change ${cls}">${arrow} ${Math.abs(p)}%</span>`;
+}
+
+function mCard(label, cur, prev, color) {
+  const accent = color || 'linear-gradient(90deg,var(--purple),var(--purple-mid))';
+  const bg = accent.startsWith('#') ? `background:linear-gradient(90deg,${accent},${accent}cc)` : `background:${accent}`;
+  return `<div class="metric-card">
+    <div class="metric-card-accent" style="${bg}"></div>
+    <div class="metric-label">${label}</div>
+    <div class="metric-value">${Number(cur).toLocaleString()}</div>
+    <div class="metric-comparison">vs ${Number(prev).toLocaleString()} ${chip(cur, prev)}</div>
+  </div>`;
+}
+
+function eRow(label, cur, prev) {
+  return `<tr>
+    <td>${label}</td>
+    <td style="font-weight:700;font-family:var(--font-display)">${Number(cur).toLocaleString()}</td>
+    <td style="color:var(--text-light)">${Number(prev).toLocaleString()}</td>
+    <td>${chip(cur, prev)}</td>
+  </tr>`;
+}
+
+/* SECTION BUILDERS */
+function standardSection(pid, cfg, client, num) {
+  const n = String(num).padStart(2,'0');
+
+  const growthCards = cfg.growthFields.map(f => mCard(f.label, gn(`${pid}-${f.id}-cur`), gn(`${pid}-${f.id}-prev`), cfg.color)).join('');
+
+  const extraFields = cfg.extraFields || [];
+  const extraCards  = extraFields.map(f => mCard(f.label, gn(`${pid}-${f.id}-cur`), gn(`${pid}-${f.id}-prev`), cfg.color)).join('');
+
+  const gRows = cfg.growthFields.length;
+  const growthGridClass = gRows === 4 ? 'metric-grid four' : 'metric-grid';
+  const eLen = extraFields.length;
+  const extraGridClass = eLen === 2 ? 'metric-grid two' : eLen === 4 ? 'metric-grid four' : 'metric-grid';
+
+  const engFields = cfg.engagementFields || [];
+  let totalCur = 0, totalPrev = 0;
+  const engRows = engFields.map(f => {
+    const c = gn(`${pid}-${f.id}-cur`), p = gn(`${pid}-${f.id}-prev`);
+    totalCur += c; totalPrev += p;
+    return eRow(f.label, c, p);
+  }).join('');
+
+  const reachCur  = gn(`${pid}-reach-cur`);
+  const reachPrev = gn(`${pid}-reach-prev`);
+  const erCur  = reachCur  > 0 ? ((totalCur  / reachCur)  * 100).toFixed(2) : null;
+  const erPrev = reachPrev > 0 ? ((totalPrev / reachPrev) * 100).toFixed(2) : null;
+
+  return `
+    <div class="report-section">
+      <div class="report-section-label" style="color:${cfg.color}">${n} &mdash; ${cfg.name}</div>
+      <div class="report-section-title" style="border-bottom-color:${cfg.color}40">
+        ${cfg.name} Performance
+        <span style="width:12px;height:12px;border-radius:50%;background:${cfg.color};display:inline-block;flex-shrink:0"></span>
+      </div>
+      <div class="${growthGridClass}">${growthCards}</div>
+      ${extraCards ? `<div class="${extraGridClass}">${extraCards}</div>` : ''}
+      ${erCur !== null ? `
+      <div class="eng-rate-banner">
+        <div class="erb-rate">${erCur}%</div>
+        <div>
+          <div class="erb-label">Engagement Rate</div>
+          <div class="erb-comparison">vs ${erPrev ?? '—'}% last month ${erPrev ? chip(parseFloat(erCur), parseFloat(erPrev)) : ''}</div>
+        </div>
+        <div class="erb-formula">Total Engagement &divide; Reach &times; 100</div>
+      </div>` : ''}
+      <div class="engagement-table-wrap">
+        <div class="engagement-table-label">Engagement Breakdown</div>
+        <table class="engagement-table">
+          <thead><tr><th>Type</th><th>${client.month}</th><th>${client.prev}</th><th>Change</th></tr></thead>
+          <tbody>
+            ${engRows}
+            <tr class="engagement-total">
+              <td>Total Engagement</td>
+              <td style="font-weight:800;font-family:var(--font-display)">${Number(totalCur).toLocaleString()}</td>
+              <td style="color:rgba(255,255,255,0.55)">${Number(totalPrev).toLocaleString()}</td>
+              <td>${chip(totalCur, totalPrev)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function gbpSection(pid, num) {
+  const n    = String(num).padStart(2,'0');
+  const col  = '#4285F4';
+  const sc   = gn(`${pid}-searches-cur`),   sp   = gn(`${pid}-searches-prev`);
+  const vc   = gn(`${pid}-views-cur`),       vp   = gn(`${pid}-views-prev`);
+  const cc   = gn(`${pid}-clicks-cur`),      cp   = gn(`${pid}-clicks-prev`);
+  const dc   = gn(`${pid}-directions-cur`),  dp   = gn(`${pid}-directions-prev`);
+  const lc   = gn(`${pid}-calls-cur`),       lp   = gn(`${pid}-calls-prev`);
+  const rc   = gn(`${pid}-reviews-cur`),     rp   = gn(`${pid}-reviews-prev`);
+  const ratC = gn(`${pid}-ratingcur`),       ratP = gn(`${pid}-ratingprev`);
+  const tot  = gn(`${pid}-totalrev`);
+  const ratDiff = ratC && ratP ? (ratC - ratP).toFixed(1) : null;
+  const ratChip = ratDiff !== null
+    ? `<span class="metric-change ${parseFloat(ratDiff) > 0 ? 'up' : parseFloat(ratDiff) < 0 ? 'down' : 'same'}">${parseFloat(ratDiff) >= 0 ? '+' : ''}${ratDiff} pts</span>`
+    : '';
+
+  return `
+    <div class="report-section">
+      <div class="report-section-label" style="color:${col}">${n} &mdash; Google Business</div>
+      <div class="report-section-title" style="border-bottom-color:${col}40">
+        Google Business Profile
+        <span style="width:12px;height:12px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0"></span>
+      </div>
+      <div class="report-sub-label">Visibility</div>
+      <div class="metric-grid two">${mCard('Searches', sc, sp, col)}${mCard('Profile Views', vc, vp, col)}</div>
+      <div class="report-sub-label">Customer Actions</div>
+      <div class="metric-grid">${mCard('Website Clicks', cc, cp, col)}${mCard('Direction Requests', dc, dp, col)}${mCard('Phone Calls', lc, lp, col)}</div>
+      <div class="report-sub-label">Reviews</div>
+      <div class="gbp-review-row">
+        ${mCard('New Reviews This Month', rc, rp, col)}
+        ${ratC ? `<div class="metric-card" style="flex:1">
+          <div class="metric-card-accent" style="background:${col}"></div>
+          <div class="metric-label">Average Rating</div>
+          <div class="metric-value">${ratC}<span style="font-size:16px;color:var(--text-light);font-weight:400"> / 5</span></div>
+          <div class="metric-comparison">${ratP ? `vs ${ratP} prev. ${ratChip}` : 'Current rating'}</div>
+        </div>` : ''}
+        ${tot ? `<div class="metric-card" style="flex:1">
+          <div class="metric-card-accent" style="background:${col}"></div>
+          <div class="metric-label">Total Reviews</div>
+          <div class="metric-value">${Number(tot).toLocaleString()}</div>
+          <div class="metric-comparison">Cumulative total</div>
+        </div>` : ''}
+      </div>
+    </div>`;
+}
+
+/* GENERATE */
+function generateReport() {
+  const client = { name: gv('clientName') || 'Client Name', url: gv('clientUrl'), month: gv('reportMonth') || 'This Month', prev: gv('prevMonth') || 'Previous Month' };
+  const cfgs = allConfigs();
+  let sections = '';
+  let num = 1;
+
+  activePlatforms.forEach(pid => {
+    const cfg = cfgs[pid];
+    if (!cfg) return;
+    sections += cfg.type === 'gbp' ? gbpSection(pid, num) : standardSection(pid, cfg, client, num);
+    num++;
+  });
+
+  let postsHtml = '', postNum = 1;
+  document.querySelectorAll('.post-item').forEach(item => {
+    const desc     = item.querySelector('.post-desc').value.trim();
+    const platform = item.querySelector('.post-platform').value.trim();
+    const eng      = parseInt(item.querySelector('.post-eng').value) || 0;
+    if (!desc) return;
+    const match  = Object.keys(cfgs).find(k => cfgs[k].name.toLowerCase() === platform.toLowerCase());
+    const pColor = match ? cfgs[match].color : 'var(--purple)';
+    postsHtml += `<li class="top-post-item">
+      <span class="top-post-num">${postNum++}</span>
+      <div class="top-post-content">
+        <div class="top-post-desc">${desc}</div>
+        ${platform ? `<span class="top-post-platform" style="background:${pColor}18;color:${pColor}">${platform}</span>` : ''}
+      </div>
+      ${eng ? `<div class="top-post-engagement"><div class="tpe-label">Engagement</div><div class="tpe-value">${Number(eng).toLocaleString()}</div></div>` : ''}
+    </li>`;
+  });
+
+  const wins = gv('keyWins');
+  const recs = gv('recommendations');
+  let ex = 0;
+  const lbl = () => String(num + ex++).padStart(2,'0');
+
+  const html = `
+    <div class="report-header">
+      <div class="rh-circle-1"></div><div class="rh-circle-2"></div>
+      <div class="report-agency">LitBiz<span>.</span>Media</div>
+      <div class="report-main-title">Social Media<br>Monthly Report</div>
+      <div class="report-divider"></div>
+      <div class="report-client-info">
+        <div class="report-client-chip"><div class="rcc-label">Client</div><div class="rcc-value">${client.name}</div></div>
+        ${client.url ? `<div class="report-client-chip"><div class="rcc-label">Website</div><div class="rcc-value">${client.url}</div></div>` : ''}
+        <div class="report-client-chip"><div class="rcc-label">Reporting Period</div><div class="rcc-value">${client.month}</div></div>
+        <div class="report-client-chip"><div class="rcc-label">Compared To</div><div class="rcc-value">${client.prev}</div></div>
+      </div>
+    </div>
+    <div class="report-body">
+      ${sections}
+      ${postsHtml ? `<div class="report-section"><div class="report-section-label">${lbl()} &mdash; Content</div><div class="report-section-title">Top Performing Posts</div><ul class="top-posts-list">${postsHtml}</ul></div>` : ''}
+      ${wins ? `<div class="report-section"><div class="report-section-label">${lbl()} &mdash; Highlights</div><div class="report-section-title">Key Wins This Month</div><div class="notes-box">${wins}</div></div>` : ''}
+      ${recs ? `<div class="report-section"><div class="report-section-label">${lbl()} &mdash; Looking Ahead</div><div class="report-section-title">Recommendations &amp; Next Steps</div><div class="notes-box">${recs}</div></div>` : ''}
+    </div>
+    <div class="report-footer">
+      <div><div class="footer-brand">LitBiz<span>.</span>Media</div><div class="footer-url">litbiz.io</div></div>
+      <div class="footer-right">Prepared for ${client.name}<br>${client.month} Social Media Report</div>
+    </div>`;
+
+  document.querySelector('.report').innerHTML = html;
+  document.getElementById('form-view').style.display = 'none';
+  document.getElementById('report-view').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function goBack() {
+  document.getElementById('report-view').style.display = 'none';
+  document.getElementById('form-view').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+init();
+</script>
+</body>
+</html>

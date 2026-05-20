@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- LitBiz auth gate (Stage 1) -->
+<style id="litbiz-auth-gate">html{visibility:hidden}</style>
+<script>
+(async function(){
+  try{
+    const r = await fetch('https://api.mysparkplus.app/api/subaccount/litbiz/whoami',{credentials:'include'});
+    if(!r.ok) throw 0;
+    const d = await r.json();
+    if(!d.ok) throw 0;
+    window.__litbizUser = d;
+    var g = document.getElementById('litbiz-auth-gate');
+    if(g) g.remove();
+  }catch(e){
+    window.location.replace('https://mysparkplus.app/');
+  }
+})();
+</script>
+<!-- end LitBiz auth gate -->
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LitBiz Media | Paid Ads Report Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --purple:       #4C1D95;
+  --purple-dark:  #2E1065;
+  --purple-mid:   #6D28D9;
+  --purple-light: #EDE9FE;
+  --orange:       #EA580C;
+  --orange-light: #FB923C;
+  --surface:      #F5F3FF;
+  --border:       #DDD6FE;
+  --text-dark:    #1E1B4B;
+  --text-mid:     #4C4980;
+  --text-light:   #8B88B0;
+  --font-display: 'Syne', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --radius:       10px;
+  --shadow:       0 2px 14px rgba(76,29,149,0.09);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--surface); color: var(--text-dark); font-size: 15px; line-height: 1.5; }
+
+/* ---- FORM ---- */
+.form-view { max-width: 920px; margin: 0 auto; padding: 36px 24px 60px; }
+.form-header { margin-bottom: 36px; }
+.form-logo { font-family: var(--font-display); font-weight: 800; font-size: 15px; color: var(--text-light); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+.form-logo span { color: var(--orange); }
+.form-title { font-family: var(--font-display); font-size: 30px; font-weight: 800; color: var(--text-dark); margin-bottom: 6px; }
+.form-subtitle { font-size: 14px; color: var(--text-mid); }
+
+.section-card { background: white; border-radius: var(--radius); padding: 26px 28px; margin-bottom: 18px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+.section-title { font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--purple); letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 9px; }
+.section-title::before { content: ''; display: inline-block; width: 4px; height: 15px; background: var(--orange); border-radius: 2px; flex-shrink: 0; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+label { font-size: 12px; font-weight: 600; color: var(--text-mid); }
+
+input[type="text"], input[type="number"], textarea {
+  font-family: var(--font-body); font-size: 14px; color: var(--text-dark);
+  background: var(--surface); border: 1.5px solid var(--border); border-radius: 6px;
+  padding: 9px 12px; transition: border-color 0.15s, box-shadow 0.15s; outline: none; width: 100%;
+}
+input:focus, textarea:focus { border-color: var(--purple-mid); box-shadow: 0 0 0 3px rgba(109,40,217,0.1); background: white; }
+textarea { resize: vertical; min-height: 96px; }
+
+/* Platform chips */
+.platform-chips { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 22px; }
+.platform-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 15px; border-radius: 24px; font-size: 13px; font-weight: 600; cursor: pointer; border: 2px solid var(--border); background: white; color: var(--text-light); transition: all 0.15s; user-select: none; font-family: var(--font-body); }
+.platform-chip.active { border-color: var(--chip-color); color: var(--chip-color); background: color-mix(in srgb, var(--chip-color) 8%, transparent); }
+.platform-chip .pdot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.15s; flex-shrink: 0; }
+.platform-chip.active .pdot { background: var(--chip-color); }
+
+/* Platform cards */
+.platform-card { border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+.platform-card:last-child { margin-bottom: 0; }
+.platform-card-header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; background: var(--surface); border-bottom: 1px solid var(--border); border-left: 4px solid var(--card-color, var(--purple)); }
+.platform-card-name { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--text-dark); }
+.platform-card-body { padding: 18px 22px; }
+
+.metric-cols-header { display: grid; grid-template-columns: 200px 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+.metric-cols-header div:not(:first-child) { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.06em; }
+.metric-group-label { font-size: 11px; font-weight: 700; color: var(--orange); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; margin-top: 4px; }
+.metric-group-label.second { margin-top: 20px; }
+.metric-input-row { display: grid; grid-template-columns: 200px 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }
+.metric-input-label { font-size: 13px; font-weight: 500; color: var(--text-mid); }
+.metric-input-row input { padding: 8px 10px; font-size: 13px; }
+
+/* ROAS row - single value per period */
+.roas-note { font-size: 10px; font-weight: 400; color: var(--text-light); text-transform: none; letter-spacing: 0; margin-left: 6px; }
+
+/* Campaign input table */
+.campaign-input-section { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--border); }
+.campaign-input-label { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.campaign-input-label span { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-light); }
+
+.ci-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ci-table th { text-align: left; font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.05em; padding: 7px 8px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+.ci-table td { padding: 5px 6px; }
+.ci-table td input { padding: 7px 9px; font-size: 13px; }
+.ci-table .ci-remove { width: 40px; text-align: center; }
+
+.btn-remove { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 15px; padding: 5px; border-radius: 5px; transition: all 0.15s; }
+.btn-remove:hover { background: #FEE2E2; color: #DC2626; }
+.btn-add { margin-top: 12px; background: none; border: 1.5px dashed var(--border); color: var(--purple-mid); font-family: var(--font-body); font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 7px; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-add:hover { border-color: var(--purple-mid); background: var(--purple-light); }
+
+.btn-generate { width: 100%; padding: 16px; background: linear-gradient(135deg, var(--purple-dark) 0%, var(--purple-mid) 100%); color: white; border: none; border-radius: var(--radius); font-family: var(--font-display); font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 10px; box-shadow: 0 6px 22px rgba(76,29,149,0.3); }
+.btn-generate:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(76,29,149,0.38); }
+.btn-generate:active { transform: translateY(0); }
+
+.empty-platforms { font-size: 14px; color: var(--text-light); padding: 12px 0 4px; font-style: italic; }
+
+/* ---- REPORT ---- */
+#report-view { display: none; }
+.report-wrapper { max-width: 920px; margin: 0 auto; }
+.report-actions { display: flex; align-items: center; gap: 12px; padding: 16px 24px; background: white; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.report-actions-label { font-size: 13px; color: var(--text-light); margin-right: auto; }
+.btn-back { padding: 9px 18px; background: white; border: 1.5px solid var(--border); border-radius: 6px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--text-mid); cursor: pointer; transition: all 0.15s; }
+.btn-back:hover { border-color: var(--purple); color: var(--purple); }
+.btn-print { padding: 9px 20px; background: var(--orange); border: none; border-radius: 6px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: white; cursor: pointer; }
+.btn-print:hover { background: #C2410C; }
+.report { background: white; }
+
+/* Report header */
+.report-header { background: var(--purple-dark); padding: 52px 58px 44px; position: relative; overflow: hidden; }
+.rh-circle-1 { position: absolute; right: -50px; top: -50px; width: 240px; height: 240px; border-radius: 50%; background: rgba(234,88,12,0.18); }
+.rh-circle-2 { position: absolute; right: 80px; bottom: -70px; width: 180px; height: 180px; border-radius: 50%; background: rgba(109,40,217,0.25); }
+.report-agency { font-family: var(--font-display); font-weight: 800; font-size: 13px; color: rgba(255,255,255,0.4); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 16px; position: relative; z-index: 1; }
+.report-agency span { color: var(--orange-light); }
+.report-main-title { font-family: var(--font-display); font-size: 42px; font-weight: 800; color: white; line-height: 1.05; margin-bottom: 28px; position: relative; z-index: 1; }
+.report-divider { width: 48px; height: 3px; background: var(--orange); border-radius: 2px; margin-bottom: 24px; position: relative; z-index: 1; }
+.report-client-info { display: flex; flex-wrap: wrap; gap: 28px; position: relative; z-index: 1; }
+.report-client-chip { display: flex; flex-direction: column; gap: 3px; }
+.rcc-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
+.rcc-value { font-size: 15px; font-weight: 600; color: white; font-family: var(--font-display); }
+
+/* Report body */
+.report-body { padding: 52px 58px 44px; }
+.report-section { margin-bottom: 56px; }
+.report-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--orange); margin-bottom: 8px; }
+.report-section-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-dark); margin-bottom: 24px; padding-bottom: 14px; border-bottom: 2px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.report-sub-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-light); margin-bottom: 12px; margin-top: 20px; }
+
+/* Metric cards */
+.metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+.metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 18px 16px; position: relative; overflow: hidden; }
+.metric-card-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.metric-label { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+.metric-value { font-family: var(--font-display); font-weight: 800; color: var(--text-dark); line-height: 1; margin-bottom: 9px; }
+.metric-value.lg { font-size: 32px; }
+.metric-value.md { font-size: 26px; }
+.metric-value.sm { font-size: 20px; }
+.metric-comparison { font-size: 12px; color: var(--text-light); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.metric-change { font-weight: 700; font-size: 11px; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+.metric-change.up   { background: #D1FAE5; color: #065F46; }
+.metric-change.down { background: #FEE2E2; color: #991B1B; }
+.metric-change.same { background: var(--border); color: var(--text-mid); }
+.metric-change.neutral { background: var(--border); color: var(--text-mid); }
+
+/* Calculated metrics band */
+.calc-band { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; }
+.calc-band-header { padding: 10px 18px; background: var(--purple-dark); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: rgba(255,255,255,0.6); display: flex; align-items: center; gap: 8px; }
+.calc-band-header::before { content: '⟨ ⟩'; font-size: 13px; color: var(--orange-light); letter-spacing: -1px; }
+.calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+.calc-card { padding: 18px 16px; border-right: 1px solid var(--border); background: white; }
+.calc-card:last-child { border-right: none; }
+.calc-card.highlight { background: color-mix(in srgb, var(--orange) 5%, white); }
+.calc-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-light); margin-bottom: 9px; }
+.calc-value { font-family: var(--font-display); font-size: 24px; font-weight: 800; color: var(--text-dark); line-height: 1; margin-bottom: 8px; }
+.calc-compare { font-size: 12px; color: var(--text-light); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Campaign table */
+.campaign-table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.campaign-table { width: 100%; border-collapse: collapse; }
+.campaign-table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-light); padding: 10px 14px; text-align: left; background: var(--surface); border-bottom: 2px solid var(--border); white-space: nowrap; }
+.campaign-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.campaign-table tr:last-child td { border-bottom: none; }
+.campaign-table .c-name { font-weight: 600; color: var(--text-dark); }
+.campaign-table .c-total td { background: var(--purple-dark); color: white; font-weight: 700; font-family: var(--font-display); font-size: 12px; }
+
+/* Notes + footer */
+.notes-box { background: var(--surface); border-left: 4px solid var(--orange); border-radius: 0 var(--radius) var(--radius) 0; padding: 20px 24px; font-size: 14px; line-height: 1.75; color: var(--text-mid); white-space: pre-wrap; }
+.report-footer { background: var(--purple-dark); padding: 28px 58px; display: flex; justify-content: space-between; align-items: center; }
+.footer-brand { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: rgba(255,255,255,0.5); }
+.footer-brand span { color: var(--orange-light); }
+.footer-url { font-size: 12px; color: rgba(255,255,255,0.28); margin-top: 3px; }
+.footer-right { text-align: right; font-size: 12px; color: rgba(255,255,255,0.32); line-height: 1.7; }
+
+@media print {
+  .report-actions { display: none !important; }
+  #form-view { display: none !important; }
+  #report-view { display: block !important; }
+  body { background: white; }
+  .report-wrapper { padding: 0; margin: 0; max-width: 100%; }
+  .report-header, .report-footer, .metric-card-accent, .metric-change,
+  .notes-box, .calc-band-header, .campaign-table .c-total td {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .report-section { page-break-inside: avoid; }
+  .campaign-table-wrap { page-break-inside: avoid; }
+  .calc-band { page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<!-- FORM VIEW -->
+<div id="form-view" class="form-view">
+
+  <div class="form-header">
+    <div class="form-logo">LitBiz<span>.</span>Media</div>
+    <div class="form-title">Paid Ads Report Builder</div>
+    <div class="form-subtitle">Enter account totals and optional campaign breakdowns. CTR, CPC, CPM, and Cost Per Appointment calculate automatically.</div>
+  </div>
+
+  <!-- Client Info -->
+  <div class="section-card">
+    <div class="section-title">Client Information</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Client Name</label><input type="text" id="clientName" placeholder="e.g. Harmony Dental Care"></div>
+      <div class="form-group"><label>Website</label><input type="text" id="clientUrl" placeholder="e.g. harmonydental.com"></div>
+      <div class="form-group"><label>Reporting Month</label><input type="text" id="reportMonth" placeholder="e.g. March 2025"></div>
+      <div class="form-group"><label>Previous Month</label><input type="text" id="prevMonth" placeholder="e.g. February 2025"></div>
+    </div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;color:var(--text-mid);margin-bottom:6px">Avg. Appointment Value ($) <span style="font-size:11px;font-weight:400;color:var(--text-light)">&mdash; optional, used to auto-calculate ROAS per platform</span></div>
+      <input type="number" id="apptValue" placeholder="e.g. 150.00" min="0" step="0.01" style="max-width:220px">
+    </div>
+  </div>
+
+  <!-- Platforms -->
+  <div class="section-card">
+    <div class="section-title">Ad Platforms</div>
+    <div class="platform-chips" id="platformChips"></div>
+    <div id="platformCards"></div>
+  </div>
+
+  <!-- Key Wins -->
+  <div class="section-card">
+    <div class="section-title">Key Wins This Month</div>
+    <div class="form-group"><label>Highlights across all platforms</label><textarea id="keyWins" placeholder="Google Ads CPA dropped 18% this month. Meta appointment bookings up 24%. TikTok campaign drove 12 new leads at $31 each."></textarea></div>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="section-card">
+    <div class="section-title">Recommendations &amp; Next Steps</div>
+    <div class="form-group"><label>What you're adjusting or testing next month</label><textarea id="recommendations" placeholder="Pause underperforming Google ad group and reallocate budget to top campaign. Test new Meta creative targeting 35-55 female demographic."></textarea></div>
+  </div>
+
+  <button class="btn-generate" onclick="generateReport()">Generate Report</button>
+</div>
+
+<!-- REPORT VIEW -->
+<div id="report-view">
+  <div class="report-wrapper">
+    <div class="report-actions">
+      <span class="report-actions-label">Preview your report below. Use Print / Save as PDF to export.</span>
+      <button class="btn-back" onclick="goBack()">&#8592; Back to Edit</button>
+      <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+    <div class="report"></div>
+  </div>
+</div>
+
+<script>
+/* ==============================
+   PLATFORM CONFIG
+   ============================== */
+const PLATFORMS = {
+  google: { name: 'Google Ads',  color: '#4285F4' },
+  meta:   { name: 'Meta Ads',    color: '#0866FF' },
+  tiktok: { name: 'TikTok Ads',  color: '#FF0050' },
+};
+const PLATFORM_ORDER = ['google', 'meta', 'tiktok'];
+
+let activePlatforms = ['google', 'meta', 'tiktok'];
+
+/* ---- Init ---- */
+function init() {
+  renderChips();
+  renderCards();
+}
+
+/* ---- Chips ---- */
+function renderChips() {
+  const c = document.getElementById('platformChips');
+  c.innerHTML = '';
+  PLATFORM_ORDER.forEach(id => {
+    const cfg = PLATFORMS[id];
+    const active = activePlatforms.includes(id);
+    const btn = document.createElement('button');
+    btn.className = 'platform-chip' + (active ? ' active' : '');
+    btn.style.setProperty('--chip-color', cfg.color);
+    btn.innerHTML = `<span class="pdot"></span>${cfg.name}`;
+    btn.onclick = () => togglePlatform(id);
+    c.appendChild(btn);
+  });
+}
+
+function togglePlatform(id) {
+  activePlatforms = activePlatforms.includes(id)
+    ? activePlatforms.filter(x => x !== id)
+    : [...activePlatforms, id];
+  renderChips();
+  renderCards();
+}
+
+/* ---- Platform form cards ---- */
+function renderCards() {
+  const c = document.getElementById('platformCards');
+  c.innerHTML = '';
+  if (!activePlatforms.length) {
+    c.innerHTML = '<p class="empty-platforms">No platforms selected. Toggle a platform above to add it.</p>';
+    return;
+  }
+  PLATFORM_ORDER.filter(id => activePlatforms.includes(id)).forEach(id => {
+    const el = document.createElement('div');
+    el.innerHTML = buildCard(id);
+    c.appendChild(el.firstElementChild);
+  });
+}
+
+function buildCard(pid) {
+  const cfg = PLATFORMS[pid];
+  const row = (id, label) => `
+    <div class="metric-input-row">
+      <div class="metric-input-label">${label}</div>
+      <input type="number" id="${pid}-${id}-cur" placeholder="0" min="0" step="${id === 'spend' ? '0.01' : '1'}">
+      <input type="number" id="${pid}-${id}-prev" placeholder="0" min="0" step="${id === 'spend' ? '0.01' : '1'}">
+    </div>`;
+
+  return `
+    <div class="platform-card">
+      <div class="platform-card-header" style="--card-color:${cfg.color}">
+        <span class="pdot" style="width:10px;height:10px;background:${cfg.color}"></span>
+        <span class="platform-card-name">${cfg.name}</span>
+      </div>
+      <div class="platform-card-body">
+        <div class="metric-cols-header"><div></div><div>This Month</div><div>Previous Month</div></div>
+
+        <div class="metric-group-label">Account Totals</div>
+        ${row('spend',  'Spend ($)')}
+        ${row('imp',    'Impressions')}
+        ${row('reach',  'Reach')}
+        ${row('clicks', 'Clicks')}
+        ${row('appts',  'Booked Appointments')}
+
+        <div class="metric-group-label second" style="display:flex;align-items:center;gap:6px">
+          ROAS
+          <span class="roas-note">(leave blank to auto-calculate from Appt Value above)</span>
+        </div>
+        ${row('roas', 'ROAS')}
+
+        <div class="campaign-input-section">
+          <div class="campaign-input-label">
+            Campaign Breakdown
+            <span>(optional — current month only)</span>
+          </div>
+          <table class="ci-table">
+            <thead>
+              <tr>
+                <th style="min-width:160px">Campaign Name</th>
+                <th style="width:110px">Spend ($)</th>
+                <th style="width:110px">Impressions</th>
+                <th style="width:100px">Clicks</th>
+                <th style="width:110px">Appointments</th>
+                <th class="ci-remove"></th>
+              </tr>
+            </thead>
+            <tbody id="${pid}-campaigns"></tbody>
+          </table>
+          <button class="btn-add" onclick="addCampaignRow('${pid}')">+ Add Campaign</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ---- Campaign rows ---- */
+function addCampaignRow(pid) {
+  const tbody = document.getElementById(`${pid}-campaigns`);
+  const tr = document.createElement('tr');
+  tr.className = 'campaign-input-row';
+  tr.innerHTML = `
+    <td><input type="text" placeholder="e.g. Brand Search" style="width:100%;padding:7px 9px;font-size:13px"></td>
+    <td><input type="number" placeholder="0.00" min="0" step="0.01" style="width:100%;padding:7px 9px;font-size:13px"></td>
+    <td><input type="number" placeholder="0" min="0" style="width:100%;padding:7px 9px;font-size:13px"></td>
+    <td><input type="number" placeholder="0" min="0" style="width:100%;padding:7px 9px;font-size:13px"></td>
+    <td><input type="number" placeholder="0" min="0" style="width:100%;padding:7px 9px;font-size:13px"></td>
+    <td class="ci-remove"><button class="btn-remove" onclick="this.closest('tr').remove()">&#x2715;</button></td>`;
+  tbody.appendChild(tr);
+}
+
+/* ==============================
+   HELPERS
+   ============================== */
+const gn = id => { const el = document.getElementById(id); return el ? parseFloat(el.value) || 0 : 0; };
+const gv = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+const safe = (a, b) => b && b !== 0 ? a / b : 0;
+
+function fmtC(n) {
+  if (!n) return '$0.00';
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtN(n) { return Number(n).toLocaleString(); }
+function fmtP(n) { return Number(n).toFixed(2) + '%'; }
+function fmtX(n) { return Number(n).toFixed(2) + 'x'; }
+
+function valueSize(val, isCurrency) {
+  if (!isCurrency) return 'lg';
+  const s = String(Math.floor(val));
+  if (s.length >= 7) return 'sm';
+  if (s.length >= 5) return 'md';
+  return 'lg';
+}
+
+function chip(cur, prev, mode = 'higher') {
+  // mode: 'higher' = up is good, 'lower' = down is good, 'neutral' = no color
+  if (!prev || prev === 0) return '<span style="color:var(--text-light);font-size:11px">—</span>';
+  const pct = ((cur - prev) / prev * 100).toFixed(1);
+  const n = parseFloat(pct);
+  let cls;
+  if (mode === 'neutral') { cls = 'neutral'; }
+  else if (mode === 'higher') { cls = n > 0 ? 'up' : n < 0 ? 'down' : 'same'; }
+  else { cls = n < 0 ? 'up' : n > 0 ? 'down' : 'same'; } // lower is better
+  const arrow = n > 0 ? '&#8593;' : n < 0 ? '&#8595;' : '&#8594;';
+  return `<span class="metric-change ${cls}">${arrow} ${Math.abs(pct)}%</span>`;
+}
+
+function mCard(label, displayVal, prevDisplayVal, cur, prev, mode, color, size = '') {
+  return `<div class="metric-card">
+    <div class="metric-card-accent" style="background:${color}"></div>
+    <div class="metric-label">${label}</div>
+    <div class="metric-value ${size || 'lg'}">${displayVal}</div>
+    <div class="metric-comparison">vs ${prevDisplayVal} ${chip(cur, prev, mode)}</div>
+  </div>`;
+}
+
+function calcCard(label, displayVal, prevDisplayVal, cur, prev, mode, highlight = false) {
+  return `<div class="calc-card${highlight ? ' highlight' : ''}">
+    <div class="calc-label">${label}</div>
+    <div class="calc-value">${displayVal}</div>
+    <div class="calc-compare">vs ${prevDisplayVal} ${chip(cur, prev, mode)}</div>
+  </div>`;
+}
+
+/* ==============================
+   REPORT SECTION BUILDER
+   ============================== */
+function buildPlatformSection(pid, client, num, avgApptValue) {
+  const cfg = PLATFORMS[pid];
+  const n   = String(num).padStart(2, '0');
+  const col = cfg.color;
+
+  const spendC = gn(`${pid}-spend-cur`),  spendP = gn(`${pid}-spend-prev`);
+  const impC   = gn(`${pid}-imp-cur`),    impP   = gn(`${pid}-imp-prev`);
+  const reachC = gn(`${pid}-reach-cur`),  reachP = gn(`${pid}-reach-prev`);
+  const clickC = gn(`${pid}-clicks-cur`), clickP = gn(`${pid}-clicks-prev`);
+  const apptC  = gn(`${pid}-appts-cur`),  apptP  = gn(`${pid}-appts-prev`);
+  const roasManC = gn(`${pid}-roas-cur`), roasManP = gn(`${pid}-roas-prev`);
+
+  // Calculated
+  const ctrC  = safe(clickC, impC)   * 100;
+  const ctrP  = safe(clickP, impP)   * 100;
+  const cpcC  = safe(spendC, clickC);
+  const cpcP  = safe(spendP, clickP);
+  const cpmC  = safe(spendC, impC)   * 1000;
+  const cpmP  = safe(spendP, impP)   * 1000;
+  const cpaC  = safe(spendC, apptC);
+  const cpaP  = safe(spendP, apptP);
+
+  // ROAS: use manual if entered, otherwise calculate from avg appt value
+  const autoRoasC = avgApptValue && spendC ? safe(apptC * avgApptValue, spendC) : 0;
+  const autoRoasP = avgApptValue && spendP ? safe(apptP * avgApptValue, spendP) : 0;
+  const roasC = roasManC || autoRoasC;
+  const roasP = roasManP || autoRoasP;
+  const roasDisplay = roasC ? fmtX(roasC) : '—';
+  const roasPrevDisplay = roasP ? fmtX(roasP) : '—';
+
+  // Campaign table
+  let campaignRows = '';
+  let totSpend = 0, totImp = 0, totClicks = 0, totAppts = 0;
+
+  document.querySelectorAll(`#${pid}-campaigns .campaign-input-row`).forEach(row => {
+    const inp  = row.querySelectorAll('input');
+    const name = inp[0].value.trim();
+    const s    = parseFloat(inp[1].value) || 0;
+    const im   = parseFloat(inp[2].value) || 0;
+    const cl   = parseFloat(inp[3].value) || 0;
+    const ap   = parseFloat(inp[4].value) || 0;
+    if (!name && !s) return;
+
+    totSpend  += s;
+    totImp    += im;
+    totClicks += cl;
+    totAppts  += ap;
+
+    const rCtr = im > 0 ? fmtP(safe(cl, im) * 100) : '—';
+    const rCpc = cl > 0 ? fmtC(safe(s, cl)) : '—';
+    const rCpa = ap > 0 ? fmtC(safe(s, ap)) : '—';
+
+    campaignRows += `<tr>
+      <td class="c-name">${name || 'Unnamed Campaign'}</td>
+      <td>${fmtC(s)}</td>
+      <td>${fmtN(im)}</td>
+      <td>${fmtN(cl)}</td>
+      <td>${rCtr}</td>
+      <td>${rCpc}</td>
+      <td>${fmtN(ap)}</td>
+      <td>${rCpa}</td>
+    </tr>`;
+  });
+
+  const hasCampaigns = campaignRows.length > 0;
+
+  if (hasCampaigns) {
+    const tCtr = totImp    > 0 ? fmtP(safe(totClicks, totImp)   * 100) : '—';
+    const tCpc = totClicks > 0 ? fmtC(safe(totSpend,  totClicks))      : '—';
+    const tCpa = totAppts  > 0 ? fmtC(safe(totSpend,  totAppts))       : '—';
+    campaignRows += `<tr class="c-total">
+      <td>Total</td>
+      <td>${fmtC(totSpend)}</td>
+      <td>${fmtN(totImp)}</td>
+      <td>${fmtN(totClicks)}</td>
+      <td>${tCtr}</td>
+      <td>${tCpc}</td>
+      <td>${fmtN(totAppts)}</td>
+      <td>${tCpa}</td>
+    </tr>`;
+  }
+
+  return `
+    <div class="report-section">
+      <div class="report-section-label" style="color:${col}">${n} &mdash; ${cfg.name}</div>
+      <div class="report-section-title" style="border-bottom-color:${col}40">
+        ${cfg.name} Performance
+        <span style="width:12px;height:12px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0"></span>
+      </div>
+
+      <div class="metric-grid">
+        ${mCard('Spend', fmtC(spendC), fmtC(spendP), spendC, spendP, 'neutral', col, valueSize(spendC, true))}
+        ${mCard('Impressions', fmtN(impC), fmtN(impP), impC, impP, 'higher', col, 'lg')}
+        ${mCard('Reach', fmtN(reachC), fmtN(reachP), reachC, reachP, 'higher', col, 'lg')}
+      </div>
+
+      <div class="metric-grid">
+        ${mCard('Clicks', fmtN(clickC), fmtN(clickP), clickC, clickP, 'higher', col, 'lg')}
+        ${mCard('Booked Appointments', fmtN(apptC), fmtN(apptP), apptC, apptP, 'higher', col, 'lg')}
+        <div class="metric-card">
+          <div class="metric-card-accent" style="background:${col}"></div>
+          <div class="metric-label">ROAS</div>
+          <div class="metric-value lg">${roasDisplay}</div>
+          <div class="metric-comparison">vs ${roasPrevDisplay} ${roasC && roasP ? chip(roasC, roasP, 'higher') : ''}</div>
+        </div>
+      </div>
+
+      <div class="calc-band">
+        <div class="calc-band-header">Calculated Metrics</div>
+        <div class="calc-grid">
+          ${calcCard('CTR', fmtP(ctrC), fmtP(ctrP), ctrC, ctrP, 'higher')}
+          ${calcCard('CPC', fmtC(cpcC), fmtC(cpcP), cpcC, cpcP, 'lower')}
+          ${calcCard('CPM', fmtC(cpmC), fmtC(cpmP), cpmC, cpmP, 'lower')}
+          ${calcCard('Cost Per Appointment', fmtC(cpaC), fmtC(cpaP), cpaC, cpaP, 'lower', true)}
+        </div>
+      </div>
+
+      ${hasCampaigns ? `
+      <div class="report-sub-label">Campaign Breakdown</div>
+      <div class="campaign-table-wrap">
+        <table class="campaign-table">
+          <thead>
+            <tr>
+              <th>Campaign</th>
+              <th>Spend</th>
+              <th>Impressions</th>
+              <th>Clicks</th>
+              <th>CTR</th>
+              <th>CPC</th>
+              <th>Appointments</th>
+              <th>Cost / Appt</th>
+            </tr>
+          </thead>
+          <tbody>${campaignRows}</tbody>
+        </table>
+      </div>` : ''}
+    </div>`;
+}
+
+/* ==============================
+   GENERATE
+   ============================== */
+function generateReport() {
+  const client = {
+    name:  gv('clientName')  || 'Client Name',
+    url:   gv('clientUrl'),
+    month: gv('reportMonth') || 'This Month',
+    prev:  gv('prevMonth')   || 'Previous Month',
+  };
+  const avgApptValue = parseFloat(document.getElementById('apptValue').value) || 0;
+
+  let sections = '';
+  let num = 1;
+  PLATFORM_ORDER.filter(id => activePlatforms.includes(id)).forEach(id => {
+    sections += buildPlatformSection(id, client, num++, avgApptValue);
+  });
+
+  const wins = gv('keyWins');
+  const recs = gv('recommendations');
+  let ex = 0;
+  const lbl = () => String(num + ex++).padStart(2, '0');
+
+  const html = `
+    <div class="report-header">
+      <div class="rh-circle-1"></div><div class="rh-circle-2"></div>
+      <div class="report-agency">LitBiz<span>.</span>Media</div>
+      <div class="report-main-title">Paid Ads<br>Monthly Report</div>
+      <div class="report-divider"></div>
+      <div class="report-client-info">
+        <div class="report-client-chip"><div class="rcc-label">Client</div><div class="rcc-value">${client.name}</div></div>
+        ${client.url ? `<div class="report-client-chip"><div class="rcc-label">Website</div><div class="rcc-value">${client.url}</div></div>` : ''}
+        <div class="report-client-chip"><div class="rcc-label">Reporting Period</div><div class="rcc-value">${client.month}</div></div>
+        <div class="report-client-chip"><div class="rcc-label">Compared To</div><div class="rcc-value">${client.prev}</div></div>
+        ${avgApptValue ? `<div class="report-client-chip"><div class="rcc-label">Avg. Appt Value</div><div class="rcc-value">${fmtC(avgApptValue)}</div></div>` : ''}
+      </div>
+    </div>
+
+    <div class="report-body">
+      ${sections}
+
+      ${wins ? `<div class="report-section">
+        <div class="report-section-label">${lbl()} &mdash; Highlights</div>
+        <div class="report-section-title">Key Wins This Month</div>
+        <div class="notes-box">${wins}</div>
+      </div>` : ''}
+
+      ${recs ? `<div class="report-section">
+        <div class="report-section-label">${lbl()} &mdash; Looking Ahead</div>
+        <div class="report-section-title">Recommendations &amp; Next Steps</div>
+        <div class="notes-box">${recs}</div>
+      </div>` : ''}
+    </div>
+
+    <div class="report-footer">
+      <div>
+        <div class="footer-brand">LitBiz<span>.</span>Media</div>
+        <div class="footer-url">litbiz.io</div>
+      </div>
+      <div class="footer-right">Prepared for ${client.name}<br>${client.month} Paid Ads Report</div>
+    </div>`;
+
+  document.querySelector('.report').innerHTML = html;
+  document.getElementById('form-view').style.display = 'none';
+  document.getElementById('report-view').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function goBack() {
+  document.getElementById('report-view').style.display = 'none';
+  document.getElementById('form-view').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+init();
+</script>
+</body>
+</html>

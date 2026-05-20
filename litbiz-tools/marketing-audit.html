@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- LitBiz auth gate (Stage 1) -->
+<style id="litbiz-auth-gate">html{visibility:hidden}</style>
+<script>
+(async function(){
+  try{
+    const r = await fetch('https://api.mysparkplus.app/api/subaccount/litbiz/whoami',{credentials:'include'});
+    if(!r.ok) throw 0;
+    const d = await r.json();
+    if(!d.ok) throw 0;
+    window.__litbizUser = d;
+    var g = document.getElementById('litbiz-auth-gate');
+    if(g) g.remove();
+  }catch(e){
+    window.location.replace('https://mysparkplus.app/');
+  }
+})();
+</script>
+<!-- end LitBiz auth gate -->
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LitBiz Media | Marketing Audit Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --purple:      #4C1D95;
+  --purple-dark: #2E1065;
+  --purple-mid:  #6D28D9;
+  --purple-light:#EDE9FE;
+  --orange:      #EA580C;
+  --orange-lt:   #FB923C;
+  --surface:     #F5F3FF;
+  --border:      #DDD6FE;
+  --text-dark:   #1E1B4B;
+  --text-mid:    #4C4980;
+  --text-light:  #8B88B0;
+  --fd:          'Syne', sans-serif;
+  --fb:          'DM Sans', sans-serif;
+  --radius:      10px;
+  --shadow:      0 2px 14px rgba(76,29,149,0.09);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--fb);background:var(--surface);color:var(--text-dark);font-size:15px;line-height:1.5}
+
+/* ===== FORM ===== */
+.fv{max-width:900px;margin:0 auto;padding:36px 24px 60px}
+.fhdr{margin-bottom:32px}
+.flogo{font-family:var(--fd);font-weight:800;font-size:15px;color:var(--text-light);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.flogo span{color:var(--orange)}
+.ftitle{font-family:var(--fd);font-size:30px;font-weight:800;color:var(--text-dark);margin-bottom:6px}
+.fsub{font-size:14px;color:var(--text-mid)}
+
+/* Score preview */
+.score-preview{background:white;border-radius:var(--radius);border:1.5px solid var(--border);padding:18px 24px;margin-bottom:20px;box-shadow:var(--shadow);display:flex;align-items:center;gap:24px;position:sticky;top:0;z-index:50}
+.sp-score{font-family:var(--fd);font-weight:800;font-size:38px;line-height:1;min-width:76px}
+.sp-right{flex:1}
+.sp-bar-bg{height:8px;background:var(--border);border-radius:4px;margin-bottom:6px;overflow:hidden}
+.sp-bar-fill{height:100%;border-radius:4px;transition:width .4s ease,background .4s ease}
+.sp-meta{display:flex;justify-content:space-between;align-items:center}
+.sp-label{font-size:12px;font-weight:700;letter-spacing:.04em}
+.sp-items{font-size:11px;color:var(--text-light)}
+
+/* Weight legend in preview */
+.sp-legend{display:flex;gap:14px;margin-left:auto;padding-left:24px;border-left:1px solid var(--border);flex-shrink:0}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--text-light)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* Section cards */
+.sc{background:white;border-radius:var(--radius);padding:24px 26px;margin-bottom:16px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.stitle{font-family:var(--fd);font-size:12px;font-weight:700;color:var(--purple);letter-spacing:.09em;text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:9px}
+.stitle::before{content:'';display:inline-block;width:4px;height:15px;background:var(--orange);border-radius:2px;flex-shrink:0}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fgrp{display:flex;flex-direction:column;gap:5px}
+label{font-size:12px;font-weight:600;color:var(--text-mid)}
+input[type=text],textarea{font-family:var(--fb);font-size:14px;color:var(--text-dark);background:var(--surface);border:1.5px solid var(--border);border-radius:6px;padding:8px 12px;outline:none;width:100%;transition:border-color .15s,box-shadow .15s}
+input:focus,textarea:focus{border-color:var(--purple-mid);box-shadow:0 0 0 3px rgba(109,40,217,.1);background:white}
+textarea{resize:vertical;min-height:80px}
+.at-row{display:flex;gap:10px}
+.at-btn{flex:1;padding:9px;border:2px solid var(--border);border-radius:8px;background:white;font-family:var(--fb);font-size:13px;font-weight:600;color:var(--text-light);cursor:pointer;transition:all .15s;text-align:center}
+.at-btn.active{border-color:var(--purple-mid);color:var(--purple-mid);background:var(--purple-light)}
+
+/* Category cards */
+.cat-card{background:white;border-radius:var(--radius);margin-bottom:14px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden}
+.cat-hdr{display:flex;align-items:center;gap:12px;padding:14px 22px;cursor:pointer;user-select:none;border-left:4px solid var(--cat-color)}
+.cat-hdr:hover{background:var(--surface)}
+.cat-dot{width:10px;height:10px;border-radius:50%;background:var(--cat-color);flex-shrink:0}
+.cat-name{font-family:var(--fd);font-weight:700;font-size:15px;color:var(--text-dark);flex:1}
+.cat-meta{display:flex;align-items:center;gap:10px}
+.cat-sbadge{font-size:12px;font-weight:700;padding:3px 10px;border-radius:12px;white-space:nowrap}
+.cat-count{font-size:11px;color:var(--text-light)}
+.cat-arrow{font-size:13px;color:var(--text-light);transition:transform .2s}
+.cat-arrow.open{transform:rotate(180deg)}
+.cat-body{border-top:1px solid var(--border)}
+.cat-desc{padding:12px 22px 10px;font-size:13px;color:var(--text-mid);border-bottom:1px solid var(--border)}
+
+/* Item rows */
+.item-row{display:flex;align-items:flex-start;gap:10px;padding:11px 22px;border-bottom:1px solid var(--border)}
+.item-row:last-of-type{border-bottom:none}
+.item-left{display:flex;flex-direction:column;align-items:center;gap:5px;flex-shrink:0}
+.tog-group{display:flex;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;flex-shrink:0}
+.tog-btn{padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer;border:none;background:white;font-family:var(--fb);color:var(--text-light);transition:all .1s;white-space:nowrap}
+.tog-btn:not(:last-child){border-right:1px solid var(--border)}
+.tog-btn.sel-yes{background:#D1FAE5;color:#065F46}
+.tog-btn.sel-partial{background:#FEF3C7;color:#78350F}
+.tog-btn.sel-no{background:#FEE2E2;color:#991B1B}
+
+/* Weight indicator in form */
+.w-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.w-dot.critical{background:#DC2626}
+.w-dot.high{background:#2563EB}
+.w-dot.standard{background:#9CA3AF}
+
+.item-label{font-size:14px;color:var(--text-dark);line-height:1.45;flex:1;padding-top:3px}
+.note-toggle{font-size:12px;font-weight:600;color:var(--purple-mid);cursor:pointer;background:none;border:none;padding:3px 0 0;font-family:var(--fb);text-decoration:underline;white-space:nowrap;flex-shrink:0}
+.item-note-area{padding:0 22px 10px;display:none;border-bottom:1px solid var(--border)}
+.item-note-area textarea{font-size:13px;min-height:56px;margin-top:2px}
+
+/* Buttons */
+.btn-gen{width:100%;padding:16px;background:linear-gradient(135deg,var(--purple-dark),var(--purple-mid));color:white;border:none;border-radius:var(--radius);font-family:var(--fd);font-size:16px;font-weight:700;cursor:pointer;transition:all .2s;margin-top:10px;box-shadow:0 6px 22px rgba(76,29,149,.3)}
+.btn-gen:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(76,29,149,.38)}
+
+/* ===== REPORT ===== */
+#rv{display:none}
+.rw{max-width:900px;margin:0 auto}
+.ract{display:flex;align-items:center;gap:12px;padding:16px 24px;background:white;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.ract-lbl{font-size:13px;color:var(--text-light);margin-right:auto}
+.btn-back{padding:9px 18px;background:white;border:1.5px solid var(--border);border-radius:6px;font-family:var(--fb);font-size:13px;font-weight:600;color:var(--text-mid);cursor:pointer}
+.btn-back:hover{border-color:var(--purple);color:var(--purple)}
+.btn-print{padding:9px 20px;background:var(--orange);border:none;border-radius:6px;font-family:var(--fb);font-size:13px;font-weight:600;color:white;cursor:pointer}
+.report{background:white}
+
+/* Header */
+.rhdr{background:var(--purple-dark);padding:52px 58px 44px;position:relative;overflow:hidden}
+.rh-c1{position:absolute;right:-50px;top:-50px;width:240px;height:240px;border-radius:50%;background:rgba(234,88,12,.18)}
+.rh-c2{position:absolute;right:80px;bottom:-70px;width:180px;height:180px;border-radius:50%;background:rgba(109,40,217,.25)}
+.ragency{font-family:var(--fd);font-weight:800;font-size:13px;color:rgba(255,255,255,.4);letter-spacing:.12em;text-transform:uppercase;margin-bottom:16px;position:relative;z-index:1}
+.ragency span{color:var(--orange-lt)}
+.rtitle{font-family:var(--fd);font-size:42px;font-weight:800;color:white;line-height:1.05;margin-bottom:28px;position:relative;z-index:1}
+.rdiv{width:48px;height:3px;background:var(--orange);border-radius:2px;margin-bottom:24px;position:relative;z-index:1}
+.rcinfo{display:flex;flex-wrap:wrap;gap:26px;position:relative;z-index:1}
+.rchip{display:flex;flex-direction:column;gap:3px}
+.rclbl{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4)}
+.rcval{font-size:15px;font-weight:600;color:white;font-family:var(--fd)}
+
+/* Report body */
+.rbody{padding:52px 58px 44px}
+
+/* Overall score */
+.overall-block{display:flex;align-items:stretch;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;border:1px solid var(--border)}
+.ob-left{padding:36px 40px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;flex-shrink:0;min-width:200px}
+.ob-pct{font-family:var(--fd);font-size:64px;font-weight:800;color:white;line-height:1}
+.ob-tier{font-size:12px;font-weight:700;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.1em}
+.ob-right{flex:1;padding:28px 32px;background:var(--surface);display:flex;flex-direction:column;justify-content:space-between;gap:18px}
+.ob-title{font-family:var(--fd);font-size:18px;font-weight:700;color:var(--text-dark)}
+.ob-desc{font-size:14px;color:var(--text-mid);line-height:1.6;margin-top:4px}
+.ob-counts{display:flex;gap:20px;flex-wrap:wrap}
+.obc{display:flex;flex-direction:column;gap:2px}
+.obc-val{font-family:var(--fd);font-size:24px;font-weight:800}
+.obc-lbl{font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em}
+
+/* Weighted note */
+.weight-note{background:var(--purple-light);border:1px solid var(--border);border-radius:8px;padding:12px 18px;font-size:12px;color:var(--text-mid);display:flex;align-items:center;gap:10px;margin-bottom:28px}
+.weight-note-legend{display:flex;gap:16px;margin-left:auto;flex-shrink:0}
+.wnl-item{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700}
+
+/* Priority actions */
+.priority-block{border:1.5px solid #DC2626;border-radius:var(--radius);overflow:hidden;margin-bottom:36px}
+.priority-hdr{background:#DC2626;padding:14px 22px;display:flex;align-items:center;gap:10px}
+.priority-hdr-title{font-family:var(--fd);font-size:14px;font-weight:800;color:white;letter-spacing:.02em}
+.priority-hdr-count{background:rgba(255,255,255,.2);color:white;font-size:12px;font-weight:700;padding:2px 9px;border-radius:12px}
+.priority-hdr-sub{font-size:12px;color:rgba(255,255,255,.7);margin-left:auto}
+.priority-item{display:flex;align-items:flex-start;gap:12px;padding:13px 22px;border-bottom:1px solid #FECACA;background:white}
+.priority-item:last-child{border-bottom:none}
+.pi-cat{font-size:10px;font-weight:800;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;flex-shrink:0;margin-top:2px;background:#FEF2F2;color:#DC2626}
+.pi-status{font-size:10px;font-weight:800;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;flex-shrink:0;margin-top:2px}
+.pi-status.partial{background:#FEF3C7;color:#78350F}
+.pi-status.no{background:#FEE2E2;color:#991B1B}
+.pi-label{font-size:13px;font-weight:600;color:var(--text-dark);line-height:1.45;flex:1}
+.pi-opp{font-size:12px;color:var(--text-mid);margin-top:4px;line-height:1.5}
+
+/* Category summary */
+.cs-title{font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.09em;margin-bottom:14px}
+.cs-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:36px}
+.cs-row{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;border-left:3px solid var(--cs-color)}
+.cs-name{font-size:13px;font-weight:600;color:var(--text-dark);flex:1}
+.cs-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+.cs-bar-bg{width:80px;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.cs-bar-fill{height:100%;border-radius:3px}
+.cs-pct{font-family:var(--fd);font-size:12px;font-weight:800}
+
+/* Report sections */
+.rsec{margin-bottom:48px}
+.rslbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--orange);margin-bottom:8px}
+.rstitle{font-family:var(--fd);font-size:20px;font-weight:700;color:var(--text-dark);display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.rs-scoreline{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid var(--border)}
+.rs-badge{font-size:12px;font-weight:800;padding:4px 12px;border-radius:6px;font-family:var(--fd)}
+.rs-bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.rs-bar-fill{height:100%;border-radius:3px}
+.rs-meta{font-size:11px;color:var(--text-light)}
+
+/* Report items */
+.ri{padding:13px 0;border-bottom:1px solid var(--border)}
+.ri:last-child{border-bottom:none}
+.ri-top{display:flex;align-items:flex-start;gap:10px}
+.ri-badges{display:flex;gap:6px;flex-shrink:0;margin-top:2px}
+.ri-status{font-size:10px;font-weight:800;padding:3px 9px;border-radius:5px;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}
+.ri-status.yes{background:#D1FAE5;color:#065F46}
+.ri-status.partial{background:#FEF3C7;color:#78350F}
+.ri-status.no{background:#FFF1ED;color:#9A3412}
+.ri-status.unrated{background:var(--border);color:var(--text-light)}
+.ri-wbadge{font-size:9px;font-weight:800;padding:3px 7px;border-radius:4px;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}
+.ri-wbadge.critical{background:#FEF2F2;color:#DC2626}
+.ri-wbadge.high{background:#EFF6FF;color:#1D4ED8}
+.ri-wbadge.standard{background:var(--border);color:var(--text-light)}
+.ri-label{font-size:14px;color:var(--text-dark);font-weight:500;line-height:1.45}
+.ri-opp{margin-top:7px;margin-left:98px;font-size:13px;color:var(--text-mid);line-height:1.6;padding-left:12px;border-left:3px solid #FED7AA}
+.ri-note{margin-top:5px;margin-left:98px;font-size:13px;color:var(--text-mid);font-style:italic;line-height:1.6}
+.ri-note::before{content:'"'}
+.ri-note::after{content:'"'}
+
+/* Notes */
+.notes-box{background:var(--surface);border-left:4px solid var(--orange);border-radius:0 var(--radius) var(--radius) 0;padding:20px 24px;font-size:14px;line-height:1.75;color:var(--text-mid);white-space:pre-wrap}
+
+/* Footer */
+.rfooter{background:var(--purple-dark);padding:28px 58px;display:flex;justify-content:space-between;align-items:center}
+.fb2{font-family:var(--fd);font-weight:800;font-size:17px;color:rgba(255,255,255,.5)}
+.fb2 span{color:var(--orange-lt)}
+.fu{font-size:12px;color:rgba(255,255,255,.28);margin-top:3px}
+.fr{text-align:right;font-size:12px;color:rgba(255,255,255,.32);line-height:1.7}
+
+@media print{
+  .ract{display:none!important}
+  #fv{display:none!important}
+  #rv{display:block!important}
+  body{background:white}
+  .rw{padding:0;margin:0;max-width:100%}
+  .rhdr,.rfooter,.ri-status,.ri-wbadge,.ob-left,.notes-box,.priority-hdr,.pi-cat,.pi-status{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .rsec,.overall-block,.priority-block,.cs-grid{page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<div id="fv" class="fv">
+  <div class="fhdr">
+    <div class="flogo">LitBiz<span>.</span>Media</div>
+    <div class="ftitle">Marketing Audit Tool</div>
+    <div class="fsub">Rate each item across all 10 categories. Items are weighted by impact so the score reflects real-world priority, not just a count.</div>
+  </div>
+
+  <!-- Live score -->
+  <div class="score-preview">
+    <div class="sp-score" id="spScore">0%</div>
+    <div class="sp-right">
+      <div class="sp-bar-bg"><div class="sp-bar-fill" id="spBar" style="width:0%;background:var(--text-light)"></div></div>
+      <div class="sp-meta">
+        <div class="sp-label" id="spLabel" style="color:var(--text-light)">Complete the audit below</div>
+        <div class="sp-items" id="spItems">0 of 0 items rated</div>
+      </div>
+    </div>
+    <div class="sp-legend">
+      <div class="leg-item"><span class="leg-dot" style="background:#DC2626"></span>Critical (3x)</div>
+      <div class="leg-item"><span class="leg-dot" style="background:#2563EB"></span>High Impact (2x)</div>
+      <div class="leg-item"><span class="leg-dot" style="background:#9CA3AF"></span>Standard (1x)</div>
+    </div>
+  </div>
+
+  <!-- Client Info -->
+  <div class="sc">
+    <div class="stitle">Client Information</div>
+    <div class="fg" style="margin-bottom:14px">
+      <div class="fgrp"><label>Client Name</label><input type="text" id="clientName" placeholder="e.g. Harmony Dental Care"></div>
+      <div class="fgrp"><label>Website</label><input type="text" id="clientUrl" placeholder="e.g. harmonydental.com"></div>
+      <div class="fgrp"><label>Industry / Specialty</label><input type="text" id="clientIndustry" placeholder="e.g. General Dentistry"></div>
+      <div class="fgrp"><label>Audit Date</label><input type="text" id="auditDate" placeholder="e.g. April 2025"></div>
+    </div>
+    <div>
+      <label style="display:block;margin-bottom:8px">Audit Type</label>
+      <div class="at-row">
+        <button class="at-btn active" id="atP" onclick="setType('prospect')">Prospective Client</button>
+        <button class="at-btn" id="atE" onclick="setType('existing')">Existing Client Review</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Categories -->
+  <div id="auditCats"></div>
+
+  <!-- Notes -->
+  <div class="sc">
+    <div class="stitle">Audit Summary &amp; Notes</div>
+    <div class="fgrp"><label>Overall observations or context for this client</label><textarea id="auditNotes" placeholder="e.g. Newer practice with a strong brand but limited digital infrastructure. Primary opportunities are GBP optimization and a consistent content strategy."></textarea></div>
+  </div>
+
+  <button class="btn-gen" onclick="generate()">Generate Audit Report</button>
+</div>
+
+<div id="rv">
+  <div class="rw">
+    <div class="ract">
+      <span class="ract-lbl">Preview your audit report. Use Print / Save as PDF to export.</span>
+      <button class="btn-back" onclick="goBack()">&#8592; Back to Edit</button>
+      <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+    <div class="report"></div>
+  </div>
+</div>
+
+<script>
+/* ==============================
+   AUDIT DATA  (w: 3=Critical, 2=High Impact, 1=Standard)
+   ============================== */
+const AUDIT = [
+  {
+    id:'brand', name:'Brand Foundation', color:'#7C3AED',
+    desc:'Core identity elements that create consistency, trust, and recognition across every touchpoint.',
+    items:[
+      {id:'logo',    w:2, label:'Professional logo in use across all platforms',         opp:'A consistent, professional logo builds immediate trust and recognition with potential patients.'},
+      {id:'colors',  w:1, label:'Brand colors defined and applied consistently',         opp:'Defined brand colors create a cohesive experience across every touchpoint and reduce inconsistent usage.'},
+      {id:'fonts',   w:1, label:'Brand typography defined and in use',                   opp:'Typography consistency signals professionalism and reinforces brand identity at every interaction.'},
+      {id:'voice',   w:1, label:'Brand voice and tone documented',                       opp:'A documented brand voice ensures consistent communication whether a team member or AI is responding.'},
+      {id:'tagline', w:2, label:'Clear value proposition or tagline visible',            opp:'A clear value proposition tells prospects immediately why they should choose you over a competitor.'},
+      {id:'assets',  w:1, label:'Brand assets organized and accessible to the team',    opp:'Organized brand assets speed up content creation and prevent inconsistent usage across channels.'},
+    ]
+  },
+  {
+    id:'website', name:'Website', color:'#0891B2',
+    desc:'The foundation of your digital presence and the primary tool for converting visitors into patients.',
+    items:[
+      {id:'live',     w:3, label:'Website is live, functional, and error-free',                     opp:'A live, error-free website is the baseline for any digital marketing effort. Everything else depends on it.'},
+      {id:'mobile',   w:3, label:'Fully mobile responsive',                                         opp:'Over 60% of healthcare searches happen on mobile. A poor mobile experience loses patients before they ever call.'},
+      {id:'speed',    w:2, label:'Page load speed under 3 seconds',                                 opp:'Every additional second of load time reduces conversions by up to 7% and directly impacts SEO rankings.'},
+      {id:'ssl',      w:3, label:'SSL certificate active (HTTPS)',                                  opp:'HTTPS is a trust signal for both patients and Google. Sites without it are flagged as insecure.'},
+      {id:'cta',      w:2, label:'Clear calls-to-action on homepage',                               opp:'Without a clear next step, visitors leave. A prominent CTA converts browsers into booked appointments.'},
+      {id:'contact',  w:2, label:'Contact information visible on every page',                       opp:'Phone number and address in the header removes friction and makes it easy for patients to reach you.'},
+      {id:'services', w:2, label:'Services clearly listed with dedicated pages',                    opp:'Individual service pages give Google more to index and give patients confidence in your expertise.'},
+      {id:'social',   w:1, label:'Testimonials or patient reviews displayed on site',               opp:'Social proof on your website directly increases conversion rates, especially for healthcare decisions.'},
+      {id:'booking',  w:2, label:'Online booking or appointment request available',                 opp:'Patients increasingly expect to book online. Removing this friction can significantly increase conversions.'},
+      {id:'privacy',  w:2, label:'Privacy policy and terms of service present',                    opp:'Required for regulatory compliance and digital advertising. Missing pages can block ad account approvals.'},
+    ]
+  },
+  {
+    id:'seo', name:'SEO', color:'#059669',
+    desc:'On-page and technical factors that determine how well the site performs in organic search results.',
+    items:[
+      {id:'titles',    w:2, label:'Title tags optimized with target keywords',                     opp:'Title tags are one of the strongest on-page ranking signals and directly impact click-through rates.'},
+      {id:'meta',      w:1, label:'Meta descriptions written for all key pages',                  opp:'Compelling meta descriptions increase clicks from search results without requiring a change in rankings.'},
+      {id:'h1',        w:2, label:'H1 tags present and keyword-optimized on all pages',           opp:'H1 tags signal page topic to Google. Each page needs one clear, keyword-rich primary heading.'},
+      {id:'alttext',   w:1, label:'Image alt text in use across the site',                        opp:'Alt text improves accessibility and gives Google additional context for indexing your pages.'},
+      {id:'sitemap',   w:2, label:'XML sitemap submitted to Google Search Console',               opp:'A submitted sitemap helps Google find and index your pages faster, especially new content.'},
+      {id:'robots',    w:2, label:'Robots.txt configured correctly',                              opp:'A misconfigured robots.txt can accidentally block Google from your most important pages.'},
+      {id:'internal',  w:1, label:'Internal linking structure in place',                          opp:'Strong internal linking distributes authority across your site and helps Google understand content hierarchy.'},
+      {id:'blog',      w:2, label:'Blog or content section actively updated',                     opp:'Regular content gives Google fresh signals and creates opportunities to rank for patient search queries.'},
+      {id:'backlinks', w:2, label:'Backlink profile established (10+ quality referring domains)', opp:'Backlinks from reputable sites remain one of the strongest ranking factors. A strategy accelerates authority growth.'},
+      {id:'cwv',       w:2, label:'Core Web Vitals passing in Google Search Console',             opp:'Core Web Vitals are a confirmed ranking factor. Poor scores hurt both rankings and user experience.'},
+    ]
+  },
+  {
+    id:'localseo', name:'Local SEO', color:'#D97706',
+    desc:'Signals that determine visibility in local and map-based search results for the practice\'s geographic area.',
+    items:[
+      {id:'nap',         w:3, label:'NAP (Name, Address, Phone) consistent across all listings',    opp:'Inconsistent NAP data confuses Google and directly suppresses local search rankings.'},
+      {id:'localkw',     w:2, label:'Local keywords used throughout page content',                  opp:'City and neighborhood keywords in your content tell Google exactly which market you serve.'},
+      {id:'localpages',  w:2, label:'Location or service area pages present on site',               opp:'Dedicated location pages are one of the most effective ways to rank for geo-specific patient searches.'},
+      {id:'schema',      w:2, label:'Local business schema markup implemented',                     opp:'Schema gives Google structured data about your practice, improving the chance of rich search results.'},
+      {id:'citations',   w:2, label:'Listed in major directories (Yelp, Healthgrades, YP, etc.)',  opp:'Directory citations reinforce your NAP data and build the trust signals Google uses for local rankings.'},
+      {id:'map',         w:1, label:'Google Map embedded on contact or location page',              opp:'An embedded map confirms your location to Google and makes it easier for patients to find you.'},
+      {id:'servicearea', w:1, label:'Service area defined in GBP and referenced on site',          opp:'A defined service area expands your local visibility beyond your immediate address.'},
+    ]
+  },
+  {
+    id:'gbp', name:'Google Business Profile', color:'#4285F4',
+    desc:'The single most influential factor for local search and map pack visibility for most healthcare practices.',
+    items:[
+      {id:'claimed',    w:3, label:'GBP claimed and verified',                                     opp:'An unclaimed profile is a significant missed opportunity. Verified profiles rank substantially higher in local search.'},
+      {id:'complete',   w:3, label:'Business info fully complete (hours, phone, address, website)', opp:'Complete profiles earn more visibility. Incomplete info also frustrates patients and costs phone calls.'},
+      {id:'categories', w:3, label:'Primary and secondary categories correctly set',               opp:'Categories determine which searches your profile appears for. Wrong or missing categories limit reach significantly.'},
+      {id:'photos',     w:2, label:'Photos uploaded (interior, exterior, team, services)',         opp:'Profiles with photos receive significantly more clicks and direction requests than those without.'},
+      {id:'services',   w:2, label:'Services listed with descriptions',                           opp:'Service listings help your profile appear for specific treatment searches and build patient confidence.'},
+      {id:'posts',      w:2, label:'GBP posts published at least 2x per month',                   opp:'Regular posts signal an active business to Google and give patients timely reasons to engage.'},
+      {id:'qa',         w:1, label:'Q&A section populated with common questions',                 opp:'Populating Q&A controls the narrative and prevents incorrect answers from appearing on your profile.'},
+      {id:'reviews',    w:3, label:'Reviews actively responded to within 48 hours',               opp:'Responding to reviews improves local rankings and shows prospective patients that you value their feedback.'},
+      {id:'messaging',  w:1, label:'Messaging feature enabled',                                   opp:'Messaging gives patients a low-friction way to contact you, and active messaging profiles tend to rank better.'},
+      {id:'booking',    w:2, label:'Booking link or appointment URL added to profile',            opp:'A booking link in GBP turns profile views directly into appointments without the patient ever leaving Google.'},
+    ]
+  },
+  {
+    id:'social', name:'Social Media', color:'#C13584',
+    desc:'Platform presence, brand consistency, content quality, and audience engagement across social channels.',
+    items:[
+      {id:'profiles',   w:2, label:'Active profiles on relevant platforms for target audience',   opp:'Patients look for social proof before booking. An absent or inactive profile raises credibility questions.'},
+      {id:'branding',   w:2, label:'Consistent branding across all profiles',                    opp:'Inconsistent logos, colors, or bios across platforms fragments your brand identity.'},
+      {id:'bios',       w:1, label:'Bios and About sections fully completed with a CTA',         opp:'A complete bio with a clear CTA and link is one of the easiest wins for converting profile visitors.'},
+      {id:'frequency',  w:2, label:'Posting at least 3x per week consistently',                  opp:'Posting frequency signals an active, trustworthy practice and keeps you visible in followers\' feeds.'},
+      {id:'variety',    w:1, label:'Content variety (education, culture, promos, testimonials)', opp:'A single content type trains followers to tune out. A content mix drives higher engagement and reach.'},
+      {id:'engagement', w:2, label:'Comments and messages responded to within 24 hours',         opp:'Response time is a trust signal. Slow or absent responses tell patients their questions do not matter.'},
+      {id:'links',      w:1, label:'Profile links and bio URLs current and functional',          opp:'Outdated or broken profile links waste traffic that could convert to booked appointments.'},
+      {id:'video',      w:2, label:'Short-form video content being produced regularly',          opp:'Short-form video consistently outperforms static content for reach on every major platform right now.'},
+    ]
+  },
+  {
+    id:'content', name:'Content Marketing', color:'#9333EA',
+    desc:'Strategy and execution for attracting, educating, and building trust with potential patients over time.',
+    items:[
+      {id:'strategy',  w:2, label:'Content strategy or editorial calendar in place',               opp:'Without a plan, content becomes reactive and inconsistent. A strategy aligns content with patient demand and search intent.'},
+      {id:'blogging',  w:2, label:'Blog updated at least twice per month',                        opp:'Regular blogging builds topical authority, drives organic traffic, and provides fuel for social content.'},
+      {id:'targeted',  w:2, label:'Content addresses common patient questions and concerns',      opp:'Answering the questions patients search for builds trust and positions you as the expert before they ever call.'},
+      {id:'evergreen', w:1, label:'Evergreen service or educational content present',             opp:'Evergreen content compounds in value over time, continuing to drive traffic and leads long after publishing.'},
+      {id:'email',     w:2, label:'Email list being built and communicated to regularly',         opp:'An email list is an owned audience. No algorithm controls your ability to reach them.'},
+      {id:'repurpose', w:1, label:'Content repurposed across multiple channels',                  opp:'Repurposing one piece of content into posts, emails, and video multiplies its reach without multiplying the effort.'},
+    ]
+  },
+  {
+    id:'ads', name:'Paid Advertising', color:'#0866FF',
+    desc:'Paid channel setup, targeting quality, conversion infrastructure, and campaign management.',
+    items:[
+      {id:'googleads',   w:2, label:'Google Ads account active and actively managed',              opp:'Google Ads places your practice in front of patients actively searching for your services right now.'},
+      {id:'metaads',     w:2, label:'Meta Ads (Facebook / Instagram) running',                    opp:'Meta Ads allow precise demographic targeting to build awareness with the right local audience.'},
+      {id:'adtracking',  w:3, label:'Conversion tracking configured across all ad platforms',     opp:'Without conversion tracking, there is no way to know which campaigns generate appointments and which waste budget.'},
+      {id:'remarketing', w:2, label:'Remarketing or retargeting campaigns in place',              opp:'Remarketing converts visitors who did not book the first time, often at a fraction of cold traffic costs.'},
+      {id:'landing',     w:2, label:'Dedicated landing pages used for ad traffic',                opp:'Sending ad traffic to a homepage loses conversions. Aligned landing pages dramatically improve results.'},
+      {id:'creative',    w:1, label:'Ad creative refreshed at least once per month',              opp:'Ad fatigue sets in quickly. Fresh creative maintains performance and prevents cost-per-lead from rising.'},
+      {id:'budget',      w:2, label:'Budget reviewed and optimized regularly across campaigns',   opp:'An unreviewed budget bleeds money into underperforming campaigns. Regular allocation reviews protect ad spend.'},
+    ]
+  },
+  {
+    id:'reputation', name:'Reputation Management', color:'#DB2777',
+    desc:'Review presence, rating health, and patient feedback systems across all relevant platforms.',
+    items:[
+      {id:'monitoring', w:2, label:'Reviews monitored across all platforms',                      opp:'Unmonitored reviews let negative feedback sit unanswered, significantly impacting first impressions.'},
+      {id:'rating',     w:3, label:'Average rating 4.0 or above across all platforms',            opp:'Patients filter by rating. A sub-4.0 average removes your practice from consideration before they visit your site.'},
+      {id:'generation', w:2, label:'Active system in place to generate new reviews',              opp:'Review velocity matters. A steady stream of new reviews signals to Google that your practice is active and trusted.'},
+      {id:'responses',  w:2, label:'Negative review response strategy defined and in use',       opp:'A calm, professional response to a negative review often impresses prospective patients more than the review hurts.'},
+      {id:'platforms',  w:1, label:'Present on relevant review platforms beyond Google',          opp:'Patients research on multiple platforms. A presence only on Google leaves gaps in your reputation coverage.'},
+    ]
+  },
+  {
+    id:'analytics', name:'Analytics & Tracking', color:'#B45309',
+    desc:'Data infrastructure that enables informed marketing decisions and demonstrates measurable ROI.',
+    items:[
+      {id:'ga4',       w:3, label:'Google Analytics 4 installed and collecting data',            opp:'Without GA4, marketing decisions are made without data. It is foundational to every other optimization.'},
+      {id:'gsc',       w:2, label:'Google Search Console set up and verified',                   opp:'Search Console shows exactly how Google sees your site and flags issues that suppress rankings.'},
+      {id:'goals',     w:2, label:'Conversion goals configured and tracking in GA4',             opp:'Raw traffic data is not enough. Configured goals reveal which channels are actually driving appointments.'},
+      {id:'gtm',       w:1, label:'Google Tag Manager installed',                               opp:'GTM makes it possible to deploy tracking tags without a developer, saving time and reducing errors.'},
+      {id:'calltrack', w:3, label:'Call tracking in place',                                     opp:'For healthcare clients, most conversions happen by phone. Without call tracking, a large portion of ROI is invisible.'},
+      {id:'reporting', w:2, label:'Monthly performance reporting reviewed with client',          opp:'Regular reporting builds trust, keeps clients informed, and creates a feedback loop for continuous improvement.'},
+    ]
+  },
+];
+
+/* ==============================
+   WEIGHT LABELS
+   ============================== */
+const W = { 3:{label:'Critical',cls:'critical'}, 2:{label:'High Impact',cls:'high'}, 1:{label:'Standard',cls:'standard'} };
+
+/* ==============================
+   STATE
+   ============================== */
+const state = {};
+let auditType = 'prospect';
+AUDIT.forEach(c => c.items.forEach(i => { state[`${c.id}_${i.id}`] = {val:null, note:''}; }));
+
+/* ==============================
+   INIT
+   ============================== */
+function init() {
+  renderCats();
+  updatePreview();
+  const now = new Date();
+  document.getElementById('auditDate').value = now.toLocaleString('default',{month:'long'})+' '+now.getFullYear();
+}
+
+function setType(t) {
+  auditType = t;
+  document.getElementById('atP').className = 'at-btn'+(t==='prospect'?' active':'');
+  document.getElementById('atE').className = 'at-btn'+(t==='existing'?' active':'');
+}
+
+/* ==============================
+   FORM RENDER
+   ============================== */
+function renderCats() {
+  const c = document.getElementById('auditCats');
+  c.innerHTML = '';
+  AUDIT.forEach((cat, ci) => {
+    const div = document.createElement('div');
+    div.className = 'cat-card';
+    div.innerHTML = catHTML(cat, ci===0);
+    c.appendChild(div);
+  });
+}
+
+function catHTML(cat, open) {
+  const items = cat.items.map(item => {
+    const key = `${cat.id}_${item.id}`;
+    const wi  = W[item.w];
+    return `
+      <div class="item-row" id="irow-${key}">
+        <div class="item-left">
+          <div class="tog-group">
+            <button class="tog-btn" id="ty-${key}" onclick="setVal('${key}','yes')">Yes</button>
+            <button class="tog-btn" id="tp-${key}" onclick="setVal('${key}','partial')">Part</button>
+            <button class="tog-btn" id="tn-${key}" onclick="setVal('${key}','no')">No</button>
+          </div>
+          <div class="w-dot ${wi.cls}" title="${wi.label}"></div>
+        </div>
+        <div class="item-label">${item.label}</div>
+        <button class="note-toggle" onclick="toggleNote('${key}')">+ note</button>
+      </div>
+      <div class="item-note-area" id="na-${key}">
+        <textarea id="note-${key}" placeholder="Add context or notes for this item..." oninput="saveNote('${key}')"></textarea>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="cat-hdr" id="ch-${cat.id}" style="--cat-color:${cat.color}" onclick="toggleCat('${cat.id}')">
+      <span class="cat-dot" style="background:${cat.color}"></span>
+      <span class="cat-name">${cat.name}</span>
+      <div class="cat-meta">
+        <span class="cat-sbadge" id="csb-${cat.id}" style="background:${cat.color}18;color:${cat.color}">0%</span>
+        <span class="cat-count" id="cc-${cat.id}">0/${cat.items.length}</span>
+        <span class="cat-arrow${open?' open':''}" id="ca-${cat.id}">&#9660;</span>
+      </div>
+    </div>
+    <div class="cat-body" id="cb-${cat.id}" style="display:${open?'block':'none'}">
+      <div class="cat-desc">${cat.desc}</div>
+      ${items}
+    </div>`;
+}
+
+function toggleCat(id) {
+  const b = document.getElementById(`cb-${id}`);
+  const a = document.getElementById(`ca-${id}`);
+  const o = b.style.display !== 'none';
+  b.style.display = o ? 'none' : 'block';
+  a.className = 'cat-arrow' + (o ? '' : ' open');
+}
+
+/* ==============================
+   SCORING
+   ============================== */
+function setVal(key, val) {
+  state[key].val = val;
+  ['yes','partial','no'].forEach(v => {
+    document.getElementById(`t${v[0]}-${key}`).className = 'tog-btn' + (val===v ? ` sel-${v}` : '');
+  });
+  // Fix partial button id prefix
+  document.getElementById(`tp-${key}`).className = 'tog-btn' + (val==='partial' ? ' sel-partial' : '');
+  updatePreview();
+  updateCatBadge(key.split('_')[0]);
+}
+
+function saveNote(key) { state[key].note = document.getElementById(`note-${key}`).value; }
+
+function toggleNote(key) {
+  const a = document.getElementById(`na-${key}`);
+  a.style.display = a.style.display === 'none' || a.style.display === '' ? 'block' : 'none';
+}
+
+function score(items, catId) {
+  let pts=0, max=0, rated=0;
+  items.forEach(item => {
+    const s = state[`${catId}_${item.id}`];
+    if (s.val) {
+      rated++;
+      max += item.w;
+      if (s.val==='yes')     pts += item.w;
+      if (s.val==='partial') pts += item.w * 0.5;
+    }
+  });
+  return { pts, max, rated, total:items.length, pct: max>0 ? Math.round((pts/max)*100) : null };
+}
+
+function overallScore() {
+  let pts=0, max=0, rated=0;
+  const total = AUDIT.reduce((s,c)=>s+c.items.length,0);
+  AUDIT.forEach(c => c.items.forEach(i => {
+    const s = state[`${c.id}_${i.id}`];
+    if (s.val) { rated++; max+=i.w; if(s.val==='yes') pts+=i.w; if(s.val==='partial') pts+=i.w*0.5; }
+  }));
+  return { pts, max, rated, total, pct: max>0 ? Math.round((pts/max)*100) : 0 };
+}
+
+function tier(pct) {
+  if (pct>=85) return {label:'Strong',           color:'#059669'};
+  if (pct>=70) return {label:'Good',             color:'#0891B2'};
+  if (pct>=50) return {label:'Needs Attention',  color:'#D97706'};
+  return             {label:'Critical Priority', color:'#DC2626'};
+}
+
+function updatePreview() {
+  const o  = overallScore();
+  const ti = tier(o.pct);
+  const sp = document.getElementById('spScore');
+  sp.textContent  = o.pct + '%';
+  sp.style.color  = ti.color;
+  document.getElementById('spBar').style.width      = o.pct + '%';
+  document.getElementById('spBar').style.background = ti.color;
+  const lbl = document.getElementById('spLabel');
+  lbl.textContent  = o.rated > 0 ? ti.label : 'Complete the audit below';
+  lbl.style.color  = o.rated > 0 ? ti.color : 'var(--text-light)';
+  document.getElementById('spItems').textContent = `${o.rated} of ${o.total} items rated`;
+}
+
+function updateCatBadge(catId) {
+  const cat = AUDIT.find(c=>c.id===catId);
+  if (!cat) return;
+  const cs = score(cat.items, cat.id);
+  document.getElementById(`csb-${catId}`).textContent = cs.pct!==null ? cs.pct+'%' : '0%';
+  document.getElementById(`cc-${catId}`).textContent  = `${cs.rated}/${cs.total}`;
+}
+
+/* ==============================
+   GENERATE
+   ============================== */
+function generate() {
+  const client = {
+    name:     (document.getElementById('clientName').value.trim()||'Client Name'),
+    url:      document.getElementById('clientUrl').value.trim(),
+    industry: document.getElementById('clientIndustry').value.trim(),
+    date:     document.getElementById('auditDate').value.trim() || new Date().toLocaleDateString(),
+    type:     auditType==='prospect' ? 'Prospective Client' : 'Existing Client Review',
+  };
+  const notes   = document.getElementById('auditNotes').value.trim();
+  const overall = overallScore();
+  const ti      = tier(overall.pct);
+
+  let cYes=0, cPart=0, cNo=0, cUn=0;
+  AUDIT.forEach(c=>c.items.forEach(i=>{
+    const v = state[`${c.id}_${i.id}`].val;
+    if (!v) cUn++; else if(v==='yes') cYes++; else if(v==='partial') cPart++; else cNo++;
+  }));
+
+  // Tier descriptions
+  const tierDescs = {
+    'Strong':           `${client.name} has a strong marketing foundation. Most core elements are in place. The opportunities below represent areas to sharpen and expand what is already working.`,
+    'Good':             `${client.name} has solid marketing fundamentals with clear opportunities to build on. Addressing the items below will strengthen visibility, conversions, and long-term growth.`,
+    'Needs Attention':  `${client.name} has some marketing infrastructure in place, but key gaps are limiting reach and conversions. The priorities below offer the most direct path to improved performance.`,
+    'Critical Priority':`${client.name}'s marketing presence has significant gaps that are likely impacting patient acquisition right now. Addressing these foundational items will create measurable results quickly.`,
+  };
+
+  // Priority actions: Critical items that are No or Partial
+  const priorities = [];
+  AUDIT.forEach(cat => {
+    cat.items.forEach(item => {
+      const s = state[`${cat.id}_${item.id}`];
+      if (item.w===3 && (s.val==='no' || s.val==='partial')) {
+        priorities.push({ cat: cat.name, catColor: cat.color, item, val: s.val });
+      }
+    });
+  });
+
+  const priorityHTML = priorities.length ? `
+    <div class="priority-block">
+      <div class="priority-hdr">
+        <div class="priority-hdr-title">Critical Opportunities</div>
+        <span class="priority-hdr-count">${priorities.length} item${priorities.length>1?'s':''}</span>
+        <div class="priority-hdr-sub">Highest-weight items requiring immediate attention</div>
+      </div>
+      ${priorities.map(p=>`
+        <div class="priority-item">
+          <span class="pi-cat" style="background:${p.catColor}18;color:${p.catColor}">${p.cat}</span>
+          <span class="pi-status ${p.val}">${p.val==='partial'?'In Progress':'Opportunity'}</span>
+          <div>
+            <div class="pi-label">${p.item.label}</div>
+            <div class="pi-opp">${p.item.opp}</div>
+          </div>
+        </div>`).join('')}
+    </div>` : '';
+
+  // Category summary
+  const catSummaryHTML = `
+    <div class="cs-title">Score by Category (Weighted)</div>
+    <div class="cs-grid">
+      ${AUDIT.map(cat=>{
+        const cs = score(cat.items, cat.id);
+        const pct = cs.pct !== null ? cs.pct : 0;
+        const t   = tier(pct);
+        return `<div class="cs-row" style="--cs-color:${cat.color}">
+          <div class="cs-name">${cat.name}</div>
+          <div class="cs-right">
+            <div class="cs-bar-bg"><div class="cs-bar-fill" style="width:${pct}%;background:${t.color}"></div></div>
+            <div class="cs-pct" style="color:${t.color}">${cs.rated>0 ? pct+'%' : '—'}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  // Sections
+  let secNum = 1;
+  const sectionsHTML = AUDIT.map(cat => {
+    const cs  = score(cat.items, cat.id);
+    const pct = cs.pct !== null ? cs.pct : 0;
+    const t   = tier(pct);
+    const n   = String(secNum++).padStart(2,'0');
+
+    const itemsHTML = cat.items.map(item => {
+      const key  = `${cat.id}_${item.id}`;
+      const s    = state[key];
+      const v    = s.val;
+      const note = s.note.trim();
+      const wi   = W[item.w];
+      const statusText = !v ? 'Not Assessed' : v==='yes' ? 'In Place' : v==='partial' ? 'In Progress' : 'Opportunity';
+      const statusCls  = !v ? 'unrated' : v;
+      const showOpp    = (v==='no' || v==='partial');
+
+      return `<div class="ri">
+        <div class="ri-top">
+          <div class="ri-badges">
+            <span class="ri-status ${statusCls}">${statusText}</span>
+            ${showOpp ? `<span class="ri-wbadge ${wi.cls}">${wi.label}</span>` : ''}
+          </div>
+          <span class="ri-label">${item.label}</span>
+        </div>
+        ${showOpp ? `<div class="ri-opp">${item.opp}</div>` : ''}
+        ${note    ? `<div class="ri-note">${note}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    return `<div class="rsec">
+      <div class="rslbl" style="color:${cat.color}">${n} &mdash; ${cat.name}</div>
+      <div class="rstitle">${cat.name}<span style="width:11px;height:11px;border-radius:50%;background:${cat.color};display:inline-block;flex-shrink:0"></span></div>
+      <div class="rs-scoreline">
+        <span class="rs-badge" style="background:${t.color}18;color:${t.color}">${cs.rated>0?pct+'%':'Unrated'} &mdash; ${cs.rated>0?t.label:'Not assessed'}</span>
+        <div class="rs-bar"><div class="rs-bar-fill" style="width:${pct}%;background:${t.color}"></div></div>
+        <span class="rs-meta">${cs.rated} of ${cs.total} rated</span>
+      </div>
+      <div style="font-size:13px;color:var(--text-mid);margin-bottom:16px;line-height:1.6">${cat.desc}</div>
+      ${itemsHTML}
+    </div>`;
+  }).join('');
+
+  let ex=0;
+  const lbl = () => String(secNum+ex++).padStart(2,'0');
+
+  const html = `
+    <div class="rhdr">
+      <div class="rh-c1"></div><div class="rh-c2"></div>
+      <div class="ragency">LitBiz<span>.</span>Media</div>
+      <div class="rtitle">Marketing<br>Audit Report</div>
+      <div class="rdiv"></div>
+      <div class="rcinfo">
+        <div class="rchip"><div class="rclbl">Client</div><div class="rcval">${client.name}</div></div>
+        ${client.url      ? `<div class="rchip"><div class="rclbl">Website</div><div class="rcval">${client.url}</div></div>` : ''}
+        ${client.industry ? `<div class="rchip"><div class="rclbl">Industry</div><div class="rcval">${client.industry}</div></div>` : ''}
+        <div class="rchip"><div class="rclbl">Audit Date</div><div class="rcval">${client.date}</div></div>
+        <div class="rchip"><div class="rclbl">Audit Type</div><div class="rcval">${client.type}</div></div>
+      </div>
+    </div>
+
+    <div class="rbody">
+
+      <div class="overall-block">
+        <div class="ob-left" style="background:${ti.color}">
+          <div class="ob-pct">${overall.pct}%</div>
+          <div class="ob-tier">${ti.label}</div>
+        </div>
+        <div class="ob-right">
+          <div>
+            <div class="ob-title">Overall Marketing Score</div>
+            <div class="ob-desc">${tierDescs[ti.label]||''}</div>
+          </div>
+          <div class="ob-counts">
+            <div class="obc"><div class="obc-val" style="color:#059669">${cYes}</div><div class="obc-lbl">In Place</div></div>
+            <div class="obc"><div class="obc-val" style="color:#D97706">${cPart}</div><div class="obc-lbl">In Progress</div></div>
+            <div class="obc"><div class="obc-val" style="color:#DC2626">${cNo}</div><div class="obc-lbl">Opportunities</div></div>
+            ${cUn ? `<div class="obc"><div class="obc-val" style="color:var(--text-light)">${cUn}</div><div class="obc-lbl">Not Assessed</div></div>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="weight-note">
+        <span style="font-size:13px">&#9432;</span>
+        <span>Score is weighted by impact. <strong>Critical items (3x)</strong> carry more influence than <strong>High Impact (2x)</strong> or <strong>Standard (1x)</strong> items.</span>
+        <div class="weight-note-legend">
+          <div class="wnl-item"><span style="width:8px;height:8px;border-radius:50%;background:#DC2626;display:inline-block"></span> Critical</div>
+          <div class="wnl-item"><span style="width:8px;height:8px;border-radius:50%;background:#2563EB;display:inline-block"></span> High Impact</div>
+          <div class="wnl-item"><span style="width:8px;height:8px;border-radius:50%;background:#9CA3AF;display:inline-block"></span> Standard</div>
+        </div>
+      </div>
+
+      ${priorityHTML}
+      ${catSummaryHTML}
+      ${sectionsHTML}
+
+      ${notes ? `<div class="rsec">
+        <div class="rslbl">${lbl()} &mdash; Notes</div>
+        <div class="rstitle" style="margin-bottom:16px">Audit Summary &amp; Context</div>
+        <div class="notes-box">${notes}</div>
+      </div>` : ''}
+
+    </div>
+
+    <div class="rfooter">
+      <div><div class="fb2">LitBiz<span>.</span>Media</div><div class="fu">litbiz.io</div></div>
+      <div class="fr">Marketing Audit for ${client.name}<br>${client.date}</div>
+    </div>`;
+
+  document.querySelector('.report').innerHTML = html;
+  document.getElementById('fv').style.display = 'none';
+  document.getElementById('rv').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function goBack() {
+  document.getElementById('rv').style.display = 'none';
+  document.getElementById('fv').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+init();
+</script>
+</body>
+</html>

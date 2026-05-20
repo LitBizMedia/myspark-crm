@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- LitBiz auth gate (Stage 1) -->
+<style id="litbiz-auth-gate">html{visibility:hidden}</style>
+<script>
+(async function(){
+  try{
+    const r = await fetch('https://api.mysparkplus.app/api/subaccount/litbiz/whoami',{credentials:'include'});
+    if(!r.ok) throw 0;
+    const d = await r.json();
+    if(!d.ok) throw 0;
+    window.__litbizUser = d;
+    var g = document.getElementById('litbiz-auth-gate');
+    if(g) g.remove();
+  }catch(e){
+    window.location.replace('https://mysparkplus.app/');
+  }
+})();
+</script>
+<!-- end LitBiz auth gate -->
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LitBiz Media | SEO Report Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --purple:       #4C1D95;
+  --purple-dark:  #2E1065;
+  --purple-mid:   #6D28D9;
+  --purple-light: #EDE9FE;
+  --orange:       #EA580C;
+  --orange-light: #FB923C;
+  --orange-pale:  #FFF7ED;
+  --white:        #ffffff;
+  --surface:      #F5F3FF;
+  --border:       #DDD6FE;
+  --text-dark:    #1E1B4B;
+  --text-mid:     #4C4980;
+  --text-light:   #8B88B0;
+  --green:        #059669;
+  --red:          #DC2626;
+  --font-display: 'Syne', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --radius:       10px;
+  --shadow:       0 2px 14px rgba(76,29,149,0.09);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--surface);
+  color: var(--text-dark);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ==============================
+   FORM VIEW
+   ============================== */
+.form-view {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 36px 24px 60px;
+}
+
+.form-header {
+  margin-bottom: 36px;
+}
+
+.form-logo {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--text-light);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.form-logo span { color: var(--orange); }
+
+.form-title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--text-dark);
+  margin-bottom: 6px;
+  line-height: 1.15;
+}
+
+.form-subtitle {
+  font-size: 14px;
+  color: var(--text-mid);
+}
+
+.section-card {
+  background: white;
+  border-radius: var(--radius);
+  padding: 26px 28px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--purple);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.section-title::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 15px;
+  background: var(--orange);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-grid.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-mid);
+  letter-spacing: 0.02em;
+}
+
+input[type="text"],
+input[type="number"],
+textarea {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-dark);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+}
+
+input:focus, textarea:focus {
+  border-color: var(--purple-mid);
+  box-shadow: 0 0 0 3px rgba(109,40,217,0.1);
+  background: white;
+}
+
+textarea { resize: vertical; min-height: 96px; }
+
+input[type="number"]::-webkit-inner-spin-button { opacity: 0.4; }
+
+/* Keyword table */
+.kw-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kw-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--border);
+}
+
+.kw-table td { padding: 5px 6px; }
+
+.kw-table td input {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.kw-row td:last-child { width: 42px; text-align: center; }
+
+.btn-remove {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 5px;
+  border-radius: 5px;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.btn-remove:hover { background: #FEE2E2; color: var(--red); }
+
+.btn-add {
+  margin-top: 14px;
+  background: none;
+  border: 1.5px dashed var(--border);
+  color: var(--purple-mid);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 18px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-add:hover {
+  border-color: var(--purple-mid);
+  background: var(--purple-light);
+}
+
+/* Content items */
+.content-item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.content-item input { flex: 1; }
+
+/* Generate button */
+.btn-generate {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--purple-dark) 0%, var(--purple-mid) 100%);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 10px;
+  box-shadow: 0 6px 22px rgba(76,29,149,0.3);
+}
+
+.btn-generate:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(76,29,149,0.38);
+}
+
+.btn-generate:active { transform: translateY(0); }
+
+/* ==============================
+   REPORT VIEW
+   ============================== */
+#report-view { display: none; }
+
+.report-wrapper {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.report-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  background: white;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.report-actions-label {
+  font-size: 13px;
+  color: var(--text-light);
+  margin-right: auto;
+  font-weight: 500;
+}
+
+.btn-back {
+  padding: 9px 18px;
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-back:hover { border-color: var(--purple); color: var(--purple); }
+
+.btn-print {
+  padding: 9px 20px;
+  background: var(--orange);
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-print:hover { background: #C2410C; }
+
+/* Report document */
+.report {
+  background: white;
+  min-height: 500px;
+}
+
+/* Header */
+.report-header {
+  background: var(--purple-dark);
+  padding: 52px 56px 44px;
+  position: relative;
+  overflow: hidden;
+}
+
+.rh-circle-1 {
+  position: absolute;
+  right: -50px;
+  top: -50px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: rgba(234,88,12,0.18);
+}
+
+.rh-circle-2 {
+  position: absolute;
+  right: 80px;
+  bottom: -70px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: rgba(109,40,217,0.25);
+}
+
+.report-agency {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.report-agency span { color: var(--orange-light); }
+
+.report-main-title {
+  font-family: var(--font-display);
+  font-size: 42px;
+  font-weight: 800;
+  color: white;
+  line-height: 1.05;
+  margin-bottom: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.report-divider {
+  width: 48px;
+  height: 3px;
+  background: var(--orange);
+  border-radius: 2px;
+  margin-bottom: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.report-client-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.report-client-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rcc-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+}
+
+.rcc-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+  font-family: var(--font-display);
+}
+
+/* Body */
+.report-body { padding: 52px 56px 44px; }
+
+.report-section { margin-bottom: 52px; }
+
+.report-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 8px;
+}
+
+.report-section-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Metric cards */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 20px 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--purple) 0%, var(--purple-mid) 100%);
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 10px;
+}
+
+.metric-value {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--text-dark);
+  line-height: 1;
+  margin-bottom: 10px;
+}
+
+.metric-comparison {
+  font-size: 12px;
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.metric-change {
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.metric-change.up   { background: #D1FAE5; color: #065F46; }
+.metric-change.down { background: #FEE2E2; color: #991B1B; }
+.metric-change.same { background: var(--border); color: var(--text-mid); }
+
+/* Rankings table */
+.rankings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rankings-table th {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-light);
+  padding: 10px 14px;
+  text-align: left;
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+
+.rankings-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.rankings-table tr:last-child td { border-bottom: none; }
+
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 14px;
+  font-family: var(--font-display);
+}
+
+.rank-badge.top3  { background: #D1FAE5; color: #064E3B; }
+.rank-badge.top10 { background: #FEF3C7; color: #78350F; }
+.rank-badge.other { background: var(--surface); color: var(--text-mid); border: 1.5px solid var(--border); }
+
+.rank-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 5px;
+}
+
+.rank-change.improved { color: #065F46; background: #D1FAE5; }
+.rank-change.declined { color: #991B1B; background: #FEE2E2; }
+.rank-change.same     { color: var(--text-light); background: var(--surface); }
+
+/* Content list */
+.content-list { list-style: none; }
+
+.content-list li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  font-size: 14px;
+  color: var(--text-dark);
+}
+
+.content-list li:last-child { border-bottom: none; }
+
+.content-num {
+  min-width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple-dark), var(--purple-mid));
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+/* Notes boxes */
+.notes-box {
+  background: var(--surface);
+  border-left: 4px solid var(--orange);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 20px 24px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-mid);
+  white-space: pre-wrap;
+}
+
+/* Footer */
+.report-footer {
+  background: var(--purple-dark);
+  padding: 28px 56px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-brand {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 17px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.02em;
+}
+
+.footer-brand span { color: var(--orange-light); }
+
+.footer-url {
+  font-size: 12px;
+  color: rgba(255,255,255,0.28);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+.footer-right {
+  text-align: right;
+  font-size: 12px;
+  color: rgba(255,255,255,0.32);
+  line-height: 1.7;
+}
+
+/* ==============================
+   PRINT STYLES
+   ============================== */
+@media print {
+  .report-actions { display: none !important; }
+  #form-view      { display: none !important; }
+  #report-view    { display: block !important; }
+
+  body { background: white; }
+
+  .report-wrapper { padding: 0; margin: 0; max-width: 100%; }
+
+  .report-header,
+  .report-footer,
+  .metric-card-accent,
+  .content-num,
+  .rank-badge,
+  .rank-change,
+  .metric-change,
+  .notes-box {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .report-section { page-break-inside: avoid; }
+
+  .metric-grid { page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==============================
+     FORM VIEW
+     ============================== -->
+<div id="form-view" class="form-view">
+
+  <div class="form-header">
+    <div class="form-logo">LitBiz<span>.</span>Media</div>
+    <div class="form-title">SEO Report Builder</div>
+    <div class="form-subtitle">Enter your client's data below and generate a print-ready monthly report.</div>
+  </div>
+
+  <!-- Client Info -->
+  <div class="section-card">
+    <div class="section-title">Client Information</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Client Name</label>
+        <input type="text" id="clientName" placeholder="e.g. Harmony Dental Care">
+      </div>
+      <div class="form-group">
+        <label>Website</label>
+        <input type="text" id="clientUrl" placeholder="e.g. harmonydental.com">
+      </div>
+      <div class="form-group">
+        <label>Reporting Month</label>
+        <input type="text" id="reportMonth" placeholder="e.g. March 2025">
+      </div>
+      <div class="form-group">
+        <label>Previous Month (for comparison)</label>
+        <input type="text" id="prevMonth" placeholder="e.g. February 2025">
+      </div>
+    </div>
+  </div>
+
+  <!-- Organic Traffic -->
+  <div class="section-card">
+    <div class="section-title">Organic Traffic</div>
+    <div class="form-grid three">
+      <div class="form-group">
+        <label>Sessions — This Month</label>
+        <input type="number" id="sessionsCurrent" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>Sessions — Previous Month</label>
+        <input type="number" id="sessionsPrev" placeholder="0" min="0">
+      </div>
+      <div></div>
+      <div class="form-group">
+        <label>Clicks — This Month</label>
+        <input type="number" id="clicksCurrent" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>Clicks — Previous Month</label>
+        <input type="number" id="clicksPrev" placeholder="0" min="0">
+      </div>
+      <div></div>
+      <div class="form-group">
+        <label>Impressions — This Month</label>
+        <input type="number" id="impressionsCurrent" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>Impressions — Previous Month</label>
+        <input type="number" id="impressionsPrev" placeholder="0" min="0">
+      </div>
+      <div></div>
+    </div>
+  </div>
+
+  <!-- Backlinks + DA -->
+  <div class="section-card">
+    <div class="section-title">Backlinks &amp; Domain Authority</div>
+    <div class="form-grid three">
+      <div class="form-group">
+        <label>DA Score — This Month</label>
+        <input type="number" id="daCurrent" placeholder="0" min="0" max="100">
+      </div>
+      <div class="form-group">
+        <label>DA Score — Previous Month</label>
+        <input type="number" id="daPrev" placeholder="0" min="0" max="100">
+      </div>
+      <div></div>
+      <div class="form-group">
+        <label>Total Backlinks — This Month</label>
+        <input type="number" id="blCurrent" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>Total Backlinks — Previous Month</label>
+        <input type="number" id="blPrev" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>New Backlinks This Month</label>
+        <input type="number" id="blNew" placeholder="0" min="0">
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyword Rankings -->
+  <div class="section-card">
+    <div class="section-title">Keyword Rankings</div>
+    <table class="kw-table">
+      <thead>
+        <tr>
+          <th>Keyword</th>
+          <th style="width:150px">Current Position</th>
+          <th style="width:150px">Previous Position</th>
+          <th style="width:44px"></th>
+        </tr>
+      </thead>
+      <tbody id="kwTableBody"></tbody>
+    </table>
+    <button class="btn-add" id="addKwRow">+ Add Keyword</button>
+  </div>
+
+  <!-- Content Published -->
+  <div class="section-card">
+    <div class="section-title">Content Published This Month</div>
+    <div id="contentItems"></div>
+    <button class="btn-add" id="addContentItem">+ Add Content</button>
+  </div>
+
+  <!-- Key Wins -->
+  <div class="section-card">
+    <div class="section-title">Key Wins This Month</div>
+    <div class="form-group">
+      <label>Highlights and wins for the client this month</label>
+      <textarea id="keyWins" placeholder="Rankings improved for 3 target keywords. GBP impressions up 18%. Two new referring domains acquired."></textarea>
+    </div>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="section-card">
+    <div class="section-title">Recommendations &amp; Next Steps</div>
+    <div class="form-group">
+      <label>What you're focusing on next month</label>
+      <textarea id="recommendations" placeholder="Target two new location-based keywords. Publish one long-form service page. Conduct a technical audit on page speed."></textarea>
+    </div>
+  </div>
+
+  <button class="btn-generate" onclick="generateReport()">Generate Report</button>
+
+</div>
+
+<!-- ==============================
+     REPORT VIEW
+     ============================== -->
+<div id="report-view">
+  <div class="report-wrapper">
+
+    <div class="report-actions">
+      <span class="report-actions-label">Preview your report below. Use Print / Save as PDF to export.</span>
+      <button class="btn-back" onclick="goBack()">&#8592; Back to Edit</button>
+      <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <div class="report">
+      <!-- filled by JS -->
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ---- Init ----
+(function() {
+  addKeywordRow();
+  addKeywordRow();
+  addKeywordRow();
+  addContentRow();
+  addContentRow();
+  document.getElementById('addKwRow').addEventListener('click', addKeywordRow);
+  document.getElementById('addContentItem').addEventListener('click', addContentRow);
+})();
+
+function addKeywordRow() {
+  const tbody = document.getElementById('kwTableBody');
+  const row = document.createElement('tr');
+  row.className = 'kw-row';
+  row.innerHTML = `
+    <td><input type="text" placeholder="e.g. family dentist terre haute" style="width:100%"></td>
+    <td><input type="number" placeholder="e.g. 4" min="1" style="width:100%"></td>
+    <td><input type="number" placeholder="e.g. 7" min="1" style="width:100%"></td>
+    <td><button class="btn-remove" onclick="this.closest('tr').remove()" title="Remove row">&#x2715;</button></td>
+  `;
+  tbody.appendChild(row);
+}
+
+function addContentRow() {
+  const container = document.getElementById('contentItems');
+  const item = document.createElement('div');
+  item.className = 'content-item';
+  item.innerHTML = `
+    <input type="text" placeholder="Title or topic of published content" style="flex:1">
+    <button class="btn-remove" onclick="this.closest('.content-item').remove()" title="Remove">&#x2715;</button>
+  `;
+  container.appendChild(item);
+}
+
+// ---- Helpers ----
+function num(id) { return parseFloat(document.getElementById(id).value) || 0; }
+function val(id) { return document.getElementById(id).value.trim(); }
+
+function pctChange(cur, prev) {
+  if (!prev || prev === 0) return null;
+  return ((cur - prev) / prev * 100).toFixed(1);
+}
+
+function changeChip(cur, prev, higherIsBetter) {
+  const pct = pctChange(cur, prev);
+  if (pct === null) return '';
+  const n = parseFloat(pct);
+  const positive = higherIsBetter ? n > 0 : n < 0;
+  const negative = higherIsBetter ? n < 0 : n > 0;
+  const cls = positive ? 'up' : negative ? 'down' : 'same';
+  const arrow = n > 0 ? '&#8593;' : n < 0 ? '&#8595;' : '&#8594;';
+  return `<span class="metric-change ${cls}">${arrow} ${Math.abs(pct)}%</span>`;
+}
+
+function metricCard(label, cur, prev, higherIsBetter = true, prevLabel = 'prev.') {
+  return `
+    <div class="metric-card">
+      <div class="metric-card-accent"></div>
+      <div class="metric-label">${label}</div>
+      <div class="metric-value">${Number(cur).toLocaleString()}</div>
+      <div class="metric-comparison">
+        vs ${Number(prev).toLocaleString()} ${prevLabel}
+        ${changeChip(cur, prev, higherIsBetter)}
+      </div>
+    </div>`;
+}
+
+function rankBadgeClass(pos) {
+  if (pos <= 3) return 'top3';
+  if (pos <= 10) return 'top10';
+  return 'other';
+}
+
+function rankChangeEl(cur, prev) {
+  if (!cur || !prev) return '<span class="rank-change same">No data</span>';
+  const diff = Number(prev) - Number(cur);
+  if (diff > 0) return `<span class="rank-change improved">&#8593; ${diff} position${diff > 1 ? 's' : ''}</span>`;
+  if (diff < 0) return `<span class="rank-change declined">&#8595; ${Math.abs(diff)} position${Math.abs(diff) > 1 ? 's' : ''}</span>`;
+  return '<span class="rank-change same">&#8594; No change</span>';
+}
+
+// ---- Generate ----
+function generateReport() {
+  const client = {
+    name:  val('clientName')  || 'Client Name',
+    url:   val('clientUrl')   || '',
+    month: val('reportMonth') || 'This Month',
+    prev:  val('prevMonth')   || 'Previous Month',
+  };
+
+  const sc = num('sessionsCurrent'), sp = num('sessionsPrev');
+  const cc = num('clicksCurrent'),   cp = num('clicksPrev');
+  const ic = num('impressionsCurrent'), ip = num('impressionsPrev');
+  const dac = num('daCurrent'), dap = num('daPrev');
+  const blc = num('blCurrent'), blp = num('blPrev'), bln = num('blNew');
+
+  // Keywords
+  let kwHtml = '';
+  document.querySelectorAll('.kw-row').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const kw  = inputs[0].value.trim();
+    const cur = inputs[1].value.trim();
+    const prv = inputs[2].value.trim();
+    if (!kw) return;
+    const cls = cur ? rankBadgeClass(Number(cur)) : 'other';
+    kwHtml += `<tr>
+      <td style="font-weight:500">${kw}</td>
+      <td><span class="rank-badge ${cls}">${cur || '—'}</span></td>
+      <td style="color:var(--text-light)">${prv || '—'}</td>
+      <td>${rankChangeEl(cur, prv)}</td>
+    </tr>`;
+  });
+
+  // Content
+  let contentHtml = '';
+  let ci = 1;
+  document.querySelectorAll('.content-item input').forEach(inp => {
+    const t = inp.value.trim();
+    if (!t) return;
+    contentHtml += `<li><span class="content-num">${ci++}</span><span>${t}</span></li>`;
+  });
+
+  const keyWins = val('keyWins');
+  const recs    = val('recommendations');
+
+  const prevLabel = client.prev;
+
+  const html = `
+    <div class="report-header">
+      <div class="rh-circle-1"></div>
+      <div class="rh-circle-2"></div>
+      <div class="report-agency">LitBiz<span>.</span>Media</div>
+      <div class="report-main-title">SEO Monthly<br>Performance Report</div>
+      <div class="report-divider"></div>
+      <div class="report-client-info">
+        <div class="report-client-chip">
+          <div class="rcc-label">Client</div>
+          <div class="rcc-value">${client.name}</div>
+        </div>
+        ${client.url ? `<div class="report-client-chip">
+          <div class="rcc-label">Website</div>
+          <div class="rcc-value">${client.url}</div>
+        </div>` : ''}
+        <div class="report-client-chip">
+          <div class="rcc-label">Reporting Period</div>
+          <div class="rcc-value">${client.month}</div>
+        </div>
+        <div class="report-client-chip">
+          <div class="rcc-label">Compared To</div>
+          <div class="rcc-value">${client.prev}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="report-body">
+
+      <div class="report-section">
+        <div class="report-section-label">01 &mdash; Organic Performance</div>
+        <div class="report-section-title">Traffic Overview</div>
+        <div class="metric-grid">
+          ${metricCard('Sessions',    sc, sp, true, prevLabel)}
+          ${metricCard('Clicks',      cc, cp, true, prevLabel)}
+          ${metricCard('Impressions', ic, ip, true, prevLabel)}
+        </div>
+      </div>
+
+      <div class="report-section">
+        <div class="report-section-label">02 &mdash; Authority &amp; Links</div>
+        <div class="report-section-title">Domain Authority &amp; Backlinks</div>
+        <div class="metric-grid">
+          ${metricCard('Domain Authority', dac, dap, true, prevLabel)}
+          ${metricCard('Total Backlinks',  blc, blp, true, prevLabel)}
+          <div class="metric-card">
+            <div class="metric-card-accent"></div>
+            <div class="metric-label">New Backlinks</div>
+            <div class="metric-value">${Number(bln).toLocaleString()}</div>
+            <div class="metric-comparison">Earned in ${client.month}</div>
+          </div>
+        </div>
+      </div>
+
+      ${kwHtml ? `
+      <div class="report-section">
+        <div class="report-section-label">03 &mdash; Search Rankings</div>
+        <div class="report-section-title">Keyword Position Tracking</div>
+        <table class="rankings-table">
+          <thead>
+            <tr>
+              <th>Keyword</th>
+              <th>Current Position</th>
+              <th>Previous Position</th>
+              <th>Change</th>
+            </tr>
+          </thead>
+          <tbody>${kwHtml}</tbody>
+        </table>
+      </div>` : ''}
+
+      ${contentHtml ? `
+      <div class="report-section">
+        <div class="report-section-label">04 &mdash; Content</div>
+        <div class="report-section-title">Published This Month</div>
+        <ul class="content-list">${contentHtml}</ul>
+      </div>` : ''}
+
+      ${keyWins ? `
+      <div class="report-section">
+        <div class="report-section-label">05 &mdash; Highlights</div>
+        <div class="report-section-title">Key Wins</div>
+        <div class="notes-box">${keyWins}</div>
+      </div>` : ''}
+
+      ${recs ? `
+      <div class="report-section">
+        <div class="report-section-label">06 &mdash; Looking Ahead</div>
+        <div class="report-section-title">Recommendations &amp; Next Steps</div>
+        <div class="notes-box">${recs}</div>
+      </div>` : ''}
+
+    </div>
+
+    <div class="report-footer">
+      <div>
+        <div class="footer-brand">LitBiz<span>.</span>Media</div>
+        <div class="footer-url">litbiz.io</div>
+      </div>
+      <div class="footer-right">
+        Prepared for ${client.name}<br>
+        ${client.month} SEO Performance Report
+      </div>
+    </div>
+  `;
+
+  document.querySelector('.report').innerHTML = html;
+  document.getElementById('form-view').style.display = 'none';
+  document.getElementById('report-view').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function goBack() {
+  document.getElementById('report-view').style.display = 'none';
+  document.getElementById('form-view').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+</script>
+</body>
+</html>

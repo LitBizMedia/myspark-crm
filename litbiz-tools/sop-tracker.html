@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- LitBiz auth gate (Stage 1) -->
+<style id="litbiz-auth-gate">html{visibility:hidden}</style>
+<script>
+(async function(){
+  try{
+    const r = await fetch('https://api.mysparkplus.app/api/subaccount/litbiz/whoami',{credentials:'include'});
+    if(!r.ok) throw 0;
+    const d = await r.json();
+    if(!d.ok) throw 0;
+    window.__litbizUser = d;
+    var g = document.getElementById('litbiz-auth-gate');
+    if(g) g.remove();
+  }catch(e){
+    window.location.replace('https://mysparkplus.app/');
+  }
+})();
+</script>
+<!-- end LitBiz auth gate -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOP Tracker | LitBiz Media</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --purple:#4C1D95;
+  --purple-mid:#6D28D9;
+  --purple-light:#EDE9FE;
+  --orange:#EA580C;
+  --surface:#F5F3FF;
+  --card:#FFFFFF;
+  --text-dark:#1E1B4B;
+  --text-mid:#4C4980;
+  --text-light:#8B88B0;
+  --border:#DDD6FE;
+  --good:#059669;
+  --warn:#D97706;
+  --bad:#DC2626;
+  --info:#0891B2;
+  --radius:8px;
+  --radius-lg:14px;
+  --shadow:0 1px 3px rgba(76,29,149,0.06);
+  --shadow-md:0 4px 12px rgba(76,29,149,0.10);
+  --fd:'Syne',sans-serif;
+  --fb:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--fb);background:var(--surface);color:var(--text-dark);min-height:100vh;font-size:14px;line-height:1.5}
+
+.wrap{max-width:1200px;margin:0 auto;padding:18px 22px 40px}
+.tb{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.tb h1{font-family:var(--fd);font-size:22px;font-weight:800;color:var(--purple);margin:0}
+.tb .grow{flex:1}
+.tb-date{font-size:12px;color:var(--text-light)}
+
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--radius);font-family:var(--fb);font-size:13px;font-weight:600;border:1px solid transparent;cursor:pointer;transition:all .12s;text-decoration:none;line-height:1}
+.btn-sm{padding:6px 11px;font-size:12px}
+.btn-primary{background:var(--purple);color:#fff}
+.btn-primary:hover{background:var(--purple-mid)}
+.btn-secondary{background:var(--card);color:var(--text-dark);border-color:var(--border)}
+.btn-secondary:hover{background:var(--surface);border-color:var(--purple)}
+.btn-danger{background:#fff;color:var(--bad);border-color:#FECACA}
+.btn-danger:hover{background:#FEF2F2}
+.btn-ghost{background:transparent;color:var(--text-mid);border-color:transparent;padding:4px 8px}
+.btn-ghost:hover{color:var(--purple)}
+
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+@media(max-width:760px){.stats-row{grid-template-columns:repeat(2,1fr)}}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;box-shadow:var(--shadow)}
+.stat-val{font-family:var(--fd);font-size:26px;font-weight:800;color:var(--text-dark);line-height:1}
+.stat-val.alert{color:var(--bad)}
+.stat-val.warn{color:var(--warn)}
+.stat-val.good{color:var(--good)}
+.stat-lbl{font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-top:6px;font-weight:600}
+
+.section-hdr{display:flex;align-items:center;gap:10px;margin:18px 0 10px}
+.section-title{font-family:var(--fd);font-size:15px;font-weight:700;color:var(--text-dark)}
+
+.client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.client-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;cursor:pointer;transition:all .12s;box-shadow:var(--shadow)}
+.client-card:hover{border-color:var(--purple);box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.cc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.cc-name{font-family:var(--fd);font-size:15px;font-weight:700;color:var(--text-dark);flex:1}
+.cc-pills{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:50%}
+.s-pill{font-size:9px;font-weight:700;padding:3px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.cc-periods{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;padding:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.ps{text-align:center}
+.ps-val{font-family:var(--fd);font-size:13px;font-weight:700;line-height:1}
+.ps-lbl{font-size:9px;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-top:3px;font-weight:600}
+.ps-bar{height:3px;background:var(--surface);border-radius:2px;margin-top:5px;overflow:hidden}
+.ps-bar-fill{height:100%;transition:width .3s}
+.cc-footer{display:flex;justify-content:space-between;align-items:center;font-size:11px}
+.cc-open{color:var(--purple);font-weight:600}
+.rpt-badge{font-size:10px;font-weight:600;padding:3px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
+.rpt-badge.na{background:var(--surface);color:var(--text-light)}
+.rpt-badge.ok{background:#D1FAE5;color:var(--good)}
+.rpt-badge.soon{background:#FEF3C7;color:var(--warn)}
+.rpt-badge.overdue{background:#FEE2E2;color:var(--bad)}
+
+.empty-state{text-align:center;padding:50px 24px;background:var(--card);border:1px dashed var(--border);border-radius:var(--radius-lg)}
+.es-icon{font-size:42px;margin-bottom:14px}
+.es-title{font-family:var(--fd);font-size:17px;font-weight:700;color:var(--text-dark);margin-bottom:6px}
+.es-sub{font-size:13px;color:var(--text-light);margin-bottom:18px}
+
+.detail-nav{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg)}
+.detail-back{background:none;border:none;color:var(--purple);font-family:var(--fb);font-size:13px;font-weight:600;cursor:pointer;padding:4px 0}
+.detail-back:hover{color:var(--purple-mid)}
+.detail-name{flex:1;font-family:var(--fd);font-size:17px;font-weight:700;color:var(--text-dark);text-align:center}
+
+.svc-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.svc-tab{padding:6px 13px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--fb);font-size:12px;font-weight:600;cursor:pointer;transition:all .12s}
+.svc-tab:hover{border-color:var(--purple)}
+.svc-tab.active{color:#fff}
+
+.period-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px}
+.pt{padding:7px 13px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--fb);font-size:12px;font-weight:600;color:var(--text-mid);cursor:pointer;transition:all .12s;display:inline-flex;align-items:center;gap:6px}
+.pt:hover{border-color:var(--purple)}
+.pt.active{background:var(--purple);color:#fff;border-color:var(--purple)}
+.pt-count{font-size:10px;font-weight:600;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.15)}
+.pt:not(.active) .pt-count{background:var(--surface)}
+
+.task-box{background:var(--card);border-radius:var(--radius-lg);border:1px solid var(--border);overflow:hidden;box-shadow:var(--shadow)}
+.task-box-hdr{padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.tbh-title{font-family:var(--fd);font-size:13px;font-weight:700;color:var(--text-dark);flex:1}
+.tbh-note{font-size:11px;color:var(--text-light)}
+.tbh-prog{font-size:12px;font-weight:600;color:var(--text-mid)}
+
+.task-item{display:flex;align-items:flex-start;gap:11px;padding:11px 16px;border-bottom:1px solid var(--border);transition:background .1s;position:relative}
+.task-item:last-child{border-bottom:none}
+.task-item:hover{background:#FAFAFE}
+.task-item.done{opacity:.55}
+.task-check{width:18px;height:18px;border:1.8px solid var(--border);border-radius:4px;cursor:pointer;flex-shrink:0;margin-top:1px;transition:all .12s;background:#fff;display:flex;align-items:center;justify-content:center}
+.task-check.done{background:var(--good);border-color:var(--good)}
+.task-check.done::after{content:'\2713';color:#fff;font-size:12px;font-weight:700}
+.task-check:hover{border-color:var(--purple)}
+.task-body{flex:1;min-width:0}
+.task-lbl{font-size:13px;color:var(--text-dark);line-height:1.45}
+.task-item.done .task-lbl{text-decoration:line-through;color:var(--text-light)}
+.task-meta{font-size:10px;color:var(--text-light);margin-top:2px}
+.task-note-btn{background:none;border:none;font-size:11px;color:var(--purple);cursor:pointer;padding:3px 0;font-family:var(--fb);font-weight:600}
+.task-note-btn:hover{color:var(--purple-mid)}
+.task-note-area{margin-top:6px;display:none}
+.task-note-area.open{display:block}
+.task-note-area textarea{font-family:var(--fb);font-size:12px;color:var(--text-mid);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 10px;width:100%;resize:vertical;min-height:56px;outline:none}
+.task-note-area textarea:focus{border-color:var(--purple);background:#fff}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(30,27,75,0.55);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal{background:#fff;border-radius:var(--radius-lg);padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.modal-title{font-family:var(--fd);font-size:18px;font-weight:800;color:var(--purple);margin-bottom:18px}
+.mf{margin-bottom:14px}
+.mf-lbl{display:block;font-size:11px;font-weight:600;color:var(--text-mid);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.mf-input,.mf-select{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--fb);font-size:14px;background:#fff;color:var(--text-dark);outline:none}
+.mf-input:focus,.mf-select:focus{border-color:var(--purple)}
+.mf-hint{font-size:11px;color:var(--text-light);margin-top:4px}
+.mf-checks{display:flex;flex-wrap:wrap;gap:8px}
+.mf-check{display:flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;cursor:pointer;background:#fff;transition:all .12s}
+.mf-check:hover{border-color:var(--purple)}
+.mf-check input{accent-color:var(--purple)}
+.mf-check.on{background:var(--purple-light);border-color:var(--purple);color:var(--purple)}
+.modal-btns{display:flex;gap:8px;margin-top:20px}
+.modal-btns .btn{flex:1;justify-content:center}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text-dark);color:#fff;padding:11px 22px;border-radius:var(--radius);font-size:13px;font-weight:500;opacity:0;transition:all .25s;pointer-events:none;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.3)}
+
+/* Loading */
+.loading{padding:40px;text-align:center;color:var(--text-light)}
+
+@media(max-width:600px){
+  .wrap{padding:14px 16px 30px}
+  .cc-pills{max-width:60%}
+  .cc-periods{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="tb">
+    <h1>SOP Tracker</h1>
+    <span class="tb-date" id="tbDate"></span>
+    <span class="grow"></span>
+  </div>
+  <div id="app"><div class="loading">Loading...</div></div>
+</div>
+
+<div id="modal-root"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== Service catalog ===== */
+const SVC = {
+  social:  {name:'Social Media',     short:'Social',  color:'#7C3AED'},
+  ppc:     {name:'Google Ads',       short:'Google',  color:'#4285F4'},
+  smads:   {name:'Meta Ads',         short:'Meta',    color:'#C13584'},
+  seo:     {name:'SEO',              short:'SEO',     color:'#059669'},
+  website: {name:'Website Mgmt',     short:'Website', color:'#0891B2'}
+};
+
+const PERIODS = [
+  {id:'onboarding', label:'Onboarding', short:'ONB'},
+  {id:'daily',      label:'Daily',      short:'DAY'},
+  {id:'weekly',     label:'Weekly',     short:'WK'},
+  {id:'monthly',    label:'Monthly',    short:'MO'},
+  {id:'quarterly',  label:'Quarterly',  short:'QTR'}
+];
+
+const TASKS = {
+  social: {
+    onboarding:['Audit all existing social media profiles','Obtain admin access to all social profiles','Gather brand assets (logos, colors, fonts, photos)','Define content pillars and themes','Document brand voice and tone guidelines','Define posting schedule and platform priorities','Build first month content calendar','Set up scheduling tool and connect all accounts','Establish content approval workflow with client','Conduct competitor social profile research'],
+    daily:['Check and respond to comments on all platforms','Check and respond to DMs and direct messages','Monitor brand mentions and tags'],
+    weekly:['Schedule content for the upcoming week','Review previous week engagement metrics','Engage with relevant local and industry accounts','Verify profile links and bio URLs are current','Plan and review Stories or short-form content'],
+    monthly:['Pull monthly analytics (reach, impressions, engagement rate)','Identify and document top-performing content','Build next month content calendar','Review profile completeness and update if needed','Analyze follower growth trends','Conduct competitor profile review'],
+    quarterly:['Conduct full social media audit','Review and update content strategy','Assess platform performance and channel mix','Refresh brand assets and profile creative','Quarterly strategy call with client']
+  },
+  ppc: {
+    onboarding:['Obtain or create Google Ads account access','Link Google Analytics 4 and Search Console','Set up conversion tracking for all goal actions','Install or verify Google Tag Manager','Conduct keyword research and build initial list','Build initial negative keyword list','Competitor ad analysis and messaging review','Define campaign and ad group structure','Write initial ad copy (3 plus variants per ad group)','Set up ad extensions (callouts, sitelinks, call)','Set budget and bidding strategy','Review or create campaign landing page','Get client approval and launch campaigns'],
+    daily:['Check campaign status and delivery alerts','Monitor for disapproved ads','Verify budget pacing is on track'],
+    weekly:['Review performance metrics (CTR, CPC, conversions)','Review search terms report and add negatives','Adjust bids on underperforming keywords','Test new ad copy variations','Check Quality Scores for key keywords'],
+    monthly:['Full campaign performance review','Budget allocation review and adjustment','A/B test analysis and winner implementation','New keyword opportunities research','Landing page performance review','Competitor ad landscape review'],
+    quarterly:['Full account audit','Campaign restructure review if needed','Seasonal campaign planning','Keyword strategy refresh','Review and update all ad extensions','Quarterly strategy call with client']
+  },
+  smads: {
+    onboarding:['Obtain Meta Business Manager and Ad Account access','Install Meta Pixel on website and verify','Set up and verify conversion events','Create custom and lookalike audiences','Competitor ad research via Meta Ad Library','Define campaign and ad set structure','Gather or create ad creative (images, video, copy)','Set up UTM tracking parameters','Define budget and launch plan','Get client approval and launch campaigns'],
+    daily:['Check ad delivery and spend pacing','Monitor for disapproved ads','Check for significant performance anomalies'],
+    weekly:['Review campaign metrics (reach, clicks, conversions, CPL)','Pause underperforming ad sets or ads','Check for creative fatigue and refresh if needed','Review audience overlap and size','Test new audiences or ad creative variations'],
+    monthly:['Full campaign performance analysis','Budget review and reallocation across campaigns','Ad creative refresh (new images, copy, video)','Audience expansion or refinement','Retargeting campaign performance review'],
+    quarterly:['Full ad account audit','Campaign strategy and objective review','Test new ad formats (Reels, Stories, etc.)','Seasonal and upcoming campaign planning','Quarterly strategy call with client']
+  },
+  seo: {
+    onboarding:['Set up and verify Google Search Console','Install and configure Google Analytics 4','Install Google Tag Manager','Link GA4 to Google Search Console','Conduct full technical SEO audit','Complete keyword research (primary, secondary, local)','Competitor keyword and content gap analysis','Pull and document baseline keyword rankings','Create on-page optimization priority plan','Local SEO audit (NAP, citations, GBP)','Submit XML sitemap to Google Search Console','Site speed and Core Web Vitals assessment'],
+    daily:['Check Search Console for crawl errors or manual actions','Monitor Google Alerts for brand mentions'],
+    weekly:['Review Search Console for new errors or warnings','Review ranking movements for target keywords','Identify and fix any new 404 errors','Monitor backlink profile for new and lost links','Publish or update one piece of content'],
+    monthly:['Full keyword ranking report','On-page optimizations for 2-3 priority pages','Publish blog post or new service page','Citation audit and inconsistency cleanup','Backlink outreach or acquisition activity','Core Web Vitals check and performance review','GBP optimization update (posts, photos, Q&A)'],
+    quarterly:['Full technical SEO audit','Content audit (identify outdated or underperforming pages)','Keyword strategy refresh','Competitor ranking analysis','Link building strategy review and update','Quarterly strategy call with client']
+  },
+  website: {
+    onboarding:['Obtain hosting, cPanel, and WP admin access','Create and verify full site backup','Audit site for broken links, errors, and missing elements','Review and document plugins and theme versions','Set up uptime monitoring','Configure automated daily or weekly backups','Site speed audit and initial optimizations','Test all contact forms and confirm submissions deliver','Verify analytics and tracking are firing correctly','Initial security scan and hardening'],
+    daily:['Check uptime monitoring for any alerts','Review any security plugin alerts'],
+    weekly:['Check site for new broken links','Review and confirm contact form submissions','Check for available plugin and theme updates','Quick page speed spot check'],
+    monthly:['Create manual full-site backup before updates','Apply WordPress core, plugin, and theme updates','Verify backup integrity and restore point','Full broken link scan and repair','Test all contact forms are functioning correctly','Run full security scan','Review and address 404 error log'],
+    quarterly:['Full site audit (speed, SEO, UX, conversion paths)','Review and update any outdated page content','Security hardening review','Hosting performance and plan review','Review and update privacy policy if needed','Quarterly strategy call with client']
+  }
+};
+
+/* ===== State ===== */
+const API = 'https://api.mysparkplus.app';
+let state = { clients: [] };
+let view = 'dashboard';
+let activeClientId = null;
+let activeSvc = null;
+let activePeriod = 'onboarding';
+
+/* ===== Helpers ===== */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function getMonday(s){ const d=new Date(s+'T12:00:00'); const day=d.getDay(); const diff=(day===0)?-6:1-day; d.setDate(d.getDate()+diff); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function getMonthKey(s){ const d=new Date(s+'T12:00:00'); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function getQuarterKey(s){ const d=new Date(s+'T12:00:00'); return d.getFullYear()+'-Q'+(Math.floor(d.getMonth()/3)+1); }
+function isEffectiveDone(doneDate, freq){
+  if(!doneDate) return false;
+  const t = todayStr();
+  const dd = String(doneDate).slice(0,10);
+  if(freq==='onboarding') return true;
+  if(freq==='daily')     return dd===t;
+  if(freq==='weekly')    return getMonday(dd)===getMonday(t);
+  if(freq==='monthly')   return getMonthKey(dd)===getMonthKey(t);
+  if(freq==='quarterly') return getQuarterKey(dd)===getQuarterKey(t);
+  return false;
+}
+function taskKey(svcId, freq, idx){ return svcId+':'+freq+':'+idx; }
+function getClient(id){ return state.clients.find(c=>c.id===id); }
+function getTaskState(c, svcId, freq, idx){
+  return (c.tasks && c.tasks[taskKey(svcId, freq, idx)]) || {done_date:null, note:''};
+}
+function getPeriodStats(c, svcId, freq){
+  const items = (TASKS[svcId]||{})[freq] || [];
+  let done = 0;
+  items.forEach((_,i)=>{ const ts=getTaskState(c,svcId,freq,i); if(isEffectiveDone(ts.done_date, freq)) done++; });
+  return {done, total: items.length};
+}
+function getClientPeriodStats(c){
+  const out = {};
+  PERIODS.forEach(p=>{
+    let done=0, total=0;
+    (c.services||[]).forEach(svcId=>{ const s=getPeriodStats(c,svcId,p.id); done+=s.done; total+=s.total; });
+    out[p.id] = {done,total};
+  });
+  return out;
+}
+function getDashStats(){
+  let dailyPending=0, weeklyPending=0, reportsDueSoon=0;
+  state.clients.forEach(c=>{
+    (c.services||[]).forEach(svcId=>{
+      const ds=getPeriodStats(c,svcId,'daily'); dailyPending += ds.total-ds.done;
+      const ws=getPeriodStats(c,svcId,'weekly'); weeklyPending += ws.total-ws.done;
+    });
+    if(c.report_due_day){
+      const days = daysUntilReport(c.report_due_day);
+      if(days <= 5) reportsDueSoon++;
+    }
+  });
+  return {clients: state.clients.length, dailyPending, weeklyPending, reportsDueSoon};
+}
+function daysUntilReport(dueDay){
+  const now=new Date();
+  let m=now.getMonth(), y=now.getFullYear();
+  let d=new Date(y,m,dueDay);
+  if(d<=now){ m++; if(m>11){m=0;y++;} d=new Date(y,m,dueDay); }
+  const n=new Date(); n.setHours(0,0,0,0);
+  return Math.round((d-n)/86400000);
+}
+
+/* ===== API ===== */
+async function apiGet(path){
+  const r = await fetch(API+path, {credentials:'include'});
+  if(!r.ok) throw new Error('GET '+path+' failed: '+r.status);
+  return r.json();
+}
+async function apiSend(method, path, body){
+  const r = await fetch(API+path, {
+    method, credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if(!r.ok){
+    let msg = 'failed';
+    try{ const j = await r.json(); msg = j.error || msg; }catch(e){}
+    throw new Error(method+' '+path+': '+r.status+' '+msg);
+  }
+  return r.json();
+}
+async function loadAll(){
+  const data = await apiGet('/api/subaccount/litbiz/sop/data');
+  state.clients = data.clients || [];
+}
+
+/* ===== Views ===== */
+function showDashboard(){ view='dashboard'; activeClientId=null; render(); }
+function showClient(id){
+  view='client';
+  activeClientId=id;
+  const c = getClient(id);
+  activeSvc = c && c.services && c.services.length ? c.services[0] : null;
+  activePeriod='onboarding';
+  render();
+}
+function setActiveSvc(s){ activeSvc=s; render(); }
+function setActivePeriod(p){ activePeriod=p; render(); }
+
+function render(){
+  const d = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  document.getElementById('tbDate').textContent = d;
+  document.getElementById('app').innerHTML = view==='dashboard' ? renderDashboard() : renderClientDetail();
+}
+
+function renderDashboard(){
+  const stats = getDashStats();
+  const statsHTML = ''
+    + '<div class="stats-row">'
+    + statCard(stats.clients, 'Active Clients', '')
+    + statCard(stats.dailyPending, 'Daily Tasks Pending', stats.dailyPending>0?'alert':'good')
+    + statCard(stats.weeklyPending, 'Weekly Tasks Pending', stats.weeklyPending>0?'warn':'good')
+    + statCard(stats.reportsDueSoon, 'Reports Due Soon', stats.reportsDueSoon>0?'warn':'good')
+    + '</div>';
+
+  const headerHTML = '<div class="section-hdr"><div class="section-title">Clients</div>'
+    + '<div style="flex:1"></div>'
+    + '<button class="btn btn-primary btn-sm" onclick="openAddClient()">+ Add Client</button></div>';
+
+  if(!state.clients.length){
+    return statsHTML + headerHTML
+      + '<div class="empty-state">'
+      + '<div class="es-icon">📋</div>'
+      + '<div class="es-title">No clients yet</div>'
+      + '<div class="es-sub">Add your first client to start tracking tasks.</div>'
+      + '<button class="btn btn-primary" onclick="openAddClient()">+ Add First Client</button>'
+      + '</div>';
+  }
+
+  return statsHTML + headerHTML + '<div class="client-grid">' + state.clients.map(renderClientCard).join('') + '</div>';
+}
+
+function statCard(val, lbl, cls){
+  return '<div class="stat-card"><div class="stat-val '+cls+'">'+val+'</div><div class="stat-lbl">'+lbl+'</div></div>';
+}
+
+function renderClientCard(c){
+  const ps = getClientPeriodStats(c);
+  const cols = PERIODS.map(p=>{
+    const s = ps[p.id] || {done:0,total:0};
+    const pct = s.total>0 ? Math.round((s.done/s.total)*100) : 100;
+    const col = pct>=100 ? 'var(--good)' : pct>=60 ? 'var(--warn)' : 'var(--bad)';
+    return '<div class="ps">'
+      + '<div class="ps-val" style="color:'+col+'">'+(s.total>0?(s.done+'/'+s.total):'\u2013')+'</div>'
+      + '<div class="ps-lbl">'+p.short+'</div>'
+      + '<div class="ps-bar"><div class="ps-bar-fill" style="width:'+pct+'%;background:'+col+'"></div></div>'
+      + '</div>';
+  }).join('');
+  const pills = (c.services||[]).map(svcId=>{
+    const s = SVC[svcId]; if(!s) return '';
+    return '<span class="s-pill" style="background:'+s.color+'22;color:'+s.color+'">'+esc(s.short)+'</span>';
+  }).join('');
+
+  let rpt = '<span class="rpt-badge na">No reporting</span>';
+  if(c.report_due_day){
+    const days = daysUntilReport(c.report_due_day);
+    if(days<=0) rpt = '<span class="rpt-badge overdue">Report overdue</span>';
+    else if(days<=5) rpt = '<span class="rpt-badge soon">Report in '+days+'d</span>';
+    else rpt = '<span class="rpt-badge ok">Report in '+days+'d</span>';
+  }
+
+  return '<div class="client-card" onclick="showClient(\''+c.id+'\')">'
+    + '<div class="cc-top"><div class="cc-name">'+esc(c.name)+'</div><div class="cc-pills">'+pills+'</div></div>'
+    + '<div class="cc-periods">'+cols+'</div>'
+    + '<div class="cc-footer">'+rpt+'<span class="cc-open">View Tasks \u2192</span></div>'
+    + '</div>';
+}
+
+function renderClientDetail(){
+  const c = getClient(activeClientId);
+  if(!c){ showDashboard(); return ''; }
+
+  const svcTabs = (c.services||[]).map(svcId=>{
+    const s = SVC[svcId]; if(!s) return '';
+    const active = svcId===activeSvc;
+    const style = active ? 'background:'+s.color+';color:#fff;border-color:'+s.color : 'color:'+s.color;
+    return '<button class="svc-tab'+(active?' active':'')+'" style="'+style+'" onclick="setActiveSvc(\''+svcId+'\')">'+esc(s.short)+'</button>';
+  }).join('');
+
+  const periodTabs = PERIODS.map(p=>{
+    const active = p.id===activePeriod;
+    let cnt = '';
+    if(activeSvc){
+      const ps = getPeriodStats(c, activeSvc, p.id);
+      if(ps.total>0) cnt = '<span class="pt-count">'+ps.done+'/'+ps.total+'</span>';
+    }
+    return '<button class="pt'+(active?' active':'')+'" onclick="setActivePeriod(\''+p.id+'\')">'+p.label+cnt+'</button>';
+  }).join('');
+
+  let content = activeSvc ? renderTaskList(c, activeSvc, activePeriod) : '<div class="empty-state" style="padding:30px"><div class="es-sub">No services assigned. Click Edit Client to add some.</div></div>';
+
+  return ''
+    + '<div class="detail-nav">'
+      + '<button class="detail-back" onclick="showDashboard()">\u2190 Dashboard</button>'
+      + '<div class="detail-name">'+esc(c.name)+'</div>'
+      + '<button class="btn btn-secondary btn-sm" onclick="openEditClient(\''+c.id+'\')">Edit</button>'
+      + '<button class="btn btn-danger btn-sm" onclick="confirmArchive(\''+c.id+'\')">Archive</button>'
+    + '</div>'
+    + '<div class="svc-tabs">'+svcTabs+'</div>'
+    + '<div class="period-tabs">'+periodTabs+'</div>'
+    + content;
+}
+
+function renderTaskList(c, svcId, freq){
+  const items = (TASKS[svcId]||{})[freq] || [];
+  if(!items.length) return '<div class="empty-state" style="padding:30px"><div class="es-sub">No tasks defined for this period.</div></div>';
+
+  const ps = getPeriodStats(c, svcId, freq);
+  const note = freq==='daily' ? 'Resets each day'
+    : freq==='weekly' ? 'Resets each Monday'
+    : freq==='monthly' ? 'Resets on the 1st'
+    : freq==='quarterly' ? 'Resets each quarter'
+    : 'One-time setup tasks';
+
+  const rows = items.map((label, idx)=>{
+    const ts = getTaskState(c, svcId, freq, idx);
+    const done = isEffectiveDone(ts.done_date, freq);
+    const noteOpen = ts.note && ts.note.trim() ? ' open' : '';
+    const tk = taskKey(svcId, freq, idx);
+    let meta = '';
+    if(ts.done_date){
+      const dd = String(ts.done_date).slice(0,10);
+      meta = '<div class="task-meta">Last completed '+dd+'</div>';
+    }
+    return '<div class="task-item'+(done?' done':'')+'">'
+      + '<div class="task-check'+(done?' done':'')+'" onclick="toggleTask(\''+c.id+'\',\''+tk+'\','+(done?'false':'true')+')"></div>'
+      + '<div class="task-body">'
+        + '<div class="task-lbl">'+esc(label)+'</div>'
+        + meta
+        + '<button class="task-note-btn" onclick="toggleNote(this)">'+(ts.note&&ts.note.trim()?'Edit note':'Add note')+'</button>'
+        + '<div class="task-note-area'+noteOpen+'">'
+          + '<textarea placeholder="Notes for this task..." onblur="saveNote(\''+c.id+'\',\''+tk+'\',this.value)">'+esc(ts.note||'')+'</textarea>'
+        + '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  return '<div class="task-box">'
+    + '<div class="task-box-hdr">'
+      + '<div class="tbh-title">'+esc(SVC[svcId].name)+' \u00B7 '+esc(PERIODS.find(p=>p.id===freq).label)+'</div>'
+      + '<div class="tbh-note">'+note+'</div>'
+      + '<div class="tbh-prog">'+ps.done+' / '+ps.total+'</div>'
+    + '</div>'
+    + rows
+    + '</div>';
+}
+
+function toggleNote(btn){
+  const area = btn.nextElementSibling;
+  if(area) area.classList.toggle('open');
+}
+
+/* ===== Mutations ===== */
+async function toggleTask(clientId, tk, makeDone){
+  const c = getClient(clientId); if(!c) return;
+  if(!c.tasks) c.tasks = {};
+  const prev = c.tasks[tk] || {done_date:null, note:''};
+  const newDate = makeDone ? todayStr() : null;
+  c.tasks[tk] = Object.assign({}, prev, {done_date: newDate});
+  render();
+  try{
+    await apiSend('PUT','/api/subaccount/litbiz/sop/tasks',{client_id: clientId, task_key: tk, done_date: newDate});
+  }catch(e){
+    c.tasks[tk] = prev;
+    render();
+    toast('Save failed: ' + e.message);
+  }
+}
+
+async function saveNote(clientId, tk, val){
+  const c = getClient(clientId); if(!c) return;
+  if(!c.tasks) c.tasks = {};
+  const prev = c.tasks[tk] || {done_date:null, note:''};
+  if((prev.note||'') === val) return;
+  c.tasks[tk] = Object.assign({}, prev, {note: val});
+  try{
+    await apiSend('PUT','/api/subaccount/litbiz/sop/tasks',{client_id: clientId, task_key: tk, note: val});
+  }catch(e){
+    toast('Note save failed: ' + e.message);
+  }
+}
+
+/* ===== Modals ===== */
+function openAddClient(){ openClientModal(null); }
+function openEditClient(id){ openClientModal(id); }
+
+function openClientModal(existingId){
+  const isEdit = !!existingId;
+  const c = isEdit ? getClient(existingId) : {name:'', services:[], report_due_day:null};
+  const svcChecks = Object.keys(SVC).map(svcId=>{
+    const s = SVC[svcId];
+    const on = (c.services||[]).indexOf(svcId) !== -1;
+    return '<label class="mf-check'+(on?' on':'')+'" data-svc="'+svcId+'">'
+      + '<input type="checkbox" '+(on?'checked':'')+' onchange="this.parentNode.classList.toggle(\'on\',this.checked)">'
+      + esc(s.short)+'</label>';
+  }).join('');
+
+  const html = '<div class="modal-bg" onclick="if(event.target===this)closeModal()">'
+    + '<div class="modal">'
+      + '<div class="modal-title">'+(isEdit?'Edit Client':'Add Client')+'</div>'
+      + '<div class="mf"><label class="mf-lbl">Client Name</label><input class="mf-input" id="cm-name" value="'+esc(c.name)+'" placeholder="e.g. Smith Dental"></div>'
+      + '<div class="mf"><label class="mf-lbl">Services</label><div class="mf-checks" id="cm-svcs">'+svcChecks+'</div></div>'
+      + '<div class="mf"><label class="mf-lbl">Report Due Day (optional)</label><input class="mf-input" id="cm-rday" type="number" min="1" max="31" value="'+(c.report_due_day||'')+'" placeholder="Day of month, 1-31"><div class="mf-hint">Day of the month their monthly report is due.</div></div>'
+      + '<div class="modal-btns">'
+        + '<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>'
+        + '<button class="btn btn-primary" onclick="saveClient('+(isEdit?'\''+existingId+'\'':'null')+')">'+(isEdit?'Save':'Create')+'</button>'
+      + '</div>'
+    + '</div></div>';
+  document.getElementById('modal-root').innerHTML = html;
+}
+
+async function saveClient(existingId){
+  const name = (document.getElementById('cm-name').value || '').trim();
+  if(!name){ toast('Name is required.'); return; }
+  const svcs = Array.from(document.querySelectorAll('#cm-svcs .mf-check'))
+    .filter(el => el.querySelector('input').checked)
+    .map(el => el.dataset.svc);
+  const rday = document.getElementById('cm-rday').value || null;
+
+  const body = {name, services: svcs, report_due_day: rday};
+
+  try{
+    if(existingId){
+      const updated = await apiSend('PUT','/api/subaccount/litbiz/sop/clients/'+existingId, body);
+      const c = getClient(existingId);
+      Object.assign(c, updated);
+    }else{
+      const created = await apiSend('POST','/api/subaccount/litbiz/sop/clients', body);
+      state.clients.push(created);
+      state.clients.sort((a,b)=>a.name.localeCompare(b.name));
+    }
+    closeModal();
+    render();
+    toast(existingId ? 'Client updated.' : 'Client added.');
+  }catch(e){
+    toast('Save failed: ' + e.message);
+  }
+}
+
+function confirmArchive(id){
+  const c = getClient(id); if(!c) return;
+  const html = '<div class="modal-bg" onclick="if(event.target===this)closeModal()">'
+    + '<div class="modal" style="max-width:380px">'
+      + '<div class="modal-title">Archive Client?</div>'
+      + '<p style="font-size:14px;color:var(--text-mid);margin-bottom:18px">'+esc(c.name)+' will be archived. All tasks and notes will be preserved.</p>'
+      + '<div class="modal-btns">'
+        + '<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>'
+        + '<button class="btn btn-danger" onclick="archiveClient(\''+id+'\')">Archive</button>'
+      + '</div>'
+    + '</div></div>';
+  document.getElementById('modal-root').innerHTML = html;
+}
+
+async function archiveClient(id){
+  try{
+    await apiSend('DELETE','/api/subaccount/litbiz/sop/clients/'+id);
+    state.clients = state.clients.filter(c=>c.id!==id);
+    closeModal();
+    showDashboard();
+    toast('Client archived.');
+  }catch(e){
+    toast('Archive failed: ' + e.message);
+  }
+}
+
+function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+
+let toastTimer = null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  if(!t) return;
+  t.textContent = msg;
+  t.style.opacity = '1';
+  t.style.transform = 'translateX(-50%) translateY(0)';
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{
+    t.style.opacity = '0';
+    t.style.transform = 'translateX(-50%) translateY(20px)';
+  }, 3000);
+}
+
+/* ===== Init ===== */
+async function init(){
+  try{
+    await loadAll();
+    render();
+  }catch(e){
+    document.getElementById('app').innerHTML = '<div class="empty-state"><div class="es-icon">⚠️</div><div class="es-title">Failed to load</div><div class="es-sub">'+esc(e.message)+'</div></div>';
+  }
+}
+init();
+</script>
+</body>
+</html>
