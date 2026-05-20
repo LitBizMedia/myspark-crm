@@ -8318,12 +8318,16 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     // Existing fields (unchanged)
     + '<div id="appt-warn" class="warn-box hidden"></div>'
     + '<div class="form-group" id="apt-cv-wrap"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
+    // Lock date/time fields when editing an existing appointment. Reschedule
+    // button is the only sanctioned path to change date/time so the audit trail,
+    // email notification, payment migration, and rescheduled_from_id link all happen.
+    + (a ? '<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:8px">Date and time are locked. Use the <strong>Reschedule</strong> button below to change them.</div>' : '')
     + '<div id="apt-datetime-row" class="'+(initialMode==='custom'?'form-row-3':'form-row')+'">'
-      + '<div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'" onchange="checkApptConflict()"></div>'
-      + '<div class="form-group"><label>Time</label>'+_timeInputHTML('af-time',a&&a.time||prefTime||'9:00 AM',false,'onApptStartTimeChange()')+'</div>'
+      + '<div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'"'+(a?' disabled':'')+' onchange="checkApptConflict()"></div>'
+      + '<div class="form-group"><label>Time</label>'+_timeInputHTML('af-time',a&&a.time||prefTime||'9:00 AM',!!a,'onApptStartTimeChange()')+'</div>'
       + '<div class="form-group" id="apt-end-wrap" style="display:'+(initialMode==='custom'?'block':'none')+'">'
         + '<label>End Time</label>'
-        + _timeInputHTML('af-end', _computeDefaultEndTime(a&&a.time||prefTime||'9:00 AM', a&&a.duration||60), false, 'onApptEndTimeChange()')
+        + _timeInputHTML('af-end', _computeDefaultEndTime(a&&a.time||prefTime||'9:00 AM', a&&a.duration||60), !!a, 'onApptEndTimeChange()')
       + '</div>'
     + '</div>'
     // Duration (Service mode only) + Assigned To. End Time moved into the
@@ -8332,7 +8336,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     + '<div class="form-row">'
       + '<div class="form-group" id="apt-dur-wrap" style="display:'+(initialMode==='custom'?'none':'block')+'">'
         + '<label>Duration (min)</label>'
-        + '<input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15" onchange="onApptDurationChange()">'
+        + '<input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15"'+(a?' disabled':'')+' onchange="onApptDurationChange()">'
       + '</div>'
       + '<div class="form-group" id="apt-user-wrap"><label>Assigned To</label><select id="af-user" onchange="apptOnStaffChange()">'+uOpts+'</select></div>'
     + '</div>'
@@ -10111,6 +10115,12 @@ function isValidApptDate(newDate, opts){
   return {ok:true};
 }
 
+// In-memory state for reschedule modal conflict detection. Mirrors
+// apptConflicts/apptOverrides used by the main appointment modal.
+var rsConflicts = [];
+var rsOverrides = {};
+var _rsApptCtx = null;
+
 // Open the compact reschedule picker. originalApptId is the appointment to move.
 // On submit, calls the appointments-reschedule endpoint which creates a new
 // row pointing at the original via rescheduled_from_id.
@@ -10118,21 +10128,141 @@ function openRescheduleModal(originalApptId){
   var a = (db.appointments||[]).find(function(x){return x.id===originalApptId;});
   if(!a){toast('Appointment not found.','error');return;}
 
+  // Reset conflict state for this open
+  rsConflicts = [];
+  rsOverrides = {};
+  _rsApptCtx = a;
+
   var body = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:var(--info-text);border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
     + '<div style="font-weight:600;margin-bottom:3px">Current slot</div>'
     + esc(a.date) + (a.time?' at '+esc(fmtTime(a.time)):'')
     + '</div>'
+    + '<div id="rs-warn" class="warn-box hidden"></div>'
     + '<div class="form-row">'
-      + '<div class="form-group"><label>New Date</label><input id="rs-date" type="date" value="'+esc(a.date)+'"></div>'
-      + '<div class="form-group"><label>New Time</label>'+_timeInputHTML('rs-time', a.time||'9:00 AM', false, '')+'</div>'
+      + '<div class="form-group"><label>New Date</label><input id="rs-date" type="date" value="'+esc(a.date)+'" onchange="checkRescheduleConflict()"></div>'
+      + '<div class="form-group"><label>New Time</label>'+_timeInputHTML('rs-time', a.time||'9:00 AM', false, 'checkRescheduleConflict()')+'</div>'
     + '</div>'
-    + '<div class="form-group"><label>Duration (min)</label><input id="rs-dur" type="number" value="'+(a.duration||60)+'" min="15" step="15"></div>'
+    + '<div class="form-group"><label>Duration (min)</label><input id="rs-dur" type="number" value="'+(a.duration||60)+'" min="15" step="15" onchange="checkRescheduleConflict()"></div>'
     + '<div class="form-group"><label>Notes (optional, leaves existing notes if blank)</label><textarea id="rs-notes" placeholder="Add a note about this reschedule..."></textarea></div>';
 
   var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     + '<button class="btn btn-primary" id="rs-submit-btn" onclick="submitReschedule(\''+originalApptId+'\')">Confirm Reschedule</button>';
 
   openModal('Reschedule Appointment', body, footer);
+  // Run conflict check on open in case the existing slot already has issues
+  // (rare but possible if data shifted between modal opens).
+  setTimeout(checkRescheduleConflict, 0);
+}
+
+// Conflict detection for the reschedule modal. Mirrors checkApptConflict but
+// reads from rs-* fields and uses the original appointment's staff/service.
+function checkRescheduleConflict(){
+  if(!_rsApptCtx)return;
+  var a = _rsApptCtx;
+  var date = document.getElementById('rs-date') && document.getElementById('rs-date').value;
+  var time = _readTimeInput('rs-time');
+  var dur = document.getElementById('rs-dur') && document.getElementById('rs-dur').value;
+  var userId = a.assignedTo;
+  var conflicts = [];
+
+  // Blackout date
+  if(date){
+    var bo = isBlackoutDate(date);
+    if(bo){
+      conflicts.push({type:'blackout', label:'Blackout date', message: esc(bo.reason||'Bookings disabled for this date.')});
+    }
+  }
+
+  // Daily booking cap
+  if(userId && date){
+    var userCap = getUserById(userId);
+    var cap = userCap && userCap.schedule && parseInt(userCap.schedule.maxBookingsPerDay);
+    if(cap && cap>0){
+      var existing = db.appointments.filter(function(x){
+        return x && x.assignedTo===userId && x.date===date && x.id!==a.id && isActiveAppt(x);
+      });
+      if(existing.length>=cap){
+        conflicts.push({type:'daily_cap', label:'Daily limit reached', message: esc(userCap.name||userCap.username)+' is at the daily cap of '+cap+' booking'+(cap!==1?'s':'')+' on this date.'});
+      }
+    }
+  }
+
+  // Staff not scheduled
+  if(userId && date){
+    var schHrs = getStaffAvailableHours(userId, date);
+    if(!schHrs || !schHrs.size){
+      var u2 = getUserById(userId);
+      var ov2 = u2 && u2.dateOverrides && u2.dateOverrides.find(function(o){return o.date===date;});
+      var reason2 = (ov2 && ov2.type==='off') ? (ov2.note||'Day Off') : 'no schedule for this day';
+      conflicts.push({type:'not_scheduled', label:'Staff not available', message: esc(u2 && (u2.name||u2.username) || 'Staff member')+' is not scheduled on this date ('+esc(reason2)+').'});
+    }
+  }
+
+  // Time slot outside working hours
+  if(userId && date && time){
+    var hSet = getStaffAvailableHours(userId, date);
+    if(hSet && hSet.size>0){
+      var apptHour = parseInt(time.split(':')[0]);
+      var apptMin = parseInt(time.split(':')[1])||0;
+      var apptStart = apptHour*60 + apptMin;
+      var apptEnd = apptStart + (parseInt(dur)||60);
+      var conflictHour = null;
+      for(var tt=apptStart; tt<apptEnd; tt+=5){
+        var hh = Math.floor(tt/60);
+        if(!hSet.has(hh)){conflictHour = hh; break;}
+      }
+      if(conflictHour !== null){
+        var u2name = (getUserById(userId) && (getUserById(userId).name||getUserById(userId).username)) || 'Staff member';
+        var sortedH = Array.from(hSet).sort(function(a,b){return a-b;});
+        conflicts.push({type:'time_slot', label:'Time conflict', message: esc(u2name)+' works '+fmtTime(String(sortedH[0]).padStart(2,'0')+':00')+' to '+fmtTime(String(sortedH[sortedH.length-1]+1).padStart(2,'0')+':00')+' on this date.'});
+      }
+    }
+  }
+
+  // Double-book (existing appointment at this slot)
+  var dbConflict = checkDoubleBook(a.id, date, time, dur, userId);
+  if(dbConflict){
+    var u = getUserById(userId);
+    conflicts.push({type:'double_book', label:'Scheduling conflict', message: esc(u && (u.name||u.username) || 'This staff member')+' already has "'+esc(dbConflict.title)+'" at '+fmtTime(dbConflict.time)+' on this date.'});
+  }
+
+  rsConflicts = conflicts;
+  // Clear acknowledgments for conflicts no longer present
+  Object.keys(rsOverrides).forEach(function(k){
+    if(!conflicts.some(function(c){return c.type===k;})) delete rsOverrides[k];
+  });
+  renderRescheduleConflictPanel();
+}
+
+function renderRescheduleConflictPanel(){
+  var wb = document.getElementById('rs-warn');
+  var btn = document.getElementById('rs-submit-btn');
+  if(!wb || !btn) return;
+  if(!rsConflicts.length){
+    wb.classList.add('hidden');
+    wb.innerHTML = '';
+    btn.disabled = false;
+    return;
+  }
+  var allAck = rsConflicts.every(function(c){return rsOverrides[c.type];});
+  var h = '<strong>'+rsConflicts.length+' conflict'+(rsConflicts.length!==1?'s':'')+' detected.</strong> Acknowledge to override.';
+  h += '<div style="font-size:11px;color:var(--main-text-muted);margin-top:4px">Each box you check is logged in the audit trail.</div>';
+  h += rsConflicts.map(function(c){
+    var checked = rsOverrides[c.type] ? ' checked' : '';
+    return '<div style="margin-top:8px;display:flex;align-items:flex-start;gap:8px">'
+      + '<input type="checkbox" id="rs-ovr-'+c.type+'"'+checked+' onchange="toggleRsOverride(\''+c.type+'\')" style="margin-top:3px">'
+      + '<label for="rs-ovr-'+c.type+'" style="cursor:pointer;flex:1"><strong>'+esc(c.label)+':</strong> '+c.message+'</label>'
+      + '</div>';
+  }).join('');
+  wb.innerHTML = h;
+  wb.classList.remove('hidden');
+  btn.disabled = !allAck;
+}
+
+function toggleRsOverride(type){
+  if(rsOverrides[type]) delete rsOverrides[type];
+  else rsOverrides[type] = true;
+  renderRescheduleConflictPanel();
 }
 
 // Module-scope guard. Prevents double-submit if the user clicks Confirm twice
@@ -10195,7 +10325,11 @@ async function submitReschedule(originalApptId){
         new_date: newDate,
         new_time: newTime,
         new_duration: parseInt(durEl&&durEl.value)||undefined,
-        new_notes: (notesEl&&notesEl.value)||undefined
+        new_notes: (notesEl&&notesEl.value)||undefined,
+        // Pass override:true when conflicts exist AND all have been acknowledged.
+        // Backend uses this same flag as appointments-upsert to skip its server-side
+        // conflict check (it would otherwise reject with 409).
+        override: rsConflicts.length > 0 && rsConflicts.every(function(c){return rsOverrides[c.type];})
       })
     });
     var data = await res.json().catch(function(){return {};});
