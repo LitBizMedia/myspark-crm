@@ -8366,7 +8366,20 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
       + '<input type="hidden" id="af-title" value="'+esc(a&&a.title||'')+'">';
   }
 
-  const b = widgetBanner + addonsSection + modeTabsHTML + modeBlocksHTML
+  // Rescheduled-from indicator. Shows when this appointment was created via
+  // the reschedule flow. Sits at the very top of the modal body for context.
+  var rescheduledFromBanner = '';
+  if(a && a.rescheduled_from_id){
+    var _origAppt = (db.appointments||[]).find(function(x){return x.id===a.rescheduled_from_id;});
+    if(_origAppt){
+      rescheduledFromBanner = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:var(--info-text);border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
+        + '<div style="font-weight:600;margin-bottom:3px">Rescheduled from</div>'
+        + esc(_origAppt.date) + (_origAppt.time?' at '+esc(fmtTime(_origAppt.time)):'')
+        + '</div>';
+    }
+  }
+
+  const b = rescheduledFromBanner + widgetBanner + addonsSection + modeTabsHTML + modeBlocksHTML
 
     // Existing fields (unchanged)
     + '<div id="appt-warn" class="warn-box hidden"></div>'
