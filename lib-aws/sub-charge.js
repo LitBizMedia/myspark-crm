@@ -282,6 +282,21 @@ async function processSub(sub, blob, options) {
       return result;
     }
 
+    // Manual processing: subs with no card_id are intentionally not auto-charged.
+    // Skip cleanly and advance next_due_date so the cron does not keep retrying.
+    if (!sub.card_id) {
+      result.success = true;
+      result.skipped = true;
+      result.reason = 'manual_processing';
+      if (!options.dry_run) {
+        const data = blob.data || {};
+        const tz = (data.settings && data.settings.timezone) || DEFAULT_TZ;
+        await advanceSubAfterCharge(sub, tz);
+        await logEvent(sub, 'charge_skipped', { reason: 'manual_processing', breakdown });
+      }
+      return result;
+    }
+
     const contact = await getContactById(sub.subaccount_id, sub.contact_id);
     if (!contact) throw new Error('Contact not found');
     if (!contact.squareCustomerId) throw new Error('Contact has no Square customer ID');

@@ -14899,7 +14899,12 @@ function _renderCardPickerInner(c){
   const sel=_subEditCardId||'';
   const addBtn='<button type="button" class="btn btn-ghost btn-sm" onclick="_addCardFromSubModal()" style="margin-left:6px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add card</button>';
   if(!cards.length){
-    return '<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;font-size:12px;color:var(--text-muted);padding:8px 10px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius)">No card on file. Add one to enable billing.</div>'+addBtn+'</div>';
+    // No saved cards: render the select anyway so staff can choose manual
+    // processing (or click Add card). Without the select, the contact cannot
+    // be enrolled at all when no card exists, which blocks legitimate manual
+    // billing workflows.
+    return '<div style="display:flex;align-items:center;gap:6px"><select id="sf-card" style="flex:1" onchange="_subEditCardId=this.value"><option value="" selected>No card (manual processing)</option></select>'+addBtn+'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">No card on file. Add one to enable automatic billing, or leave as manual processing.</div>';
   }
   const cardOpts='<option value="">No card (manual processing)</option>'+cards.map(function(cd){
     return '<option value="'+cd.id+'"'+(sel===cd.id?' selected':'')+'>'+esc(cd.brand||'Card')+' ending in '+esc(cd.last4||'****')+(cd.expMonth?' ('+cd.expMonth+'/'+cd.expYear+')':'')+'</option>';
@@ -15246,6 +15251,14 @@ async function saveSub(){
     const startDate=document.getElementById('sf-start').value;
     const billingCycle=document.getElementById('sf-cycle').value;
     if(!startDate){toast('Start date is required.','error');return;}
+
+    // Setup fees require a card on file. Block save with a clear error
+    // before hitting the API so staff can fix it without seeing a backend toast.
+    const sfb=calcSubSetupFeeBreakdown(_subEditItems);
+    if(sfb&&sfb.total>0&&!cardId){
+      toast('This plan has a setup fee that charges today. Add a card on file or pick a plan without a setup fee.','error');
+      return;
+    }
 
     const payload={
       contactId:contactId,
