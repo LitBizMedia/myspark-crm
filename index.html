@@ -15498,12 +15498,12 @@ function _renderPlanEditModalBody(p){
     +'<div class="form-group"><label>Setup Fee</label>'
     +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
     +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">'
-    +'<input type="checkbox" id="pe-setup-fee-enabled" '+(p&&p.setup_fee_enabled?'checked':'')+' onchange="_toggleSetupFeeInput()" style="width:16px;height:16px">'
+    +'<input type="checkbox" id="pe-setup-fee-enabled" '+(p&&p.setupFeeEnabled?'checked':'')+' onchange="_toggleSetupFeeInput()" style="width:16px;height:16px">'
     +'Charge a one-time setup fee'
     +'</label>'
     +'<div style="display:flex;align-items:center;gap:6px">'
     +'<span style="font-size:13px;color:var(--text-muted)">$</span>'
-    +'<input type="number" id="pe-setup-fee-amount" min="0" step="0.01" value="'+(p&&parseFloat(p.setup_fee_amount)>0?parseFloat(p.setup_fee_amount).toFixed(2):'')+'" placeholder="0.00" '+(p&&p.setup_fee_enabled?'':'disabled')+' style="width:120px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:13px;outline:none">'
+    +'<input type="number" id="pe-setup-fee-amount" min="0" step="0.01" value="'+(p&&parseFloat(p.setupFeeAmount)>0?parseFloat(p.setupFeeAmount).toFixed(2):'')+'" placeholder="0.00" '+(p&&p.setupFeeEnabled?'':'disabled')+' style="width:120px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:13px;outline:none">'
     +'</div>'
     +'</div>'
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Charged once when a customer subscribes to this plan. Existing subscribers are not affected. Taxable if the plan is taxable.</div>'
@@ -15547,8 +15547,8 @@ async function savePlan(){
     // Checkbox hidden by section policy: preserve existing flag.
     // For a new plan with no prior flag, default to true (matches checkbox default).
     const planId=state.modal&&state.modal.id;
-    if(planId&&db.subPlans){
-      const existing=db.subPlans.find(function(x){return x&&x.id===planId;});
+    if(planId&&db.subscriptionPlans){
+      const existing=db.subscriptionPlans.find(function(x){return x&&x.id===planId;});
       if(existing)return existing.taxable!==false;
     }
     return true;

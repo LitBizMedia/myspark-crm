@@ -126,6 +126,8 @@ function planToFrontend(row) {
     items: row.items || [],
     pricing: row.pricing || {},
     trialDays: parseInt(row.trial_days, 10) || 0,
+    setupFeeEnabled: row.setup_fee_enabled === true,
+    setupFeeAmount: parseFloat(row.setup_fee_amount) || 0,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     createdBy: row.created_by
