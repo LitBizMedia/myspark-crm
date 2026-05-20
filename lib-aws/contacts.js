@@ -211,6 +211,54 @@ async function createStubContactFromSms(subaccountId, phone) {
   }
 }
 
+// Create a new contact from public/system context (booking widget, form submit, etc).
+// Returns { id } on success, throws on failure.
+async function createContact(subaccountId, opts) {
+  if (!subaccountId) throw new Error('subaccountId is required');
+  if (!opts || (!opts.name && !opts.email && !opts.phone)) {
+    throw new Error('At least one of name/email/phone is required');
+  }
+  const contactId = 'cnt_' + Math.random().toString(36).slice(2, 14);
+  const fullName = (opts.name || '').trim();
+  const parts = fullName.split(/\s+/);
+  const firstName = parts[0] || null;
+  const lastName = parts.length > 1 ? parts.slice(1).join(' ') : null;
+  const displayName = fullName || opts.email || opts.phone || 'Unknown';
+  const email = opts.email ? String(opts.email).toLowerCase().trim() : null;
+  const phone = opts.phone ? String(opts.phone).trim() : null;
+  const source = opts.source || 'public';
+  const smsConsent = !!opts.sms_consent_transactional;
+  const smsConsentSource = smsConsent ? (opts.sms_consent_source || source) : null;
+  const now = new Date().toISOString();
+
+  await db.query(
+    `INSERT INTO contacts
+       (id, subaccount_id, first_name, last_name, display_name, email, phone,
+        source, type, status, archived,
+        tags, custom_field_values, credit_balance, square_cards,
+        email_suppressed,
+        sms_consent_transactional, sms_consent_marketing,
+        sms_consent_updated_at, sms_consent_source,
+        created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false,
+             '[]'::jsonb, '{}'::jsonb, 0, '[]'::jsonb,
+             false,
+             $11, false,
+             $12, $13,
+             $14, $14)`,
+    [
+      contactId, subaccountId,
+      firstName, lastName, displayName, email, phone,
+      source, 'client', 'active',
+      smsConsent,
+      smsConsent ? now : null,
+      smsConsentSource,
+      now
+    ]
+  );
+  return { id: contactId };
+}
+
 // Look up a single contact WITH all PHI joins (notes, allergies, warnings).
 // Used by contact-open endpoint when the drawer opens. Heavier query so don't
 // use this for bulk listings; that's what contact-list is for.
@@ -275,5 +323,6 @@ module.exports = {
   getContactByEmail,
   getContactByPhone,
   getAllContacts,
+  createContact,
   createStubContactFromSms
 };

@@ -244,7 +244,7 @@ let S = {     // booking state
   date:null, time:null, available_staff:[],
   slots:[], slots_loading:false,
   cal_month: new Date().getMonth(), cal_year: new Date().getFullYear(),
-  client:{name:'',email:'',phone:'',notes:''},
+  client:{name:'',email:'',phone:'',notes:'', sms_consent: false },
   tip:0, tip_custom:'',
   coupon_input:'', coupon_code:'', coupon_discount:0, coupon_validating:false, coupon_status:null, coupon_message:'',
   sq_card:null, sq_payments:null,
@@ -878,6 +878,12 @@ function renderBookingForm(el) {
             <label>Notes <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
             <textarea id="c-notes" oninput="S.client.notes=this.value">${esc(S.client.notes)}</textarea>
           </div>
+          <div class="bw-field" id="bw-fld-sms-consent" style="${D.settings.collect_phone === false ? 'display:none' : 'margin-top:4px'}">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:400;text-transform:none">
+              <input type="checkbox" id="c-sms-consent" ${S.client.sms_consent ? 'checked' : ''} oninput="S.client.sms_consent=this.checked" style="margin-top:3px;flex-shrink:0">
+              <span style="font-size:13px;color:var(--text-muted)">I agree to receive text messages about my appointments. Message and data rates may apply. Reply STOP to unsubscribe.</span>
+            </label>
+          </div>
           <input type="text" id="_hp" name="_hp" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off">
         </div>
         ${summary}
@@ -1262,6 +1268,12 @@ function renderClassesForm(el) {
             <label>Notes <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
             <textarea id="c-notes" oninput="S.client.notes=this.value">${esc(S.client.notes)}</textarea>
           </div>
+          <div class="bw-field" id="bw-fld-sms-consent" style="${D.settings.collect_phone === false ? 'display:none' : 'margin-top:4px'}">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:400;text-transform:none">
+              <input type="checkbox" id="c-sms-consent" ${S.client.sms_consent ? 'checked' : ''} oninput="S.client.sms_consent=this.checked" style="margin-top:3px;flex-shrink:0">
+              <span style="font-size:13px;color:var(--text-muted)">I agree to receive text messages about my appointments. Message and data rates may apply. Reply STOP to unsubscribe.</span>
+            </label>
+          </div>
           <input type="text" id="_hp" name="_hp" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off">
         </div>
         ${summary}
@@ -1472,6 +1484,12 @@ function renderInfo(el) {
       <div class="bw-field" style="${D.settings.collect_notes === false ? 'display:none' : ''}">
         <label>Notes for provider</label>
         <textarea id="c-notes" placeholder="Any special requests or information..." oninput="S.client.notes=this.value">${esc(S.client.notes)}</textarea>
+      </div>
+      <div class="bw-field" id="bw-fld-sms-consent" style="${D.settings.collect_phone === false ? 'display:none' : 'margin-top:4px'}">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:400;text-transform:none">
+          <input type="checkbox" id="c-sms-consent" ${S.client.sms_consent ? 'checked' : ''} oninput="S.client.sms_consent=this.checked" style="margin-top:3px;flex-shrink:0">
+          <span style="font-size:13px;color:var(--text-muted)">I agree to receive text messages about my appointments. Message and data rates may apply. Reply STOP to unsubscribe.</span>
+        </label>
       </div>
       ${couponBlock}
     </div>

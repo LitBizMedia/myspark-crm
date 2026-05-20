@@ -792,7 +792,9 @@ async function handler(req, res) {
         name: client_info.name,
         email: cleanEmail,
         phone: client_info.phone || '',
-        source: 'booking_widget'
+        source: 'booking_widget',
+        sms_consent_transactional: !!(client_info.sms_consent && client_info.phone),
+        sms_consent_source: 'booking_widget'
       });
       contactId = created.id;
       // Legacy compat: ensure blob is up to date if older code reads it.
