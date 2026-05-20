@@ -9,6 +9,7 @@ const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
+const automations = require('./lib/automations');
 
 // Snake_case DB row -> camelCase shape the frontend uses.
 function paymentToFrontend(row) {
@@ -212,6 +213,22 @@ async function handler(req, res) {
         is_gift_card_sale: bool(p.is_gift_card_sale != null ? p.is_gift_card_sale : p.isGiftCardSale, false)
       }
     });
+
+    // Fire automation trigger (await: low frequency, want reliable delivery)
+    try {
+      const pmt = result.rows[0];
+      if (pmt.contact_id) {
+        await automations.fireAutomationTriggers('payment_received', {
+          subaccountId: auth.subaccount_id,
+          contactId: pmt.contact_id,
+          paymentId: pmt.id,
+          amount: parseFloat(pmt.total || 0),
+          paymentMethod: pmt.payment_method || ''
+        });
+      }
+    } catch (autoErr) {
+      console.error('Automation trigger fire error (non-fatal):', autoErr.message);
+    }
 
     return res.status(200).json({ success: true, payment: paymentToFrontend(result.rows[0]) });
   } catch (e) {

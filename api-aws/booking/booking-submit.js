@@ -25,6 +25,7 @@ const contactsLib = require('./lib/contacts');
 const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocation');
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
+const automations = require('./lib/automations');
 const { logAudit } = require('./lib/audit');
 const mailgun = require('./lib/mailgun');
 const { getSquareCreds, squareHost, squareHeaders } = require('./lib/square');
@@ -1149,6 +1150,40 @@ async function handler(req, res) {
       } catch (e) {
         console.error('Confirmation email send threw:', e.message);
       }
+    }
+
+    // Fire automation triggers (fire-and-forget; do not block response)
+    try {
+      if (classSession) {
+        automations.fireAutomationTriggersAsync('class_registration_completed', {
+          subaccountId,
+          contactId,
+          classSessionId: classSession.id,
+          classServiceId: classSession.service_id || null
+        });
+      } else if (apptId) {
+        let isFirstBooking = false;
+        try {
+          const cRes = await db.query(
+            'SELECT COUNT(*) AS c FROM appointments WHERE subaccount_id = $1 AND contact_id = $2',
+            [subaccountId, contactId]
+          );
+          isFirstBooking = parseInt(cRes.rows[0].c, 10) === 1;
+        } catch (countErr) {
+          console.error('isFirstBooking count failed:', countErr.message);
+        }
+        automations.fireAutomationTriggersAsync('appointment_booked', {
+          subaccountId,
+          contactId,
+          appointmentId: apptId,
+          serviceId: body.service_id || null,
+          appointmentTypeId: body.appointment_type_id || null,
+          isFirstBooking,
+          appointmentDate: (body.date && body.time) ? (body.date + 'T' + body.time) : (body.date || null)
+        });
+      }
+    } catch (autoErr) {
+      console.error('Automation trigger fire error (non-fatal):', autoErr.message);
     }
 
     return res.status(200).json({

@@ -27,6 +27,7 @@
 const db = require('./lib/db');
 const crypto = require('crypto');
 const { wrap } = require('./lib/lambda-adapter');
+const automations = require('./lib/automations');
 const { SESv2Client, SendEmailCommand } = require('@aws-sdk/client-sesv2');
 const { getContactByEmail, getContactByPhone } = require('./lib/contacts');
 
@@ -450,6 +451,22 @@ async function handler(req, res) {
         ]
       );
     } catch (e) { console.warn('audit log failed:', e.message); }
+
+    // Fire automation trigger (fire-and-forget)
+    try {
+      if (contactId) {
+        automations.fireAutomationTriggersAsync('form_submitted', {
+          subaccountId,
+          contactId,
+          formId,
+          formName,
+          formSubmissionId: submissionId,
+          formSubmittedAt: new Date().toISOString()
+        });
+      }
+    } catch (autoErr) {
+      console.error('Automation trigger fire error (non-fatal):', autoErr.message);
+    }
 
     return res.status(200).json({
       ok: true,

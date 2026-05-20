@@ -2,6 +2,7 @@
 // Updates whitelisted fields on an existing contact.
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
+const automations = require('./lib/automations');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 
@@ -81,7 +82,23 @@ async function handler(req, res) {
     sets.push(`updated_by = $${p}`);
     params.push(auth.user_id);
 
-    const sql = `UPDATE contacts SET ${sets.join(', ')} WHERE id = $1 AND subaccount_id = $2 RETURNING id, display_name`;
+    // Capture old tags for automation contact_tagged trigger comparison
+    let _oldTagsForAutomation = [];
+    if (changedFields && changedFields.includes('tags')) {
+      try {
+        const tagRes = await db.query(
+          'SELECT tags FROM contacts WHERE id = $1 AND subaccount_id = $2',
+          [id, auth.subaccount_id]
+        );
+        if (tagRes.rows.length) {
+          _oldTagsForAutomation = Array.isArray(tagRes.rows[0].tags) ? tagRes.rows[0].tags : [];
+        }
+      } catch (e) {
+        console.warn('old tags fetch for automation failed:', e.message);
+      }
+    }
+
+    const sql = `UPDATE contacts SET ${sets.join(', ')} WHERE id = $1 AND subaccount_id = $2 RETURNING id, display_name, tags`;
     const r = await db.query(sql, params);
     if (!r.rows.length) return res.status(404).json({ error: 'Contact not found' });
 
@@ -93,6 +110,25 @@ async function handler(req, res) {
       targetSubaccountId: auth.subaccount_id,
       metadata: { changed_fields: changedFields }
     });
+
+    // Fire contact_tagged for each newly-added tag (fire-and-forget)
+    try {
+      if (changedFields && changedFields.includes('tags')) {
+        const newTags = Array.isArray(r.rows[0].tags) ? r.rows[0].tags : [];
+        const oldSet = new Set(_oldTagsForAutomation);
+        for (const tag of newTags) {
+          if (!oldSet.has(tag)) {
+            automations.fireAutomationTriggersAsync('contact_tagged', {
+              subaccountId: auth.subaccount_id,
+              contactId: id,
+              tag
+            });
+          }
+        }
+      }
+    } catch (autoErr) {
+      console.error('Automation trigger fire error (non-fatal):', autoErr.message);
+    }
 
     return res.status(200).json({ success: true, id });
   } catch (e) {

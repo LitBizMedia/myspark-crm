@@ -2,6 +2,7 @@
 // Creates a new contact for the authed subaccount.
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
+const automations = require('./lib/automations');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 
@@ -98,6 +99,16 @@ async function handler(req, res) {
       targetSubaccountId: auth.subaccount_id,
       metadata: { display_name: displayName, has_email: !!email, has_phone: !!phone }
     });
+
+    // Fire automation trigger (fire-and-forget)
+    try {
+      automations.fireAutomationTriggersAsync('contact_created', {
+        subaccountId: auth.subaccount_id,
+        contactId: id
+      });
+    } catch (autoErr) {
+      console.error('Automation trigger fire error (non-fatal):', autoErr.message);
+    }
 
     return res.status(200).json({ success: true, id });
   } catch (e) {

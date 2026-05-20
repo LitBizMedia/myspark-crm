@@ -16,6 +16,7 @@ const { isValidStatus } = require('./lib/appt-statuses');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
+const automations = require('./lib/automations');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -184,7 +185,7 @@ async function handler(req, res) {
 
         // Determine if this is a new appointment (for audit action label)
     const existing = await db.query(
-      'SELECT id FROM appointments WHERE id = $1 AND subaccount_id = $2',
+      'SELECT id, status, contact_id FROM appointments WHERE id = $1 AND subaccount_id = $2',
       [a.id, subaccountId]
     );
     const isNew = existing.rows.length === 0;
@@ -606,6 +607,46 @@ async function handler(req, res) {
       } catch (emailErr) {
         console.warn('appointment confirmation email failed (non-fatal):', emailErr.message);
       }
+    }
+
+    // Fire automation trigger (fire-and-forget)
+    try {
+      const _contactIdFire = (existing.rows[0] && existing.rows[0].contact_id) || a.contact_id || a.contactId;
+      if (isNew && _contactIdFire) {
+        let _isFirstBook = false;
+        try {
+          const cR = await db.query(
+            'SELECT COUNT(*) AS c FROM appointments WHERE subaccount_id = $1 AND contact_id = $2',
+            [subaccountId, _contactIdFire]
+          );
+          _isFirstBook = parseInt(cR.rows[0].c, 10) === 1;
+        } catch (cErr) {
+          console.warn('isFirstBooking count failed:', cErr.message);
+        }
+        automations.fireAutomationTriggersAsync('appointment_booked', {
+          subaccountId,
+          contactId: _contactIdFire,
+          appointmentId: a.id,
+          serviceId: a.service_id || null,
+          isFirstBooking: _isFirstBook,
+          appointmentDate: a.date || null,
+          appointmentStatus: a.status || ''
+        });
+      } else if (!isNew && _contactIdFire) {
+        const _oldStatus = existing.rows[0].status;
+        const _newStatus = a.status;
+        if (_oldStatus !== _newStatus && _newStatus) {
+          automations.fireAutomationTriggersAsync('appointment_status_changed', {
+            subaccountId,
+            contactId: _contactIdFire,
+            appointmentId: a.id,
+            oldStatus: _oldStatus,
+            newStatus: _newStatus
+          });
+        }
+      }
+    } catch (autoErr) {
+      console.error('Automation trigger fire error (non-fatal):', autoErr.message);
     }
 
     return res.status(200).json({ success: true, id: a.id });
