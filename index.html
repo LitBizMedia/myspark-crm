@@ -15494,7 +15494,20 @@ function _renderPlanEditModalBody(p){
     +'<div style="display:flex;align-items:center;gap:10px">'
     +'<input type="number" id="pe-trial-days" min="0" max="365" value="'+(p&&parseInt(p.trial_days||p.trialDays,10)>0?parseInt(p.trial_days||p.trialDays,10):'')+'" placeholder="0" style="width:120px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:13px;outline:none">'
     +'<span style="font-size:13px;color:var(--text-muted)">days. New subscribers on this plan get this many free days before the first charge. Leave blank or 0 for no trial.</span>'
-    +'</div></div>';
+    +'</div></div>'
+    +'<div class="form-group"><label>Setup Fee</label>'
+    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">'
+    +'<input type="checkbox" id="pe-setup-fee-enabled" '+(p&&p.setup_fee_enabled?'checked':'')+' onchange="_toggleSetupFeeInput()" style="width:16px;height:16px">'
+    +'Charge a one-time setup fee'
+    +'</label>'
+    +'<div style="display:flex;align-items:center;gap:6px">'
+    +'<span style="font-size:13px;color:var(--text-muted)">$</span>'
+    +'<input type="number" id="pe-setup-fee-amount" min="0" step="0.01" value="'+(p&&parseFloat(p.setup_fee_amount)>0?parseFloat(p.setup_fee_amount).toFixed(2):'')+'" placeholder="0.00" '+(p&&p.setup_fee_enabled?'':'disabled')+' style="width:120px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:13px;outline:none">'
+    +'</div>'
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Charged once when a customer subscribes to this plan. Existing subscribers are not affected. Taxable if the plan is taxable.</div>'
+    +'</div>';
 
   openModal(isEdit?'Edit Plan':'New Plan',body,
     '<button class="btn btn-ghost" onclick="_backToSubPlansModal()">Back</button><button class="btn btn-primary" onclick="savePlan()">'+(isEdit?'Save Changes':'Create Plan')+'</button>',
@@ -15505,6 +15518,13 @@ function _togglePlanCycle(cy){
   const en=document.getElementById('pp-en-'+cy);if(!en)return;
   _planEditPricing[cy].enabled=en.checked;
   const pr=document.getElementById('pp-pr-'+cy);if(pr)pr.disabled=!en.checked;
+}
+function _toggleSetupFeeInput(){
+  const en=document.getElementById('pe-setup-fee-enabled');
+  const amt=document.getElementById('pe-setup-fee-amount');
+  if(!en||!amt)return;
+  amt.disabled=!en.checked;
+  if(!en.checked)amt.value='';
 }
 function _updatePlanPrice(cy){
   const pr=document.getElementById('pp-pr-'+cy);if(!pr)return;
@@ -15545,7 +15565,22 @@ async function savePlan(){
     if(!isNaN(n)&&n>0)trialDays=Math.min(365,n);
   }
 
-  const payload={name:name,description:description,active:active,taxable:taxable,categoryId:categoryId,pricing:_planEditPricing,trialDays:trialDays};
+  // Setup fee: optional. When enabled, amount must be > 0.
+  const setupFeeEnabledEl=document.getElementById('pe-setup-fee-enabled');
+  const setupFeeAmountEl=document.getElementById('pe-setup-fee-amount');
+  let setupFeeEnabled=false;
+  let setupFeeAmount=0;
+  if(setupFeeEnabledEl&&setupFeeEnabledEl.checked){
+    setupFeeEnabled=true;
+    const sfa=parseFloat(setupFeeAmountEl&&setupFeeAmountEl.value);
+    if(isNaN(sfa)||sfa<=0){
+      toast('Setup fee amount must be greater than 0 when enabled.','error');
+      return;
+    }
+    setupFeeAmount=Math.round(sfa*100)/100;
+  }
+
+  const payload={name:name,description:description,active:active,taxable:taxable,categoryId:categoryId,pricing:_planEditPricing,trialDays:trialDays,setupFeeEnabled:setupFeeEnabled,setupFeeAmount:setupFeeAmount};
 
   try{
     if(isEdit){
