@@ -143,18 +143,24 @@ group('isLineTaxable() - subscription section policy', () => {
     tax.isLineTaxable({ tax: { enabled: true, rate: 7 } }, 'subscription', { taxable: true }), true);
 });
 
-// appointment types remain per-item only
-group('isLineTaxable() - appointmentType still per-item only', () => {
-  const allOnEverywhere = {
-    tax: {
-      enabled: true, rate: 7,
-      sections: { services: 'all', products: 'all', sessionPacks: 'all', subscription: 'all' }
-    }
-  };
-  assertEq('appointmentType ignores section policy (true)',
-    tax.isLineTaxable(allOnEverywhere, 'appointmentType', { taxable: true }), true);
-  assertEq('appointmentType ignores section policy (false)',
-    tax.isLineTaxable(allOnEverywhere, 'appointmentType', { taxable: false }), false);
+// appointmentType now follows section policy (like services/products/etc.)
+group('isLineTaxable() - appointmentType section policy', () => {
+  const atAll = { tax: { enabled: true, rate: 7, sections: { appointmentType: 'all' } } };
+  const atNone = { tax: { enabled: true, rate: 7, sections: { appointmentType: 'none' } } };
+  const atPerItem = { tax: { enabled: true, rate: 7, sections: { appointmentType: 'per_item' } } };
+
+  assertEq('appointmentType all + taxable: true',
+    tax.isLineTaxable(atAll, 'appointmentType', { taxable: true }), true);
+  assertEq('appointmentType all + non-taxable: true (policy overrides)',
+    tax.isLineTaxable(atAll, 'appointmentType', { taxable: false }), true);
+  assertEq('appointmentType none + taxable: false',
+    tax.isLineTaxable(atNone, 'appointmentType', { taxable: true }), false);
+  assertEq('appointmentType per_item + taxable: true',
+    tax.isLineTaxable(atPerItem, 'appointmentType', { taxable: true }), true);
+  assertEq('appointmentType per_item + non-taxable: false',
+    tax.isLineTaxable(atPerItem, 'appointmentType', { taxable: false }), false);
+  assertEq('appointmentType missing policy defaults to per_item',
+    tax.isLineTaxable({ tax: { enabled: true, rate: 7 } }, 'appointmentType', { taxable: true }), true);
 });
 
 // ============================================================
@@ -216,6 +222,7 @@ group('normalizeTaxSettings()', () => {
   assertEq('null input products per_item', empty.sections.products, 'per_item');
   assertEq('null input sessionPacks per_item', empty.sections.sessionPacks, 'per_item');
   assertEq('null input subscription per_item', empty.sections.subscription, 'per_item');
+  assertEq('null input appointmentType per_item', empty.sections.appointmentType, 'per_item');
   assertEq('null input pos default true', empty.posDefaultTaxable, true);
 
   const partial = tax.normalizeTaxSettings({
@@ -227,6 +234,7 @@ group('normalizeTaxSettings()', () => {
   assertEq('partial input products defaults', partial.sections.products, 'per_item');
   assertEq('partial input sessionPacks defaults', partial.sections.sessionPacks, 'per_item');
   assertEq('partial input subscription defaults', partial.sections.subscription, 'per_item');
+  assertEq('partial input appointmentType defaults', partial.sections.appointmentType, 'per_item');
 });
 
 // ============================================================

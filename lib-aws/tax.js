@@ -13,10 +13,10 @@
 'use strict';
 
 // Sections that participate in section policy.
-const POLICY_SECTIONS = ['services', 'products', 'sessionPacks', 'subscription'];
+const POLICY_SECTIONS = ['services', 'products', 'sessionPacks', 'subscription', 'appointmentType'];
 
 // Sections that are ALWAYS per-item (no section policy applies).
-const PER_ITEM_ONLY_SECTIONS = ['appointmentType'];
+const PER_ITEM_ONLY_SECTIONS = [];
 
 // Sections that are ALWAYS non-taxable (locked off, no UI).
 const LOCKED_NON_TAXABLE_SECTIONS = ['giftCard', 'tip', 'fee', 'credit'];
@@ -135,7 +135,8 @@ function normalizeTaxSettings(tax) {
       services: (t.sections && t.sections.services) || DEFAULT_POLICY,
       products: (t.sections && t.sections.products) || DEFAULT_POLICY,
       sessionPacks: (t.sections && t.sections.sessionPacks) || DEFAULT_POLICY,
-      subscription: (t.sections && t.sections.subscription) || DEFAULT_POLICY
+      subscription: (t.sections && t.sections.subscription) || DEFAULT_POLICY,
+      appointmentType: (t.sections && t.sections.appointmentType) || DEFAULT_POLICY
     },
     posDefaultTaxable: t.posDefaultTaxable !== false
   };

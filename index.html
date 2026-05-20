@@ -25790,12 +25790,13 @@ function openAppointmentTypeEditor(idx){
     +'<div class="form-group"><label>Buffer Before (min)</label><input id="atyp-buf-before" type="number" min="0" max="120" value="'+(parseInt(t.buffer_before)||0)+'"></div>'
     +'<div class="form-group"><label>Buffer After (min)</label><input id="atyp-buf-after" type="number" min="0" max="120" value="'+(parseInt(t.buffer_after)||0)+'"></div>'
     +'</div>'
-    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:10px">'
-    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'atyp-tax\');c.checked=!c.checked">'
-    +'<input id="atyp-tax" type="checkbox"'+(t.taxable!==false?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Taxable</div>'
-    +'</div>'
-    +'</div>'
+    +taxableEditorControl('appointmentType',
+        '<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:10px">'
+        +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'atyp-tax\');c.checked=!c.checked">'
+        +'<input id="atyp-tax" type="checkbox"'+(t.taxable!==false?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()">'
+        +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Taxable</div>'
+        +'</div>'
+        +'</div>')
     +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:10px">'
     +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'atyp-active\');c.checked=!c.checked">'
     +'<input id="atyp-active" type="checkbox"'+(t.active!==false?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()">'
@@ -34263,6 +34264,7 @@ function renderTaxSectionPolicy(){
   var prd=sections.products||'per_item';
   var spk=sections.sessionPacks||'per_item';
   var sub=sections.subscription||'per_item';
+  var atyp=sections.appointmentType||'per_item';
   var posDef=tx.posDefaultTaxable!==false;
   var uniform=_taxSectionsUniformMode();
 
@@ -34315,6 +34317,8 @@ function renderTaxSectionPolicy(){
     +secSel('sessionPacks',spk,'Session Packs')
     +'<div style="border-top:1px solid var(--main-border)"></div>'
     +secSel('subscription',sub,'Subscriptions')
+    +'<div style="border-top:1px solid var(--main-border)"></div>'
+    +secSel('appointmentType',atyp,'Appointment Types')
     +'</div>'
 
     // POS Custom Items subsection
@@ -34327,7 +34331,7 @@ function renderTaxSectionPolicy(){
     +'</div>'
 
     // Locked-rules footer
-    +'<p style="font-size:11px;color:var(--main-text-muted);margin:12px 0 0">Appointment types stay per-item by design. Gift card sales, tips, fees, and account credits are never taxed.</p>'
+    +'<p style="font-size:11px;color:var(--main-text-muted);margin:12px 0 0">Gift card sales, tips, fees, and account credits are never taxed.</p>'
     +'</div>';
 }
 
@@ -34340,7 +34344,8 @@ function _taxSectionsUniformMode(){
   var b=s.products||'per_item';
   var c=s.sessionPacks||'per_item';
   var d=s.subscription||'per_item';
-  if(a===b&&b===c&&c===d)return a;
+  var e=s.appointmentType||'per_item';
+  if(a===b&&b===c&&c===d&&d===e)return a;
   return null;
 }
 
@@ -34359,7 +34364,7 @@ function setTaxSectionPolicy(section,policy){
 function setAllTaxSectionsPolicy(mode){
   if(!db.paySettings)db.paySettings={};
   if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
-  db.paySettings.tax.sections={services:mode,products:mode,sessionPacks:mode,subscription:mode};
+  db.paySettings.tax.sections={services:mode,products:mode,sessionPacks:mode,subscription:mode,appointmentType:mode};
   saveData();
   renderPaySettings();
   if(state.paymentsTab==='pos'&&typeof calcTotals==='function')calcTotals();
@@ -34423,10 +34428,10 @@ function getTaxSettings(){
 // =====================================================
 
 // Sections that participate in section policy.
-var TAX_POLICY_SECTIONS=['services','products','sessionPacks','subscription'];
+var TAX_POLICY_SECTIONS=['services','products','sessionPacks','subscription','appointmentType'];
 
 // Sections that are ALWAYS per-item (no section policy applies).
-var TAX_PER_ITEM_ONLY_SECTIONS=['appointmentType'];
+var TAX_PER_ITEM_ONLY_SECTIONS=[];
 
 // Sections that are ALWAYS non-taxable (locked off, no UI).
 var TAX_LOCKED_NON_TAXABLE_SECTIONS=['giftCard','tip','fee','credit'];

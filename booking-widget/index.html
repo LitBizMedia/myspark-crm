@@ -275,6 +275,49 @@ async function init() {
   }
 }
 
+// =====================================================
+// Widget tax policy helpers
+// Mirrors lib-aws/tax.js: section policy + per-item flag.
+// Reads taxSettings.sections passed in via /api/booking/widget-data.
+// =====================================================
+var WIDGET_TAX_POLICY_SECTIONS = ['services','products','sessionPacks','subscription','appointmentType'];
+var WIDGET_TAX_PER_ITEM_ONLY = [];
+
+// Returns 'all' | 'none' | 'per_item' for a given section.
+// Defaults to 'per_item' when section policy is missing.
+function widgetGetSectionPolicy(taxSettings, section) {
+  if (!taxSettings || !taxSettings.sections) return 'per_item';
+  var v = taxSettings.sections[section];
+  if (v === 'all' || v === 'none' || v === 'per_item') return v;
+  return 'per_item';
+}
+
+// Should this line item be taxed? Encodes the three-tier logic.
+function widgetIsLineTaxable(taxSettings, section, item) {
+  // Tier 0: tax collection disabled or no rate
+  if (!taxSettings || !taxSettings.enabled || !(parseFloat(taxSettings.rate) > 0)) return false;
+  // Per-item-only: appointment types
+  if (WIDGET_TAX_PER_ITEM_ONLY.indexOf(section) !== -1) {
+    return !!(item && item.taxable !== false);
+  }
+  // Section-policy-driven
+  if (WIDGET_TAX_POLICY_SECTIONS.indexOf(section) !== -1) {
+    var policy = widgetGetSectionPolicy(taxSettings, section);
+    if (policy === 'all') return true;
+    if (policy === 'none') return false;
+    return !!(item && item.taxable !== false);
+  }
+  // Unknown section: conservative fallback
+  return !!(item && item.taxable !== false);
+}
+
+// Determines the section a booking item belongs to based on widget state.
+// Appointment types live on S.appointment_type. Everything else (services,
+// variations, classes) is 'services'.
+function widgetSectionForBooking(state) {
+  return (state && state.appointment_type) ? 'appointmentType' : 'services';
+}
+
 function applyBranding() {
   if (!D) return;
   const color = D.settings.widget_primary_color || '#6b21ea';
@@ -809,9 +852,10 @@ function renderBookingForm(el) {
 
   // Total summary
   const subtotal = parseFloat(S.appointment_type?.price ?? 0) || 0;
-  const taxable = (S.appointment_type && S.appointment_type.taxable !== false);
   const taxSettings = D.settings.tax || { enabled:false, rate:0, label:'Sales Tax' };
-  const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
+  // Section is 'appointmentType' here (this code path only runs for appt widgets).
+  const taxable = widgetIsLineTaxable(taxSettings, 'appointmentType', S.appointment_type);
+  const taxAmount = taxable
     ? Math.round(subtotal * taxSettings.rate) / 100
     : 0;
   const total = subtotal + taxAmount;
@@ -1942,9 +1986,11 @@ function bookingSummaryHtml(showTotal) {
   const tipAmt = S.tip || 0;
   const couponDiscount = S.coupon_discount || 0;
   const afterDiscount = Math.max(0, subtotal - couponDiscount);
-  const taxable = item.taxable !== false;
   const taxSettings = D.settings.tax || { enabled:false, rate:0, label:'Sales Tax' };
-  const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
+  // Section depends on whether the booking is for an appointment type or a service/class.
+  const taxSection = widgetSectionForBooking(S);
+  const taxable = widgetIsLineTaxable(taxSettings, taxSection, item);
+  const taxAmount = taxable
     ? Math.round(afterDiscount * taxSettings.rate) / 100
     : 0;
   const feeSettings = D.settings.additional_fee || { enabled:false, type:'flat', amount:0, label:'Additional Fee' };
@@ -1986,9 +2032,10 @@ function computeTotal() {
   const tipAmt = S.tip || 0;
   const couponDiscount = S.coupon_discount || 0;
   const afterDiscount = Math.max(0, subtotal - couponDiscount);
-  const taxable = item && item.taxable !== false;
   const taxSettings = D.settings.tax || { enabled:false, rate:0, label:'Sales Tax' };
-  const taxAmount = (taxSettings.enabled && taxable && taxSettings.rate > 0)
+  const taxSection = widgetSectionForBooking(S);
+  const taxable = widgetIsLineTaxable(taxSettings, taxSection, item);
+  const taxAmount = taxable
     ? Math.round(afterDiscount * taxSettings.rate) / 100
     : 0;
   const feeSettings = D.settings.additional_fee || { enabled:false, type:'flat', amount:0 };
