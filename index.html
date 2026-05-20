@@ -6802,7 +6802,7 @@ function checkDoubleBook(apptId,date,time,duration,userId){
   const s=t2m(time),e=s+(parseInt(duration)||60);
   return db.appointments.find(a=>{
     if(a.id===apptId)return false;
-    if(a.date!==date||!a.assignedTo||a.assignedTo!==userId||a.status==='cancelled')return false;
+    if(a.date!==date||!a.assignedTo||a.assignedTo!==userId||!isActiveAppt(a))return false;
     const bufB=parseInt(a.buffer_before)||0,bufA=parseInt(a.buffer_after)||0;
     const as=t2m(a.time||'00:00')-bufB,ae=as+bufB+(a.duration||60)+bufA;
     return s<ae&&e>as;
@@ -9785,7 +9785,7 @@ function checkApptConflict(){
       var thisApptId=state.modal && state.modal.id;
       var existing=db.appointments.filter(function(a){
         return a && a.assignedTo===userId && a.date===date && a.id!==thisApptId
-          && a.status!=='cancelled' && a.status!=='no-show';
+          && isActiveAppt(a);
       });
       if(existing.length>=cap){
         conflicts.push({
