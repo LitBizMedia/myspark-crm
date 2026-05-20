@@ -12022,12 +12022,38 @@ function renderBusinessLogo(){
   var preview=document.getElementById('bi-logo-preview');
   var removeBtn=document.getElementById('bi-logo-remove');
   if(!preview)return;
-  if(bi.logoUrl){
-    preview.innerHTML='<img src="'+esc(bi.logoUrl)+'" alt="Business logo" style="max-width:100%;max-height:100%;object-fit:contain">';
-    if(removeBtn)removeBtn.style.display='';
-  } else {
+
+  // No logo set
+  if(!bi.logoFileId && !bi.logoKey){
     preview.innerHTML='<span style="font-size:11px;color:var(--text-dim)">No logo</span>';
     if(removeBtn)removeBtn.style.display='none';
+    return;
+  }
+
+  // Resolve fresh presigned URL from media list (regenerated each load)
+  if(!state.media)state.media={files:[],folders:[],loaded:false};
+  if(!state.media.loaded){
+    preview.innerHTML='<span style="font-size:11px;color:var(--text-dim)">Loading...</span>';
+    if(removeBtn)removeBtn.style.display='';
+    loadMediaFiles().then(function(){ renderBusinessLogo(); });
+    return;
+  }
+
+  var match=null;
+  if(bi.logoFileId){
+    match=(state.media.files||[]).find(function(f){return f.id===bi.logoFileId;});
+  }
+  if(!match && bi.logoKey){
+    match=(state.media.files||[]).find(function(f){return f.file_key===bi.logoKey || f.key===bi.logoKey;});
+  }
+
+  if(match && match.url){
+    preview.innerHTML='<img src="'+esc(match.url)+'" alt="Business logo" style="max-width:100%;max-height:100%;object-fit:contain">';
+    if(removeBtn)removeBtn.style.display='';
+  } else {
+    // File was deleted from media library, but reference remained
+    preview.innerHTML='<span style="font-size:11px;color:var(--text-dim)">Logo file not found</span>';
+    if(removeBtn)removeBtn.style.display='';
   }
 }
 
@@ -12071,11 +12097,16 @@ async function uploadBusinessLogo(event){
     var listData=await listRes.json().catch(function(){return{files:[]};});
     var newRow=(listData.files||[]).find(function(f){return f.id===presignData.fileId;});
     if(!newRow){setStatus('Upload succeeded but preview failed. Refresh page.','error');event.target.value='';return;}
-    // Step 4: save to settings
+    // Step 4: save to settings (canonical key + fileId only; URL regenerates on each render)
     if(!db.settings.businessInfo)db.settings.businessInfo={};
-    db.settings.businessInfo.logoUrl=newRow.url||'';
+    db.settings.businessInfo.logoUrl=''; // legacy field, no longer persisted with URL
     db.settings.businessInfo.logoKey=presignData.fileKey||'';
     db.settings.businessInfo.logoFileId=presignData.fileId||'';
+    // Keep state.media.files in sync so renderBusinessLogo can resolve immediately
+    if(state.media && Array.isArray(state.media.files)){
+      var existing=state.media.files.find(function(f){return f.id===newRow.id;});
+      if(!existing) state.media.files.unshift(newRow);
+    }
     saveData();
     renderBusinessLogo();
     setStatus('Logo uploaded.','ok');
