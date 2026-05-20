@@ -19194,7 +19194,7 @@ function _renderAutoTriggerConfig(){
     var field = _autoTriggerDaysField(t);
     var label = _autoTriggerDaysLabel(t);
     html += '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">' + esc(label) + '</label>'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(label) + '</label>'
       + '<input type="number" min="0" value="' + esc(cfg[field] != null ? cfg[field] : '') + '" onchange="_autoSetTriggerCfg(\'' + field + '\', this.value)" class="msp-input" style="width:120px">'
       + '</div>';
   }
@@ -19204,13 +19204,13 @@ function _renderAutoTriggerConfig(){
       return '<option value="' + esc(s.id) + '"' + (cfg.service_id === s.id ? ' selected' : '') + '>' + esc(s.name || s.title || 'Untitled') + '</option>';
     }).join('');
     html += '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Filter by service (optional)</label>'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Filter by service (optional)</label>'
       + '<select onchange="_autoSetTriggerCfg(\'service_id\', this.value)" class="msp-input" style="width:100%">' + opts + '</select>'
       + '</div>';
   }
   if (t === 'appointment_booked') {
     html += '<div style="margin-top:12px">'
-      + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--main-text);cursor:pointer">'
+      + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">'
       + '<input type="checkbox" ' + (cfg.only_first_booking ? 'checked' : '') + ' onchange="_autoSetTriggerCfg(\'only_first_booking\', this.checked)">'
       + 'Only fire on first-ever booking for this contact</label></div>';
   }
@@ -19219,15 +19219,15 @@ function _renderAutoTriggerConfig(){
     var fromOpts = statusOpts.map(function(s){ return '<option value="' + esc(s) + '"' + (cfg.from_status === s ? ' selected' : '') + '>' + (s ? esc(s) : 'Any') + '</option>'; }).join('');
     var toOpts = statusOpts.map(function(s){ return '<option value="' + esc(s) + '"' + (cfg.to_status === s ? ' selected' : '') + '>' + (s ? esc(s) : 'Any') + '</option>'; }).join('');
     html += '<div style="margin-top:12px;display:flex;gap:12px">'
-      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">From status</label>'
+      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">From status</label>'
       + '<select onchange="_autoSetTriggerCfg(\'from_status\', this.value)" class="msp-input" style="width:100%">' + fromOpts + '</select></div>'
-      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">To status</label>'
+      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">To status</label>'
       + '<select onchange="_autoSetTriggerCfg(\'to_status\', this.value)" class="msp-input" style="width:100%">' + toOpts + '</select></div>'
       + '</div>';
   }
   if (t === 'payment_received') {
     html += '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Minimum amount (optional)</label>'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Minimum amount (optional)</label>'
       + '<input type="number" min="0" step="0.01" value="' + esc(cfg.min_amount != null ? cfg.min_amount : '') + '" onchange="_autoSetTriggerCfg(\'min_amount\', this.value === \'\' ? null : parseFloat(this.value))" class="msp-input" style="width:140px" placeholder="$0.00">'
       + '</div>';
   }
@@ -19237,15 +19237,15 @@ function _renderAutoTriggerConfig(){
       return '<option value="' + esc(f.id) + '"' + (cfg.form_id === f.id ? ' selected' : '') + '>' + esc(f.name || 'Untitled form') + '</option>';
     }).join('');
     html += '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Filter by form (optional)</label>'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Filter by form (optional)</label>'
       + '<select onchange="_autoSetTriggerCfg(\'form_id\', this.value)" class="msp-input" style="width:100%">' + fopts + '</select>'
       + '</div>';
   }
   if (t === 'contact_tagged') {
     html += '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Filter by tag (optional)</label>'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Filter by tag (optional)</label>'
       + '<input type="text" value="' + esc(cfg.tag || '') + '" oninput="_autoSetTriggerCfg(\'tag\', this.value)" class="msp-input" style="width:100%" placeholder="VIP, Lead, New patient...">'
-      + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">Leave blank to fire on any tag added</div>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Leave blank to fire on any tag added</div>'
       + '</div>';
   }
   if (t === 'class_registration_completed') {
@@ -19254,7 +19254,7 @@ function _renderAutoTriggerConfig(){
       return '<option value="' + esc(s.id) + '"' + (cfg.class_service_id === s.id ? ' selected' : '') + '>' + esc(s.name || 'Untitled class') + '</option>';
     }).join('');
     html += '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Filter by class (optional)</label>'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Filter by class (optional)</label>'
       + '<select onchange="_autoSetTriggerCfg(\'class_service_id\', this.value)" class="msp-input" style="width:100%">' + copts + '</select>'
       + '</div>';
   }
@@ -19283,7 +19283,7 @@ function _renderAutoActionConfig(){
   var a = _autoEdit.action_type;
   var cfg = _autoEdit.action_config || {};
   var t = _autoEdit.trigger_type;
-  if (!a) return '<div style="color:var(--main-text-muted);font-size:13px;padding:8px 0">Select an action to configure it.</div>';
+  if (!a) return '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">Select an action to configure it.</div>';
 
   if (a === 'send_email') {
     var vars = _autoAvailableVars(t);
@@ -19291,13 +19291,13 @@ function _renderAutoActionConfig(){
       return '<button type="button" onclick="_autoInsertVar(\'auto-body\',\'' + v + '\')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px">{{' + esc(v) + '}}</button>';
     }).join(' ');
     return '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Subject</label>'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Subject</label>'
       + '<input type="text" id="auto-subject" value="' + esc(cfg.subject || '') + '" oninput="_autoEdit.action_config.subject = this.value" class="msp-input" style="width:100%" placeholder="e.g. Happy Birthday {{contact.first_name}}!">'
       + '</div>'
       + '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Body (HTML supported)</label>'
-      + '<div style="margin-bottom:6px;padding:8px;background:var(--main-card-hover);border:1px solid var(--main-border);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:4px">'
-      + '<div style="font-size:11px;color:var(--main-text-muted);margin-right:6px;align-self:center;font-weight:600">Insert variable:</div>' + chips
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Body (HTML supported)</label>'
+      + '<div style="margin-bottom:6px;padding:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:4px">'
+      + '<div style="font-size:11px;color:var(--text-muted);margin-right:6px;align-self:center;font-weight:600">Insert variable:</div>' + chips
       + '</div>'
       + '<textarea id="auto-body" oninput="_autoEdit.action_config.body_html = this.value" class="msp-input" rows="10" style="width:100%;font-family:monospace;font-size:13px" placeholder="<p>Hi {{contact.first_name}}, ...</p>">' + esc(cfg.body_html || '') + '</textarea>'
       + '</div>';
@@ -19308,18 +19308,18 @@ function _renderAutoActionConfig(){
       return '<button type="button" onclick="_autoInsertVar(\'auto-sms-body\',\'' + v + '\')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px">{{' + esc(v) + '}}</button>';
     }).join(' ');
     return '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">SMS Body</label>'
-      + '<div style="margin-bottom:6px;padding:8px;background:var(--main-card-hover);border:1px solid var(--main-border);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:4px">'
-      + '<div style="font-size:11px;color:var(--main-text-muted);margin-right:6px;align-self:center;font-weight:600">Insert variable:</div>' + chips2
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">SMS Body</label>'
+      + '<div style="margin-bottom:6px;padding:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:4px">'
+      + '<div style="font-size:11px;color:var(--text-muted);margin-right:6px;align-self:center;font-weight:600">Insert variable:</div>' + chips2
       + '</div>'
       + '<textarea id="auto-sms-body" oninput="_autoEdit.action_config.body = this.value" class="msp-input" rows="5" style="width:100%;font-size:13px" placeholder="Hi {{contact.first_name}}, ...">' + esc(cfg.body || '') + '</textarea>'
-      + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:4px">Keep SMS short. Long messages split into multiple charges.</div>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Keep SMS short. Long messages split into multiple charges.</div>'
       + '</div>';
   }
   if (a === 'add_tag' || a === 'remove_tag') {
     var labelTag = (a === 'add_tag') ? 'Tag to add' : 'Tag to remove';
     return '<div style="margin-top:12px">'
-      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">' + labelTag + '</label>'
+      + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + labelTag + '</label>'
       + '<input type="text" value="' + esc(cfg.tag || '') + '" oninput="_autoEdit.action_config.tag = this.value" class="msp-input" style="width:100%" placeholder="VIP, Welcomed, Onboarded...">'
       + '</div>';
   }
@@ -19380,15 +19380,15 @@ function _renderAutoEditor(){
   ];
   var idempotencyHTML = idempotencyOpts.map(function(o){
     var checked = (e.idempotency_rule === o.v) ? 'checked' : '';
-    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid ' + (e.idempotency_rule === o.v ? 'var(--purple)' : 'var(--main-border)') + ';border-radius:var(--radius);cursor:pointer;margin-bottom:6px;background:' + (e.idempotency_rule === o.v ? 'var(--purple-dim)' : 'transparent') + '">'
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid ' + (e.idempotency_rule === o.v ? 'var(--purple)' : 'var(--border)') + ';border-radius:var(--radius);cursor:pointer;margin-bottom:6px;background:' + (e.idempotency_rule === o.v ? 'var(--purple-dim)' : 'transparent') + '">'
       + '<input type="radio" name="auto-idem" value="' + o.v + '" ' + checked + ' onchange="_autoEdit.idempotency_rule = this.value; _renderAutoEditor()" style="margin-top:2px">'
-      + '<div><div style="font-size:13px;font-weight:600;color:var(--main-text)">' + esc(o.label) + '</div>'
-      + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">' + esc(o.help) + '</div></div>'
+      + '<div><div style="font-size:13px;font-weight:600;color:var(--text)">' + esc(o.label) + '</div>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + esc(o.help) + '</div></div>'
       + '</label>';
   }).join('');
 
   var periodInput = (e.idempotency_rule === 'once_per_period')
-    ? '<div style="margin-top:8px;padding-left:24px"><label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:4px">Window in days</label>'
+    ? '<div style="margin-top:8px;padding-left:24px"><label style="display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">Window in days</label>'
       + '<input type="number" min="1" value="' + esc(e.idempotency_window_days || 30) + '" onchange="_autoEdit.idempotency_window_days = parseInt(this.value, 10) || null" class="msp-input" style="width:100px"></div>'
     : '';
 
@@ -19397,55 +19397,55 @@ function _renderAutoEditor(){
 
     // Section 1: Identity
     + '<div>'
-    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Identity</div>'
-    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Name</label>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Identity</div>'
+    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Name</label>'
     + '<input type="text" value="' + esc(e.name) + '" oninput="_autoEdit.name = this.value" class="msp-input" style="width:100%" placeholder="e.g. Birthday email">'
-    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin:12px 0 6px">Description (optional)</label>'
+    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin:12px 0 6px">Description (optional)</label>'
     + '<input type="text" value="' + esc(e.description) + '" oninput="_autoEdit.description = this.value" class="msp-input" style="width:100%" placeholder="What does this automation do?">'
-    + '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--main-text);cursor:pointer">'
+    + '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--text);cursor:pointer">'
     + '<input type="checkbox" ' + (e.active ? 'checked' : '') + ' onchange="_autoEdit.active = this.checked">'
     + 'Active (uncheck to pause without deleting)</label>'
     + '</div>'
 
     // Section 2: Trigger
     + '<div>'
-    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Trigger</div>'
-    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">When this happens</label>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Trigger</div>'
+    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">When this happens</label>'
     + '<select onchange="_autoSetTrigger(this.value)" class="msp-input" style="width:100%">' + triggerOpts + '</select>'
     + _renderAutoTriggerConfig()
     + '</div>'
 
     // Section 3: Action
     + '<div>'
-    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Action</div>'
-    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:6px">Do this</label>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Action</div>'
+    + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Do this</label>'
     + '<select onchange="_autoSetAction(this.value)" class="msp-input" style="width:100%">' + actionOpts + '</select>'
     + _renderAutoActionConfig()
     + '</div>'
 
     // Section 4: Idempotency
     + '<div>'
-    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">How often can it fire</div>'
+    + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">How often can it fire</div>'
     + idempotencyHTML
     + periodInput
     + '</div>'
 
     // Section 5: Advanced
     + '<div>'
-    + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Advanced</div>'
-    + '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--main-text);cursor:pointer">'
+    + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Advanced</div>'
+    + '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--text);cursor:pointer">'
     + '<input type="checkbox" ' + (e.is_transactional ? 'checked' : '') + ' onchange="_autoEdit.is_transactional = this.checked" style="margin-top:2px">'
     + '<div><div style="font-weight:600">This is a transactional message</div>'
-    + '<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px">Transactional messages bypass marketing consent. Use only for receipts, appointment confirmations, and critical operational messages. NEVER use for promotional content.</div></div>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Transactional messages bypass marketing consent. Use only for receipts, appointment confirmations, and critical operational messages. NEVER use for promotional content.</div></div>'
     + '</label>'
     + '</div>'
 
     // Test send section (only when editing existing)
-    + (e.id ? ('<div style="border-top:1px solid var(--main-border);padding-top:14px">'
-      + '<div style="font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Test send</div>'
-      + '<div style="font-size:13px;color:var(--main-text-muted);margin-bottom:8px">Send a test to a specific contact (bypasses idempotency and consent checks for testing purposes only).</div>'
+    + (e.id ? ('<div style="border-top:1px solid var(--border);padding-top:14px">'
+      + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Test send</div>'
+      + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Send a test to a specific contact (bypasses idempotency and consent checks for testing purposes only).</div>'
       + '<div style="display:flex;gap:8px;align-items:flex-end">'
-      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--main-text);margin-bottom:4px">Contact ID</label>'
+      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">Contact ID</label>'
       + '<input type="text" id="auto-test-contact" class="msp-input" style="width:100%" placeholder="Paste contact ID"></div>'
       + '<button class="btn btn-ghost" onclick="_autoTestSend()">Send test</button>'
       + '</div></div>') : '')
