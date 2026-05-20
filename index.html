@@ -10161,19 +10161,24 @@ async function submitReschedule(originalApptId){
     return;
   }
 
-  // Time input may produce "9:00 AM" format; normalize to HH:MM 24h.
-  var newTime = _normalizeTo24h ? _normalizeTo24h(newTimeRaw) : newTimeRaw;
-  if(!/^\d{2}:\d{2}$/.test(newTime)){
-    // Fallback: try simple parse
-    var m = newTimeRaw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-    if(m){
-      var hh = parseInt(m[1],10);
-      var mm = m[2];
-      var ampm = (m[3]||'').toUpperCase();
-      if(ampm==='PM' && hh<12) hh+=12;
-      if(ampm==='AM' && hh===12) hh=0;
+  // Normalize time. The picker may emit "9:00 AM", "21:00", or "9:00".
+  // Self-contained parser. If none of the formats match, reject submission.
+  var newTime = '';
+  var m = newTimeRaw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if(m){
+    var hh = parseInt(m[1],10);
+    var mm = m[2];
+    var ampm = (m[3]||'').toUpperCase();
+    if(ampm==='PM' && hh<12) hh+=12;
+    if(ampm==='AM' && hh===12) hh=0;
+    if(hh>=0 && hh<=23){
       newTime = (hh<10?'0'+hh:String(hh)) + ':' + mm;
     }
+  }
+  if(!/^\d{2}:\d{2}$/.test(newTime)){
+    // Early return BEFORE btn/_rescheduling are touched, so nothing to clean up.
+    toast('Could not read the time. Try HH:MM format.','error');
+    return;
   }
 
   var btn = document.getElementById('rs-submit-btn');
