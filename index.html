@@ -732,7 +732,7 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .appt-row-sm{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-left:3px solid var(--orange);
   border-radius:var(--radius);padding:9px 12px;margin-bottom:6px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .appt-row-sm > div:first-child{min-width:0;flex:1 1 200px}
-.appt-row-sm.completed{border-left-color:var(--success-light);opacity:.6}.appt-row-sm.cancelled{border-left-color:var(--text-dim);opacity:.4}
+.appt-row-sm.completed{border-left-color:var(--success-light);opacity:.6}.appt-row-sm.cancelled{border-left-color:var(--text-dim);opacity:.4}.appt-row-sm.waiting_room{border-left-color:var(--warning,#f59e0b)}
 .appt-sm-title{font-size:13px;font-weight:600;margin-bottom:2px;color:var(--text)}
 .appt-sm-meta{font-size:11px;color:var(--text-muted)}
 .sb-sm{font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;text-transform:uppercase}
@@ -1938,7 +1938,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="appt-list-search" type="text" placeholder="Search appointments..." oninput="renderApptList()"></div>
             <select class="filter-sel" id="appt-list-user" onchange="renderApptList()"><option value="">All Staff</option></select>
             <select class="filter-sel" id="appt-list-range" onchange="renderApptList()"><option value="2w">Next 2 weeks</option><option value="30d">Next 30 days</option><option value="60d">Next 60 days</option><option value="future">All upcoming</option><option value="past30">Past 30 days</option><option value="past90">Past 90 days</option><option value="all">All time</option></select>
-            <select class="filter-sel" id="appt-list-status" onchange="renderApptList()"><option value="scheduled">Scheduled</option><option value="">All Status</option><option value="completed">Completed</option><option value="rescheduled">Rescheduled</option><option value="no-show">No-show</option><option value="cancelled">Cancelled</option></select>
+            <select class="filter-sel" id="appt-list-status" onchange="renderApptList()"><option value="scheduled">Scheduled</option><option value="waiting_room">Waiting Room</option><option value="">All Status</option><option value="completed">Completed</option><option value="rescheduled">Rescheduled</option><option value="no-show">No-show</option><option value="cancelled">Cancelled</option></select>
           </div>
           <div id="appt-list-body"></div>
         </div>
@@ -3945,7 +3945,7 @@ function renderDash(){
   // Today's appointments - filter by scope
   const todayAppts=db.appointments.filter(function(a){
     if(a.date!==td)return false;
-    if(a.status!=='scheduled')return false;
+    if(!isActiveAppt(a))return false;
     if(scope==='me' && a.assignedTo && a.assignedTo!==uid)return false;
     return true;
   }).sort(function(a,b){return t2m(a.time||'00:00')-t2m(b.time||'00:00');});
@@ -4029,7 +4029,7 @@ function _renderDashHero(td, uid, scope, isAdminish){
   // Today's appointments scoped to current view
   const todayAppts=db.appointments.filter(function(a){
     if(a.date!==td)return false;
-    if(a.status!=='scheduled')return false;
+    if(!isActiveAppt(a))return false;
     if(scope==='me' && a.assignedTo && a.assignedTo!==uid)return false;
     return true;
   }).sort(function(a,b){return t2m(a.time||'00:00')-t2m(b.time||'00:00');});
@@ -4524,7 +4524,7 @@ function renderDrawer(){
     const aHTML=arr=>arr.map(a=>{
       const u=a.assignedTo?getUserById(a.assignedTo):null,uc=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
       const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
-      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px"><span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span>'+payPill+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
+      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px">'+apptStatusBadge(a.status)+''+payPill+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openApptModal(\''+c.id+'\',\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="icon-btn-xs" onclick="delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div></div>';
     }).join('');
     // Sub-tab pill row + Book button on the right. Sticky so chips stay
     // visible while the list scrolls (esp. helpful on small screens after
@@ -5758,9 +5758,28 @@ function _orderedStaff(){
   return ordered;
 }
 
+// Appointment status registry. Add new statuses here, downstream code reads from this map.
+// isActive=true means the slot is occupied (blocks new bookings, counts toward "today's appointments").
+// isActive=false means the slot is released (cancelled, completed, no-show, rescheduled).
+var APPT_STATUSES = {
+  scheduled:    { label: 'Scheduled',    color: '#4ade80', badgeClass: 'sched',  isActive: true  },
+  waiting_room: { label: 'Waiting Room', color: '#f59e0b', badgeClass: 'wait',   isActive: true  },
+  completed:    { label: 'Completed',    color: '#60a5fa', badgeClass: 'compl',  isActive: false },
+  rescheduled:  { label: 'Rescheduled',  color: '#fbbf24', badgeClass: 'reschd', isActive: false },
+  'no-show':    { label: 'No-show',      color: '#f97316', badgeClass: 'noshow', isActive: false },
+  cancelled:    { label: 'Cancelled',    color: '#9ca3af', badgeClass: 'canc',   isActive: false }
+};
+function isActiveAppt(a){
+  var cfg = APPT_STATUSES[a && a.status || 'scheduled'];
+  return cfg ? cfg.isActive : true;
+}
+function apptStatusBadge(status){
+  var cfg = APPT_STATUSES[status||'scheduled'] || APPT_STATUSES.scheduled;
+  return '<span class="sb-sm '+cfg.badgeClass+'" style="background:'+cfg.color+'22;color:'+cfg.color+'">'+esc(cfg.label)+'</span>';
+}
 function apptStatusDot(status){
-  var color=status==='completed'?'#60a5fa':status==='cancelled'?'#9ca3af':status==='rescheduled'?'#fbbf24':status==='no-show'?'#f97316':'#4ade80';
-  return'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+color+';margin-right:3px;flex-shrink:0;vertical-align:middle"></span>';
+  var cfg = APPT_STATUSES[status||'scheduled'] || APPT_STATUSES.scheduled;
+  return'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+cfg.color+';margin-right:3px;flex-shrink:0;vertical-align:middle"></span>';
 }
 function renderCalLegend(){
   const el=document.getElementById('cal-legend');if(!el)return;
@@ -8320,7 +8339,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     + '<div id="apt-group-clients-wrap" style="display:none"></div>'
     + '<div id="apt-group-staff-wrap" style="display:none"></div>'
     + '<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
-    + '<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+['scheduled','completed','rescheduled','no-show','cancelled'].map(x=>'<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
+    + '<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+Object.keys(APPT_STATUSES).map(function(x){return '<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+APPT_STATUSES[x].label+'</option>';}).join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
     + '<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
 
   // Title reflects mode for clarity. Edit always says "Edit Appointment".
@@ -13263,13 +13282,13 @@ function getNotifs(){
   }
 
   if(types.apptToday!==false){
-    db.appointments.filter(a=>a.date===td&&a.status==='scheduled'&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
+    db.appointments.filter(a=>a.date===td&&isActiveAppt(a)&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
       .forEach(a=>{const key='appttoday-'+a.id;out.push({cls:'ni-appt',icon:'C',text:'"'+a.title+'"'+(a.time?' at '+fmtTime(a.time):''),sub:'Appointment today',kind:'appt',id:a.id,key,read:readSet.has(key)})});
   }
 
   if(types.apptTomorrow!==false){
     const tom=new Date();tom.setDate(tom.getDate()+1);const ts=_localDS(tom);
-    db.appointments.filter(a=>a.date===ts&&a.status==='scheduled'&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
+    db.appointments.filter(a=>a.date===ts&&isActiveAppt(a)&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
       .forEach(a=>{const key='appttom-'+a.id;if(!out.find(x=>x.key===key))out.push({cls:'ni-appt',icon:'C',text:'"'+a.title+'" tomorrow'+(a.time?' at '+fmtTime(a.time):''),sub:'Appointment tomorrow',kind:'appt',id:a.id,key,read:readSet.has(key)})});
   }
 
@@ -13277,7 +13296,7 @@ function getNotifs(){
   if(apptAdvH>48){
     const advMs=apptAdvH*3600000;
     db.appointments.filter(a=>{
-      if(a.status!=='scheduled')return false;
+      if(!isActiveAppt(a))return false;
       if(!isAdmin&&a.assignedTo&&a.assignedTo!==uid)return false;
       const apptMs=new Date(a.date+'T'+(a.time||'09:00')).getTime();
       const diff=apptMs-now2.getTime();
@@ -17594,7 +17613,7 @@ function renderApptList(){
         +'<div class="appt-list-meta">'+(a.time?fmtTime(a.time)+' \u00b7 ':'')+( a.duration||60)+' min'+(c?' \u00b7 '+esc(c.name):'')+(a.location?' \u00b7 '+esc(a.location):'')+'</div>'
         +'</div>'
         +(u?'<div style="font-size:11px;font-weight:600;color:'+uc+';flex-shrink:0;padding-top:2px">'+esc(u.name||u.username)+'</div>':'')
-        +'<div style="flex-shrink:0;display:flex;align-items:center;gap:6px">'+payPill+'<span class="sb-sm '+(a.status==='scheduled'?'sched':a.status==='completed'?'compl':a.status==='rescheduled'?'reschd':a.status==='no-show'?'noshow':'canc')+'">'+a.status+'</span>'
+        +'<div style="flex-shrink:0;display:flex;align-items:center;gap:6px">'+payPill+apptStatusBadge(a.status)
         +'<button class="icon-btn-xs" title="Delete" onclick="event.stopPropagation();delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div>'
         +'</div>';
     });
@@ -25251,7 +25270,7 @@ function renderStaffTeam(){
   h+='<div class="staff-card-grid">';
   users.forEach(function(u){
     const col=u.color||'#6b21ea';
-    const todayAppts=db.appointments.filter(function(a){return a.assignedTo===u.id&&a.date===today&&a.status==='scheduled';});
+    const todayAppts=db.appointments.filter(function(a){return a.assignedTo===u.id&&a.date===today&&isActiveAppt(a);});
     const dayStatus=getUserDayStatus(u.id,today);
     let schedLabel='';
     if(dayStatus.status==='on')schedLabel='Working '+fmtTime(dayStatus.start)+' \u2013 '+fmtTime(dayStatus.end);

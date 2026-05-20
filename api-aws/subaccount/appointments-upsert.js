@@ -212,7 +212,7 @@ async function handler(req, res) {
           time: a.time,
           duration: a.duration,
           ignoreAppointmentId: a.id,
-          statusFilter: "status = 'scheduled'",
+          statusFilter: "status NOT IN ('completed','cancelled','no-show','rescheduled')",
           dbClient: db
         });
         if (!result.ok) {
@@ -239,7 +239,7 @@ async function handler(req, res) {
             time: a.time,
             duration: dur,
             ignoreAppointmentId: a.id,
-            statusFilter: "status = 'scheduled'",
+            statusFilter: "status NOT IN ('completed','cancelled','no-show','rescheduled')",
             dbClient: db
           });
           if (!r.ok) {
