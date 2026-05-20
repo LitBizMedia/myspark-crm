@@ -14224,10 +14224,18 @@ function calcSubSetupFeeBreakdown(items){
   const taxLabel=t?t.label:'Sales Tax';
   const feeLines=[];
   let subtotal=0,taxableBase=0;
+  // For existing-sub edits, only NEW items trigger a setup fee charge.
+  // Items already on the sub when the modal opened were already charged at
+  // enrollment time and must not appear in the preview.
+  const originalIds={};
+  (typeof _subEditOriginalItems!=='undefined'&&_subEditOriginalItems||[]).forEach(function(o){
+    if(o&&o.id)originalIds[o.id]=true;
+  });
   (items||[]).forEach(function(it){
-    // Prefer snapshot on the item (set by backend on existing subs / after save).
-    // Fall back to plan lookup for in-progress enrollment items that haven't
-    // been saved yet. Plan is the source of truth.
+    // Skip items that existed at modal open. They were charged at enrollment.
+    if(it.id&&originalIds[it.id])return;
+    // For genuinely new items, look up the plan to get current setupFeeAmount.
+    // Plan is the source of truth.
     let fee=parseFloat(it.setupFeeAmount)||0;
     if(fee<=0&&it.planId){
       const p=getPlan(it.planId);
