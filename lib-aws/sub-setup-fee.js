@@ -174,9 +174,16 @@ async function writeSetupFeePayment(ctx, contact, card, breakdown, squarePayment
   return paymentId;
 }
 
-// Main entry point. See file header for contract.
+// chargeSetupFees does the Square charge ONLY. It does not write a payment record.
+// Callers must invoke writeSetupFeePayment separately, inside their own transaction
+// if atomicity with subscription creation is required.
+//
+// Returns:
+//   { success: true,  skipped: true, reason }                       no items with fees
+//   { success: true,  squarePayment, breakdown, contact, card }     Square charge succeeded
+//   { success: false, error, breakdown? }                           validation or Square error
 async function chargeSetupFees(ctx) {
-  const result = { success: false, skipped: false, paymentId: null, squarePaymentId: null, error: null };
+  const result = { success: false, skipped: false, error: null };
 
   try {
     if (!ctx || !ctx.subaccountId || !ctx.subId || !ctx.contactId) {
@@ -193,8 +200,6 @@ async function chargeSetupFees(ctx) {
     result.breakdown = breakdown;
     result.cents = breakdown.cents;
 
-    // Defensive: setup fee breakdown should never be zero if filter passed,
-    // but guard anyway so we never call Square with 0.
     if (breakdown.cents <= 0) {
       result.success = true;
       result.skipped = true;
@@ -202,7 +207,6 @@ async function chargeSetupFees(ctx) {
       return result;
     }
 
-    // Card on file required. Setup fees are never cash/check at enrollment.
     if (!ctx.cardId) throw new Error('No card on file selected for this subscription');
 
     const contact = await getContactById(ctx.subaccountId, ctx.contactId);
@@ -215,9 +219,6 @@ async function chargeSetupFees(ctx) {
     const creds = await getSquareCreds(slug);
     if (!creds || !creds.access_token) throw new Error('Square is not connected for this workspace');
 
-    // Idempotency key: subId plus caller-supplied tag. Callers pass 'create' for
-    // initial enrollment or 'additem-{itemId}' for plan additions. Retries with
-    // the same key are safe; Square returns the original payment.
     const idempotencyTag = ctx.idempotencyTag || 'create';
     const idempotencyKey = 'setupfee-' + ctx.subId + '-' + idempotencyTag;
     const note = 'Setup fee for subscription ' + ctx.subId;
@@ -237,19 +238,10 @@ async function chargeSetupFees(ctx) {
       return result;
     }
 
-    let ownerName = null;
-    if (ctx.ownerUserId) {
-      try {
-        const u = await db.query('SELECT display_name FROM subaccount_users WHERE id = $1', [ctx.ownerUserId]);
-        if (u.rows.length) ownerName = u.rows[0].display_name;
-      } catch (_) { /* non-fatal */ }
-    }
-
-    const paymentId = await writeSetupFeePayment(ctx, contact, card, breakdown, charge.payment, ownerName);
-
     result.success = true;
-    result.paymentId = paymentId;
-    result.squarePaymentId = charge.payment.id;
+    result.squarePayment = charge.payment;
+    result.contact = contact;
+    result.card = card;
     return result;
   } catch (e) {
     result.error = e.message;
@@ -259,5 +251,6 @@ async function chargeSetupFees(ctx) {
 
 module.exports = {
   computeSetupFeeBreakdown,
-  chargeSetupFees
+  chargeSetupFees,
+  writeSetupFeePayment
 };

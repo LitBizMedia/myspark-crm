@@ -15,6 +15,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const { processSub } = require('./lib/sub-charge');
+const { chargeSetupFees, writeSetupFeePayment } = require('./lib/sub-setup-fee');
 const { todayInTz, DEFAULT_TZ } = require('./lib/timezone');
 
 const VALID_CYCLES = ['weekly', 'monthly', 'quarterly', 'annual'];
@@ -68,6 +69,7 @@ async function buildItem(rawItem, idx, billingCycle, subaccountId, addedAt) {
     taxable = plan.taxable !== false;
     price = parseFloat(cfg.price);
     planTrialDays = parseInt(plan.trial_days, 10) || 0;
+    var _setupFee = (plan.setup_fee_enabled && parseFloat(plan.setup_fee_amount) > 0) ? parseFloat(plan.setup_fee_amount) : 0;
     id = rawItem.id || `si-${Date.now()}-${idx}-p`;
   } else {
     name = String(rawItem.name || '').trim();
@@ -85,7 +87,8 @@ async function buildItem(rawItem, idx, billingCycle, subaccountId, addedAt) {
     discountType, discountValue, discountNote, discountRecurring,
     addedAt: addedAt || new Date().toISOString(),
     billingEndsAt: null,
-    _planTrialDays: planTrialDays  // transient: stripped before INSERT
+    _planTrialDays: planTrialDays,  // transient: stripped before INSERT
+    setupFeeAmount: planId ? _setupFee : 0
   };
 }
 
@@ -197,6 +200,31 @@ async function handler(req, res) {
       initialNextDue = trialEndsAt;
     }
 
+    // SETUP FEE: charge BEFORE the transaction. If any plan-based item carries
+    // a setup fee, charge Square first. On failure, return 400 with zero DB
+    // writes. On success, write the payment record inside the transaction so
+    // it stays atomic with the subscription row.
+    let setupFeeResult = null;
+    const hasAnySetupFee = items.some(it => parseFloat(it.setupFeeAmount) > 0);
+    if (hasAnySetupFee) {
+      setupFeeResult = await chargeSetupFees({
+        subaccountId,
+        subId: id,
+        contactId,
+        cardId: b.cardId,
+        ownerUserId: b.ownerUserId,
+        items,
+        paySettings: blob.data.paySettings || {},
+        idempotencyTag: 'create'
+      });
+      if (!setupFeeResult.success) {
+        return res.status(400).json({
+          error: 'Setup fee charge failed: ' + (setupFeeResult.error || 'unknown'),
+          setup_fee_breakdown: setupFeeResult.breakdown || null
+        });
+      }
+    }
+
     await db.query('BEGIN');
     try {
       await db.query(
@@ -244,6 +272,45 @@ async function handler(req, res) {
         ]
       );
 
+      // Setup fee payment record + event, inside the transaction so it commits
+      // atomically with the subscription row.
+      if (setupFeeResult && setupFeeResult.success && !setupFeeResult.skipped) {
+        const setupFeePaymentId = await writeSetupFeePayment(
+          {
+            subaccountId,
+            subId: id,
+            contactId,
+            ownerUserId: b.ownerUserId
+          },
+          setupFeeResult.contact,
+          setupFeeResult.card,
+          setupFeeResult.breakdown,
+          setupFeeResult.squarePayment,
+          null
+        );
+
+        await db.query(
+          `INSERT INTO subscription_events (
+            id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, payment_id, metadata, created_at
+          ) VALUES ($1, $2, $3, 'setup_fee_charged', $4, 'user', $5, $6::jsonb, NOW())`,
+          [
+            `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id, subaccountId,
+            auth.user_id,
+            setupFeePaymentId,
+            JSON.stringify({
+              payment_id: setupFeePaymentId,
+              square_payment_id: setupFeeResult.squarePayment.id,
+              total: setupFeeResult.breakdown.total,
+              tax: setupFeeResult.breakdown.taxAmount,
+              breakdown: setupFeeResult.breakdown
+            })
+          ]
+        );
+
+        setupFeeResult._paymentId = setupFeePaymentId;
+      }
+
       await db.query('COMMIT');
     } catch (txErr) {
       await db.query('ROLLBACK');
@@ -290,7 +357,14 @@ async function handler(req, res) {
     return res.status(200).json({
       success: true,
       subscription: verify.rows[0],
-      immediate_charge: immediateChargeResult
+      immediate_charge: immediateChargeResult,
+      setup_fee: setupFeeResult && !setupFeeResult.skipped ? {
+        payment_id: setupFeeResult._paymentId || null,
+        total: setupFeeResult.breakdown.total,
+        tax: setupFeeResult.breakdown.taxAmount,
+        subtotal: setupFeeResult.breakdown.subtotal,
+        items: setupFeeResult.breakdown.items
+      } : null
     });
   } catch (e) {
     console.error('subscriptions-create error:', e.message);
