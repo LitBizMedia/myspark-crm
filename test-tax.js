@@ -122,19 +122,35 @@ group('isLineTaxable() - sessionPacks section policy', () => {
 });
 
 // ============================================================
-// isLineTaxable - subscriptions and appointment types are per-item only
+// isLineTaxable - subscriptions follow section policy (Stage 3+)
 // ============================================================
-group('isLineTaxable() - per-item-only sections', () => {
+group('isLineTaxable() - subscription section policy', () => {
+  const subAll = { tax: { enabled: true, rate: 7, sections: { subscription: 'all' } } };
+  const subNone = { tax: { enabled: true, rate: 7, sections: { subscription: 'none' } } };
+  const subPerItem = { tax: { enabled: true, rate: 7, sections: { subscription: 'per_item' } } };
+
+  assertEq('subscription all + taxable item: true',
+    tax.isLineTaxable(subAll, 'subscription', { taxable: true }), true);
+  assertEq('subscription all + non-taxable item: true (policy overrides)',
+    tax.isLineTaxable(subAll, 'subscription', { taxable: false }), true);
+  assertEq('subscription none + taxable item: false',
+    tax.isLineTaxable(subNone, 'subscription', { taxable: true }), false);
+  assertEq('subscription per_item + taxable: true',
+    tax.isLineTaxable(subPerItem, 'subscription', { taxable: true }), true);
+  assertEq('subscription per_item + non-taxable: false',
+    tax.isLineTaxable(subPerItem, 'subscription', { taxable: false }), false);
+  assertEq('subscription missing policy defaults to per_item with taxable: true',
+    tax.isLineTaxable({ tax: { enabled: true, rate: 7 } }, 'subscription', { taxable: true }), true);
+});
+
+// appointment types remain per-item only
+group('isLineTaxable() - appointmentType still per-item only', () => {
   const allOnEverywhere = {
     tax: {
       enabled: true, rate: 7,
-      sections: { services: 'all', products: 'all', sessionPacks: 'all' }
+      sections: { services: 'all', products: 'all', sessionPacks: 'all', subscription: 'all' }
     }
   };
-  assertEq('subscription ignores section policy, uses item flag (true)',
-    tax.isLineTaxable(allOnEverywhere, 'subscription', { taxable: true }), true);
-  assertEq('subscription ignores section policy, uses item flag (false)',
-    tax.isLineTaxable(allOnEverywhere, 'subscription', { taxable: false }), false);
   assertEq('appointmentType ignores section policy (true)',
     tax.isLineTaxable(allOnEverywhere, 'appointmentType', { taxable: true }), true);
   assertEq('appointmentType ignores section policy (false)',
@@ -199,6 +215,7 @@ group('normalizeTaxSettings()', () => {
   assertEq('null input services per_item', empty.sections.services, 'per_item');
   assertEq('null input products per_item', empty.sections.products, 'per_item');
   assertEq('null input sessionPacks per_item', empty.sections.sessionPacks, 'per_item');
+  assertEq('null input subscription per_item', empty.sections.subscription, 'per_item');
   assertEq('null input pos default true', empty.posDefaultTaxable, true);
 
   const partial = tax.normalizeTaxSettings({
@@ -209,6 +226,7 @@ group('normalizeTaxSettings()', () => {
   assertEq('partial input services preserved', partial.sections.services, 'all');
   assertEq('partial input products defaults', partial.sections.products, 'per_item');
   assertEq('partial input sessionPacks defaults', partial.sections.sessionPacks, 'per_item');
+  assertEq('partial input subscription defaults', partial.sections.subscription, 'per_item');
 });
 
 // ============================================================
@@ -225,8 +243,10 @@ group('Backward compatibility (pre-migration shape)', () => {
     tax.isLineTaxable(legacy, 'products', {}), true);
   assertEq('legacy sessionPacks + taxable: true',
     tax.isLineTaxable(legacy, 'sessionPacks', { taxable: true }), true);
-  assertEq('legacy subscription + taxable: true',
+  assertEq('legacy subscription + taxable: true (per_item default)',
     tax.isLineTaxable(legacy, 'subscription', { taxable: true }), true);
+  assertEq('legacy subscription + non-taxable: false (per_item default)',
+    tax.isLineTaxable(legacy, 'subscription', { taxable: false }), false);
   assertEq('legacy giftCard + taxable: still false',
     tax.isLineTaxable(legacy, 'giftCard', { taxable: true }), false);
 });

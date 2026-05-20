@@ -13925,7 +13925,7 @@ function openProductModal(id){
     +'<div class="form-group"><label>Product Name *</label><input id="prd-name" type="text" value="'+esc(p&&p.name||'')+'" placeholder="e.g. Website Design Package"></div>'
     +'<div class="form-group"><label>Status</label><select id="prd-active"><option value="true"'+(!p||p.active?' selected':'')+'>Active</option><option value="false"'+(p&&!p.active?' selected':'')+'>Inactive</option></select></div>'
     +'</div>'
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="prd-taxable" type="checkbox"'+((p&&p.taxable!==false)||!p?' checked':'')+'>Charge tax on this product</label></div>'
+    +taxableEditorControl('products','<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="prd-taxable" type="checkbox"'+((p&&p.taxable!==false)||!p?' checked':'')+'>Charge tax on this product</label></div>')
     +'<div class="form-group"><label>Category</label><select id="prd-cat" class="filter-sel" style="width:100%;height:42px"><option value="">No category</option>'+catOpts+'</select><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Add or remove categories from the Manage Categories section in Manage Products.</div></div>'
     +'<div class="form-group"><label>Description</label><textarea id="prd-desc" rows="3">'+esc(p&&p.description||'')+'</textarea></div>'
     +'<div class="divider"></div>'
@@ -14025,7 +14025,12 @@ function saveProduct(){
     description:(document.getElementById('prd-desc')&&document.getElementById('prd-desc').value||'').trim(),
     category,
     active:document.getElementById('prd-active')&&document.getElementById('prd-active').value==='true',
-    taxable:!!(document.getElementById('prd-taxable')&&document.getElementById('prd-taxable').checked),
+    taxable:(function(){
+      var el=document.getElementById('prd-taxable');
+      if(el)return !!el.checked;
+      // Checkbox hidden by section policy: preserve existing flag.
+      return p&&p.taxable!==false;
+    })(),
     squareCatalogId:existing&&existing.squareCatalogId||'',
     price:editVariations.length?0:(parseFloat(editProductPrice)||0),
     variations:editVariations.length?editVariations.map(function(v){return{id:v.id,name:v.name,price:parseFloat(v.price)||0};}):[],
@@ -14932,9 +14937,22 @@ function _renderItemRow(it,idx){
   const qtySection='<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Qty</div>'
     +'<input type="number" id="itm-qty-'+idx+'" min="1" step="1" value="'+(it.qty||1)+'" style="'+inpStyle+'" oninput="_subEditItems['+idx+'].qty=Math.max(1,parseInt(this.value,10)||1);_rerenderSummary()"></div>';
 
-  const taxSection=isCatalog
-    ? '<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Taxable</div><div style="font-size:13px;padding:7px 0">'+(it.taxable===false?'No':'Yes')+'</div></div>'
-    : '<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Taxable</div><div style="padding:9px 0"><input type="checkbox" id="itm-tax-'+idx+'"'+(it.taxable!==false?' checked':'')+' onchange="_subEditItems['+idx+'].taxable=this.checked;_rerenderSummary()" style="width:16px;height:16px"></div></div>';
+  // Per-line taxable display adapts to subscription section policy.
+  // When policy is all/none, the per-line flag has no effect: show a brief
+  // hint instead of a misleading control. When per_item or tax disabled,
+  // keep the original behavior (read-only Yes/No for catalog, live checkbox
+  // for custom items).
+  var _subPolicy=getTaxSettings()?getSectionPolicy('subscription'):'per_item';
+  var taxSection;
+  if(_subPolicy==='all'){
+    taxSection='<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Taxable</div><div style="font-size:13px;padding:7px 0;color:var(--main-text-muted)" title="Section Policy: Tax all">All</div></div>';
+  }else if(_subPolicy==='none'){
+    taxSection='<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Taxable</div><div style="font-size:13px;padding:7px 0;color:var(--main-text-muted)" title="Section Policy: Tax none">None</div></div>';
+  }else{
+    taxSection=isCatalog
+      ? '<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Taxable</div><div style="font-size:13px;padding:7px 0">'+(it.taxable===false?'No':'Yes')+'</div></div>'
+      : '<div style="width:80px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Taxable</div><div style="padding:9px 0"><input type="checkbox" id="itm-tax-'+idx+'"'+(it.taxable!==false?' checked':'')+' onchange="_subEditItems['+idx+'].taxable=this.checked;_rerenderSummary()" style="width:16px;height:16px"></div></div>';
+  }
 
   // Discount section (collapsible-ish: always visible but indented)
   const dt=it.discountType||'';
@@ -15467,7 +15485,7 @@ function _renderPlanEditModalBody(p){
     +'<div class="form-group"><label>Description</label><textarea id="pe-desc" rows="3" placeholder="What does this plan include? Free text shown to staff and on receipts.">'+esc(p&&p.description||'')+'</textarea></div>'
     +'<div class="form-row">'
     +'<div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:18px"><input type="checkbox" id="pe-active" '+(p&&!p.active?'':'checked')+' style="width:16px;height:16px"><label for="pe-active" style="font-size:13px;cursor:pointer">Active (selectable for new subscriptions)</label></div>'
-    +'<div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:18px"><input type="checkbox" id="pe-taxable" '+(p&&p.taxable===false?'':'checked')+' style="width:16px;height:16px"><label for="pe-taxable" style="font-size:13px;cursor:pointer">Taxable (each charge cycle adds tax per subaccount tax settings)</label></div>'
+    +taxableEditorControl('subscription','<div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:18px"><input type="checkbox" id="pe-taxable" '+(p&&p.taxable===false?'':'checked')+' style="width:16px;height:16px"><label for="pe-taxable" style="font-size:13px;cursor:pointer">Taxable (each charge cycle adds tax per subaccount tax settings)</label></div>')
     +'</div>'
     +'<div class="form-group"><label>Pricing per Cycle * <span style="font-weight:400;color:var(--text-muted)">(at least one required)</span></label>'
     +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px">'+pricingRows+'</div>'
@@ -15503,7 +15521,13 @@ async function savePlan(){
   const name=(document.getElementById('pe-name').value||'').trim();
   const description=(document.getElementById('pe-desc').value||'').trim();
   const active=document.getElementById('pe-active').checked;
-  const taxable=document.getElementById('pe-taxable').checked;
+  const taxable=(function(){
+    const el=document.getElementById('pe-taxable');
+    if(el)return !!el.checked;
+    // Checkbox hidden by section policy: preserve existing flag.
+    // For a new plan with no prior flag, default to true (matches checkbox default).
+    return p?p.taxable!==false:true;
+  })();
   const categoryId=document.getElementById('pe-cat').value||null;
 
   if(!name){toast('Plan name is required.','error');return;}
@@ -16911,7 +16935,9 @@ function renderServiceCommonFields(s,type){
     +'<div class="form-group"><label>Booking Lead Time (hours)</label><input id="svc-lead" type="number" min="0" value="'+(s&&s.booking_lead_time_hours||0)+'"></div>'
     +'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>'
     +'</div>'
-    +'<div class="form-group" style="display:flex;gap:18px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-taxable" type="checkbox"'+((s&&s.taxable!==false)||!s?' checked':'')+'>Charge tax on this '+(type==='class'?'class':'service')+'</label></div>'
+    +'<div class="form-group" style="display:flex;gap:18px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label>'
+    +taxableEditorControl('services','<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-taxable" type="checkbox"'+((s&&s.taxable!==false)||!s?' checked':'')+'>Charge tax on this '+(type==='class'?'class':'service')+'</label>')
+    +'</div>'
     +renderSvcAvailabilityFields(s);
 }
 
@@ -17423,7 +17449,13 @@ function saveService(id){
     booking_lead_time_hours:parseInt(document.getElementById('svc-lead').value)||0,
     booking_advance_days:parseInt(document.getElementById('svc-adv').value)||60,
     active:document.getElementById('svc-active').checked,
-    taxable:!!(document.getElementById('svc-taxable')&&document.getElementById('svc-taxable').checked),
+    taxable:(function(){
+      var el=document.getElementById('svc-taxable');
+      if(el)return !!el.checked;
+      // Checkbox hidden by section policy: preserve existing flag.
+      var existing=s&&s.taxable!==false;
+      return existing;
+    })(),
     // Per-service availability. null means use business hours (default).
     availability:readSvcAvailabilityFields()
   };
@@ -30216,7 +30248,7 @@ function openPackTemplateModal(id){
     +'<input id="spt-expmonths" type="number" min="1" step="1" style="'+inpS+'" value="'+(t&&t.expiresMonths?t.expiresMonths:'')+'" placeholder="12"></div>'
     +'</div>'
     +(isNew?'':'<div class="form-group"><label>Status</label><select id="spt-status" class="filter-sel" style="width:100%;height:38px"><option value="active"'+(t&&t.status!=='inactive'?' selected':'')+'>Active</option><option value="inactive"'+(t&&t.status==='inactive'?' selected':'')+'>Inactive</option></select></div>')
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="spt-taxable" type="checkbox"'+((t&&t.taxable!==false)||!t?' checked':'')+'>Charge tax on this pack</label></div>';
+    +taxableEditorControl('sessionPacks','<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="spt-taxable" type="checkbox"'+((t&&t.taxable!==false)||!t?' checked':'')+'>Charge tax on this pack</label></div>');
   openModal((isNew?'New Pack Template':'Edit Pack Template'),body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="savePackTemplate('+(isNew?'null':"'"+id+"'")+')">'+( isNew?'Create Template':'Save Changes')+'</button>',
@@ -30248,7 +30280,12 @@ function savePackTemplate(id){
   if(paid<1||total<1){toast('Enter valid session counts.','error');return;}
   if(total<paid){toast('Total sessions must be >= sessions paid.','error');return;}
   if(!db.sessionPackTemplates)db.sessionPackTemplates=[];
-  var taxable=!!(document.getElementById('spt-taxable')&&document.getElementById('spt-taxable').checked);
+  var taxable=(function(){
+    var el=document.getElementById('spt-taxable');
+    if(el)return !!el.checked;
+    // Checkbox hidden by section policy: preserve existing flag.
+    return t&&t.taxable!==false;
+  })();
   if(id){
     var t=db.sessionPackTemplates.find(function(x){return x.id===id;});
     if(!t){toast('Template not found.','error');return;}
@@ -34167,7 +34204,7 @@ function renderPaySettings(){
     +'<div class="form-group" style="flex:2;min-width:140px"><label>Tax Label</label><input id="tax-label" type="text" style="'+inp+'" value="'+esc(tx.label||'Sales Tax')+'" placeholder="e.g. Sales Tax" oninput="savePaySettings()"></div>'
     +'<div class="form-group" style="flex:1;min-width:90px"><label>Rate (%)</label><input id="tax-rate" type="number" style="'+inp+'" min="0" max="100" step="0.001" value="'+(tx.rate||'')+'" placeholder="7.000" oninput="savePaySettings()"></div>'
     +'</div>'
-    +'<p style="font-size:12px;color:var(--main-text-muted);margin:4px 0 0">Tax applies to services, products, and packs marked taxable. Gift card sales are not taxed at purchase. Discounts and coupons reduce the taxable amount before tax is calculated.</p>'
+    +renderTaxSectionPolicy()
     +'<p style="font-size:11px;color:var(--main-text-muted);margin:0;font-style:italic">Tax law varies by state and item type. You are responsible for setting the correct rate and marking each item correctly.</p>'
     +'</div>'
     +'</div>'
@@ -34189,6 +34226,155 @@ function toggleAdditionalFee(){
   renderPaySettings();
   if(state.paymentsTab==='pos')calcTotals();
   toast('Additional fee '+(db.paySettings.additionalFee.enabled?'enabled':'disabled')+'.','success');
+}
+
+// =====================================================
+// Tax Section Policy UI helpers (Stage 3)
+// =====================================================
+
+// Returns either the original per-item taxable checkbox HTML, or an
+// explanatory note when the section's policy is 'all' or 'none'.
+// Use in item editors so the UI matches what actually controls tax.
+function taxableEditorControl(section, checkboxHtml){
+  // Tax disabled globally: show the checkbox so it can be set ahead of time.
+  if(!getTaxSettings())return checkboxHtml;
+  // Per-item-only sections (appointment types) never have policy: keep checkbox.
+  if(TAX_PER_ITEM_ONLY_SECTIONS.indexOf(section)!==-1)return checkboxHtml;
+  var policy=getSectionPolicy(section);
+  if(policy==='all'){
+    return '<div class="form-group" style="background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--main-text-muted)">'
+      +'<span style="color:var(--main-text);font-weight:500">Will be taxed.</span> Section Policy is set to Tax all in Payment Settings.'
+      +'</div>';
+  }
+  if(policy==='none'){
+    return '<div class="form-group" style="background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--main-text-muted)">'
+      +'<span style="color:var(--main-text);font-weight:500">Will not be taxed.</span> Section Policy is set to Tax none in Payment Settings.'
+      +'</div>';
+  }
+  return checkboxHtml;
+}
+
+// Render the Section Policy block. Lives inside tax-fields, only visible
+// when tax collection is enabled.
+function renderTaxSectionPolicy(){
+  var tx=(db.paySettings&&db.paySettings.tax)||{};
+  var sections=tx.sections||{};
+  var srv=sections.services||'per_item';
+  var prd=sections.products||'per_item';
+  var spk=sections.sessionPacks||'per_item';
+  var sub=sections.subscription||'per_item';
+  var posDef=tx.posDefaultTaxable!==false;
+  var uniform=_taxSectionsUniformMode();
+
+  // Quick-set buttons. Active style when all sections match that mode.
+  function qsBtn(mode,label){
+    var active=uniform===mode;
+    var bg=active?'var(--orange)':'transparent';
+    var col=active?'#fff':'var(--main-text)';
+    var bd=active?'var(--orange)':'var(--main-border)';
+    return '<button type="button" onclick="setAllTaxSectionsPolicy(\''+mode+'\')" '
+      +'style="background:'+bg+';color:'+col+';border:1px solid '+bd+';'
+      +'border-radius:var(--radius);padding:7px 14px;font-size:12px;font-weight:600;'
+      +'cursor:pointer;font-family:Lato,sans-serif">'+label+'</button>';
+  }
+
+  function secSel(section,current,label){
+    var opt=function(v,t){
+      return '<option value="'+v+'"'+(current===v?' selected':'')+'>'+t+'</option>';
+    };
+    return '<div style="display:flex;align-items:center;gap:12px;padding:8px 0">'
+      +'<span style="flex:1;font-size:13px;color:var(--main-text);font-weight:500">'+label+'</span>'
+      +'<select class="filter-sel" onchange="setTaxSectionPolicy(\''+section+'\',this.value)" '
+      +'style="width:170px;height:36px;font-size:13px">'
+      +opt('all','Tax all')
+      +opt('none','Tax none')
+      +opt('per_item','Per-item')
+      +'</select>'
+      +'</div>';
+  }
+
+  return '<div style="margin-top:6px;padding-top:14px;border-top:1px solid var(--main-border)">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:10px">Section Policy</div>'
+
+    // Quick-set strip
+    +'<div style="margin-bottom:14px">'
+    +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:6px">Set all sections at once:</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +qsBtn('all','Tax everything')
+    +qsBtn('none','Tax nothing')
+    +qsBtn('per_item','Decide per item')
+    +'</div>'
+    +'</div>'
+
+    // Section dropdowns
+    +'<div style="background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:6px 14px">'
+    +secSel('services',srv,'Services')
+    +'<div style="border-top:1px solid var(--main-border)"></div>'
+    +secSel('products',prd,'Products')
+    +'<div style="border-top:1px solid var(--main-border)"></div>'
+    +secSel('sessionPacks',spk,'Session Packs')
+    +'<div style="border-top:1px solid var(--main-border)"></div>'
+    +secSel('subscription',sub,'Subscriptions')
+    +'</div>'
+
+    // POS Custom Items subsection
+    +'<div style="margin-top:14px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:12px 14px">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+    +'<div class="bh-toggle'+(posDef?' on':'')+'" onclick="togglePosDefaultTaxable()" style="position:relative;flex-shrink:0"></div>'
+    +'<span style="font-size:13px;color:var(--main-text);font-weight:500">Default new POS custom items to taxable</span>'
+    +'</div>'
+    +'<p style="font-size:11px;color:var(--main-text-muted);margin:0 0 0 48px">Staff still toggles tax per line at sale time.</p>'
+    +'</div>'
+
+    // Locked-rules footer
+    +'<p style="font-size:11px;color:var(--main-text-muted);margin:12px 0 0">Appointment types stay per-item by design. Gift card sales, tips, fees, and account credits are never taxed.</p>'
+    +'</div>';
+}
+
+// Returns 'all' | 'none' | 'per_item' if all four policy-bearing sections
+// share the same mode. Returns null when they differ.
+function _taxSectionsUniformMode(){
+  var tx=(db.paySettings&&db.paySettings.tax)||{};
+  var s=tx.sections||{};
+  var a=s.services||'per_item';
+  var b=s.products||'per_item';
+  var c=s.sessionPacks||'per_item';
+  var d=s.subscription||'per_item';
+  if(a===b&&b===c&&c===d)return a;
+  return null;
+}
+
+// Single section dropdown change.
+function setTaxSectionPolicy(section,policy){
+  if(!db.paySettings)db.paySettings={};
+  if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
+  if(!db.paySettings.tax.sections)db.paySettings.tax.sections={};
+  db.paySettings.tax.sections[section]=policy;
+  saveData();
+  renderPaySettings();
+  if(state.paymentsTab==='pos'&&typeof calcTotals==='function')calcTotals();
+}
+
+// Quick-set: apply one mode to all four sections at once.
+function setAllTaxSectionsPolicy(mode){
+  if(!db.paySettings)db.paySettings={};
+  if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
+  db.paySettings.tax.sections={services:mode,products:mode,sessionPacks:mode,subscription:mode};
+  saveData();
+  renderPaySettings();
+  if(state.paymentsTab==='pos'&&typeof calcTotals==='function')calcTotals();
+  var labels={all:'Tax everything',none:'Tax nothing',per_item:'Decide per item'};
+  toast('Section policy set to: '+(labels[mode]||mode),'success');
+}
+
+// Toggle the default-taxable flag for new POS custom items.
+function togglePosDefaultTaxable(){
+  if(!db.paySettings)db.paySettings={};
+  if(!db.paySettings.tax)db.paySettings.tax={enabled:false,label:'Sales Tax',rate:0};
+  db.paySettings.tax.posDefaultTaxable=!(db.paySettings.tax.posDefaultTaxable!==false);
+  saveData();
+  renderPaySettings();
+  toast('POS default '+(db.paySettings.tax.posDefaultTaxable?'enabled':'disabled')+'.','success');
 }
 
 function toggleTaxCollection(){
@@ -34237,10 +34423,10 @@ function getTaxSettings(){
 // =====================================================
 
 // Sections that participate in section policy.
-var TAX_POLICY_SECTIONS=['services','products','sessionPacks'];
+var TAX_POLICY_SECTIONS=['services','products','sessionPacks','subscription'];
 
 // Sections that are ALWAYS per-item (no section policy applies).
-var TAX_PER_ITEM_ONLY_SECTIONS=['subscription','appointmentType'];
+var TAX_PER_ITEM_ONLY_SECTIONS=['appointmentType'];
 
 // Sections that are ALWAYS non-taxable (locked off, no UI).
 var TAX_LOCKED_NON_TAXABLE_SECTIONS=['giftCard','tip','fee','credit'];
