@@ -15252,14 +15252,6 @@ async function saveSub(){
     const billingCycle=document.getElementById('sf-cycle').value;
     if(!startDate){toast('Start date is required.','error');return;}
 
-    // Setup fees require a card on file. Block save with a clear error
-    // before hitting the API so staff can fix it without seeing a backend toast.
-    const sfb=calcSubSetupFeeBreakdown(_subEditItems);
-    if(sfb&&sfb.total>0&&!cardId){
-      toast('This plan has a setup fee that charges today. Add a card on file or pick a plan without a setup fee.','error');
-      return;
-    }
-
     const payload={
       contactId:contactId,
       billingCycle:billingCycle,
