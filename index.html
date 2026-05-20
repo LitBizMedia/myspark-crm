@@ -15307,9 +15307,17 @@ async function saveSub(){
       try{await apiSubAction(sub.id,'remove_item',{itemId:id});}
       catch(e){errors.push('Remove "'+(origById[id].name||id)+'": '+e.message);}
     }
-    // Then additions
+    // Then additions. Track setup fees charged so we can mention them in the toast.
+    let addedSetupFeeTotal=0;
+    let addedSetupFeeCount=0;
     for(const id of added){
-      try{await apiSubAction(sub.id,'add_item',{item:stripItem(currById[id])});}
+      try{
+        const addRes=await apiSubAction(sub.id,'add_item',{item:stripItem(currById[id])});
+        if(addRes&&addRes.setup_fee&&addRes.setup_fee.total>0){
+          addedSetupFeeTotal+=parseFloat(addRes.setup_fee.total)||0;
+          addedSetupFeeCount++;
+        }
+      }
       catch(e){errors.push('Add "'+(currById[id].name||id)+'": '+e.message);}
     }
     // Then updates
@@ -15345,6 +15353,8 @@ async function saveSub(){
     if(errors.length){
       toast(errors.length+' error'+(errors.length===1?'':'s')+': '+errors[0],'error');
       console.error('Sub edit errors:',errors);
+    }else if(addedSetupFeeCount>0){
+      toast('Subscription updated. Charged setup fee '+fmt$(addedSetupFeeTotal)+'.','success');
     }else{
       toast('Subscription updated.','success');
     }
