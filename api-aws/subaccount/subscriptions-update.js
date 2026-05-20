@@ -22,7 +22,7 @@ const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
-const { chargeSetupFees, writeSetupFeePayment } = require('./lib/sub-setup-fee');
+const { chargeSetupFees, writeSetupFeePayment, writePendingSetupFeePayment } = require('./lib/sub-setup-fee');
 
 // Validate and normalize one item being added (catalog or custom)
 async function buildItem(rawItem, billingCycle, subaccountId, addedAt) {
@@ -338,8 +338,9 @@ async function handler(req, res) {
         );
       }
 
-      // Setup fee payment record + event (only when add_item charged a setup fee)
-      if (setupFeeResult && setupFeeResult.success && !setupFeeResult.skipped) {
+      // Setup fee payment record + event. Two paths: charged (Square ran) or
+      // deferred (no card, pending manual collection).
+      if (setupFeeResult && setupFeeResult.success && !setupFeeResult.skipped && !setupFeeResult.deferred) {
         const setupFeePaymentId = await writeSetupFeePayment(
           {
             subaccountId,
@@ -368,6 +369,40 @@ async function handler(req, res) {
               square_payment_id: setupFeeResult.squarePayment.id,
               total: setupFeeResult.breakdown.total,
               tax: setupFeeResult.breakdown.taxAmount,
+              breakdown: setupFeeResult.breakdown,
+              trigger: 'add_item'
+            })
+          ]
+        );
+
+        setupFeeResult._paymentId = setupFeePaymentId;
+      } else if (setupFeeResult && setupFeeResult.success && setupFeeResult.deferred) {
+        const setupFeePaymentId = await writePendingSetupFeePayment(
+          {
+            subaccountId,
+            subId: id,
+            contactId: sub.contact_id,
+            ownerUserId: sub.owner_user_id
+          },
+          setupFeeResult.contact,
+          setupFeeResult.breakdown,
+          null
+        );
+
+        await db.query(
+          `INSERT INTO subscription_events (
+            id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, payment_id, metadata, created_at
+          ) VALUES ($1, $2, $3, 'setup_fee_deferred', $4, 'user', $5, $6::jsonb, NOW())`,
+          [
+            `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id, subaccountId,
+            auth.user_id,
+            setupFeePaymentId,
+            JSON.stringify({
+              payment_id: setupFeePaymentId,
+              total: setupFeeResult.breakdown.total,
+              tax: setupFeeResult.breakdown.taxAmount,
+              reason: 'manual_processing',
               breakdown: setupFeeResult.breakdown,
               trigger: 'add_item'
             })
@@ -405,7 +440,8 @@ async function handler(req, res) {
         total: setupFeeResult.breakdown.total,
         tax: setupFeeResult.breakdown.taxAmount,
         subtotal: setupFeeResult.breakdown.subtotal,
-        items: setupFeeResult.breakdown.items
+        items: setupFeeResult.breakdown.items,
+        deferred: !!setupFeeResult.deferred
       } : null
     });
   } catch (e) {
