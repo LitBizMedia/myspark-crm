@@ -4521,8 +4521,10 @@ function renderDrawer(){
     // Default to upcoming view; reset 'show all' flag when switching tabs
     if(!state.dApptTab)state.dApptTab='upcoming';
     const sorted=cAppts.sort((a,b)=>a.date.localeCompare(b.date));
-    const up=sorted.filter(a=>a.date>=todayStr()&&a.status!=='cancelled');
-    const past=sorted.filter(a=>a.date<todayStr()||a.status==='cancelled').reverse();
+    // "Upcoming" = active appointments in the future. Rescheduled-away, completed,
+    // and no-show appointments fall into "past" regardless of date.
+    const up=sorted.filter(a=>a.date>=todayStr()&&isActiveAppt(a));
+    const past=sorted.filter(a=>a.date<todayStr()||!isActiveAppt(a)).reverse();
     const aHTML=arr=>arr.map(a=>{
       const u=a.assignedTo?getUserById(a.assignedTo):null,uc=a.assignedTo?getUserColor(a.assignedTo):'var(--orange)';
       const payPill=_paymentPillHTML(_eventPaymentStatus(a), false);
@@ -25788,7 +25790,9 @@ function renderDashWeek(){
     const isToday=ds===td;
     const dayName=DSHORT[d.getDay()];
     const dayNum=d.getDate();
-    const apptCount=(db.appointments||[]).filter(function(a){return a.date===ds&&a.assignedTo===userId&&a.status!=='cancelled';}).length;
+    // Count active appointments only ("what's left to do" semantics).
+    // Excludes completed, rescheduled, no-show, cancelled.
+    const apptCount=(db.appointments||[]).filter(function(a){return a.date===ds&&a.assignedTo===userId&&isActiveAppt(a);}).length;
 
     let statusLabel='',statusClass='',hoursLabel='';
     if(u){
