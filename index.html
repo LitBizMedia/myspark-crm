@@ -14189,7 +14189,7 @@ function calcSubTaxBreakdown(s){
     }
     line=Math.max(0,line);
     afterDiscount+=line;
-    if(it.taxable!==false)taxableBase+=line;
+    if(isLineTaxable('subscription',it))taxableBase+=line;
   });
   const taxRate=t?t.rate:0;
   const tax=t?Math.round(taxableBase*taxRate/100*100)/100:0;
@@ -14975,14 +14975,19 @@ function _renderItemsSummary(){
   // Use a fake sub-shape (lastChargedAt:null = first cycle) so first-cycle-only discounts apply too
   const fakeSub={items:_subEditItems,lastChargedAt:null};
   const b=calcSubTaxBreakdown(fakeSub);
-  // Show tax line whenever tax is enabled, even at $0.00, so user can verify
-  // tax is being calculated (especially helpful for tiny amounts that round away)
-  const taxLine=b.taxEnabled
+  // Show tax row only when at least one item is taxable. A 0% rate on a
+  // taxable plan still shows the row (some jurisdictions require zero-rate
+  // reporting); a fully non-taxable subscription hides it entirely.
+  const taxLine=(b.taxEnabled&&b.taxableAmount>0)
     ? '<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text-muted)"><span>'+esc(b.taxLabel)+' ('+b.taxRate+'%)</span><span>'+fmt$(b.tax)+'</span></div>'
     : '';
-  const taxNote=b.taxEnabled
-    ? ''
-    : '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Tax not enabled in subaccount settings.</div>';
+  // Show the "tax not enabled" note only when tax is off globally AND the
+  // subscription has at least one taxable item (so the user understands why
+  // no tax appears even though their items are marked taxable).
+  const hasTaxableItems=_subEditItems.some(function(it){return it.taxable!==false;});
+  const taxNote=(!b.taxEnabled&&hasTaxableItems)
+    ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Tax not enabled in subaccount settings.</div>'
+    : '';
 
   // Trial banner: scan items for plan trial_days. Show longest trial offered by
   // any plan-based item, matching backend logic (Math.max).
@@ -30403,8 +30408,8 @@ function spSellUpdatePrice(){
   if(!tmpl){el.style.display='none';return;}
   var svcTxt=tmpl.serviceRestriction==='specific'&&tmpl.services&&tmpl.services.length?tmpl.services.join(', '):'Any service';
   var expTxt=tmpl.expiresMonths?tmpl.expiresMonths+' months from purchase':'Never expires';
-  // Tax preview
-  var taxableFlag=tmpl.taxable!==false;
+  // Tax preview. Pack taxability via 'sessionPacks' section policy.
+  var taxableFlag=isLineTaxable('sessionPacks',tmpl);
   var spTaxCalc=calcTax([{price:tmpl.price,taxable:taxableFlag,qty:1}],0);
   var hasTax=spTaxCalc.tax>0;
   var totalWithTax=tmpl.price+spTaxCalc.tax;
@@ -30639,9 +30644,9 @@ async function spProcessSale(){
   var btn=document.getElementById('sp-sell-btn');
   var errEl=document.getElementById('sp-sq-card-errors');
   var subtotal=tmpl.price;
-  // Tax math: pack inherits taxable flag from template (defaults true).
+  // Pack taxability via 'sessionPacks' section policy.
   // Discount/coupon are not supported on pack sale today, so preTaxDiscount=0.
-  var taxableFlag=tmpl.taxable!==false;
+  var taxableFlag=isLineTaxable('sessionPacks',tmpl);
   var taxCalc=calcTax([{price:subtotal,taxable:taxableFlag,qty:1}],0);
   var taxAmount=taxCalc.tax;
   var taxableAmount=taxCalc.taxableAmount;
@@ -30800,7 +30805,9 @@ function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcIn
     var d=new Date();d.setMonth(d.getMonth()+tmpl.expiresMonths);
     expiresDate=_localDS(d);
   }
-  var taxableFlag=tmpl.taxable!==false;
+  // Pack taxability via 'sessionPacks' section policy.
+  // Used to set the payment record line item's taxable flag.
+  var taxableFlag=isLineTaxable('sessionPacks',tmpl);
   var tx=parseFloat(taxAmount)||0;
   var taxBase=parseFloat(taxableAmount)||0;
   var spTotal=tmpl.price+tx;
@@ -30991,8 +30998,8 @@ function spDrawerIssuePack(contactId){
   var pm=document.getElementById('sp-drawer-pm')&&document.getElementById('sp-drawer-pm').value||'card';
   var notes=(document.getElementById('sp-drawer-notes')&&document.getElementById('sp-drawer-notes').value||'').trim();
   var staffId=state.user&&state.user.id||'';
-  // Tax math: pack inherits taxable flag from template
-  var taxableFlag=tmpl.taxable!==false;
+  // Pack taxability via 'sessionPacks' section policy.
+  var taxableFlag=isLineTaxable('sessionPacks',tmpl);
   var spTaxCalc=calcTax([{price:tmpl.price,taxable:taxableFlag,qty:1}],0);
   closeModal();
   spSellFinalize(tmpl,contactId,staffId,pm,'',notes,'',null,spTaxCalc.tax,spTaxCalc.taxableAmount);
