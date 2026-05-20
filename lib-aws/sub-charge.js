@@ -108,6 +108,66 @@ async function chargeSquare({ creds, customerId, cardId, cents, idempotencyKey, 
   return { ok: true, payment: data.payment };
 }
 
+// Pending variant: writes a recurring subscription payment row with status='pending'
+// and payment_method='other'. Used by the cron when a sub has no card on file
+// (manual processing). Staff marks the payment as paid later via the transactions UI.
+async function writePendingSubPayment(sub, contact, breakdown, ownerName) {
+  const paymentId = `pay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  await db.query(
+    `INSERT INTO payments (
+      id, subaccount_id,
+      contact_id, contact_name,
+      staff_id, staff_name, tip_staff_id,
+      payment_type, payment_method, status,
+      items, subtotal, after_discount, total,
+      coupon_discount, coupon_code, coupon_id,
+      discount_amount, discount_type, discount_val, discount_note,
+      fee_amount, tax_amount, taxable_amount, tip_amount, credit_applied,
+      gift_card_applied, refunded_amount,
+      is_session_pack_sale, is_gift_card_sale,
+      square_payment_id, square_receipt_url, card_last4, card_brand,
+      subscription_id, notes,
+      created_at, updated_at
+    ) VALUES (
+      $1, $2,
+      $3, $4,
+      $5, $6, NULL,
+      'subscription', 'other', 'pending',
+      $7::jsonb, $8, $9, $10,
+      0, NULL, NULL,
+      $11, NULL, NULL, $12,
+      0, $13, $14, 0, 0,
+      0, 0,
+      FALSE, FALSE,
+      NULL, NULL, NULL, NULL,
+      $15, $16,
+      NOW(), NOW()
+    )
+    ON CONFLICT (id) DO NOTHING`,
+    [
+      paymentId,
+      sub.subaccount_id,
+      sub.contact_id,
+      (contact && contact.name) || null,
+      sub.owner_user_id,
+      ownerName || null,
+      JSON.stringify(breakdown.items),
+      breakdown.subtotal,
+      breakdown.afterDiscount,
+      breakdown.total,
+      breakdown.discount,
+      breakdown.discount > 0 ? 'Per-item discounts' : null,
+      breakdown.taxAmount,
+      breakdown.taxableAmount,
+      sub.id,
+      `Subscription cycle (manual processing): ${sub.plan_name_snapshot || 'Subscription'}`
+    ]
+  );
+
+  return paymentId;
+}
+
 async function writePaymentRecord(sub, contact, card, breakdown, squarePayment, ownerName) {
   const paymentId = `pay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const last4 = (squarePayment && squarePayment.card_details && squarePayment.card_details.card && squarePayment.card_details.card.last_4) || card.last4 || null;
@@ -282,17 +342,35 @@ async function processSub(sub, blob, options) {
       return result;
     }
 
-    // Manual processing: subs with no card_id are intentionally not auto-charged.
-    // Skip cleanly and advance next_due_date so the cron does not keep retrying.
+    // Manual processing: subs with no card_id are not auto-charged. Instead,
+    // write a pending payment record so staff can mark it paid in the UI when
+    // they collect cash/check/card manually. Advance next_due_date so the cron
+    // moves on to the next cycle on its own.
     if (!sub.card_id) {
       result.success = true;
-      result.skipped = true;
+      result.deferred = true;
       result.reason = 'manual_processing';
       if (!options.dry_run) {
         const data = blob.data || {};
         const tz = (data.settings && data.settings.timezone) || DEFAULT_TZ;
+        const contact = await getContactById(sub.subaccount_id, sub.contact_id);
+        let ownerName = null;
+        if (sub.owner_user_id) {
+          try {
+            const u = await db.query('SELECT display_name FROM subaccount_users WHERE id = $1', [sub.owner_user_id]);
+            if (u.rows.length) ownerName = u.rows[0].display_name;
+          } catch (_) { /* non-fatal */ }
+        }
+        const paymentId = await writePendingSubPayment(sub, contact, breakdown, ownerName);
         await advanceSubAfterCharge(sub, tz);
-        await logEvent(sub, 'charge_skipped', { reason: 'manual_processing', breakdown });
+        await logEvent(sub, 'charge_deferred', {
+          payment_id: paymentId,
+          reason: 'manual_processing',
+          total: breakdown.total,
+          tax: breakdown.taxAmount,
+          breakdown
+        }, paymentId);
+        result.payment_id = paymentId;
       }
       return result;
     }
