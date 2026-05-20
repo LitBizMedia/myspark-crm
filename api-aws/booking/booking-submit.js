@@ -30,6 +30,7 @@ const { logAudit } = require('./lib/audit');
 const mailgun = require('./lib/mailgun');
 const { getSquareCreds, squareHost, squareHeaders } = require('./lib/square');
 const { isTimeAvailable } = require('./lib/schedule');
+const { isLineTaxable } = require('./lib/tax');
 const crypto = require('crypto');
 
 // Generate a 32-byte hex random token (256 bits, URL-safe).
@@ -689,10 +690,19 @@ async function handler(req, res) {
     // 9. Compute totals per Payment Policy
     // Math chain: subtotal -> coupon -> afterDiscount -> tax -> fee -> tip -> total
     // (Fee is post-tax and NOT taxed itself, per policy.)
-    // taxableFlag was already set in the lookup branch above.
+    //
+    // taxableFlag (set in the lookup branch above) carries the item's intrinsic
+    // taxable category. It's used for storage on payment record line items.
+    // The math layer applies isLineTaxable to honor section policy + global tax
+    // state. Section is 'services' for services/classes; appointment types are
+    // 'appointmentType' (per-item only, never section-gated).
     const subtotal = r2(basePrice);
     const afterDiscount = r2(Math.max(0, subtotal - couponDiscount));
-    const { tax: taxAmount, taxableAmount } = calcTax(subtotal, taxableFlag, couponDiscount, taxSettings);
+    // appointmentType is non-null only for appointment-widget bookings.
+    // Service widgets and class widgets use the 'services' section.
+    const mathSection = appointmentType ? 'appointmentType' : 'services';
+    const taxableForCharge = isLineTaxable(paySettings, mathSection, { taxable: taxableFlag });
+    const { tax: taxAmount, taxableAmount } = calcTax(subtotal, taxableForCharge, couponDiscount, taxSettings);
     // Workspace-level additional fee. Applies only when apply_to.booking_widget=true.
     const feeSettings = paySettings.additionalFee || {};
     const feeApplyToWidget = feeSettings.apply_to && feeSettings.apply_to.booking_widget === true;

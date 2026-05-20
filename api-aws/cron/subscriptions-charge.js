@@ -19,6 +19,7 @@
 // guarded by trial_reminder_sent_at column being non-null.
 
 const db = require('./lib/db');
+const { isLineTaxable } = require('./lib/tax');
 const contactsLib = require('./lib/contacts');
 const { processSub } = require('./lib/sub-charge');
 const { sendEmail } = require('./lib/mailgun');
@@ -56,7 +57,8 @@ function estimateChargeAmount(sub, paySettings) {
     }
     const lineAfter = lineSubtotal - lineDiscount;
     afterDiscount += lineAfter;
-    if (it.taxable !== false) taxableAmount += lineAfter;
+    // Match computeCharge: subscription items go through 'subscription' section.
+    if (isLineTaxable(paySettings, 'subscription', it)) taxableAmount += lineAfter;
   }
   const tax_ = Math.round(taxableAmount * taxRate) / 100;
   return Math.round((afterDiscount + tax_) * 100) / 100;

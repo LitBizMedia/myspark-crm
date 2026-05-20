@@ -17,6 +17,7 @@ const db = require('./db');
 const { getSquareCreds, squareHost, squareHeaders } = require('./square');
 const { todayInTz, DEFAULT_TZ } = require('./timezone');
 const { getContactById } = require('./contacts');
+const { isLineTaxable } = require('./tax');
 
 const SUSPEND_AFTER = 3;
 const SUSPEND_WINDOW_DAYS = 7;
@@ -60,7 +61,9 @@ function computeCharge(sub, paySettings, tz) {
       line = Math.max(0, line);
     }
     afterDiscount += line;
-    if (it.taxable !== false) taxableAmount += line;
+    // Subscriptions are per-item only (no section policy). The helper also
+    // short-circuits if tax is globally disabled, matching existing gating.
+    if (isLineTaxable(paySettings, 'subscription', it)) taxableAmount += line;
   });
 
   const discount = subtotal - afterDiscount;
