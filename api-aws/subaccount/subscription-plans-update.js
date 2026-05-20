@@ -141,8 +141,8 @@ async function handler(req, res) {
       if (setupFee === null) {
         return res.status(400).json({ error: 'Setup fee amount must be greater than 0 when enabled' });
       }
-      updates.push(`setup_fee_enabled = ${i++}`); params.push(setupFee.enabled);
-      updates.push(`setup_fee_amount = ${i++}`); params.push(setupFee.amount);
+      updates.push(`setup_fee_enabled = $${i++}`); params.push(setupFee.enabled);
+      updates.push(`setup_fee_amount = $${i++}`); params.push(setupFee.amount);
     }
 
     if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
