@@ -21,13 +21,12 @@ const { sendAppointmentConfirmations } = require('./lib/appointment-emails');
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
+const { isTerminalStatus } = require('./lib/appt-statuses');
 const { wrap } = require('./lib/lambda-adapter');
 
 function newId() {
   return 'appt-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
-
-const TERMINAL_STATUSES = ['completed', 'cancelled', 'no-show', 'rescheduled'];
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -63,7 +62,7 @@ async function handler(req, res) {
     const orig = origRes.rows[0];
 
     // Reject if already terminal
-    if (TERMINAL_STATUSES.indexOf(orig.status) !== -1) {
+    if (isTerminalStatus(orig.status)) {
       return res.status(400).json({
         error: 'Cannot reschedule an appointment with status: ' + orig.status
       });

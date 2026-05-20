@@ -12,6 +12,7 @@ const contactsLib = require('./lib/contacts');
 const { resolveResourceClaims, resolveMultipleResourceClaims, replaceClaims, persistClaims } = require('./lib/resource-allocation');
 const { sendAppointmentConfirmations } = require('./lib/appointment-emails');
 const { checkStaffConflict } = require('./lib/staff-conflict');
+const { isValidStatus } = require('./lib/appt-statuses');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
@@ -203,6 +204,12 @@ async function handler(req, res) {
     // to time on both sides of every comparison. We also wrap the entire check
     // in a try/catch so any unexpected error degrades to "skip the check" rather
     // than blocking a legitimate save.
+    // Validate appointment status. Must be in the registry from lib/appt-statuses.
+    // Defaults to 'scheduled' when not provided (matches DB column default).
+    if (a.status && !isValidStatus(a.status)) {
+      return res.status(400).json({ error: 'Invalid appointment status: ' + a.status });
+    }
+
     if (a.assignedTo && a.date && a.time && !req.body.override) {
       try {
         const result = await checkStaffConflict({
