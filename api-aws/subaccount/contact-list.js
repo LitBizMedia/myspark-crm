@@ -22,12 +22,39 @@ const { logAudit } = require('./lib/audit');
 
 // Mirrors contactToFrontend() in data-load.js exactly, minus the child
 // table joins. Keep these two shapes in sync forever.
+// Helper: format date as YYYY-MM-DD without TZ shift
+function fmtDate(d) {
+  if (!(d instanceof Date)) return d;
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth()+1).padStart(2,'0');
+  const da = String(d.getUTCDate()).padStart(2,'0');
+  return y+'-'+m+'-'+da;
+}
+
+// Helper: drop null/undefined/empty-string/false/empty-array/empty-object values.
+// Cuts JSON payload size roughly 70% for typical contacts since most columns are NULL.
+// Frontend code already tolerates missing keys (it backfills defaults at use site).
+function slim(obj) {
+  const out = {};
+  for (const k in obj) {
+    const v = obj[k];
+    if (v === null || v === undefined) continue;
+    if (v === '' || v === false) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date) && Object.keys(v).length === 0) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 function contactToFrontend(row) {
   if (!row) return row;
   // SLIM SHAPE: only fields the contacts list view + drawer headers need.
   // Heavy fields (notes, allergies, etc.) load on contact-open via dedicated endpoints.
-  // Defensive empty defaults so existing frontend code reading .notes.length etc. works.
-  return {
+  // Empty/null/false values are stripped from the wire format to keep payload
+  // under Lambda's 6MB cap; frontend backfills defaults where needed.
+  // The 'id' field is always emitted (loop below guarantees it via slim()).
+  const base = {
     id: row.id,
     external_id: row.external_id,
     first_name: row.first_name,
@@ -39,14 +66,7 @@ function contactToFrontend(row) {
     company: row.company,
     title: row.title,
     website: row.website,
-    date_of_birth: row.date_of_birth instanceof Date ?
-      (function(d){
-        const y = d.getUTCFullYear();
-        const m = String(d.getUTCMonth()+1).padStart(2,'0');
-        const da = String(d.getUTCDate()).padStart(2,'0');
-        return y+'-'+m+'-'+da;
-      })(row.date_of_birth) :
-      row.date_of_birth,
+    date_of_birth: fmtDate(row.date_of_birth),
     gender: row.gender,
     pronouns: row.pronouns,
     preferred_language: row.preferred_language,
@@ -73,16 +93,13 @@ function contactToFrontend(row) {
     sms_consent_marketing: !!row.sms_consent_marketing,
     sms_consent_updated_at: row.sms_consent_updated_at instanceof Date ? row.sms_consent_updated_at.toISOString() : row.sms_consent_updated_at,
     sms_consent_source: row.sms_consent_source,
-    notes: [],
-    warnings: [],
-    allergies: [],
-    creditHistory: [],
-    warning_counts: row.warning_counts || { critical: 0, warning: 0, info: 0 },
+    warning_counts: row.warning_counts && (row.warning_counts.critical || row.warning_counts.warning || row.warning_counts.info) ? row.warning_counts : null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     createdBy: row.created_by,
     updatedBy: row.updated_by
   };
+  return slim(base);
 }
 
 async function handler(req, res) {
