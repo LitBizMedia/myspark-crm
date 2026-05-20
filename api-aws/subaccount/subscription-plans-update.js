@@ -33,6 +33,14 @@ function validatePricing(pricing) {
   return null;
 }
 
+function parseSetupFee(rawEnabled, rawAmount) {
+  const enabled = rawEnabled === true || rawEnabled === 'true';
+  if (!enabled) return { enabled: false, amount: 0 };
+  const amount = parseFloat(rawAmount);
+  if (isNaN(amount) || amount <= 0) return null;
+  return { enabled: true, amount: Math.round(amount * 100) / 100 };
+}
+
 function normalizeItems(items) {
   if (!Array.isArray(items)) return [];
   return items.map((it, idx) => ({
@@ -118,7 +126,23 @@ async function handler(req, res) {
       let n = parseInt(body.trialDays, 10);
       if (isNaN(n) || n < 0) n = 0;
       if (n > 365) n = 365;
-      updates.push(`trial_days = $${i++}`); params.push(n);
+      updates.push(`trial_days = ${i++}`); params.push(n);
+    }
+    // Setup fee: enabled and amount are paired. Caller may send one or both.
+    // Resolve the final pair, then write both columns to keep them consistent.
+    if (body.setupFeeEnabled !== undefined || body.setupFeeAmount !== undefined) {
+      const finalEnabled = body.setupFeeEnabled !== undefined
+        ? (body.setupFeeEnabled === true || body.setupFeeEnabled === 'true')
+        : existing.rows[0].setup_fee_enabled;
+      const finalAmount = body.setupFeeAmount !== undefined
+        ? body.setupFeeAmount
+        : existing.rows[0].setup_fee_amount;
+      const setupFee = parseSetupFee(finalEnabled, finalAmount);
+      if (setupFee === null) {
+        return res.status(400).json({ error: 'Setup fee amount must be greater than 0 when enabled' });
+      }
+      updates.push(`setup_fee_enabled = ${i++}`); params.push(setupFee.enabled);
+      updates.push(`setup_fee_amount = ${i++}`); params.push(setupFee.amount);
     }
 
     if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });

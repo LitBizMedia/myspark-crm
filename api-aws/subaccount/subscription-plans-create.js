@@ -41,6 +41,17 @@ function parseTrialDays(v) {
   return n;
 }
 
+// Normalize setup fee fields. Returns { enabled, amount }.
+// If enabled is true but amount is invalid or <= 0, returns null to signal error.
+// If enabled is false, forces amount to 0.
+function parseSetupFee(rawEnabled, rawAmount) {
+  const enabled = rawEnabled === true || rawEnabled === 'true';
+  if (!enabled) return { enabled: false, amount: 0 };
+  const amount = parseFloat(rawAmount);
+  if (isNaN(amount) || amount <= 0) return null;
+  return { enabled: true, amount: Math.round(amount * 100) / 100 };
+}
+
 // Normalize items: ensure each has id, name, taxable defaults.
 function normalizeItems(items) {
   if (!Array.isArray(items)) return [];
@@ -73,6 +84,10 @@ async function handler(req, res) {
   const categoryId = body.categoryId || null;
   const taxable = body.taxable !== false;
   const trialDays = parseTrialDays(body.trialDays);
+  const setupFee = parseSetupFee(body.setupFeeEnabled, body.setupFeeAmount);
+  if (setupFee === null) {
+    return res.status(400).json({ error: 'Setup fee amount must be greater than 0 when enabled' });
+  }
 
   if (!name) return res.status(400).json({ error: 'Plan name is required' });
 
@@ -103,12 +118,16 @@ async function handler(req, res) {
       `INSERT INTO subscription_plans (
         id, subaccount_id, name, description, active, items, pricing,
         category_id, taxable, trial_days,
+        setup_fee_enabled, setup_fee_amount,
         created_at, updated_at, created_by
       ) VALUES ($1, $2, $3, $4, TRUE, $5::jsonb, $6::jsonb,
                 $7, $8, $9,
-                NOW(), NOW(), $10)`,
+                $10, $11,
+                NOW(), NOW(), $12)`,
       [id, auth.subaccount_id, name, description, JSON.stringify(items),
-       JSON.stringify(cleanPricing), categoryId, taxable, trialDays, auth.user_id]
+       JSON.stringify(cleanPricing), categoryId, taxable, trialDays,
+       setupFee.enabled, setupFee.amount,
+       auth.user_id]
     );
 
     await logAudit({
@@ -121,7 +140,7 @@ async function handler(req, res) {
       targetType: 'subscription_plan',
       targetId: id,
       targetSubaccountId: auth.subaccount_id,
-      metadata: { name, category_id: categoryId, taxable, trial_days: trialDays, item_count: items.length }
+      metadata: { name, category_id: categoryId, taxable, trial_days: trialDays, setup_fee_enabled: setupFee.enabled, setup_fee_amount: setupFee.amount, item_count: items.length }
     });
 
     const verify = await db.query('SELECT * FROM subscription_plans WHERE id = $1', [id]);
