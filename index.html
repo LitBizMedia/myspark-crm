@@ -8362,7 +8362,13 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     bodyHTML = b;
   }
 
-  var detailFooter = (a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
+  // Reschedule button only shown when editing an existing appointment
+  // whose status is non-terminal (per APPT_STATUSES.isActive).
+  var canReschedule = a && a.id && isActiveAppt(a);
+  var rescheduleBtn = canReschedule
+    ? '<button class="btn btn-ghost" onclick="openRescheduleModal(\''+a.id+'\')">Reschedule</button>'
+    : '';
+  var detailFooter = (a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+rescheduleBtn+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
 
   openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
   setTimeout(function(){
@@ -10087,6 +10093,109 @@ function syncAppointment(appt, deleted, override){
 }
 
 // Backward-compat alias for renamed function. Drop in future cleanup.
+// Open the compact reschedule picker. originalApptId is the appointment to move.
+// On submit, calls the appointments-reschedule endpoint which creates a new
+// row pointing at the original via rescheduled_from_id.
+function openRescheduleModal(originalApptId){
+  var a = (db.appointments||[]).find(function(x){return x.id===originalApptId;});
+  if(!a){toast('Appointment not found.','error');return;}
+
+  var body = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:var(--info-text);border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
+    + '<div style="font-weight:600;margin-bottom:3px">Current slot</div>'
+    + esc(a.date) + (a.time?' at '+esc(fmtTime(a.time)):'')
+    + '</div>'
+    + '<div class="form-row">'
+      + '<div class="form-group"><label>New Date</label><input id="rs-date" type="date" value="'+esc(a.date)+'"></div>'
+      + '<div class="form-group"><label>New Time</label>'+_timeInputHTML('rs-time', a.time||'9:00 AM', false, '')+'</div>'
+    + '</div>'
+    + '<div class="form-group"><label>Duration (min)</label><input id="rs-dur" type="number" value="'+(a.duration||60)+'" min="15" step="15"></div>'
+    + '<div class="form-group"><label>Notes (optional, leaves existing notes if blank)</label><textarea id="rs-notes" placeholder="Add a note about this reschedule..."></textarea></div>';
+
+  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" id="rs-submit-btn" onclick="submitReschedule(\''+originalApptId+'\')">Confirm Reschedule</button>';
+
+  openModal('Reschedule Appointment', body, footer);
+}
+
+// Module-scope guard. Prevents double-submit if the user clicks Confirm twice
+// faster than the button disabled state can flip. Belt to button.disabled's suspenders.
+var _rescheduling = false;
+
+async function submitReschedule(originalApptId){
+  if(_rescheduling){return;}
+  var dateEl = document.getElementById('rs-date');
+  var timeEl = document.getElementById('rs-time');
+  var durEl = document.getElementById('rs-dur');
+  var notesEl = document.getElementById('rs-notes');
+  if(!dateEl || !timeEl){toast('Form not ready.','error');return;}
+
+  var newDate = (dateEl.value||'').trim();
+  var newTimeRaw = (timeEl.value||'').trim();
+  if(!newDate || !newTimeRaw){toast('New date and time are required.','error');return;}
+
+  // Past-date validation. Comparing against today's date in local time.
+  // Same-day reschedules are allowed (the time itself might still be future).
+  if(newDate < todayStr()){
+    toast('New date cannot be in the past.','error');
+    return;
+  }
+
+  // Time input may produce "9:00 AM" format; normalize to HH:MM 24h.
+  var newTime = _normalizeTo24h ? _normalizeTo24h(newTimeRaw) : newTimeRaw;
+  if(!/^\d{2}:\d{2}$/.test(newTime)){
+    // Fallback: try simple parse
+    var m = newTimeRaw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if(m){
+      var hh = parseInt(m[1],10);
+      var mm = m[2];
+      var ampm = (m[3]||'').toUpperCase();
+      if(ampm==='PM' && hh<12) hh+=12;
+      if(ampm==='AM' && hh===12) hh=0;
+      newTime = (hh<10?'0'+hh:String(hh)) + ':' + mm;
+    }
+  }
+
+  var btn = document.getElementById('rs-submit-btn');
+  if(btn){btn.disabled=true; btn.textContent='Rescheduling...';}
+  _rescheduling = true;
+
+  try {
+    var res = await fetch(apiUrl('/api/subaccount/appointments-reschedule'), {
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        original_appointment_id: originalApptId,
+        new_date: newDate,
+        new_time: newTime,
+        new_duration: parseInt(durEl&&durEl.value)||undefined,
+        new_notes: (notesEl&&notesEl.value)||undefined
+      })
+    });
+    var data = await res.json().catch(function(){return {};});
+    if(!res.ok){
+      if(res.status===409){
+        toast('That slot is already booked. Pick a different time.','error');
+      } else {
+        toast(data.error || 'Could not reschedule. Try again.','error');
+      }
+      if(btn){btn.disabled=false; btn.textContent='Confirm Reschedule';}
+      _rescheduling = false;
+      return;
+    }
+    closeModal();
+    toast('Rescheduled to '+fmtDate(newDate)+' at '+fmtTime(newTime),'success');
+    await fetchFromServer();
+    if(typeof renderCalendar==='function') renderCalendar();
+    if(typeof renderApptList==='function') renderApptList();
+  } catch(e){
+    toast('Network error. Try again.','error');
+    if(btn){btn.disabled=false; btn.textContent='Confirm Reschedule';}
+  } finally {
+    _rescheduling = false;
+  }
+}
+
 function saveAppt(){
   const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
   if(!title||!date){toast('Title and date required.','error');return}
