@@ -15546,7 +15546,12 @@ async function savePlan(){
     if(el)return !!el.checked;
     // Checkbox hidden by section policy: preserve existing flag.
     // For a new plan with no prior flag, default to true (matches checkbox default).
-    return p?p.taxable!==false:true;
+    const planId=state.modal&&state.modal.id;
+    if(planId&&db.subPlans){
+      const existing=db.subPlans.find(function(x){return x&&x.id===planId;});
+      if(existing)return existing.taxable!==false;
+    }
+    return true;
   })();
   const categoryId=document.getElementById('pe-cat').value||null;
 
