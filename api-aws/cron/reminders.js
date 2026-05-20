@@ -315,7 +315,8 @@ async function runReminders() {
             to: contact.phone,
             body: smsBody,
             templateType: 'appt-reminder',
-            contactId: contact.id
+            contactId: contact.id,
+            purpose: 'transactional'
           });
           if (result.ok) { smsSentFlag = true; smsSent++; }
         }

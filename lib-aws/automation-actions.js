@@ -52,7 +52,8 @@ async function actionSendSms(automation, contact, slug, vars) {
   const sendRes = await twilio.sendSms(slug, {
     to: contact.phone,
     body,
-    contactId: contact.id
+    contactId: contact.id,
+    purpose: automation.is_transactional ? 'transactional' : 'marketing'
   });
 
   if (!sendRes.ok) return { status: 'failed', error: sendRes.error || 'Twilio send failed' };

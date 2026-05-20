@@ -202,6 +202,39 @@ async function sendSms(slug, opts) {
     }
   }
 
+  // Consent gate. Enforces TCPA-compliant opt-in before any send.
+  // Skip ONLY if caller explicitly bypasses (used for SMS reply-to-inbound
+  // where consent is implicit, since the contact initiated the conversation).
+  if (!opts.bypass_consent) {
+    let purpose = opts.purpose;
+    if (!purpose) {
+      console.warn('lib/twilio.js: opts.purpose missing; defaulting to "transactional". Caller should declare purpose explicitly.');
+      purpose = 'transactional';
+    }
+    if (purpose !== 'transactional' && purpose !== 'marketing') {
+      return { ok: false, error: 'Invalid purpose: ' + purpose };
+    }
+    if (opts.contactId) {
+      try {
+        const db = require('./db');
+        const consentRow = await db.query(
+          'SELECT sms_consent_transactional, sms_consent_marketing FROM contacts WHERE id = $1 AND subaccount_id = $2',
+          [opts.contactId, subaccountId]
+        );
+        const consent = consentRow.rows[0] || {};
+        const hasConsent = (purpose === 'transactional')
+          ? !!consent.sms_consent_transactional
+          : !!consent.sms_consent_marketing;
+        if (!hasConsent) {
+          return { ok: false, skipped: true, code: 'skipped_consent', error: 'Contact has not consented to ' + purpose + ' SMS' };
+        }
+      } catch (e) {
+        console.error('SMS consent lookup failed:', e.message);
+        return { ok: false, error: 'Consent verification failed' };
+      }
+    }
+  }
+
   // Twilio Message Create call
   const params = new URLSearchParams({
     To: toNormalized,

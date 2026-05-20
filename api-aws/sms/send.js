@@ -58,7 +58,8 @@ async function handler(req, res) {
   const result = await sendSms(slug, {
     to, body, templateType, contactId, vars,
     source: source || 'manual',
-    sentByUserId: session.user_id
+    sentByUserId: session.user_id,
+    purpose: 'transactional'
   });
 
   if (!result.ok) {
