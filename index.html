@@ -14213,6 +14213,55 @@ function calcSubTaxBreakdown(s){
   };
 }
 
+// One-time setup fee breakdown for new enrollments or plan additions.
+// Mirrors backend computeSetupFeeBreakdown in lib-aws/sub-setup-fee.js.
+// items: array of subscription items (each may carry setupFeeAmount snapshot)
+// Returns null if no items have setup fees.
+function calcSubSetupFeeBreakdown(items){
+  const t=getTaxSettings();
+  const taxEnabled=!!t;
+  const taxRate=t?t.rate:0;
+  const taxLabel=t?t.label:'Sales Tax';
+  const feeLines=[];
+  let subtotal=0,taxableBase=0;
+  (items||[]).forEach(function(it){
+    // Prefer snapshot on the item (set by backend on existing subs / after save).
+    // Fall back to plan lookup for in-progress enrollment items that haven't
+    // been saved yet. Plan is the source of truth.
+    let fee=parseFloat(it.setupFeeAmount)||0;
+    if(fee<=0&&it.planId){
+      const p=getPlan(it.planId);
+      if(p&&p.setupFeeEnabled&&parseFloat(p.setupFeeAmount)>0){
+        fee=parseFloat(p.setupFeeAmount);
+      }
+    }
+    if(fee<=0)return;
+    const taxable=it.taxable!==false;
+    const line={
+      id:'setupfee-'+(it.id||''),
+      name:'Setup fee: '+(it.name||'Plan'),
+      price:fee,
+      qty:1,
+      taxable:taxable
+    };
+    feeLines.push(line);
+    subtotal+=fee;
+    if(isLineTaxable('subscription',line))taxableBase+=fee;
+  });
+  if(feeLines.length===0)return null;
+  const tax=taxEnabled?Math.round(taxableBase*taxRate/100*100)/100:0;
+  return {
+    items:feeLines,
+    subtotal:Math.round(subtotal*100)/100,
+    taxableAmount:Math.round(taxableBase*100)/100,
+    tax:tax,
+    total:Math.round((subtotal+tax)*100)/100,
+    taxRate:taxRate,
+    taxLabel:taxLabel,
+    taxEnabled:taxEnabled
+  };
+}
+
 // What the customer will be charged on the next cycle (after discount + tax).
 // This is the value to display in any "next charge" column.
 function calcSubNextCharge(s){
@@ -15032,6 +15081,26 @@ function _renderItemsSummary(){
       +'</div>';
   }
 
+  // Setup fee preview: shown only when at least one plan item carries a setup fee.
+  // For each item with setupFeeAmount > 0, show the fee. Show tax separately when
+  // taxable items contribute. Total is the amount that will be charged today.
+  const sfb=calcSubSetupFeeBreakdown(_subEditItems);
+  let setupFeeBlock='';
+  if(sfb){
+    const sfLines=sfb.items.map(function(ln){
+      return '<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text-muted)"><span>'+esc(ln.name)+'</span><span>'+fmt$(ln.price)+'</span></div>';
+    }).join('');
+    const sfTaxLine=(sfb.taxEnabled&&sfb.taxableAmount>0)
+      ? '<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text-muted)"><span>'+esc(sfb.taxLabel)+' ('+sfb.taxRate+'%)</span><span>'+fmt$(sfb.tax)+'</span></div>'
+      : '';
+    setupFeeBlock='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:8px;font-size:13px">'
+      +'<div style="font-weight:700;margin-bottom:6px;color:var(--orange)">Charged today</div>'
+      +sfLines
+      +sfTaxLine
+      +'<div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border);font-weight:700"><span>One-time total</span><span style="font-family:Exo 2,sans-serif;font-size:15px;color:var(--orange)">'+fmt$(sfb.total)+'</span></div>'
+      +'</div>';
+  }
+
   return trialBanner
     +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:6px;font-size:13px">'
     +'<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--text-muted)">Subtotal</span><span>'+fmt$(b.subtotal)+'</span></div>'
@@ -15040,7 +15109,8 @@ function _renderItemsSummary(){
     +taxLine
     +'<div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border);font-weight:700"><span>Total per cycle</span><span style="font-family:Exo 2,sans-serif;font-size:15px;color:var(--orange)">'+fmt$(b.total)+'</span></div>'
     +taxNote
-    +'</div>';
+    +'</div>'
+    +setupFeeBlock;
 }
 
 function _addItemRow(mode){
