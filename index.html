@@ -6310,8 +6310,9 @@ function posAddItem(){
   const desc=document.getElementById('pos-desc').value.trim();
   const price=parseFloat(document.getElementById('pos-price').value)||0;
   if(!desc){toast('Enter an item description.','error');return}
-  // Custom items default to taxable. User can toggle off per-line.
-  state.posItems.push({id:uid(),desc,price,taxable:true,custom:true});
+  // Custom items default to taxable per paySettings.posDefaultTaxable.
+  // User can still toggle off per-line via the Tax checkbox.
+  state.posItems.push({id:uid(),desc,price,taxable:defaultPosTaxable(),custom:true});
   document.getElementById('pos-desc').value='';
   document.getElementById('pos-price').value='';
   renderPosItems();calcTotals();
@@ -6350,6 +6351,15 @@ function setTip(v){
   calcTotals();
 }
 
+// Map a POS line item to its tax section. POS lines are heterogeneous:
+// - Custom (custom:true)         -> 'pos'   (per-line toggle by staff)
+// - Product (productId)          -> 'products' (follows section policy)
+// - Anything else                -> 'pos' (safe per-line fallback)
+function _posItemSection(item){
+  if(item&&item.productId)return 'products';
+  return 'pos';
+}
+
 function calcTotals(){
   const sub=state.posItems.reduce((s,i)=>s+i.price,0);
   // Step 1: Coupon discount (applied to original subtotal)
@@ -6371,7 +6381,12 @@ function calcTotals(){
   // Step 3: Tax (on taxable items, after discount allocation)
   // Order: Subtotal -> Coupon -> Discount -> Tax -> Fee -> Tip -> Total
   // Fee is post-tax (not taxed). Tip is post-tax. GC and credits apply against final total.
-  const taxCalc=calcTax(state.posItems.map(function(i){return {price:i.price,taxable:!!i.taxable,qty:1};}), totalDiscountAmt);
+  // Resolve each line's taxability via the section policy helper.
+  // Custom POS lines use the user's per-line toggle (stored in i.taxable).
+  // Product lines follow the 'products' section policy.
+  const taxCalc=calcTax(state.posItems.map(function(i){
+    return {price:i.price,taxable:isLineTaxable(_posItemSection(i),i),qty:1};
+  }), totalDiscountAmt);
   const tax=taxCalc.tax;
   // Step 4: Tip (computed on after-discount, not on tax)
   let tip=0;
@@ -8686,8 +8701,11 @@ function _eventPaymentStatus(a){
 //   onSuccess: optional callback after a successful payment (e.g., refresh roster)
 function _buildApptPayCtx(appt){
   var staff=appt.assignedTo?(db.users||[]).find(function(u){return u.id===appt.assignedTo;}):null;
-  // Resolve taxable flag from service. Default true if service not found
-  // (matches default behavior for new services). Variations inherit from parent.
+  // ctx.taxable carries the service's intrinsic taxable category (independent
+  // of global tax state or section policy). Payment records store this as a
+  // historical property. The actual tax charge decision happens at the math
+  // layer below via isLineTaxable('services', ...), which respects both
+  // section policy and global tax enablement.
   var taxable=true;
   if(appt.service_id){
     var svc=(db.services||[]).find(function(s){return s.id===appt.service_id;});
@@ -8712,6 +8730,8 @@ function _buildClassPayCtx(session, contactId, opts){
   // Class instructor is whoever taught it. Use session.instructor_id or the
   // service's first assigned staff as a fallback.
   var instructorId=session.instructor_id||null;
+  // ctx.taxable carries the service's intrinsic taxable category.
+  // The math layer applies section policy + global tax state separately.
   var taxable=true;
   if(session.service_id){
     var svc=(db.services||[]).find(function(s){return s.id===session.service_id;});
@@ -9141,9 +9161,10 @@ function apptUpdateTotals(){
   var afterDiscount=Math.max(0, afterCoupon-discountAmount);
 
   // Tax. Treat the appointment/class as a single line where the line is the
-  // entire subtotal. Taxable flag comes from ctx (resolved from the source service).
-  // Discount allocation is the full discount since there's only one line.
-  var taxableFlag=ctx.taxable!==false;
+  // entire subtotal. ctx.taxable carries the service's intrinsic flag;
+  // isLineTaxable applies the 'services' section policy and global gate
+  // on top of that to produce the final charge decision.
+  var taxableFlag=isLineTaxable('services',{taxable:ctx.taxable!==false});
   var taxCalc=calcTax([{price:subtotal,taxable:taxableFlag,qty:1}], couponDiscount+discountAmount);
   var taxAmount=taxCalc.tax;
   var taxableAmount=taxCalc.taxableAmount;
@@ -28039,7 +28060,9 @@ function posAddProductItem(){
   const pricingVal=pricingSel&&!document.getElementById('pos-pricing-opt-wrap').classList.contains('hidden')&&pricingSel.value||'';
   const optName=pricingVal?pricingVal.split('|')[0]:'';
   const desc=prod?(prod.name+(optName?' - '+optName:'')):'Product';
-  state.posItems.push({id:uid(),desc,price,productId:prodId,pricingOption:optName,taxable:!!(prod&&prod.taxable!==false)});
+  // Store the resolved taxable flag at line creation. The 'products' section
+  // policy is consulted via isLineTaxable; per-item flag is the fallback.
+  state.posItems.push({id:uid(),desc,price,productId:prodId,pricingOption:optName,taxable:isLineTaxable('products',prod||{})});
   renderPosItems();calcTotals();
   if(prodSel)prodSel.value='';
   if(priceInp)priceInp.value='';
