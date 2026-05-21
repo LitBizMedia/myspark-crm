@@ -2301,7 +2301,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </button>
             </div>
           </div>
-          <div id="subs-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+          <div id="subs-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px"></div>
           <div id="subs-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="subs-search" type="text" placeholder="Search subscriptions..." oninput="renderSubscriptions()"></div>
@@ -14511,7 +14511,7 @@ function _renderSubsStats(){
     +card('Active',String(active),'var(--success-light)',active===1?'subscriber':'subscribers')
     +card('In Trial',String(trialing),'var(--warning-light)',trialing===1?'subscriber':'subscribers')
     +card('Paused',String(paused),'var(--orange)',paused===1?'subscriber':'subscribers')
-    +card('Needs Attention',String(suspended),suspended>0?'var(--danger-light)':null,'failed charges');
+    +(suspended>0?card('Needs Attention',String(suspended),'var(--danger-light)','failed charges'):'');
 }
 
 function _setMrrView(v){
