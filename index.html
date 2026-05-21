@@ -14449,18 +14449,54 @@ function _renderSubsStats(){
   var el=document.getElementById('subs-stats');
   if(!el)return;
   var subs=db.subscriptions||[];
-  var mrr=0,active=0,trialing=0,suspended=0;
+  var view='monthlyPlans';
+  try{var stored=localStorage.getItem('myspark.subs.mrrView');if(stored==='average'||stored==='monthlyPlans'||stored==='effectiveMonthly')view=stored;}catch(e){}
+  var mrrAverage=0,mrrMonthly=0,mrrEffective=0;
+  var cntAverage=0,cntMonthly=0,cntEffective=0;
+  var active=0,trialing=0,suspended=0;
   subs.forEach(function(s){
     if(s.status==='active'){
       active++;
+      var cycle=s.billingCycle||'monthly';
       var bd=calcSubTaxBreakdown(s);
-      mrr+=_normalizeToMonthlyMRR(bd.afterDiscount||0, s.billingCycle||'monthly');
+      var amt=bd.afterDiscount||0;
+      mrrAverage+=_normalizeToMonthlyMRR(amt,cycle);
+      cntAverage++;
+      if(cycle==='monthly'){
+        mrrMonthly+=amt;cntMonthly++;
+        mrrEffective+=amt;cntEffective++;
+      }else if(cycle==='weekly'){
+        mrrEffective+=amt*52/12;cntEffective++;
+      }
     }else if(s.status==='trialing'){
       trialing++;
     }else if(s.status==='suspended'){
       suspended++;
     }
   });
+  var displayVal,displayCnt;
+  if(view==='average'){displayVal=mrrAverage;displayCnt=cntAverage;}
+  else if(view==='effectiveMonthly'){displayVal=mrrEffective;displayCnt=cntEffective;}
+  else{displayVal=mrrMonthly;displayCnt=cntMonthly;}
+  function tog(key,label,tip){
+    var on=(view===key);
+    var bg=on?'var(--purple)':'transparent';
+    var col=on?'#fff':'var(--main-text-muted)';
+    var bd=on?'var(--purple)':'var(--main-border)';
+    return '<button type="button" onclick="event.stopPropagation();_setMrrView(\''+key+'\')" title="'+tip+'" style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:10px;background:'+bg+';color:'+col+';border:1px solid '+bd+';cursor:pointer;white-space:nowrap;font-family:inherit">'+label+'</button>';
+  }
+  var toggles=tog('average','Avg','Average MRR. All active subs normalized to a monthly amount. Weekly times 52 divided by 12, monthly raw, quarterly times 4 divided by 12, annual divided by 12.')
+    +tog('monthlyPlans','Monthly','Monthly Plans only. Sum of monthly-cycle subscription prices, no normalization.')
+    +tog('effectiveMonthly','Effective','Effective Monthly. Monthly plans plus weekly subs normalized to monthly. Real cash hitting the account each month.');
+  var planWord=displayCnt===1?'plan contributing':'plans contributing';
+  var mrrCard='<div class="stat-card" style="border-top:2px solid var(--success-light)">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">'
+    +'<div class="stat-label" style="margin:0">MRR</div>'
+    +'<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end">'+toggles+'</div>'
+    +'</div>'
+    +'<div class="stat-val">'+fmt$(displayVal)+'</div>'
+    +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:3px">'+displayCnt+' '+planWord+'</div>'
+    +'</div>';
   function card(label,val,accent,sub){
     var border=accent?'border-top:2px solid '+accent:'';
     return '<div class="stat-card" style="'+border+'">'
@@ -14469,10 +14505,15 @@ function _renderSubsStats(){
       +(sub?'<div style="font-size:11px;color:var(--main-text-muted);margin-top:3px">'+sub+'</div>':'')
       +'</div>';
   }
-  el.innerHTML=card('Monthly Recurring Revenue',fmt$(mrr),'#34d399','from active subscriptions')
-    +card('Active',String(active),'#34d399',active===1?'subscriber':'subscribers')
-    +card('In Trial',String(trialing),'#fbbf24',trialing===1?'subscriber':'subscribers')
-    +card('Needs Attention',String(suspended),suspended>0?'#f87171':null,'failed charges');
+  el.innerHTML=mrrCard
+    +card('Active',String(active),'var(--success-light)',active===1?'subscriber':'subscribers')
+    +card('In Trial',String(trialing),'var(--warning-light)',trialing===1?'subscriber':'subscribers')
+    +card('Needs Attention',String(suspended),suspended>0?'var(--danger-light)':null,'failed charges');
+}
+
+function _setMrrView(v){
+  try{localStorage.setItem('myspark.subs.mrrView',v);}catch(e){}
+  _renderSubsStats();
 }
 
 function renderSubscriptions(){
