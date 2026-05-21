@@ -984,6 +984,62 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .conv-new-btn:active:not(:disabled){background:var(--orange-active)}
 .conv-new-btn:disabled{opacity:.55;cursor:not-allowed}
 .conv-new-btn svg{width:14px;height:14px}
+.conv-composer-overlay{position:fixed;inset:0;background:var(--overlay);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
+.conv-composer-overlay.hidden{display:none}
+.conv-composer-card{width:100%;max-width:560px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:var(--bg-panel);border:1px solid var(--purple-border);border-radius:var(--radius-lg);overflow:hidden}
+.conv-composer-card .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.conv-composer-card .modal-title{font-size:16px;font-weight:700;color:#fff}
+.conv-composer-close{background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center}
+.conv-composer-close:hover{background:var(--bg-card-hover);color:var(--text)}
+.conv-composer-close svg{width:18px;height:18px}
+.conv-composer-card .modal-body{flex:1;overflow-y:auto;padding:20px;color:var(--text)}
+.conv-composer-card .modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border)}
+.conv-composer-section{margin-bottom:18px}
+.conv-composer-section:last-child{margin-bottom:0}
+.conv-composer-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:8px}
+.conv-composer-search-wrap{position:relative}
+.conv-composer-search{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-input);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box}
+.conv-composer-search:focus{outline:none;border-color:var(--purple);box-shadow:var(--focus-ring)}
+.conv-composer-search::placeholder{color:var(--text-placeholder)}
+.conv-composer-results{margin-top:8px;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card)}
+.conv-composer-results.hidden{display:none}
+.conv-composer-result{display:flex;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .12s}
+.conv-composer-result:last-child{border-bottom:none}
+.conv-composer-result:hover{background:var(--bg-card-hover)}
+.conv-composer-result-avatar{width:32px;height:32px;border-radius:var(--radius-full);background:var(--purple-dim);color:var(--purple);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;text-transform:uppercase}
+.conv-composer-result-body{flex:1;min-width:0}
+.conv-composer-result-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-composer-result-meta{font-size:11px;color:var(--text-muted);display:flex;gap:10px;flex-wrap:wrap}
+.conv-composer-result-meta span{display:inline-flex;align-items:center;gap:3px}
+.conv-composer-empty{padding:20px;text-align:center;color:var(--text-muted);font-size:12px}
+.conv-composer-pinned{display:flex;gap:10px;align-items:center;padding:10px 12px;background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);margin-bottom:0}
+.conv-composer-pinned.hidden{display:none}
+.conv-composer-pinned-clear{background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.conv-composer-pinned-clear:hover{background:var(--bg-card-hover);color:var(--text)}
+.conv-composer-pinned-clear svg{width:14px;height:14px}
+.conv-composer-channel-row{display:flex;gap:8px}
+.conv-composer-channel-pill{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-full);background:var(--bg-card);color:var(--text-muted);font-size:13px;font-weight:600;border:1px solid var(--border);cursor:pointer;font-family:inherit;transition:all .15s}
+.conv-composer-channel-pill:hover:not(:disabled){background:var(--bg-card-hover);color:var(--text)}
+.conv-composer-channel-pill.active{background:var(--purple);color:#fff;border-color:var(--purple)}
+.conv-composer-channel-pill:disabled{opacity:.4;cursor:not-allowed}
+.conv-composer-channel-pill svg{width:14px;height:14px}
+.conv-composer-subject{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-input);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px}
+.conv-composer-subject:focus{outline:none;border-color:var(--purple);box-shadow:var(--focus-ring)}
+.conv-composer-subject::placeholder{color:var(--text-placeholder)}
+.conv-composer-subject.hidden{display:none}
+.conv-composer-body-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-input);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box;resize:vertical;min-height:120px;line-height:1.5}
+.conv-composer-body-input:focus{outline:none;border-color:var(--purple);box-shadow:var(--focus-ring)}
+.conv-composer-body-input::placeholder{color:var(--text-placeholder)}
+.conv-composer-body-input:disabled{opacity:.6;cursor:not-allowed}
+.conv-composer-error{padding:10px 12px;background:var(--danger-dim);color:var(--danger-text);border:1px solid var(--danger);border-radius:var(--radius);font-size:12px;margin-top:12px}
+.conv-composer-error.hidden{display:none}
+.conv-composer-cancel{padding:8px 14px;background:none;border:1px solid var(--border);border-radius:var(--radius);color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit}
+.conv-composer-cancel:hover{background:var(--bg-card-hover);color:var(--text)}
+.conv-composer-send{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s}
+.conv-composer-send:hover:not(:disabled){background:var(--orange-hover)}
+.conv-composer-send:active:not(:disabled){background:var(--orange-active)}
+.conv-composer-send:disabled{opacity:.45;cursor:not-allowed}
+.conv-composer-send svg{width:14px;height:14px}
 .conv-main{flex:1;display:flex;min-height:0;overflow:hidden}
 .conv-list{width:360px;flex-shrink:0;border-right:1px solid var(--main-border);background:var(--main-card);overflow-y:auto}
 .conv-list-empty{padding:40px 20px;text-align:center;color:var(--main-text-muted);font-size:13px}
@@ -2098,7 +2154,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
             </div>
             <div class="conv-actionbar-spacer"></div>
-            <button class="conv-new-btn" disabled title="Composer launching soon" aria-label="New Message (coming soon)">
+            <button class="conv-new-btn" onclick="convOpenComposer()" aria-label="Start a new conversation">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               New Message
             </button>
@@ -2132,6 +2188,53 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                 <p>Choose a conversation from the list to view the full thread.</p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="conv-composer-modal" class="conv-composer-overlay hidden" onclick="convComposerBackdropClick(event)">
+        <div class="conv-composer-card" onclick="event.stopPropagation()">
+          <div class="modal-head">
+            <div class="modal-title">New Message</div>
+            <button class="conv-composer-close" onclick="convCloseComposer()" aria-label="Close composer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="conv-composer-section">
+              <div class="conv-composer-label">To</div>
+              <div id="conv-composer-pinned" class="conv-composer-pinned hidden"></div>
+              <div class="conv-composer-search-wrap" id="conv-composer-search-wrap">
+                <input type="text" id="conv-composer-search" class="conv-composer-search" placeholder="Search contacts by name, phone, or email (2+ chars)" oninput="convComposerSearch(this.value)" autocomplete="off" />
+                <div id="conv-composer-results" class="conv-composer-results hidden"></div>
+              </div>
+            </div>
+            <div class="conv-composer-section" id="conv-composer-channel-section">
+              <div class="conv-composer-label">Channel</div>
+              <div class="conv-composer-channel-row">
+                <button class="conv-composer-channel-pill" id="conv-composer-channel-sms" onclick="convComposerSetChannel('sms')" disabled title="Pick a contact first">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                  SMS
+                </button>
+                <button class="conv-composer-channel-pill" id="conv-composer-channel-email" onclick="convComposerSetChannel('email')" disabled title="Pick a contact first">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                  Email
+                </button>
+              </div>
+            </div>
+            <div class="conv-composer-section">
+              <div class="conv-composer-label" id="conv-composer-body-label">Message</div>
+              <input type="text" id="conv-composer-subject" class="conv-composer-subject hidden" placeholder="Subject" oninput="convComposerInput()" autocomplete="off" maxlength="500" />
+              <textarea id="conv-composer-body" class="conv-composer-body-input" placeholder="Write your message" oninput="convComposerInput()" maxlength="50000"></textarea>
+            </div>
+            <div id="conv-composer-error" class="conv-composer-error hidden"></div>
+          </div>
+          <div class="modal-foot">
+            <button class="conv-composer-cancel" onclick="convCloseComposer()">Cancel</button>
+            <button class="conv-composer-send" id="conv-composer-send" onclick="convComposerSubmit()" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              Send
+            </button>
           </div>
         </div>
       </div>
@@ -18562,6 +18665,310 @@ function convRefresh(){
   convFetchList();
   var s = _convState();
   if(s.activeId) convFetchThread(s.activeId, function(err, data){ if(!err) convRenderThread(); });
+}
+
+// ============================================================================
+// CONVERSATION COMPOSER (Phase 2 - new message modal)
+// ============================================================================
+
+var _convComposer = {
+  open: false,
+  contact: null,
+  channel: null,
+  sending: false
+};
+
+function _convComposerEl(id){ return document.getElementById('conv-composer-' + id); }
+
+function _convComposerContactName(c){
+  if(!c) return '';
+  var n = ((c.firstName || '') + ' ' + (c.lastName || '')).trim();
+  return n || c.name || c.fullName || c.email || c.phone || 'Unnamed';
+}
+
+function _convComposerContactInitials(c){
+  var name = _convComposerContactName(c);
+  var parts = name.split(/\s+/).filter(Boolean);
+  if(parts.length === 0) return '?';
+  if(parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function convOpenComposer(){
+  _convComposer.open = true;
+  _convComposer.contact = null;
+  _convComposer.channel = null;
+  _convComposer.sending = false;
+  var modal = document.getElementById('conv-composer-modal');
+  if(modal) modal.classList.remove('hidden');
+  var searchInput = _convComposerEl('search');
+  if(searchInput){ searchInput.value = ''; }
+  var subjectInput = _convComposerEl('subject');
+  if(subjectInput){ subjectInput.value = ''; subjectInput.classList.add('hidden'); }
+  var bodyInput = _convComposerEl('body');
+  if(bodyInput){ bodyInput.value = ''; }
+  var pinned = _convComposerEl('pinned');
+  if(pinned){ pinned.classList.add('hidden'); pinned.innerHTML = ''; }
+  var searchWrap = document.getElementById('conv-composer-search-wrap');
+  if(searchWrap){ searchWrap.classList.remove('hidden'); }
+  var results = _convComposerEl('results');
+  if(results){ results.classList.add('hidden'); results.innerHTML = ''; }
+  var err = _convComposerEl('error');
+  if(err){ err.classList.add('hidden'); err.textContent = ''; }
+  _convComposerSyncChannels();
+  _convComposerSyncSendButton();
+  setTimeout(function(){ if(searchInput) searchInput.focus(); }, 50);
+}
+
+function convCloseComposer(){
+  if(_convComposer.sending) return;
+  _convComposer.open = false;
+  var modal = document.getElementById('conv-composer-modal');
+  if(modal) modal.classList.add('hidden');
+}
+
+function convComposerBackdropClick(e){
+  if(e.target && e.target.id === 'conv-composer-modal') convCloseComposer();
+}
+
+function convComposerSearch(q){
+  var results = _convComposerEl('results');
+  if(!results) return;
+  q = (q || '').toLowerCase().trim();
+  if(q.length < 2){
+    results.classList.add('hidden');
+    results.innerHTML = '';
+    return;
+  }
+  var contacts = db.contacts || [];
+  var matches = [];
+  for(var i = 0; i < contacts.length && matches.length < 20; i++){
+    var c = contacts[i];
+    var name = _convComposerContactName(c);
+    var hay = [name, c.email, c.phone].filter(Boolean).join(' ').toLowerCase();
+    if(hay.indexOf(q) !== -1) matches.push(c);
+  }
+  if(matches.length === 0){
+    results.innerHTML = '<div class="conv-composer-empty">No contacts match.</div>';
+    results.classList.remove('hidden');
+    return;
+  }
+  var html = matches.map(function(c){
+    var initials = _convComposerContactInitials(c);
+    var name = _convComposerContactName(c);
+    var metaParts = [];
+    if(c.email) metaParts.push('<span>' + esc(c.email) + '</span>');
+    if(c.phone) metaParts.push('<span>' + esc(c.phone) + '</span>');
+    var meta = metaParts.join('');
+    return '<div class="conv-composer-result" onclick="convComposerSelectContact(\'' + esc(c.id) + '\')">' +
+      '<div class="conv-composer-result-avatar">' + esc(initials) + '</div>' +
+      '<div class="conv-composer-result-body">' +
+        '<div class="conv-composer-result-name">' + esc(name) + '</div>' +
+        '<div class="conv-composer-result-meta">' + meta + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  results.innerHTML = html;
+  results.classList.remove('hidden');
+}
+
+function convComposerSelectContact(contactId){
+  var contacts = db.contacts || [];
+  var c = contacts.find(function(x){ return x.id === contactId; });
+  if(!c) return;
+  _convComposer.contact = c;
+  _convComposer.channel = null;
+  var pinned = _convComposerEl('pinned');
+  var searchWrap = document.getElementById('conv-composer-search-wrap');
+  var initials = _convComposerContactInitials(c);
+  var name = _convComposerContactName(c);
+  var metaParts = [];
+  if(c.email) metaParts.push('<span>' + esc(c.email) + '</span>');
+  if(c.phone) metaParts.push('<span>' + esc(c.phone) + '</span>');
+  pinned.innerHTML =
+    '<div class="conv-composer-result-avatar">' + esc(initials) + '</div>' +
+    '<div class="conv-composer-result-body">' +
+      '<div class="conv-composer-result-name">' + esc(name) + '</div>' +
+      '<div class="conv-composer-result-meta">' + metaParts.join('') + '</div>' +
+    '</div>' +
+    '<button class="conv-composer-pinned-clear" onclick="convComposerClearContact()" aria-label="Clear contact">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+    '</button>';
+  pinned.classList.remove('hidden');
+  searchWrap.classList.add('hidden');
+  _convComposerSyncChannels();
+  _convComposerSyncSendButton();
+}
+
+function convComposerClearContact(){
+  _convComposer.contact = null;
+  _convComposer.channel = null;
+  var pinned = _convComposerEl('pinned');
+  var searchWrap = document.getElementById('conv-composer-search-wrap');
+  var searchInput = _convComposerEl('search');
+  pinned.classList.add('hidden');
+  pinned.innerHTML = '';
+  searchWrap.classList.remove('hidden');
+  if(searchInput){ searchInput.value = ''; searchInput.focus(); }
+  var results = _convComposerEl('results');
+  if(results){ results.classList.add('hidden'); results.innerHTML = ''; }
+  _convComposerSyncChannels();
+  _convComposerSyncSendButton();
+}
+
+function _convComposerSyncChannels(){
+  var c = _convComposer.contact;
+  var smsBtn = _convComposerEl('channel-sms');
+  var emailBtn = _convComposerEl('channel-email');
+  var subjectInput = _convComposerEl('subject');
+  if(!c){
+    if(smsBtn){ smsBtn.disabled = true; smsBtn.classList.remove('active'); smsBtn.title = 'Pick a contact first'; }
+    if(emailBtn){ emailBtn.disabled = true; emailBtn.classList.remove('active'); emailBtn.title = 'Pick a contact first'; }
+    if(subjectInput) subjectInput.classList.add('hidden');
+    return;
+  }
+  if(smsBtn){
+    smsBtn.disabled = !c.phone;
+    smsBtn.title = c.phone ? '' : 'No phone on file';
+    smsBtn.classList.toggle('active', _convComposer.channel === 'sms');
+  }
+  if(emailBtn){
+    emailBtn.disabled = !c.email;
+    emailBtn.title = c.email ? '' : 'No email on file';
+    emailBtn.classList.toggle('active', _convComposer.channel === 'email');
+  }
+  if(subjectInput){
+    if(_convComposer.channel === 'email') subjectInput.classList.remove('hidden');
+    else subjectInput.classList.add('hidden');
+  }
+}
+
+function convComposerSetChannel(ch){
+  var c = _convComposer.contact;
+  if(!c) return;
+  if(ch === 'sms' && !c.phone) return;
+  if(ch === 'email' && !c.email) return;
+  _convComposer.channel = ch;
+  _convComposerSyncChannels();
+  _convComposerSyncSendButton();
+  setTimeout(function(){
+    if(ch === 'email'){
+      var subj = _convComposerEl('subject');
+      if(subj) subj.focus();
+    } else {
+      var body = _convComposerEl('body');
+      if(body) body.focus();
+    }
+  }, 30);
+}
+
+function convComposerInput(){
+  _convComposerSyncSendButton();
+}
+
+function _convComposerSyncSendButton(){
+  var btn = _convComposerEl('send');
+  if(!btn) return;
+  var c = _convComposer.contact;
+  var ch = _convComposer.channel;
+  var bodyInput = _convComposerEl('body');
+  var subjectInput = _convComposerEl('subject');
+  var bodyVal = bodyInput ? bodyInput.value.trim() : '';
+  var subjVal = subjectInput ? subjectInput.value.trim() : '';
+  var ok = !!c && !!ch && bodyVal.length > 0;
+  if(ch === 'email') ok = ok && subjVal.length > 0;
+  btn.disabled = !ok || _convComposer.sending;
+}
+
+function _convComposerShowError(msg){
+  var err = _convComposerEl('error');
+  if(!err) return;
+  err.textContent = msg;
+  err.classList.remove('hidden');
+}
+
+function _convComposerClearError(){
+  var err = _convComposerEl('error');
+  if(!err) return;
+  err.textContent = '';
+  err.classList.add('hidden');
+}
+
+async function convComposerSubmit(){
+  if(_convComposer.sending) return;
+  var c = _convComposer.contact;
+  var ch = _convComposer.channel;
+  var bodyInput = _convComposerEl('body');
+  var subjectInput = _convComposerEl('subject');
+  if(!c || !ch || !bodyInput) return;
+  var bodyText = bodyInput.value.trim();
+  var subject = subjectInput ? subjectInput.value.trim() : '';
+  if(!bodyText) return;
+  if(ch === 'email' && !subject) return;
+
+  _convComposerClearError();
+  _convComposer.sending = true;
+  _convComposerSyncSendButton();
+  if(bodyInput) bodyInput.disabled = true;
+  if(subjectInput) subjectInput.disabled = true;
+
+  try {
+    var payload = {
+      contact_id: c.id,
+      channel: ch,
+      body_text: bodyText
+    };
+    if(ch === 'email') payload.subject = subject;
+    var res = await fetch(_convAPI('/api/subaccount/conversation-start'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var data = await res.json();
+    if(!res.ok || !data.success){
+      var msg = (data && (data.error || data.message)) || ('Send failed (HTTP ' + res.status + ')');
+      _convComposerShowError(msg);
+      _convComposer.sending = false;
+      if(bodyInput) bodyInput.disabled = false;
+      if(subjectInput) subjectInput.disabled = false;
+      _convComposerSyncSendButton();
+      return;
+    }
+    var newConvId = data.conversation_id;
+    convCloseComposerForce();
+    convFetchList();
+    if(newConvId){
+      setTimeout(function(){ convOpenThread(newConvId); }, 250);
+    }
+  } catch(e){
+    _convComposerShowError('Network error: ' + (e && e.message ? e.message : 'unknown'));
+    _convComposer.sending = false;
+    if(bodyInput) bodyInput.disabled = false;
+    if(subjectInput) subjectInput.disabled = false;
+    _convComposerSyncSendButton();
+  }
+}
+
+function convCloseComposerForce(){
+  _convComposer.open = false;
+  _convComposer.sending = false;
+  var modal = document.getElementById('conv-composer-modal');
+  if(modal) modal.classList.add('hidden');
+  var bodyInput = _convComposerEl('body');
+  var subjectInput = _convComposerEl('subject');
+  if(bodyInput) bodyInput.disabled = false;
+  if(subjectInput) subjectInput.disabled = false;
+}
+
+// Bind Esc key to close composer (passive listener, no preventDefault)
+if(!window._convComposerEscBound){
+  window._convComposerEscBound = true;
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && _convComposer && _convComposer.open && !_convComposer.sending){
+      convCloseComposer();
+    }
+  });
 }
 
 function _convFiltered(){
