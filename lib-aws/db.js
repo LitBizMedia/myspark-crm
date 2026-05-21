@@ -249,15 +249,23 @@ async function insert(table, rows, options) {
   
   let onConflict = '';
   if (options.onConflict) {
-    const conflictCol = quoteColumn(options.onConflict);
+    // 2026-05-21: accept either a string (single column) or array
+    // (composite key). Composite is required for multi-column UNIQUE
+    // constraints like appointment_reminders(subaccount_id, appointment_id,
+    // reminder_type). Backward compatible: string callers continue to work.
+    const conflictCols = Array.isArray(options.onConflict)
+      ? options.onConflict
+      : [options.onConflict];
+    const conflictColsSafe = conflictCols.map(quoteColumn);
+    const conflictTarget = conflictColsSafe.join(', ');
     if (options.onConflictAction === 'ignore' || options.onConflictAction === 'do_nothing') {
-      onConflict = `ON CONFLICT (${conflictCol}) DO NOTHING`;
+      onConflict = `ON CONFLICT (${conflictTarget}) DO NOTHING`;
     } else {
       const updateSet = colsSafe
-        .filter(c => c !== conflictCol)
+        .filter(c => !conflictColsSafe.includes(c))
         .map(c => `${c} = EXCLUDED.${c}`)
         .join(', ');
-      onConflict = `ON CONFLICT (${conflictCol}) DO UPDATE SET ${updateSet}`;
+      onConflict = `ON CONFLICT (${conflictTarget}) DO UPDATE SET ${updateSet}`;
     }
   }
   

@@ -101,7 +101,7 @@ async function logReminder(subaccountId, appointmentId, emailSent, smsSent) {
       email_sent: emailSent,
       sms_sent: smsSent,
       sent_at: new Date().toISOString()
-    }, { onConflict: 'subaccount_id,appointment_id,reminder_type' });
+    }, { onConflict: ['subaccount_id', 'appointment_id', 'reminder_type'] });
   } catch (e) {
     console.error('logReminder error:', e.message);
   }
