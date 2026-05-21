@@ -1963,6 +1963,12 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <select class="filter-sel" id="c-type" onchange="onCFilter()"><option value="">All Types</option><option value="lead">Lead</option><option value="client">Client</option><option value="partner">Partner</option><option value="employee">Employee</option><option value="lapsed">Lapsed</option></select>
           <select class="filter-sel" id="c-status" onchange="onCFilter()"><option value="">All Status</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
           <select class="filter-sel" id="c-tag" onchange="onCFilter()"><option value="">All Tags</option></select>
+          <select class="filter-sel" id="c-pagesize" onchange="onCPageSize(this.value)" title="Contacts per page">
+            <option value="25">25 per page</option>
+            <option value="50" selected>50 per page</option>
+            <option value="100">100 per page</option>
+            <option value="200">200 per page</option>
+          </select>
         </div>
         <div class="tbl-wrap"><table class="ct-table"><thead id="ct-head"></thead><tbody id="ct-body"></tbody></table></div>
         <div id="contacts-pg"></div>
@@ -2826,7 +2832,7 @@ const DEF_BH={
 let state={
   user:null,panel:'dashboard',
   subaccountSlug:'litbiz',subaccountId:'sub-litbiz',agencyMode:false,
-  cPage:1,cSearch:'',cType:'',cStatus:'',cTag:'',cSort:{col:'name',dir:'asc'},cSelected:new Set(),cShowArchived:false,
+  cPage:1,cPageSize:50,cTotal:0,cTotalPages:1,cLoading:false,cSearch:'',cType:'',cStatus:'',cTag:'',cSort:{col:'name',dir:'asc'},cSelected:new Set(),cSelectedAllMatching:false,cShowArchived:false,
   drawer:null,dTab:'info',
   calView:'month',calDate:new Date(),calUser:'all',
   tScope:'mine',tStatus:'all',tSearch:'',tPri:'',tPage:1,
@@ -2844,7 +2850,7 @@ let state={
 // DB
 // =====================================================
 let db={
-  contacts:[],appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],sessionPackTemplates:[],sessionPacks:[],
+  contacts:[],contactNameMap:{},appointments:[],tasks:[],payments:[],coupons:[],giftCards:[],giftCardProducts:[],sessionPackTemplates:[],sessionPacks:[],
   services:[],serviceVariations:[],classSessions:[],serviceCategories:[],serviceWidgets:[],
   tags:[
     {id:'tag-hotlead',name:'Hot Lead',color:'#ff4000'},
@@ -2883,6 +2889,42 @@ let db={
     additionalFee:{enabled:false,label:'Additional Fee',type:'flat',amount:0}
   }
 };
+
+// =====================================================
+// CONTACT DISPLAY HELPER
+// =====================================================
+// getContactName(id) returns the display name of a contact by ID.
+// Reads from db.contactNameMap, populated on boot via /contact-name-map.
+//
+// Use this instead of db.contacts.find(c=>c.id===id) for display purposes
+// since db.contacts only holds the current page after Stage 2 pagination.
+//
+// Returns the contact's name string, or '' for falsy id, or
+// '(Unknown contact)' if the ID isn't in the map.
+function getContactName(id){
+  if(!id)return '';
+  var entry=db.contactNameMap&&db.contactNameMap[id];
+  return entry?entry.name:'(Unknown contact)';
+}
+
+// getContactEmail(id) companion helper. Used by views that show
+// contact email next to name.
+function getContactEmail(id){
+  if(!id)return '';
+  var entry=db.contactNameMap&&db.contactNameMap[id];
+  return entry?(entry.email||''):'';
+}
+
+// Restore user's contacts page-size preference from localStorage on boot
+try {
+  var _saved_ps = localStorage.getItem('msp_contacts_pagesize');
+  if (_saved_ps) {
+    var _ps = parseInt(_saved_ps, 10);
+    if ([25,50,100,200].indexOf(_ps) >= 0 && typeof state !== 'undefined' && state) {
+      state.cPageSize = _ps;
+    }
+  }
+} catch(e){}
 
 // =====================================================
 // UTILS
@@ -4428,60 +4470,155 @@ function _filteredContacts(){
   return list;
 }
 
-function renderContacts(){
-  // Audit: PHI list view (logged once per render, not per row)
+// Map UI sort state to backend sort param
+function _cSortParam(){
+  var col=state.cSort.col, dir=state.cSort.dir;
+  if(col==='name') return dir==='desc'?'name_desc':'name_asc';
+  if(col==='company') return dir==='desc'?'name_desc':'name_asc';
+  if(col==='type') return dir==='desc'?'name_desc':'name_asc';
+  return dir==='desc'?'created_desc':'created_asc';
+}
+
+// loadContactsPage: fetches one page from paginated backend.
+// Populates db.contacts with page data; updates state.cTotal and cTotalPages.
+async function loadContactsPage(){
+  state.cLoading=true;
+  var params=new URLSearchParams();
+  params.set('page', state.cPage);
+  params.set('page_size', state.cPageSize);
+  params.set('sort', _cSortParam());
+  if(state.cShowArchived) params.set('archived','true');
+  if(state.cSearch && state.cSearch.length>=2) params.set('search', state.cSearch);
+  if(state.cType) params.set('type', state.cType);
+  if(state.cStatus) params.set('status', state.cStatus);
+  if(state.cTag) params.set('tag', state.cTag);
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/contact-list?'+params.toString()), {credentials:'include'});
+    if(!r.ok){
+      console.warn('contact-list fetch failed:', r.status);
+      state.cLoading=false;
+      return null;
+    }
+    var data=await r.json();
+    if(!data || !Array.isArray(data.contacts)){
+      state.cLoading=false;
+      return null;
+    }
+    db.contacts=data.contacts.map(function(c){
+      c.notes=c.notes||[];
+      c.warnings=c.warnings||[];
+      c.allergies=c.allergies||[];
+      c.creditHistory=c.creditHistory||[];
+      return c;
+    });
+    state.cTotal=data.total||0;
+    state.cTotalPages=data.total_pages||1;
+    state.cLoading=false;
+    return data;
+  }catch(e){
+    console.warn('loadContactsPage error:', e);
+    state.cLoading=false;
+    return null;
+  }
+}
+
+async function renderContacts(){
+  // Refresh tag filter dropdown (uses db.tags, no fetch)
+  const tf=document.getElementById('c-tag');
+  if(tf){const tv=tf.value;tf.innerHTML='<option value="">All Tags</option>'+db.tags.map(t=>'<option value="'+t.id+'"'+(tv===t.id?' selected':'')+'>'+esc(t.name)+'</option>').join('')}
+
+  const tbody=document.getElementById('ct-body');
+  if(tbody){
+    tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--main-text-muted)">Loading contacts...</td></tr>';
+  }
+
+  await loadContactsPage();
+
   try {
     if (state && state.user && state.user.id) {
-      var _filtered = filteredContacts();
       logSubaccountAudit('subaccount.contact.list', {
         metadata: {
-          count: _filtered.length,
+          count: db.contacts.length,
+          total: state.cTotal,
           search: state.cSearch || null,
           type_filter: state.cType || null,
           status_filter: state.cStatus || null,
           tag_filter: state.cTag || null,
-          page: state.cPage || 1
+          page: state.cPage || 1,
+          page_size: state.cPageSize,
+          client_ts: new Date().toISOString()
         }
       });
     }
   } catch(e){}
 
-  const tf=document.getElementById('c-tag');
-  if(tf){const tv=tf.value;tf.innerHTML='<option value="">All Tags</option>'+db.tags.map(t=>'<option value="'+t.id+'"'+(tv===t.id?' selected':'')+'>'+esc(t.name)+'</option>').join('')}
-  const filtered=filteredContacts(),pages=Math.ceil(filtered.length/PER_PAGE)||1;
-  if(state.cPage>pages)state.cPage=1;
-  const slice=filtered.slice((state.cPage-1)*PER_PAGE,state.cPage*PER_PAGE);
-  const totalActive=db.contacts.filter(function(c){return!c.archived}).length;
-  const sub=document.getElementById('contacts-sub');if(sub)sub.textContent=state.cShowArchived?(filtered.length+' archived contacts'):(filtered.length+' of '+totalActive+' contacts');
+  const slice=db.contacts;
+  const sub=document.getElementById('contacts-sub');
+  if(sub){
+    var subText;
+    if(state.cShowArchived){
+      subText=state.cTotal+' archived contacts';
+    } else if(state.cSearch || state.cType || state.cStatus || state.cTag){
+      subText=state.cTotal+' matching contacts';
+    } else {
+      subText=state.cTotal+' contacts';
+    }
+    sub.textContent=subText;
+  }
   const{col,dir}=state.cSort;
   const th=(label,key)=>'<th class="'+(col===key?'sort-'+dir:'')+'" onclick="sortC(\''+key+'\')">'+label+'</th>';
   const thead=document.getElementById('ct-head');
   if(thead)thead.innerHTML='<tr><th class="cb-col"><input type="checkbox" id="ct-select-all" onclick="toggleSelectAll(event)" title="Select all on page"></th>'+th('Name','name')+th('Business','company')+'<th>Phone</th><th>Email</th><th>Tags</th>'+th('Type','type')+'<th>Status</th><th style="width:50px"></th></tr>';
-  const tbody=document.getElementById('ct-body');if(!tbody)return;
-  if(!slice.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><h3>No contacts found</h3><p>Add a contact or adjust filters.</p></div></td></tr>';document.getElementById('contacts-pg').innerHTML='';return}
+  if(!tbody)return;
+  if(!slice.length){
+    var emptyMsg=(state.cSearch || state.cType || state.cStatus || state.cTag)
+      ? 'No contacts match your filters'
+      : (state.cShowArchived ? 'No archived contacts' : 'No contacts yet');
+    var emptyHint=(state.cSearch || state.cType || state.cStatus || state.cTag)
+      ? 'Try clearing filters or different search terms.'
+      : 'Add a contact to get started.';
+    tbody.innerHTML='<tr><td colspan="9"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><h3>'+emptyMsg+'</h3><p>'+emptyHint+'</p></div></td></tr>';
+    document.getElementById('contacts-pg').innerHTML='';
+    return;
+  }
   tbody.innerHTML=slice.map(c=>{
     const col_=avColor(c.name),tags=(c.tags||[]).slice(0,3).map(tid=>{const t=getTag(tid);return t?'<span class="tag-pill" style="background:'+t.color+'20;color:'+t.color+';border:1px solid '+t.color+'40">'+esc(t.name)+'</span>':''}).join('');
     var rowActions='';
     if(state.cShowArchived){
-      // Archive view: restore + permanent delete icons
       rowActions='<button class="icon-btn-xs" title="Restore" onclick="restoreOne(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/></svg></button>'
         +'<button class="icon-btn-xs" title="Delete permanently" style="color:#dc2626" onclick="deleteOnePermanent(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>';
     } else {
-      // Normal view: edit icon
       rowActions='<button class="icon-btn-xs" onclick="openContactModal(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
     }
     return'<tr onclick="openDrawer(\''+c.id+'\')"'+(c.archived?' style="opacity:.65"':'')+'>'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600;display:flex;align-items:center">'+esc(c.name)+_contactRowWarningBadge(c)+'</div></div></td>'+'<td style="font-size:13px">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(fmtPhoneDisplay(c.phone))+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()" style="white-space:nowrap">'+rowActions+'</td></tr>';
   }).join('');
-  renderPg('contacts-pg',state.cPage,pages,'cPg');
+  renderPg('contacts-pg',state.cPage,state.cTotalPages,'cPg');
   updateBulkBar();
   const hcb=document.getElementById('ct-select-all');
   if(hcb){const sl=slice.filter(c=>state.cSelected.has(c.id));hcb.checked=slice.length>0&&sl.length===slice.length;hcb.indeterminate=sl.length>0&&sl.length<slice.length;}
 }
 
-function sortC(col){if(state.cSort.col===col)state.cSort.dir=state.cSort.dir==='asc'?'desc':'asc';else state.cSort={col,dir:'asc'};renderContacts()}
-function onCSearch(v){state.cSearch=v;state.cPage=1;renderContacts()}
+function sortC(col){if(state.cSort.col===col)state.cSort.dir=state.cSort.dir==='asc'?'desc':'asc';else state.cSort={col,dir:'asc'};state.cPage=1;renderContacts()}
+
+var _cSearchDebounce=null;
+function onCSearch(v){
+  state.cSearch=v;
+  if(_cSearchDebounce)clearTimeout(_cSearchDebounce);
+  _cSearchDebounce=setTimeout(function(){state.cPage=1;renderContacts();},300);
+}
+
 function onCFilter(){state.cType=document.getElementById('c-type').value;state.cStatus=document.getElementById('c-status').value;state.cTag=document.getElementById('c-tag').value;state.cPage=1;renderContacts()}
 function cPg(p){state.cPage=p;renderContacts()}
+
+function onCPageSize(v){
+  var n=parseInt(v,10);
+  if(!isNaN(n) && [25,50,100,200].indexOf(n)>=0){
+    state.cPageSize=n;
+    state.cPage=1;
+    try{localStorage.setItem('msp_contacts_pagesize', String(n));}catch(e){}
+    renderContacts();
+  }
+}
 
 // =====================================================
 // DRAWER
@@ -11687,14 +11824,28 @@ async function fetchFromServer(opts){
   setSyncSt('syncing');
   try{
     // Contacts split out of data-load on May 13, 2026 to stay under Lambda's 6MB
-    // response cap. Fire both in parallel for zero added latency when included.
+    // response cap. Fire data-load, contact-list (legacy mode until Stage 2),
+    // and contact-name-map in parallel.
+    //
+    // contact-name-map gives us {id: {name, email}} for ALL contacts including
+    // archived. Used by getContactName() helper everywhere a contact needs to
+    // render by ID (calendar, appointments, payments, etc.).
+    //
+    // STAGE 2 NOTE: contact-list is called with ?legacy=1 here to preserve the
+    // pre-pagination behavior until the contacts panel is rewritten. After
+    // Stage 2, the contacts panel calls paginated contact-list directly and
+    // this boot path drops the contact-list fetch entirely.
     const fetches=[fetch(apiUrl('/api/subaccount/data-load'),{credentials:'include'})];
     if(includeContacts){
-      fetches.push(fetch(apiUrl('/api/subaccount/contact-list'),{credentials:'include'}));
+      // Stage 2: contacts panel calls loadContactsPage() on demand.
+      // contact-name-map gives us full ID-to-name coverage for display lookups
+      // (calendar, drawer, payments) at 600KB instead of 5MB+.
+      fetches.push(fetch(apiUrl('/api/subaccount/contact-name-map'),{credentials:'include'}));
     }
     const responses=await Promise.all(fetches);
     const r=responses[0];
-    const rc=includeContacts?responses[1]:null;
+    const rc=null;
+    const rnm=includeContacts?responses[1]:null;
     if(!r.ok){setSyncSt('error');return false;}
     const result=await r.json();
     // Merge contact-list result into the main result envelope so existing
@@ -11716,6 +11867,19 @@ async function fetchFromServer(opts){
       }catch(e){console.warn('contact-list parse failed:',e);}
     }else if(includeContacts){
       console.warn('contact-list fetch failed, status:',rc&&rc.status);
+    }
+    // Populate db.contactNameMap from the parallel fetch. Independent of
+    // contact-list, so even if contact-list fails or returns truncated data,
+    // the name map still gives us full coverage for display lookups.
+    if(includeContacts && rnm && rnm.ok){
+      try{
+        const nm=await rnm.json();
+        if(nm&&nm.map&&typeof nm.map==='object'){
+          db.contactNameMap=nm.map;
+        }
+      }catch(e){console.warn('contact-name-map parse failed:',e);}
+    }else if(includeContacts){
+      console.warn('contact-name-map fetch failed, status:',rnm&&rnm.status);
     }
     if(result&&result.data){
       const rem=result.data;
@@ -28240,31 +28404,67 @@ function toggleSelectContact(id,e){
   else state.cSelected.add(id);
   const cb=document.getElementById('cb-'+id);
   if(cb)cb.checked=state.cSelected.has(id);
-  const filtered=filteredContacts();
-  const slice=filtered.slice((state.cPage-1)*PER_PAGE,state.cPage*PER_PAGE);
+  // Server-side pagination: db.contacts IS the visible page
+  const visible=db.contacts||[];
   const hcb=document.getElementById('ct-select-all');
-  if(hcb){const sl=slice.filter(c=>state.cSelected.has(c.id));hcb.checked=slice.length>0&&sl.length===slice.length;hcb.indeterminate=sl.length>0&&sl.length<slice.length;}
+  if(hcb){
+    const sl=visible.filter(function(c){return state.cSelected.has(c.id);});
+    hcb.checked=visible.length>0 && sl.length===visible.length;
+    hcb.indeterminate=sl.length>0 && sl.length<visible.length;
+  }
   updateBulkBar();
 }
 
 function toggleSelectAll(e){
-  const filtered=filteredContacts();
-  const slice=filtered.slice((state.cPage-1)*PER_PAGE,state.cPage*PER_PAGE);
-  const allSelected=slice.every(c=>state.cSelected.has(c.id));
-  slice.forEach(c=>allSelected?state.cSelected.delete(c.id):state.cSelected.add(c.id));
+  // Server-side pagination: db.contacts IS the visible page
+  const visible=db.contacts||[];
+  const allSelected=visible.length>0 && visible.every(function(c){return state.cSelected.has(c.id);});
+  visible.forEach(function(c){
+    if(allSelected) state.cSelected.delete(c.id);
+    else state.cSelected.add(c.id);
+  });
   updateBulkBar();
   renderContacts();
 }
 
-function selectAllContacts(){
-  const filtered=filteredContacts();
-  filtered.forEach(c=>state.cSelected.add(c.id));
-  updateBulkBar();
-  renderContacts();
+// Select all contacts matching current filters (not just visible page).
+// Fetches all matching IDs from the backend contact-ids endpoint.
+async function selectAllContacts(){
+  var btn=document.querySelector('.bulk-select-all-btn');
+  if(btn){btn.disabled=true;btn.textContent='Loading...';}
+  var params=new URLSearchParams();
+  if(state.cShowArchived) params.set('archived','true');
+  if(state.cSearch && state.cSearch.length>=2) params.set('search', state.cSearch);
+  if(state.cType) params.set('type', state.cType);
+  if(state.cStatus) params.set('status', state.cStatus);
+  if(state.cTag) params.set('tag', state.cTag);
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/contact-ids?'+params.toString()), {credentials:'include'});
+    if(!r.ok){
+      if(typeof toast==='function')toast('Could not load matching contacts. Try again.','error');
+      if(btn){btn.disabled=false;btn.textContent='Select all';}
+      return;
+    }
+    var data=await r.json();
+    if(!data || !Array.isArray(data.ids)){
+      if(btn){btn.disabled=false;btn.textContent='Select all';}
+      return;
+    }
+    data.ids.forEach(function(id){ state.cSelected.add(id); });
+    state.cSelectedAllMatching=true;
+    updateBulkBar();
+    renderContacts();
+    if(typeof toast==='function')toast(data.ids.length+' contacts selected across all pages','success');
+  }catch(e){
+    console.warn('selectAllContacts failed:', e);
+    if(typeof toast==='function')toast('Could not load matching contacts. Try again.','error');
+    if(btn){btn.disabled=false;btn.textContent='Select all';}
+  }
 }
 
 function clearSelection(){
   state.cSelected.clear();
+  state.cSelectedAllMatching=false;
   updateBulkBar();
   renderContacts();
 }
@@ -28277,21 +28477,31 @@ function updateBulkBar(){
   const n=state.cSelected.size;
   if(n>0){
     bar.classList.remove('hidden');
-    if(countEl)countEl.textContent=n+' contact'+(n===1?'':'s')+' selected';
-    const filtered=filteredContacts();
-    const slice=filtered.slice((state.cPage-1)*PER_PAGE,state.cPage*PER_PAGE);
-    const allPageSel=slice.every(c=>state.cSelected.has(c.id));
+    if(countEl){
+      if(state.cSelectedAllMatching){
+        countEl.textContent=n+' contacts selected (all matching)';
+      } else {
+        countEl.textContent=n+' contact'+(n===1?'':'s')+' selected';
+      }
+    }
+    // Server-side pagination: use db.contacts (current page) and state.cTotal.
+    var visible=(db.contacts||[]);
+    var allPageSel=visible.length>0 && visible.every(function(c){return state.cSelected.has(c.id);});
     if(wrap){
-      if(allPageSel&&n<filtered.length){
+      if(state.cSelectedAllMatching){
         wrap.classList.remove('hidden');
-        wrap.innerHTML='<button class="bulk-select-all-btn" onclick="selectAllContacts()">Select all '+filtered.length+' contacts</button>';
-      }else{
+        wrap.innerHTML='<button class="bulk-select-all-btn" onclick="clearSelection()">Clear selection</button>';
+      } else if(allPageSel && state.cTotal > visible.length){
+        wrap.classList.remove('hidden');
+        wrap.innerHTML='<button class="bulk-select-all-btn" onclick="selectAllContacts()">Select all '+state.cTotal+' matching contacts</button>';
+      } else {
         wrap.classList.add('hidden');
       }
     }
   }else{
     bar.classList.add('hidden');
     if(wrap)wrap.classList.add('hidden');
+    state.cSelectedAllMatching=false;
   }
 }
 
