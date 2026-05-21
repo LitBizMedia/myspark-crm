@@ -14453,7 +14453,7 @@ function _renderSubsStats(){
   try{var stored=localStorage.getItem('myspark.subs.mrrView');if(stored==='average'||stored==='monthlyPlans'||stored==='effectiveMonthly')view=stored;}catch(e){}
   var mrrAverage=0,mrrMonthly=0,mrrEffective=0;
   var cntAverage=0,cntMonthly=0,cntEffective=0;
-  var active=0,trialing=0,suspended=0;
+  var active=0,trialing=0,paused=0,suspended=0;
   subs.forEach(function(s){
     if(s.status==='active'){
       active++;
@@ -14470,6 +14470,8 @@ function _renderSubsStats(){
       }
     }else if(s.status==='trialing'){
       trialing++;
+    }else if(s.status==='paused'){
+      paused++;
     }else if(s.status==='suspended'){
       suspended++;
     }
@@ -14508,6 +14510,7 @@ function _renderSubsStats(){
   el.innerHTML=mrrCard
     +card('Active',String(active),'var(--success-light)',active===1?'subscriber':'subscribers')
     +card('In Trial',String(trialing),'var(--warning-light)',trialing===1?'subscriber':'subscribers')
+    +card('Paused',String(paused),'var(--orange)',paused===1?'subscriber':'subscribers')
     +card('Needs Attention',String(suspended),suspended>0?'var(--danger-light)':null,'failed charges');
 }
 
