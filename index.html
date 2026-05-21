@@ -976,6 +976,16 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .conv-search-clear:hover{color:var(--main-text);background:var(--main-card-hover)}
 .conv-search-clear svg{width:14px;height:14px;display:block}
 .conv-search-input:placeholder-shown ~ .conv-search-clear{display:none}
+/* Contacts panel search clear-X. Matches conversations pattern. */
+/* Contacts search clear-X. Explicit dimensions so svg renders inside the button.
+   Button has fixed 22x22 size, svg centered via flex. Auto-hides when input empty. */
+.c-search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;background:none;border:none;cursor:pointer;padding:0;
+  color:var(--main-text-muted);font-size:18px;line-height:1;font-family:inherit;
+  display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm)}
+.c-search-clear:hover{color:var(--main-text);background:var(--main-card-hover)}
+.search-box input:placeholder-shown ~ .c-search-clear{display:none}
+.search-box input{padding-right:34px}
 .conv-stats{display:flex;align-items:center;gap:18px;flex-shrink:0;flex-wrap:wrap}
 .conv-stat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--main-text-muted);white-space:nowrap}
 .conv-stat svg{width:14px;height:14px;flex-shrink:0;color:var(--main-text-muted)}
@@ -1959,7 +1969,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
         </div>
         <div class="toolbar">
-          <div class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="c-search" type="text" placeholder="Search contacts..." oninput="onCSearch(this.value)"></div>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="c-search" type="text" placeholder="Search contacts..." oninput="onCSearch(this.value)">
+            <button class="c-search-clear" onclick="clearContactSearch()" aria-label="Clear search" tabindex="-1">×</button>
+          </div>
           <select class="filter-sel" id="c-type" onchange="onCFilter()"><option value="">All Types</option><option value="lead">Lead</option><option value="client">Client</option><option value="partner">Partner</option><option value="employee">Employee</option><option value="lapsed">Lapsed</option></select>
           <select class="filter-sel" id="c-status" onchange="onCFilter()"><option value="">All Status</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
           <select class="filter-sel" id="c-tag" onchange="onCFilter()"><option value="">All Tags</option></select>
@@ -2891,28 +2905,76 @@ let db={
 };
 
 // =====================================================
-// CONTACT DISPLAY HELPER
+// CONTACT DISPLAY HELPERS - THREE TIERS
 // =====================================================
-// getContactName(id) returns the display name of a contact by ID.
-// Reads from db.contactNameMap, populated on boot via /contact-name-map.
+// Pagination split contact data into three tiers. Pick the right helper for
+// the context to avoid stale data, missing fields, or unnecessary network calls.
 //
-// Use this instead of db.contacts.find(c=>c.id===id) for display purposes
-// since db.contacts only holds the current page after Stage 2 pagination.
+// TIER 1 - getContactDisplay(id):
+//   Returns slim record from db.contactNameMap (loaded once on boot).
+//   Fields: { name, email, phone, company, tags, archived, creditBalance, squareCustomerId }
+//   Use for: any view-only display of name, phone, email, company, tags.
+//   Sync, instant, works for ALL contacts including those not on the current page.
 //
-// Returns the contact's name string, or '' for falsy id, or
-// '(Unknown contact)' if the ID isn't in the map.
+// TIER 2 - getContact(id):
+//   Returns full record from db.contacts (current contacts panel page only).
+//   Fields: everything contactToFrontend returns (includes notes, allergies, warnings, creditHistory).
+//   Use for: contacts panel actions (archive, edit, etc.) where the contact is visible.
+//   Sync, but returns null if the contact isn't on the current page.
+//
+// TIER 3 - getContactFull(id):
+//   Async fetch via /api/subaccount/contact-open. Full PHI including notes, allergies, warnings.
+//   Use for: drawer, modals, and anything that touches PHI.
+//   Async (await), works for any contact in the subaccount.
+//
+// Convenience wrappers for the most common one-field lookups:
 function getContactName(id){
   if(!id)return '';
   var entry=db.contactNameMap&&db.contactNameMap[id];
   return entry?entry.name:'(Unknown contact)';
 }
 
-// getContactEmail(id) companion helper. Used by views that show
-// contact email next to name.
 function getContactEmail(id){
   if(!id)return '';
   var entry=db.contactNameMap&&db.contactNameMap[id];
   return entry?(entry.email||''):'';
+}
+
+// TIER 1: slim display record from boot-loaded name map.
+// Returns null if contact unknown.
+function getContactDisplay(id){
+  if(!id)return null;
+  var entry=db.contactNameMap&&db.contactNameMap[id];
+  if(!entry)return null;
+  // Return a shape that mirrors the legacy db.contacts entry for the fields
+  // we promise to provide. Callers can keep doing c.name, c.email, etc.
+  return {
+    id: id,
+    name: entry.name,
+    display_name: entry.name,
+    email: entry.email||null,
+    phone: entry.phone||null,
+    company: entry.company||null,
+    tags: entry.tags||[],
+    archived: !!entry.archived,
+    creditBalance: entry.creditBalance||0,
+    squareCustomerId: entry.squareCustomerId||null
+  };
+}
+
+// TIER 3: async full record. Uses /api/subaccount/contact-open.
+// Returns null on error.
+async function getContactFull(id){
+  if(!id)return null;
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/contact-open?id='+encodeURIComponent(id)),{credentials:'include'});
+    if(!r.ok)return null;
+    var data=await r.json();
+    return data&&data.contact?data.contact:null;
+  }catch(e){
+    console.warn('getContactFull failed for', id, e);
+    return null;
+  }
 }
 
 // Restore user's contacts page-size preference from localStorage on boot
@@ -3273,7 +3335,23 @@ function chipTextColor(bgHex){
 const isOverdue=d=>!!d&&d<todayStr();
 const t2m=t=>{const[h,m]=(t||'0:0').split(':').map(Number);return h*60+m};
 const getDK=ds=>DKEYS[new Date(ds+'T12:00:00').getDay()];
-const getContact=id=>{const c=db.contacts.find(c=>c.id===id);if(!c)return null;if(c.archived&&!state.cShowArchived)return null;return c;};
+// getContact: TIER 2 lookup. Returns full record from db.contacts (current
+// contacts panel page) if available, otherwise falls back to TIER 1 slim
+// record from name map. Callers expecting PHI fields (notes, allergies,
+// warnings, creditHistory) should use getContactFull(id) instead.
+const getContact=id=>{
+  if(!id)return null;
+  const c=db.contacts.find(c=>c.id===id);
+  if(c){
+    if(c.archived&&!state.cShowArchived)return null;
+    return c;
+  }
+  // Not on current page; return slim display record from name map.
+  const slim=getContactDisplay(id);
+  if(!slim)return null;
+  if(slim.archived&&!state.cShowArchived)return null;
+  return slim;
+};
 const getAppt=id=>db.appointments.find(a=>a.id===id);
 const getTask=id=>db.tasks.find(t=>t.id===id);
 const getTag=id=>db.tags.find(t=>t.id===id);
@@ -4556,9 +4634,13 @@ async function renderContacts(){
   const sub=document.getElementById('contacts-sub');
   if(sub){
     var subText;
+    // 'matching' only when a filter actually applies. Search needs 2+ chars
+    // for the backend to honor it; below that it's effectively no filter.
+    var hasActiveSearch = state.cSearch && state.cSearch.length >= 2;
+    var hasActiveFilter = hasActiveSearch || state.cType || state.cStatus || state.cTag;
     if(state.cShowArchived){
       subText=state.cTotal+' archived contacts';
-    } else if(state.cSearch || state.cType || state.cStatus || state.cTag){
+    } else if(hasActiveFilter){
       subText=state.cTotal+' matching contacts';
     } else {
       subText=state.cTotal+' contacts';
@@ -4605,6 +4687,17 @@ function onCSearch(v){
   state.cSearch=v;
   if(_cSearchDebounce)clearTimeout(_cSearchDebounce);
   _cSearchDebounce=setTimeout(function(){state.cPage=1;renderContacts();},300);
+}
+
+// Clear the contacts search input and reload page 1. Triggered by the
+// X button inside the search box.
+function clearContactSearch(){
+  var inp=document.getElementById('c-search');
+  if(inp)inp.value='';
+  state.cSearch='';
+  state.cPage=1;
+  if(_cSearchDebounce)clearTimeout(_cSearchDebounce);
+  renderContacts();
 }
 
 function onCFilter(){state.cType=document.getElementById('c-type').value;state.cStatus=document.getElementById('c-status').value;state.cTag=document.getElementById('c-tag').value;state.cPage=1;renderContacts()}
@@ -7491,7 +7584,7 @@ function _unlinkedSquareContactCount(){
 }
 
 function confirmDelContact(id){
-  var ct=db.contacts.find(function(x){return x.id===id;});
+  var ct=getContact(id);
   if(!ct)return;
   openModal('Archive Contact',
     '<p style="color:var(--text-muted)">Archive <strong style="color:var(--text)">'+ esc(ct.name)+'</strong>? They can be restored from the archive later.</p>',
@@ -8800,7 +8893,7 @@ function switchApptTab(tab){
 function openClassParticipantPayment(sessionId, contactId){
   var session=(db.classSessions||[]).find(function(x){return x.id===sessionId;});
   if(!session){toast('Session not found.','error');return;}
-  var contact=(db.contacts||[]).find(function(c){return c.id===contactId;});
+  var contact=getContact(contactId);
   if(!contact){toast('Contact not found.','error');return;}
 
   // Reset payment-form state so previous payments don't leak in
@@ -9034,7 +9127,7 @@ function _buildClassPayCtx(session, contactId, opts){
     }
   }
   var staff=instructorId?(db.users||[]).find(function(u){return u.id===instructorId;}):null;
-  var contact=(db.contacts||[]).find(function(c){return c.id===contactId;});
+  var contact=getContact(contactId);
   return {
     type:'class',
     linkage:{classSessionId:session.id, participantContactId:contactId},
@@ -11865,9 +11958,10 @@ async function fetchFromServer(opts){
           });
         }
       }catch(e){console.warn('contact-list parse failed:',e);}
-    }else if(includeContacts){
-      console.warn('contact-list fetch failed, status:',rc&&rc.status);
     }
+    // Note: contact-list is no longer fetched on boot (Stage 2 paginated
+    // the contacts panel). The rc variable is always null here. Block kept
+    // intact in case the legacy fetch path is needed for emergency rollback.
     // Populate db.contactNameMap from the parallel fetch. Independent of
     // contact-list, so even if contact-list fails or returns truncated data,
     // the name map still gives us full coverage for display lookups.
@@ -18951,8 +19045,7 @@ function convComposerSearch(q){
 }
 
 function convComposerSelectContact(contactId){
-  var contacts = db.contacts || [];
-  var c = contacts.find(function(x){ return x.id === contactId; });
+  var c = getContact(contactId);
   if(!c) return;
   _convComposer.contact = c;
   _convComposer.channel = null;
@@ -21115,7 +21208,7 @@ function _renderCardHTML(card){
 
   var who = '';
   if (card.contact_id) {
-    var contact = (db.contacts || []).find(function(c){ return c.id === card.contact_id; });
+    var contact = getContact(card.contact_id);
     if (contact) who = contact.display_name || contact.name || '';
   }
   if (!who && card.lead_name) who = card.lead_name;
@@ -21344,7 +21437,7 @@ function openCardModal(cardId, stageId){
 
   var contactInitialName = '';
   if (card && card.contact_id) {
-    var c = (db.contacts || []).find(function(x){ return x.id === card.contact_id; });
+    var c = getContact(card.contact_id);
     if (c) contactInitialName = c.display_name || c.name || c.email || '';
   }
 
@@ -22660,7 +22753,7 @@ function onSendContractContactSearch(){
 }
 
 function pickSendContractContact(contactId){
-  var c = (db.contacts || []).find(function(x){ return x.id === contactId; });
+  var c = getContact(contactId);
   if(!c) return;
   sendContractState.contactId = contactId;
 
@@ -22731,7 +22824,7 @@ function onSendContractExpirationChange(){
 function buildSendContractRealContext(){
   // Build sample-style context but using real values
   if(!sendContractState.contactId) return null;
-  var c = (db.contacts || []).find(function(x){ return x.id === sendContractState.contactId; });
+  var c = getContact(sendContractState.contactId);
   if(!c) return null;
 
   var ctx = {
@@ -28821,7 +28914,7 @@ async function confirmBulkDeletePermanent(){
 
 // Single-contact restore from archive view
 async function restoreOne(id){
-  const c=db.contacts.find(x=>x.id===id);
+  const c=getContact(id);
   if(!c) return;
   try{
     await contactArchive(id, true); // unarchive=true
@@ -28835,7 +28928,7 @@ async function restoreOne(id){
 
 // Single-contact permanent delete with confirm
 function deleteOnePermanent(id){
-  const c=db.contacts.find(x=>x.id===id);
+  const c=getContact(id);
   if(!c) return;
   state.modal={type:'del-perm',id:id};
   document.getElementById('modal-title').textContent='Delete Permanently';
@@ -28851,7 +28944,7 @@ function deleteOnePermanent(id){
 async function confirmDeleteOnePermanent(){
   const id=state.modal&&state.modal.id;
   if(!id) return;
-  const c=db.contacts.find(x=>x.id===id);
+  const c=getContact(id);
   try{
     await contactDelete(id);
     await fetchFromServer();
@@ -29357,7 +29450,7 @@ function txnRenderTable(){
   tbody.innerHTML = slice.map(function(p){
     var t = txnNorm(p);
     var staff = t.staffId ? getUserById(t.staffId) : null;
-    var contact = t.contactId ? db.contacts.find(function(c){ return c.id === t.contactId; }) : null;
+    var contact = t.contactId ? getContact(t.contactId) : null;
     var contactName = contact ? contact.name : (t.contactName || '');
     var firstItem = t.items.length ? esc(t.items[0].desc || t.items[0].name || '') : 'Payment';
     var moreItems = t.items.length > 1 ? ' <span style="color:var(--main-text-muted);font-size:11px">+' + (t.items.length - 1) + ' more</span>' : '';
@@ -29497,7 +29590,7 @@ function txnOpenDetail(id){
   if(!p) return;
   var t = txnNorm(p);
   var staff = t.staffId ? getUserById(t.staffId) : null;
-  var contact = t.contactId ? db.contacts.find(function(c){ return c.id === t.contactId; }) : null;
+  var contact = t.contactId ? getContact(t.contactId) : null;
   var contactName = contact ? contact.name : (t.contactName || 'Walk-in');
   var dt = new Date(t.createdAt);
   var dtFull = dt.toLocaleString('en-US', {month:'long', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
@@ -29815,7 +29908,7 @@ function txnExportCSV(){
   var rows = filtered.map(function(p){
     var t = txnNorm(p);
     var staff = t.staffId ? getUserById(t.staffId) : null;
-    var contact = t.contactId ? db.contacts.find(function(c){ return c.id===t.contactId; }) : null;
+    var contact = t.contactId ? getContact(t.contactId) : null;
     var dt = new Date(t.createdAt);
     var itemsList = t.items.map(function(i){ return i.desc||i.name||''; }).filter(Boolean).join('; ') || 'Payment';
     return [
@@ -29984,7 +30077,7 @@ function openCouponUsageLog(id){
   }else{
     body+='<div style="max-height:360px;overflow-y:auto">';
     [...log].reverse().forEach(function(entry){
-      var c=entry.contactId?db.contacts.find(function(x){return x.id===entry.contactId;}):null;
+      var c=entry.contactId?getContact(entry.contactId):null;
       var staff=entry.staffId?getUserById(entry.staffId):null;
       body+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">'
         +'<div><div style="font-size:13px;font-weight:500">'+esc(c?c.name:'Walk-in')+'</div>'
@@ -30783,7 +30876,7 @@ function gcRenderOrdersTable(){
   var orders=(db.giftCards||[]).filter(function(g){
     if(sf&&g.status!==sf)return false;
     if(q){
-      var c=g.contactId?db.contacts.find(function(x){return x.id===g.contactId;}):null;
+      var c=g.contactId?getContact(g.contactId):null;
       var name=(c?c.name:'').toLowerCase();
       var code=(g.code||'').toLowerCase();
       if(!code.includes(q)&&!name.includes(q))return false;
@@ -30801,7 +30894,7 @@ function gcRenderOrdersTable(){
     +'<th>Status</th><th style="width:40px"></th></tr></thead><tbody>';
   orders.forEach(function(g){
     var prod=g.productId?(db.giftCardProducts||[]).find(function(x){return x.id===g.productId;}):null;
-    var contact=g.contactId?db.contacts.find(function(x){return x.id===g.contactId;}):null;
+    var contact=g.contactId?getContact(g.contactId):null;
     var issuedBy=g.issuedById?getUserById(g.issuedById):null;
     var sc=statusColors[g.status]||statusColors.active;
     h+='<tr onclick="gcOpenOrderDetail(\''+g.id+'\')" style="cursor:pointer">'
@@ -30842,7 +30935,7 @@ function copyGcCode(code, btn){
 function gcOpenOrderDetail(id){
   var g=(db.giftCards||[]).find(function(x){return x.id===id;});if(!g)return;
   var prod=g.productId?(db.giftCardProducts||[]).find(function(x){return x.id===g.productId;}):null;
-  var contact=g.contactId?db.contacts.find(function(x){return x.id===g.contactId;}):null;
+  var contact=g.contactId?getContact(g.contactId):null;
   var issuedBy=g.issuedById?getUserById(g.issuedById):null;
   var sc={active:{bg:'rgba(52,211,153,.12)',color:'var(--success-light)',label:'Active'},partial:{bg:'rgba(245,158,11,.12)',color:'var(--warning-light)',label:'Partial'},redeemed:{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Redeemed'},refunded:{bg:'rgba(239,68,68,.12)',color:'var(--danger-light)',label:'Refunded'}}[g.status]||{bg:'rgba(107,33,234,.12)',color:'var(--purple-light)',label:'Active'};
   var body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
@@ -31349,15 +31442,15 @@ function spRenderClientPacksTable(){
   var packs=[...(db.sessionPacks||[])].sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');});
   if(filter)packs=packs.filter(function(p){return p.status===filter;});
   if(search)packs=packs.filter(function(p){
-    var c=p.contactId?(db.contacts||[]).find(function(x){return x.id===p.contactId;}):null;
-    var cName=c?c.name.toLowerCase():'';
+    var c=p.contactId?getContact(p.contactId):null;
+    var cName=c?(c.name||'').toLowerCase():'';
     var pName=(p.templateSnapshot&&p.templateSnapshot.name||'').toLowerCase();
     return cName.includes(search)||pName.includes(search);
   });
   if(!packs.length){el.innerHTML='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg><h3>No packs found</h3><p>Sell a session pack to see it here.</p></div>';return;}
   var h='<div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Pack</th><th>Sessions</th><th>Purchased</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>';
   packs.forEach(function(p){
-    var c=p.contactId?(db.contacts||[]).find(function(x){return x.id===p.contactId;}):null;
+    var c=p.contactId?getContact(p.contactId):null;
     var cName=c?c.name:'Walk-in';
     var pName=p.templateSnapshot&&p.templateSnapshot.name||'Session Pack';
     var remaining=p.sessionsTotal-(p.sessionsUsed||0);
@@ -31890,7 +31983,7 @@ function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcIn
     notes:notes,usageLog:[],createdAt:now_()
   });
   saveData();
-  var c=(db.contacts||[]).find(function(x){return x.id===contactId;});
+  var c=getContact(contactId);
   toast('Session pack issued to '+(c?c.name:'client')+'.','success');
   ['sp-sell-c-inp','sp-sell-notes','sp-sell-ref'].forEach(function(fid){var el=document.getElementById(fid);if(el)el.value='';});
   var cid=document.getElementById('sp-sell-c-id');if(cid)cid.value='';

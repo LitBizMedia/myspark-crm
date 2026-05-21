@@ -1,19 +1,22 @@
 // GET /api/subaccount/contact-name-map
 //
-// Returns a lightweight ID-to-name mapping for ALL contacts in the subaccount
-// (including archived). Used for display lookups in calendar, appointments,
-// payment history, and any view that needs a contact name without loading
-// full records.
+// Returns a lightweight display-tier mapping for ALL contacts in the subaccount
+// (including archived). Used by getContactDisplay(id) helper for any view that
+// needs to render contact info without loading full PHI records.
 //
 // Loaded once on boot, cached in memory, refreshed only on contact mutations.
 //
 // Response:
-//   { map: { contactId: { name, email } }, count }
+//   { map: { contactId: { name, email, phone, company, tags, archived, creditBalance, squareCustomerId } }, count }
 //
-// Performance: single SELECT, no joins, returns ~80 bytes per contact.
-// At 8000 contacts ~640KB; at 50000 contacts ~4MB. If a subaccount exceeds
-// 50000 contacts, this endpoint needs to be paginated too (defer until
-// any client reaches that scale).
+// Performance: single SELECT, no joins, returns ~150 bytes per contact.
+// At 8000 contacts ~1.2MB; at 30000 contacts ~4.5MB. If a subaccount exceeds
+// 30000 contacts, this endpoint needs to be paginated (defer until needed).
+//
+// History:
+//   May 21 2026 - Created with just {name, email}
+//   May 21 2026 - Expanded to include display-tier fields (phone, company,
+//                 tags, archived, creditBalance, squareCustomerId)
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
@@ -30,7 +33,9 @@ async function handler(req, res) {
 
   try {
     const result = await db.query(
-      `SELECT id, display_name, email
+      `SELECT
+         id, display_name, email, phone, company,
+         tags, archived, credit_balance, square_customer_id
        FROM contacts
        WHERE subaccount_id = $1`,
       [subaccountId]
@@ -38,10 +43,19 @@ async function handler(req, res) {
 
     const map = {};
     result.rows.forEach(r => {
-      map[r.id] = {
-        name: r.display_name,
-        email: r.email
-      };
+      // Build slim object, omit empty/null/zero/false values to keep payload tight.
+      // Frontend code reads via getContactDisplay() which handles missing keys safely.
+      const entry = { name: r.display_name };
+      if (r.email) entry.email = r.email;
+      if (r.phone) entry.phone = r.phone;
+      if (r.company) entry.company = r.company;
+      if (Array.isArray(r.tags) && r.tags.length) entry.tags = r.tags;
+      if (r.archived) entry.archived = true;
+      if (r.credit_balance != null && parseFloat(r.credit_balance) !== 0) {
+        entry.creditBalance = parseFloat(r.credit_balance);
+      }
+      if (r.square_customer_id) entry.squareCustomerId = r.square_customer_id;
+      map[r.id] = entry;
     });
 
     await logAudit({
