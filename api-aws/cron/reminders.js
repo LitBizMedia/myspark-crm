@@ -17,6 +17,7 @@ const { sendEmail } = require('./lib/mailgun');
 const { sendSms } = require('./lib/twilio');
 const { wrap } = require('./lib/lambda-adapter');
 const { apptTimestampInTz } = require('./lib/timezone');
+const { canSubaccountSendSms } = require('./lib/sms-gate');
 
 async function getCronSecret() {
   return secrets.getKey('myspark/cron/secret', 'CRON_SECRET');
@@ -71,13 +72,7 @@ async function getWidgetReminderConfig(subaccountId) {
   }
 }
 
-async function getSmsSettings(subaccountId) {
-  try {
-    return await db.findOne('sms_settings', { subaccount_id: subaccountId });
-  } catch (e) {
-    return null;
-  }
-}
+// getSmsSettings removed 2026-05-21: replaced by lib/sms-gate.canSubaccountSendSms helper.
 
 async function getTemplate(subaccountId, templateType) {
   try {
@@ -143,6 +138,8 @@ async function runReminders() {
 
   let emailsSent = 0;
   let smsSent = 0;
+  let emailsFailed = 0;
+  let smsFailed = 0;
   let skipped = 0;
 
   // Cache subaccount data per-tenant since multiple appts share a subaccount
@@ -299,16 +296,27 @@ async function runReminders() {
           templateType: 'appt-reminder',
           contactId: contact.id
         });
-        if (result.ok) { emailSentFlag = true; emailsSent++; }
+        if (result.ok) {
+          emailSentFlag = true;
+          emailsSent++;
+        } else {
+          emailsFailed++;
+          console.error('Email reminder send failed:', (result && result.error) || 'unknown');
+        }
       } catch (e) {
+        emailsFailed++;
         console.error('Email reminder error:', e.message);
       }
     }
 
     if (smsEnabled && contact.phone) {
-      try {
-        const smsSettings = await getSmsSettings(appt.subaccount_id);
-        if (smsSettings && smsSettings.enabled && smsSettings.campaign_status === 'approved') {
+      // TODO (future-ready): also check contact-level sms_opt_out flag once
+      // the contacts schema gains that field. Twilio handles STOP at the
+      // carrier level today, but a contact-side flag prevents wasted send
+      // attempts and gives staff visibility into who has opted out.
+      const gate = await canSubaccountSendSms(appt.subaccount_id, db);
+      if (gate.ok) {
+        try {
           const smsBody = 'Reminder: your ' + appt.title + ' is tomorrow'
             + (timeStr ? ' at ' + timeStr : '') + '. Reply STOP to opt out.';
           const result = await sendSms(slug, {
@@ -318,17 +326,27 @@ async function runReminders() {
             contactId: contact.id,
             purpose: 'transactional'
           });
-          if (result.ok) { smsSentFlag = true; smsSent++; }
+          if (result.ok) {
+            smsSentFlag = true;
+            smsSent++;
+          } else {
+            smsFailed++;
+            console.error('SMS reminder send failed:', (result && result.error) || 'unknown');
+          }
+        } catch (e) {
+          smsFailed++;
+          console.error('SMS reminder error:', e.message);
         }
-      } catch (e) {
-        console.error('SMS reminder error:', e.message);
+      } else {
+        // Gate denied is expected when a tenant is not A2P-live. Logged for visibility.
+        console.log('SMS gate denied for ' + appt.subaccount_id + ': ' + gate.reason + (gate.status ? ' (status=' + gate.status + ')' : ''));
       }
     }
 
     await logReminder(appt.subaccount_id, appt.id, emailSentFlag, smsSentFlag);
   }
 
-  return { success: true, emailsSent, smsSent, skipped };
+  return { success: true, emailsSent, smsSent, emailsFailed, smsFailed, failed: emailsFailed + smsFailed, skipped };
 }
 
 async function httpHandler(req, res) {
