@@ -969,9 +969,13 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .conv-actionbar{display:flex;align-items:center;gap:14px;padding:12px 24px;background:var(--main-card);border-bottom:1px solid var(--main-border);flex-shrink:0;flex-wrap:wrap}
 .conv-search-wrap{position:relative;flex:1 1 320px;min-width:200px;max-width:480px}
 .conv-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--main-text-muted);pointer-events:none}
-.conv-search-input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input);color:var(--main-text);font-size:13px;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+.conv-search-input{width:100%;padding:8px 36px 8px 34px;border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input);color:var(--main-text);font-size:13px;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
 .conv-search-input:focus{outline:none;border-color:var(--purple);box-shadow:var(--focus-ring)}
 .conv-search-input::placeholder{color:var(--text-placeholder)}
+.conv-search-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:var(--main-text-muted);display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm)}
+.conv-search-clear:hover{color:var(--main-text);background:var(--main-card-hover)}
+.conv-search-clear svg{width:14px;height:14px;display:block}
+.conv-search-input:placeholder-shown ~ .conv-search-clear{display:none}
 .conv-stats{display:flex;align-items:center;gap:18px;flex-shrink:0;flex-wrap:wrap}
 .conv-stat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--main-text-muted);white-space:nowrap}
 .conv-stat svg{width:14px;height:14px;flex-shrink:0;color:var(--main-text-muted)}
@@ -2135,6 +2139,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <div class="conv-search-wrap">
               <svg class="conv-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input type="text" id="conv-search-input" class="conv-search-input" placeholder="Search by contact or message" oninput="convOnSearchInput(this.value)" autocomplete="off" />
+              <button class="conv-search-clear" onclick="convSearchClear()" aria-label="Clear search" tabindex="-1">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
             <div class="conv-stats" id="conv-stats">
               <div class="conv-stat" title="Open conversations awaiting your reply">
@@ -18740,13 +18747,19 @@ function convComposerSearch(q){
     results.innerHTML = '';
     return;
   }
+  var qDigits = q.replace(/\D/g, '');
   var contacts = db.contacts || [];
   var matches = [];
   for(var i = 0; i < contacts.length && matches.length < 20; i++){
     var c = contacts[i];
     var name = _convComposerContactName(c);
     var hay = [name, c.email, c.phone].filter(Boolean).join(' ').toLowerCase();
-    if(hay.indexOf(q) !== -1) matches.push(c);
+    var matched = hay.indexOf(q) !== -1;
+    if(!matched && qDigits.length >= 3 && c.phone){
+      var phoneDigits = String(c.phone).replace(/\D/g, '');
+      if(phoneDigits.indexOf(qDigits) !== -1) matched = true;
+    }
+    if(matched) matches.push(c);
   }
   if(matches.length === 0){
     results.innerHTML = '<div class="conv-composer-empty">No contacts match.</div>';
@@ -18936,6 +18949,16 @@ async function convComposerSubmit(){
       return;
     }
     var newConvId = data.conversation_id;
+    // Optimistic stat bump for instant feedback. Next convFetchList ->
+    // convRenderList -> _convUpdateStats will sync with real data.
+    var sentEl = document.getElementById('conv-stat-sent');
+    if(sentEl){
+      var sentNow = parseInt(sentEl.textContent || '0', 10);
+      if(!isNaN(sentNow)){
+        sentEl.textContent = String(sentNow + 1);
+        sentEl.classList.remove('muted');
+      }
+    }
     convCloseComposerForce();
     convFetchList();
     if(newConvId){
@@ -18975,12 +18998,18 @@ function _convFiltered(){
   var s = _convState();
   var arr = db.conversations || [];
   var q = (s.searchQuery || '').toLowerCase().trim();
+  var qDigits = q.replace(/\D/g, '');
   return arr.filter(function(c){
     if(s.filterChannel !== 'all' && c.channel !== s.filterChannel) return false;
     if(s.filterStatus && c.status !== s.filterStatus) return false;
     if(q){
       var hay = [c.contactName, c.contactEmail, c.contactPhone, c.lastMessagePreview].filter(Boolean).join(' ').toLowerCase();
-      if(hay.indexOf(q) === -1) return false;
+      var matched = hay.indexOf(q) !== -1;
+      if(!matched && qDigits.length >= 3 && c.contactPhone){
+        var phoneDigits = String(c.contactPhone).replace(/\D/g, '');
+        if(phoneDigits.indexOf(qDigits) !== -1) matched = true;
+      }
+      if(!matched) return false;
     }
     return true;
   });
@@ -19004,6 +19033,15 @@ function _convUpdateCounts(){
 function convOnSearchInput(v){
   _convState().searchQuery = v || '';
   convRenderList();
+}
+
+function convSearchClear(){
+  var input = document.getElementById('conv-search-input');
+  if(!input) return;
+  input.value = '';
+  _convState().searchQuery = '';
+  convRenderList();
+  input.focus();
 }
 
 function _convFmtWait(ms){
