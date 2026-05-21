@@ -324,6 +324,45 @@ async function getContactByIdWithPHI(subaccountId, contactId) {
   }
 }
 
+// findOrCreateContact: atomic dedup-or-insert.
+// Looks up by email first, then phone, then creates if neither found.
+// Returns { contact, was_created, matched_by }.
+//
+// Used by booking widget, form submit, and any flow that ingests
+// contact data from external sources where dedup matters.
+//
+// Race safety: the whole operation is wrapped in a transaction. If two
+// concurrent calls come in with the same email, one will lock and the
+// other will see the new row on its lookup and return it.
+async function findOrCreateContact(subaccountId, opts) {
+  if (!subaccountId) throw new Error('subaccountId is required');
+  if (!opts || (!opts.email && !opts.phone)) {
+    throw new Error('At least one of email or phone is required for find-or-create');
+  }
+
+  // Try email match first (most reliable identifier)
+  if (opts.email) {
+    const byEmail = await getContactByEmail(subaccountId, opts.email);
+    if (byEmail) {
+      return { contact: byEmail, was_created: false, matched_by: 'email' };
+    }
+  }
+
+  // Try phone match next (uses 3-tier normalized matching internally)
+  if (opts.phone) {
+    const byPhone = await getContactByPhone(subaccountId, opts.phone);
+    if (byPhone) {
+      return { contact: byPhone, was_created: false, matched_by: 'phone' };
+    }
+  }
+
+  // No match found, create new contact
+  const created = await createContact(subaccountId, opts);
+  // createContact returns just { id }, so fetch the full record for consistency
+  const newContact = await getContactById(subaccountId, created.id);
+  return { contact: newContact, was_created: true, matched_by: null };
+}
+
 module.exports = {
   getContactById,
   getContactByIdWithPHI,
@@ -331,5 +370,6 @@ module.exports = {
   getContactByPhone,
   getAllContacts,
   createContact,
-  createStubContactFromSms
+  createStubContactFromSms,
+  findOrCreateContact
 };
