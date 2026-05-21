@@ -8,7 +8,10 @@
 //   search        - fuzzy match across name, email, phone (min 2 chars)
 //   sort          - created_desc | created_asc | name_asc | name_desc | email_asc
 //   archived      - false (default) | true | all
-//   legacy        - 1 = return all contacts in old shape (emergency fallback)
+//   type          - filter by contact type (lead | client | partner | employee | lapsed)
+//   status        - filter by status (active | inactive)
+//   tag           - filter by tag id (must be present in tags JSONB array)
+// (legacy=1 emergency fallback removed in Stage 3 cleanup, May 21 2026)
 //
 // Response shape:
 //   { contacts, page, page_size, total, total_pages, has_next, has_prev }
@@ -118,12 +121,6 @@ async function handler(req, res) {
   const subaccountId = auth.subaccount_id;
   const qs = req.query || {};
 
-  // EMERGENCY FALLBACK: legacy=1 returns all contacts in old shape.
-  // Stage 2 frontend rollout safety net. Removed in Stage 3.
-  if (qs.legacy === '1') {
-    return handleLegacy(req, res, subaccountId, auth);
-  }
-
   // Parse pagination params
   let page = parseInt(qs.page, 10);
   if (!Number.isFinite(page) || page < 1) page = 1;
@@ -149,6 +146,19 @@ async function handler(req, res) {
   else if (archivedRaw === 'all') archivedFilter = '';
   else archivedFilter = 'AND archived = FALSE';
 
+  // Parse type filter (whitelist)
+  const TYPE_WHITELIST = ['lead', 'client', 'partner', 'employee', 'lapsed'];
+  const typeRaw = (qs.type || '').toLowerCase().trim();
+  const typeFilter = TYPE_WHITELIST.includes(typeRaw) ? typeRaw : null;
+
+  // Parse status filter (whitelist)
+  const STATUS_WHITELIST = ['active', 'inactive'];
+  const statusRaw = (qs.status || '').toLowerCase().trim();
+  const statusFilter = STATUS_WHITELIST.includes(statusRaw) ? statusRaw : null;
+
+  // Parse tag filter (just a string, validated against JSONB containment)
+  const tagFilter = (qs.tag || '').trim() || null;
+
   // Build WHERE clause
   const params = [subaccountId];
   let whereSearch = '';
@@ -157,7 +167,25 @@ async function handler(req, res) {
     whereSearch = `AND LOWER(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') || ' ' || COALESCE(email, '') || ' ' || COALESCE(phone, '') || ' ' || COALESCE(display_name, '')) LIKE $${params.length}`;
   }
 
-  const whereClause = `WHERE subaccount_id = $1 ${archivedFilter} ${whereSearch}`;
+  let whereType = '';
+  if (typeFilter) {
+    params.push(typeFilter);
+    whereType = `AND type = $${params.length}`;
+  }
+
+  let whereStatus = '';
+  if (statusFilter) {
+    params.push(statusFilter);
+    whereStatus = `AND status = $${params.length}`;
+  }
+
+  let whereTag = '';
+  if (tagFilter) {
+    params.push(JSON.stringify([tagFilter]));
+    whereTag = `AND tags @> $${params.length}::jsonb`;
+  }
+
+  const whereClause = `WHERE subaccount_id = $1 ${archivedFilter} ${whereSearch} ${whereType} ${whereStatus} ${whereTag}`;
 
   // Add pagination params
   params.push(pageSize);
@@ -178,7 +206,7 @@ async function handler(req, res) {
       ),
       db.query(
         `SELECT COUNT(*)::int AS total FROM contacts ${whereClause}`,
-        params.slice(0, search ? 2 : 1)
+        params.slice(0, params.length - 2)
       )
     ]);
 
@@ -226,6 +254,9 @@ async function handler(req, res) {
         has_search: !!search,
         search_length: search ? search.length : 0,
         archived_filter: archivedRaw,
+        type_filter: typeFilter,
+        status_filter: statusFilter,
+        has_tag_filter: !!tagFilter,
         total: total,
         returned: contacts.length
       }
@@ -247,69 +278,8 @@ async function handler(req, res) {
 }
 
 // Legacy mode: returns the pre-pagination shape with the 5MB truncation guardrail.
-// Used as a Stage 2 rollout safety net via ?legacy=1.
-async function handleLegacy(req, res, subaccountId, auth) {
-  try {
-    const [result, warnAgg] = await Promise.all([
-      db.query(
-        `SELECT ${SELECT_COLS}
-         FROM contacts
-         WHERE subaccount_id = $1
-         ORDER BY created_at ASC`,
-        [subaccountId]
-      ),
-      db.query(
-        `SELECT contact_id, severity, COUNT(*)::int AS cnt
-         FROM contact_warnings
-         WHERE subaccount_id = $1
-         GROUP BY contact_id, severity`,
-        [subaccountId]
-      )
-    ]);
-
-    const warningCountsMap = {};
-    warnAgg.rows.forEach(r => {
-      if (!warningCountsMap[r.contact_id]) warningCountsMap[r.contact_id] = { critical: 0, warning: 0, info: 0 };
-      if (r.severity in warningCountsMap[r.contact_id]) warningCountsMap[r.contact_id][r.severity] = r.cnt;
-    });
-    result.rows.forEach(row => {
-      row.warning_counts = warningCountsMap[row.id] || { critical: 0, warning: 0, info: 0 };
-    });
-
-    let contacts = result.rows.map(contactToFrontend);
-    const total = contacts.length;
-    const MAX_BYTES = 5 * 1024 * 1024;
-    let serialized = JSON.stringify({ contacts });
-    let truncated = false;
-    if (Buffer.byteLength(serialized) > MAX_BYTES) {
-      let lo = 0, hi = contacts.length;
-      while (lo < hi) {
-        const mid = (lo + hi + 1) >> 1;
-        const test = JSON.stringify({ contacts: contacts.slice(0, mid) });
-        if (Buffer.byteLength(test) <= MAX_BYTES) lo = mid;
-        else hi = mid - 1;
-      }
-      contacts = contacts.slice(0, lo);
-      truncated = true;
-    }
-
-    await logAudit({
-      req,
-      actorType: 'subaccount',
-      actorId: auth.user_id,
-      actorUsername: auth.username,
-      actorRole: auth.role,
-      action: 'subaccount.contact.bulk_list',
-      targetType: 'bulk_data',
-      targetSubaccountId: subaccountId,
-      metadata: { contact_count: contacts.length, total_in_db: total, truncated: truncated, mode: 'legacy' }
-    });
-
-    return res.status(200).json({ contacts, total, truncated });
-  } catch (err) {
-    console.error('contact-list legacy error:', err);
-    return res.status(500).json({ error: 'Failed to load contacts', detail: err.message });
-  }
-}
+// handleLegacy removed May 21 2026 (Stage 3 cleanup). The legacy=1 query
+// param was a safety net during Stage 2 pagination rollout. With pickers,
+// dedup, and display all migrated, the fallback is no longer needed.
 
 exports.handler = wrap(handler);

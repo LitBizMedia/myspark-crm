@@ -4590,27 +4590,9 @@ function _renderDashActivity(scope, uid, isAdminish){
 // =====================================================
 // CONTACTS
 // =====================================================
-function filteredContacts(){
-  if(state.cShowArchived){return _filteredContacts().filter(c=>c.archived);}
-  return _filteredContacts().filter(c=>!c.archived);
-}
-function _filteredContacts(){
-  const{cSearch:q,cType:type,cStatus:status,cTag:tag}=state;
-  let list=db.contacts.filter(c=>{
-    if(q){const ql=q.toLowerCase();if(![c.name,c.email,c.phone,c.company,c.title].some(f=>(f||'').toLowerCase().includes(ql)))return false}
-    if(type&&c.type!==type)return false;
-    if(status&&c.status!==status)return false;
-    if(tag&&!(c.tags||[]).includes(tag))return false;
-    return true;
-  });
-  const{col,dir}=state.cSort;
-  list.sort((a,b)=>{
-    const av=(col==='name'?a.name:col==='company'?a.company:col==='type'?a.type:a.name)||'';
-    const bv=(col==='name'?b.name:col==='company'?b.company:col==='type'?b.type:b.name)||'';
-    return dir==='asc'?av.localeCompare(bv):bv.localeCompare(av);
-  });
-  return list;
-}
+// filteredContacts() and _filteredContacts() removed May 21 2026 after
+// Stage 2 pagination. db.contacts is now just the current page; filtering
+// and sorting happen server-side via loadContactsPage().
 
 // Map UI sort state to backend sort param
 function _cSortParam(){
@@ -24611,18 +24593,38 @@ function fbLinkSub(subId){
   fbAutoLinkSub(sub);
 }
 
-function fbAutoLinkSub(sub){
+async function fbAutoLinkSub(sub){
   if(!sub||!sub.data)return;
   // Try to find email in submission data
   const form=(db.forms||[]).find(f=>f.id===sub.formId);if(!form)return;
   const emailField=form.pages.reduce((arr,pg)=>arr.concat(pg.fields),[]).find(fd=>fd.type==='email');
   const email=emailField&&sub.data[emailField.id];
-  if(email){
-    const existing=db.contacts.find(c=>(c.email||'').toLowerCase()===email.toLowerCase());
-    if(existing){sub.contactId=existing.id;saveData();toast('Linked to '+existing.name,'success');return;}
+  if(!email){
+    toast('No matching contact found.','warn');
+    return;
   }
-  // Manual link path: server-side auto-create handles this now via the
-  // form-submit Lambda. If no contact matched, just toast and bail.
+  // Server search by email (Stage 2 Step 5: db.contacts only holds the
+  // current page after pagination, so client-side find would miss off-page
+  // contacts and create false-negative dupes).
+  try{
+    const r=await fetch(apiUrl('/api/subaccount/contact-search?q='+encodeURIComponent(email)+'&limit=10'),{credentials:'include'});
+    if(r.ok){
+      const data=await r.json();
+      const matches=(data&&data.matches)||[];
+      // Filter to exact email match only (pg_trgm is fuzzy)
+      const target=email.toLowerCase().trim();
+      const existing=matches.find(function(m){return (m.email||'').toLowerCase().trim()===target;});
+      if(existing){
+        sub.contactId=existing.id;
+        saveData();
+        toast('Linked to '+existing.name,'success');
+        return;
+      }
+    }
+  }catch(e){
+    console.warn('fbAutoLinkSub search failed:',e);
+  }
+  // No match found.
   toast('No matching contact found.','warn');
 }
 
@@ -36540,7 +36542,7 @@ function importBuildRow(row){
   return out;
 }
 
-function importRunPreview(){
+async function importRunPreview(){
   // Build each row with its source-row index attached, so any failure during
   // import can dump the FULL original CSV row (including unmapped columns)
   // into the download-failures CSV. Lossless retry.
@@ -36549,21 +36551,76 @@ function importRunPreview(){
     built._rowIndex=idx;
     return built;
   });
-  // Dedup on email. The contacts.external_id column exists in the DB
-  // schema (for future cross-system sync) but is not exposed in the import UI.
-  var emailIndex={};
-  db.contacts.forEach(function(c){
-    if(c.email)emailIndex[c.email.toLowerCase()]=c;
+
+  // Dedup on email via backend (Stage 2 Step 5: db.contacts only holds the
+  // current contacts panel page after pagination, so a local index would
+  // miss off-page emails and create false-negative dupes).
+  //
+  // Collect all unique emails from mapped rows, then bulk-check via API.
+  // For large imports (> 2000 emails), batch into chunks of 2000.
+  var emailsToCheck=[];
+  var emailSet={};
+  mapped.forEach(function(m){
+    if(m.email){
+      var k=m.email.toLowerCase().trim();
+      if(k && !emailSet[k]){
+        emailSet[k]=true;
+        emailsToCheck.push(m.email);
+      }
+    }
   });
+
+  // Show loading state in the preview area
+  var prevWrap=document.getElementById('import-review');
+  if(prevWrap){
+    prevWrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--main-text-muted)"><div style="font-size:14px;margin-bottom:8px">Checking for duplicates...</div><div style="font-size:12px">Looking up '+emailsToCheck.length+' email'+(emailsToCheck.length===1?'':'s')+' against existing contacts</div></div>';
+  }
+
+  var emailIndex={};
+  if(emailsToCheck.length){
+    var BATCH=2000;
+    try{
+      for(var i=0; i<emailsToCheck.length; i+=BATCH){
+        var batch=emailsToCheck.slice(i, i+BATCH);
+        var r=await fetch(apiUrl('/api/subaccount/contact-bulk-check-emails'),{
+          method:'POST',
+          credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({emails:batch})
+        });
+        if(!r.ok){
+          var errTxt=await r.text();
+          console.error('bulk-check-emails failed:', r.status, errTxt);
+          toast('Could not check duplicates. Try again in a moment.','error');
+          return;
+        }
+        var data=await r.json();
+        // Merge into emailIndex. Server returns {existing:{lcEmail:{id,name,email}}}
+        if(data && data.existing){
+          Object.keys(data.existing).forEach(function(k){
+            emailIndex[k]=data.existing[k];
+          });
+        }
+      }
+    }catch(e){
+      console.error('bulk-check-emails error:',e);
+      toast('Network error during duplicate check. Try again.','error');
+      return;
+    }
+  }
+
   importState.dupes=[];
   importState.newContacts=[];
   mapped.forEach(function(m){
-    if(m.email&&emailIndex[m.email.toLowerCase()]){
-      m._existingId=emailIndex[m.email.toLowerCase()].id;
-      importState.dupes.push(m);
-    }else{
-      importState.newContacts.push(m);
+    if(m.email){
+      var lk=m.email.toLowerCase().trim();
+      if(emailIndex[lk]){
+        m._existingId=emailIndex[lk].id;
+        importState.dupes.push(m);
+        return;
+      }
     }
+    importState.newContacts.push(m);
   });
   importRenderReview();
 }
