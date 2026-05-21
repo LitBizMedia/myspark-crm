@@ -2977,6 +2977,70 @@ async function getContactFull(id){
   }
 }
 
+// =====================================================
+// CONTACT PICKER HELPER (Stage 2 Step 4)
+// =====================================================
+var _pickerAbort = null;
+var _pickerDebounce = null;
+
+function _contactPickerSearch(query, opts, onResults){
+  if(!opts)opts={};
+  var limit = opts.limit || 8;
+  var minChars = opts.minChars != null ? opts.minChars : 2;
+  var excludeIds = opts.excludeIds || [];
+
+  if(_pickerDebounce)clearTimeout(_pickerDebounce);
+  if(_pickerAbort){
+    try{_pickerAbort.abort();}catch(e){}
+    _pickerAbort = null;
+  }
+
+  var q = (query || '').trim();
+  if(q.length < minChars){
+    onResults([], false);
+    return;
+  }
+
+  _pickerDebounce = setTimeout(function(){
+    _pickerAbort = new AbortController();
+    var fetchLimit = limit + excludeIds.length;
+    if(fetchLimit > 50) fetchLimit = 50;
+    var url = apiUrl('/api/subaccount/contact-search?q=' + encodeURIComponent(q) + '&limit=' + fetchLimit);
+    fetch(url, { credentials: 'include', signal: _pickerAbort.signal })
+      .then(function(r){
+        if(!r.ok) return null;
+        return r.json();
+      })
+      .then(function(data){
+        if(!data || !Array.isArray(data.matches)){
+          onResults([], false);
+          return;
+        }
+        var filtered = data.matches;
+        if(excludeIds.length){
+          var excl = excludeIds;
+          filtered = filtered.filter(function(m){ return excl.indexOf(m.id) < 0; });
+        }
+        filtered = filtered.slice(0, limit).map(function(m){
+          var nm = db.contactNameMap && db.contactNameMap[m.id];
+          return {
+            id: m.id,
+            name: m.name,
+            email: m.email || (nm && nm.email) || null,
+            phone: m.phone || (nm && nm.phone) || null,
+            company: (nm && nm.company) || null
+          };
+        });
+        onResults(filtered, !!data.truncated);
+      })
+      .catch(function(e){
+        if(e.name === 'AbortError') return;
+        console.warn('contact-search failed:', e);
+        onResults([], false);
+      });
+  }, 200);
+}
+
 // Restore user's contacts page-size preference from localStorage on boot
 try {
   var _saved_ps = localStorage.getItem('msp_contacts_pagesize');
@@ -6674,12 +6738,22 @@ function switchPayTab(tab){
 
 function posCSearch(v){
   const dd=document.getElementById('pos-c-drop');
-  const activeContacts=db.contacts.filter(function(c){return!c.archived});
-  if(!v.trim()){dd.classList.add('hidden');return}
-  const m=activeContacts.filter(c=>(c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase())).slice(0,8);
-  if(!m.length){dd.innerHTML='<div class="ss-empty">No contacts found</div>';}
-  else dd.innerHTML=m.map(c=>'<div class="ss-opt" onclick="selPosC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>').join('');
+  if(!dd)return;
+  if(!(v||'').trim()){dd.classList.add('hidden');return}
+  dd.innerHTML='<div class="ss-empty">Searching...</div>';
   dd.classList.remove('hidden');
+  _contactPickerSearch(v, {limit:8}, function(matches, truncated){
+    if(!matches.length){
+      dd.innerHTML='<div class="ss-empty">No contacts found</div>';
+    } else {
+      var html = matches.map(function(c){
+        return '<div class="ss-opt" onclick="selPosC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';
+      }).join('');
+      if(truncated) html += '<div class="ss-empty" style="font-style:italic">Refine search for more results</div>';
+      dd.innerHTML = html;
+    }
+    dd.classList.remove('hidden');
+  });
 }
 
 function selPosC(id,name){
@@ -7310,12 +7384,33 @@ function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,val){
   return'<div class="ss-wrap" id="'+wrapId+'"><input class="ss-inp" id="'+inputId+'" type="text" placeholder="'+esc(placeholder)+'" value="'+esc(iv)+'" oninput="'+sf+'" onclick="'+sf+'" autocomplete="off"><input type="hidden" id="'+hiddenId+'" value="'+esc(val||'')+'"><div class="ss-drop hidden" id="'+ddId+'"></div></div>';
 }
 function ssFilter(inputId,hiddenId,ddId,v){
-  const dd=document.getElementById(ddId);if(!v&&!document.getElementById(inputId).value){dd.classList.add('hidden');return}
-  const m=db.contacts.filter(c=>!c.archived&&((c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase()))).slice(0,8);
-  if(!m.length)dd.innerHTML='<div class="ss-empty">No contacts found</div>';
-  else dd.innerHTML='<div class="ss-opt" onclick="ssSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\'\',\'\')" style="color:var(--text-muted);font-style:italic">None</div>'+m.map(c=>'<div class="ss-opt" onclick="ssSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>').join('');
+  const dd=document.getElementById(ddId);
+  if(!dd)return;
+  const inp=document.getElementById(inputId);
+  const inputVal = inp ? inp.value : '';
+  if(!(v||'').trim() && !inputVal){dd.classList.add('hidden');return}
+  var noneOpt = '<div class="ss-opt" onclick="ssSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\'\',\'\')" style="color:var(--text-muted);font-style:italic">None</div>';
+  if((v||'').trim().length < 2){
+    dd.innerHTML = noneOpt + '<div class="ss-empty" style="font-size:11px">Type 2+ chars to search</div>';
+    dd.classList.remove('hidden');
+    setTimeout(function(){document.addEventListener('click', function f(){dd.classList.add('hidden');document.removeEventListener('click',f);}, {capture:true});}, 10);
+    return;
+  }
+  dd.innerHTML = noneOpt + '<div class="ss-empty">Searching...</div>';
   dd.classList.remove('hidden');
-  setTimeout(()=>document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f)},{capture:true}),10);
+  _contactPickerSearch(v, {limit:8}, function(matches, truncated){
+    if(!matches.length){
+      dd.innerHTML = noneOpt + '<div class="ss-empty">No contacts found</div>';
+    } else {
+      var optsHtml = matches.map(function(c){
+        return '<div class="ss-opt" onclick="ssSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';
+      }).join('');
+      if(truncated) optsHtml += '<div class="ss-empty" style="font-style:italic">Refine search for more results</div>';
+      dd.innerHTML = noneOpt + optsHtml;
+    }
+    dd.classList.remove('hidden');
+    setTimeout(function(){document.addEventListener('click', function f(){dd.classList.add('hidden');document.removeEventListener('click',f);}, {capture:true});}, 10);
+  });
 }
 
 function ssSelect(inputId,hiddenId,ddId,id,name){
@@ -8149,36 +8244,36 @@ function _apptGroupClientFilter(v){
   var g = state.apptGroup;
   if(!g) return;
   var existingIds = g.clients.map(function(c){return c.contact_id;});
-  var query = (v||'').toLowerCase();
-  var matches = (db.contacts||[])
-    .filter(function(c){
-      if(c.archived) return false;
-      if(existingIds.indexOf(c.id) >= 0) return false;
-      if(!query) return true;
-      return (c.name||'').toLowerCase().indexOf(query) >= 0
-        || (c.email||'').toLowerCase().indexOf(query) >= 0
-        || (c.company||'').toLowerCase().indexOf(query) >= 0;
-    })
-    .slice(0, 8);
-  if(!matches.length){
-    dd.innerHTML = '<div class="ss-empty">No contacts found</div>';
-  } else {
-    dd.innerHTML = matches.map(function(c){
-      var meta = c.email || c.company || '';
-      return '<div class="ss-opt" onclick="_apptGroupClientPick(\''+c.id+'\')">'
-        + '<div style="font-weight:600">' + esc(c.name||'Unknown') + '</div>'
-        + (meta ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(meta) + '</div>' : '')
-        + '</div>';
-    }).join('');
+  if(!(v||'').trim()){
+    dd.innerHTML = '<div class="ss-empty" style="font-size:11px">Type 2+ chars to search for a client</div>';
+    dd.classList.remove('hidden');
+    return;
   }
+  dd.innerHTML = '<div class="ss-empty">Searching...</div>';
   dd.classList.remove('hidden');
-  setTimeout(function(){
-    document.addEventListener('click', function f(){
-      var stillThere = document.getElementById('apt-gc-drop');
-      if(stillThere) stillThere.classList.add('hidden');
-      document.removeEventListener('click', f);
-    }, {capture: true});
-  }, 10);
+  _contactPickerSearch(v, {limit:8, excludeIds: existingIds}, function(matches, truncated){
+    if(!matches.length){
+      dd.innerHTML = '<div class="ss-empty">No contacts found</div>';
+    } else {
+      var html = matches.map(function(c){
+        var meta = c.email || c.company || '';
+        return '<div class="ss-opt" onclick="_apptGroupClientPick(\''+c.id+'\')">'
+          + '<div style="font-weight:600">' + esc(c.name||'Unknown') + '</div>'
+          + (meta ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(meta) + '</div>' : '')
+          + '</div>';
+      }).join('');
+      if(truncated) html += '<div class="ss-empty" style="font-style:italic">Refine search for more results</div>';
+      dd.innerHTML = html;
+    }
+    dd.classList.remove('hidden');
+    setTimeout(function(){
+      document.addEventListener('click', function f(){
+        var stillThere = document.getElementById('apt-gc-drop');
+        if(stillThere) stillThere.classList.add('hidden');
+        document.removeEventListener('click', f);
+      }, {capture: true});
+    }, 10);
+  });
 }
 
 function _apptGroupClientPick(contactId){
@@ -19005,22 +19100,17 @@ function convComposerSearch(q){
     results.innerHTML = '';
     return;
   }
-  var qDigits = q.replace(/\D/g, '');
-  var contacts = db.contacts || [];
-  var matches = [];
-  for(var i = 0; i < contacts.length && matches.length < 20; i++){
-    var c = contacts[i];
-    if(c.archived) continue;
-    var name = _convComposerContactName(c);
-    var hay = [name, c.email, c.phone].filter(Boolean).join(' ').toLowerCase();
-    var matched = hay.indexOf(q) !== -1;
-    if(!matched && qDigits.length >= 3 && c.phone){
-      var phoneDigits = String(c.phone).replace(/\D/g, '');
-      if(phoneDigits.indexOf(qDigits) !== -1) matched = true;
-    }
-    if(matched) matches.push(c);
-  }
-  if(matches.length === 0){
+  results.innerHTML = '<div class="conv-composer-empty">Searching...</div>';
+  results.classList.remove('hidden');
+  _contactPickerSearch(q, {limit:20}, function(matches, truncated){
+    _convComposerRenderMatches(matches, truncated);
+  });
+}
+
+function _convComposerRenderMatches(matches, truncated){
+  var results = _convComposerEl('results');
+  if(!results) return;
+  if(!matches || matches.length === 0){
     results.innerHTML = '<div class="conv-composer-empty">No contacts match.</div>';
     results.classList.remove('hidden');
     return;
@@ -22715,19 +22805,28 @@ function onSendContractTemplateChange(){
 function onSendContractContactSearch(){
   var input = document.getElementById('sc-contact-search');
   var box = document.getElementById('sc-contact-results');
-  var q = (input.value || '').trim().toLowerCase();
-  if(!q || q.length < 1){
-    box.style.display = 'none';
+  if(!input || !box) return;
+  var q = (input.value || '').trim();
+  if(!q || q.length < 2){
+    if(q.length === 1){
+      box.innerHTML = '<div style="padding:12px;color:var(--main-text-muted);font-size:12px;text-align:center">Type 2+ chars to search</div>';
+      box.style.display = 'block';
+    } else {
+      box.style.display = 'none';
+    }
     return;
   }
-  // Search across active, non-archived contacts with email
-  var matches = (db.contacts || []).filter(function(c){
-    if(c.archived) return false;
-    var hay = ((c.display_name||'') + ' ' + (c.first_name||'') + ' ' + (c.last_name||'') + ' ' + (c.email||'') + ' ' + (c.phone||'')).toLowerCase();
-    return hay.indexOf(q) !== -1;
-  }).slice(0, 10);
+  box.innerHTML = '<div style="padding:12px;color:var(--main-text-muted);font-size:12px;text-align:center">Searching...</div>';
+  box.style.display = 'block';
+  _contactPickerSearch(q, {limit:10}, function(matches, truncated){
+    _renderSendContractMatches(matches, truncated);
+  });
+}
 
-  if(matches.length === 0){
+function _renderSendContractMatches(matches, truncated){
+  var box = document.getElementById('sc-contact-results');
+  if(!box) return;
+  if(!matches || matches.length === 0){
     box.innerHTML = '<div style="padding:12px;color:var(--main-text-muted);font-size:12px;text-align:center">No contacts match.</div>';
     box.style.display = 'block';
     return;
@@ -30641,13 +30740,24 @@ function gcSellSetPM(m){
 }
 
 function gcSellCSearch(v){
-  var dd=document.getElementById('gc-sell-c-drop');if(!dd)return;
-  if(!v.trim()){dd.classList.add('hidden');return;}
-  var m=db.contacts.filter(function(c){return !c.archived&&((c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase()));}).slice(0,8);
-  if(!m.length)dd.innerHTML='<div class="ss-empty">No contacts found</div>';
-  else dd.innerHTML=m.map(function(c){return'<div class="ss-opt" onclick="gcSellSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+''+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+''+'</div>';}).join('');
+  var dd=document.getElementById('gc-sell-c-drop');
+  if(!dd)return;
+  if(!(v||'').trim()){dd.classList.add('hidden');return;}
+  dd.innerHTML='<div class="ss-empty">Searching...</div>';
   dd.classList.remove('hidden');
-  setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
+  _contactPickerSearch(v, {limit:8}, function(matches, truncated){
+    if(!matches.length){
+      dd.innerHTML='<div class="ss-empty">No contacts found</div>';
+    } else {
+      var html = matches.map(function(c){
+        return '<div class="ss-opt" onclick="gcSellSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';
+      }).join('');
+      if(truncated) html += '<div class="ss-empty" style="font-style:italic">Refine search for more results</div>';
+      dd.innerHTML = html;
+    }
+    dd.classList.remove('hidden');
+    setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
+  });
 }
 
 function gcSellSelC(id,name){
@@ -31583,13 +31693,24 @@ function spSellSetPM(m){
 }
 
 function spSellCSearch(v){
-  var dd=document.getElementById('sp-sell-c-drop');if(!dd)return;
-  if(!v.trim()){dd.classList.add('hidden');return;}
-  var m=(db.contacts||[]).filter(function(c){return!c.archived&&((c.name||'').toLowerCase().includes(v.toLowerCase())||(c.company||'').toLowerCase().includes(v.toLowerCase()));}).slice(0,8);
-  if(!m.length)dd.innerHTML='<div class="ss-empty">No contacts found</div>';
-  else dd.innerHTML=m.map(function(c){return'<div class="ss-opt" onclick="spSellSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';}).join('');
+  var dd=document.getElementById('sp-sell-c-drop');
+  if(!dd)return;
+  if(!(v||'').trim()){dd.classList.add('hidden');return;}
+  dd.innerHTML='<div class="ss-empty">Searching...</div>';
   dd.classList.remove('hidden');
-  setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
+  _contactPickerSearch(v, {limit:8}, function(matches, truncated){
+    if(!matches.length){
+      dd.innerHTML='<div class="ss-empty">No contacts found</div>';
+    } else {
+      var html = matches.map(function(c){
+        return '<div class="ss-opt" onclick="spSellSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';
+      }).join('');
+      if(truncated) html += '<div class="ss-empty" style="font-style:italic">Refine search for more results</div>';
+      dd.innerHTML = html;
+    }
+    dd.classList.remove('hidden');
+    setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
+  });
 }
 
 function spSellSelC(id,name){
