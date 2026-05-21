@@ -311,7 +311,9 @@ async function handler(req, res) {
       tax: {
         enabled: !!taxSettings.enabled,
         rate: parseFloat(taxSettings.rate) || 0,
-        label: taxSettings.label || 'Sales Tax'
+        label: taxSettings.label || 'Sales Tax',
+        sections: taxSettings.sections || {},
+        posDefaultTaxable: taxSettings.posDefaultTaxable !== false
       },
       additional_fee: {
         enabled: !!(feeSettings.enabled && feeApplyToWidget),
