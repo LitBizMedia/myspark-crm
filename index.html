@@ -18752,6 +18752,7 @@ function convComposerSearch(q){
   var matches = [];
   for(var i = 0; i < contacts.length && matches.length < 20; i++){
     var c = contacts[i];
+    if(c.archived) continue;
     var name = _convComposerContactName(c);
     var hay = [name, c.email, c.phone].filter(Boolean).join(' ').toLowerCase();
     var matched = hay.indexOf(q) !== -1;
