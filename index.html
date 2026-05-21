@@ -966,6 +966,24 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .conv-toolbar-spacer{flex:1}
 .conv-refresh{padding:6px 10px;background:none;border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text-muted);cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:6px}
 .conv-refresh:hover{background:var(--main-card-hover);color:var(--main-text)}
+.conv-actionbar{display:flex;align-items:center;gap:14px;padding:12px 24px;background:var(--main-card);border-bottom:1px solid var(--main-border);flex-shrink:0;flex-wrap:wrap}
+.conv-search-wrap{position:relative;flex:1 1 320px;min-width:200px;max-width:480px}
+.conv-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--main-text-muted);pointer-events:none}
+.conv-search-input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input);color:var(--main-text);font-size:13px;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+.conv-search-input:focus{outline:none;border-color:var(--purple);box-shadow:var(--focus-ring)}
+.conv-search-input::placeholder{color:var(--text-placeholder)}
+.conv-stats{display:flex;align-items:center;gap:18px;flex-shrink:0;flex-wrap:wrap}
+.conv-stat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--main-text-muted);white-space:nowrap}
+.conv-stat svg{width:14px;height:14px;flex-shrink:0;color:var(--main-text-muted)}
+.conv-stat-value{font-size:13px;font-weight:600;color:var(--main-text)}
+.conv-stat-value.muted{color:var(--main-text-muted);font-weight:500}
+.conv-stat-value.warn{color:var(--warning-text)}
+.conv-actionbar-spacer{flex:1}
+.conv-new-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;flex-shrink:0}
+.conv-new-btn:hover:not(:disabled){background:var(--orange-hover)}
+.conv-new-btn:active:not(:disabled){background:var(--orange-active)}
+.conv-new-btn:disabled{opacity:.55;cursor:not-allowed}
+.conv-new-btn svg{width:14px;height:14px}
 .conv-main{flex:1;display:flex;min-height:0;overflow:hidden}
 .conv-list{width:360px;flex-shrink:0;border-right:1px solid var(--main-border);background:var(--main-card);overflow-y:auto}
 .conv-list-empty{padding:40px 20px;text-align:center;color:var(--main-text-muted);font-size:13px}
@@ -2057,6 +2075,34 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
       <div id="panel-conversations" class="panel hidden">
         <div class="conv-wrap">
+          <div class="conv-actionbar">
+            <div class="conv-search-wrap">
+              <svg class="conv-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input type="text" id="conv-search-input" class="conv-search-input" placeholder="Search by contact or message" oninput="convOnSearchInput(this.value)" autocomplete="off" />
+            </div>
+            <div class="conv-stats" id="conv-stats">
+              <div class="conv-stat" title="Open conversations awaiting your reply">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Unanswered</span>
+                <span class="conv-stat-value muted" id="conv-stat-unanswered">0</span>
+              </div>
+              <div class="conv-stat" title="How long the oldest unanswered conversation has waited (warns at 1 hour)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>Oldest waiting</span>
+                <span class="conv-stat-value muted" id="conv-stat-oldest">&ndash;</span>
+              </div>
+              <div class="conv-stat" title="Outbound messages sent today across all conversations">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <span>Sent today</span>
+                <span class="conv-stat-value muted" id="conv-stat-sent">0</span>
+              </div>
+            </div>
+            <div class="conv-actionbar-spacer"></div>
+            <button class="conv-new-btn" disabled title="Composer launching soon" aria-label="New Message (coming soon)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Message
+            </button>
+          </div>
           <div class="conv-toolbar">
             <div class="conv-filter-group">
               <span class="conv-filter-label">Channel</span>
@@ -18521,9 +18567,14 @@ function convRefresh(){
 function _convFiltered(){
   var s = _convState();
   var arr = db.conversations || [];
+  var q = (s.searchQuery || '').toLowerCase().trim();
   return arr.filter(function(c){
     if(s.filterChannel !== 'all' && c.channel !== s.filterChannel) return false;
     if(s.filterStatus && c.status !== s.filterStatus) return false;
+    if(q){
+      var hay = [c.contactName, c.contactEmail, c.contactPhone, c.lastMessagePreview].filter(Boolean).join(' ').toLowerCase();
+      if(hay.indexOf(q) === -1) return false;
+    }
     return true;
   });
 }
@@ -18543,10 +18594,71 @@ function _convUpdateCounts(){
   });
 }
 
+function convOnSearchInput(v){
+  _convState().searchQuery = v || '';
+  convRenderList();
+}
+
+function _convFmtWait(ms){
+  var m = Math.floor(ms / 60000);
+  if(m < 1) return '<1m';
+  if(m < 60) return m + 'm';
+  var h = Math.floor(m / 60);
+  if(h < 24) return h + 'h';
+  var d = Math.floor(h / 24);
+  return d + 'd';
+}
+
+function _convUpdateStats(){
+  var arr = db.conversations || [];
+  var now = Date.now();
+  var todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  var todayMs = todayStart.getTime();
+  var unanswered = 0;
+  var oldestInboundMs = null;
+  var sentToday = 0;
+  arr.forEach(function(c){
+    var tMs = new Date(c.lastMessageAt || c.updatedAt || 0).getTime();
+    if(c.lastMessageDirection === 'outbound' && tMs >= todayMs) sentToday++;
+    if(c.status !== 'open') return;
+    if(c.lastMessageDirection === 'inbound'){
+      unanswered++;
+      if(tMs && (oldestInboundMs === null || tMs < oldestInboundMs)) oldestInboundMs = tMs;
+    }
+  });
+  var unEl = document.getElementById('conv-stat-unanswered');
+  var oldEl = document.getElementById('conv-stat-oldest');
+  var sentEl = document.getElementById('conv-stat-sent');
+  if(unEl){
+    unEl.textContent = String(unanswered);
+    unEl.classList.toggle('muted', unanswered === 0);
+    unEl.classList.toggle('warn', unanswered > 0);
+  }
+  if(oldEl){
+    if(oldestInboundMs === null){
+      oldEl.textContent = '–';
+      oldEl.classList.add('muted');
+      oldEl.classList.remove('warn');
+    } else {
+      var diffMs = now - oldestInboundMs;
+      var diffHr = diffMs / 3600000;
+      oldEl.textContent = _convFmtWait(diffMs);
+      var warn = diffHr >= 1;
+      oldEl.classList.toggle('warn', warn);
+      oldEl.classList.toggle('muted', !warn);
+    }
+  }
+  if(sentEl){
+    sentEl.textContent = String(sentToday);
+    sentEl.classList.toggle('muted', sentToday === 0);
+  }
+}
+
 function convRenderList(){
   var listEl = document.getElementById('conv-list');
   if(!listEl) return;
   _convUpdateCounts();
+  _convUpdateStats();
   var s = _convState();
   var rows = _convFiltered();
   if(rows.length === 0){
