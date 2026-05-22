@@ -105,13 +105,28 @@ async function getEffectiveSettings(subaccountId, typeKey, db) {
 
   const isSystem = type.audience === 'admin';
 
+  // source_filters: catalog defines available sources; override stores enabled state
+  // If override has no source_filters_enabled, derive defaults from catalog
+  let sourceFiltersEnabled = null;
+  if (type.source_filters && type.source_filters.available) {
+    if (override && override.source_filters_enabled) {
+      sourceFiltersEnabled = override.source_filters_enabled;
+    } else {
+      // Derive defaults from catalog
+      sourceFiltersEnabled = {};
+      type.source_filters.available.forEach(src => {
+        sourceFiltersEnabled[src.key] = src.default;
+      });
+    }
+  }
+
   return {
     type_key: typeKey,
     label: type.label,
     description: type.description,
     category: type.category,
+    scope: type.scope,
     audience: type.audience,
-    risk_level: type.risk_level,
     status: type.status,
     channels: type.channels,
     enabled: isSystem ? true : (override ? override.enabled : true),
@@ -119,6 +134,8 @@ async function getEffectiveSettings(subaccountId, typeKey, db) {
     sms_enabled: isSystem ? false : (override ? override.sms_enabled : type.default_sms),
     timing_minutes_before: override ? override.timing_minutes_before : type.default_timing_minutes_before,
     template_type: override && override.template_type ? override.template_type : type.template_type,
+    source_filters: type.source_filters || null,
+    source_filters_enabled: sourceFiltersEnabled,
     has_override: !!override,
     is_system: isSystem
   };

@@ -65,7 +65,10 @@ async function handler(req, res) {
     timing_minutes_before: body.timing_minutes_before !== undefined
       ? (body.timing_minutes_before === null ? null : parseInt(body.timing_minutes_before, 10))
       : type.default_timing_minutes_before,
-    template_type: body.template_type !== undefined ? body.template_type : type.template_type
+    template_type: body.template_type !== undefined ? body.template_type : type.template_type,
+    source_filters_enabled: body.source_filters_enabled !== undefined
+      ? (body.source_filters_enabled === null ? null : body.source_filters_enabled)
+      : null
   };
 
   const result = await db.insertOne('subaccount_notification_settings', row, {

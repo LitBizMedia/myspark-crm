@@ -1,96 +1,133 @@
 // lib-aws/notifications-catalog.js
 //
 // Source of truth for all automated notification types in MySpark+.
-// The DB table subaccount_notification_settings stores PER-SUBACCOUNT
-// OVERRIDES of these defaults. If no row exists in the table, the catalog
-// default applies. This file is the only place to add a new notification
-// type.
+// Last full rewrite: 2026-05-22 to match the locked patient-first product spec.
 //
-// Fields:
-//   key           - stable identifier, used in DB rows. Snake_case, never changes.
-//   label         - human-readable name shown in the UI.
-//   description   - one-line explanation for admins.
-//   category      - groups in the UI (Appointments, Booking, Billing, etc.)
-//   audience      - 'customer' (sends to contacts) or 'internal' (staff dashboard)
-//   risk_level    - 'required' | 'recommended' | 'optional'
-//                   - required: cannot be disabled in UI (transactional, customer harm if off)
-//                   - recommended: can disable, UI warns
-//                   - optional: free toggle
-//   channels      - default channels available: ['email'], ['sms'], or ['email', 'sms']
-//   default_email - whether email is on by default
-//   default_sms   - whether SMS is on by default
-//   default_timing_minutes_before - integer minutes before event, or null for on-event/on-request sends
-//   status        - 'live' (sender exists and respects this type) or 'planned' (sender not yet built)
-//   template_type - the email_templates.template_type slug, or null for inline templates
+// FIELDS per row:
+//   key            - stable identifier. Snake_case. NEVER changes after launch.
+//   scope          - 'subaccount' | 'agency' | 'system'
+//                    subaccount: configured in clinic admin Notifications tab
+//                    agency:    configured in agency dashboard (future)
+//                    system:    never user-configurable (transactional)
+//   audience       - 'patient' | 'admin' | 'internal'
+//                    patient:  sent to clinic's patients
+//                    admin:    sent to clinic admin (system + agency scopes)
+//                    internal: shown on staff dashboard, no channels
+//   category       - groups in the UI (Appointments, Payments, etc.)
+//   channels       - default channels available (e.g. ['email', 'sms'])
+//   default_email  - whether email is on by default
+//   default_sms    - whether SMS is on by default
+//   default_timing_minutes_before - integer minutes, or null for on-event
+//   status         - 'live' | 'planned' (Coming Soon vs functioning sender)
+//   template_type  - email_templates.template_type slug, or null
+//   label          - human-readable name for the UI
+//   description    - one-line explanation for admins
+//   source_filters - OPTIONAL. When present, the UI renders sub-checkboxes
+//                    so admin can pick WHICH source events trigger this type.
+//                    Example: payment_receipt fires for POS + appointment +
+//                    recurring billing + gift card + session pack + product.
+//                    Admin picks which subset they want.
 
 const CATALOG = [
-  // ============ APPOINTMENTS ============
-  { key: 'appointment_confirmation', label: 'Appointment Confirmation', description: 'Sent when an appointment is created', category: 'Appointments', scope: 'subaccount', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-confirmation' },
-  { key: 'appointment_reminder', label: 'Appointment Reminder', description: 'Reminds patients before their appointment', category: 'Appointments', scope: 'subaccount', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 1440, status: 'live', template_type: 'appt-reminder' },
-  { key: 'appointment_cancel_notification', label: 'Appointment Cancellation', description: 'Sent when an appointment is cancelled', category: 'Appointments', scope: 'subaccount', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-cancel' },
-  { key: 'appointment_reschedule_notification', label: 'Appointment Reschedule', description: 'Sent when an appointment is rescheduled', category: 'Appointments', scope: 'subaccount', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-reschedule' },
-  { key: 'appointment_payment_receipt', label: 'Appointment Payment Receipt', description: 'Receipt for appointment payment', category: 'Appointments', scope: 'subaccount', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'appt-receipt' },
+  // =====================================================================
+  // SUBACCOUNT SCOPE - rendered in clinic admin Notifications tab
+  // =====================================================================
 
-  // ============ BOOKING WIDGET ============
-  { key: 'booking_confirmation', label: 'Booking Confirmation', description: 'Sent after public booking widget submission', category: 'Booking', scope: 'subaccount', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'booking-confirmation' },
+  // ============ APPOINTMENTS (patient) ============
+  // Covers all booking sources: staff calendar, service widget, appointment
+  // widget, class widget. The catalog has 4 rows (one per event), each
+  // applies to every booking source.
+  { key: 'appointment_confirmation', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-confirmation', label: 'Appointment Confirmation', description: 'Sent when an appointment is booked, regardless of booking source' },
+  { key: 'appointment_reminder', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 1440, status: 'live', template_type: 'appt-reminder', label: 'Appointment Reminder', description: 'Reminds patients before their appointment or class' },
+  { key: 'appointment_cancellation', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-cancel', label: 'Appointment Cancellation', description: 'Sent when an appointment or class is cancelled' },
+  { key: 'appointment_reschedule', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-reschedule', label: 'Appointment Reschedule', description: 'Sent when an appointment is rescheduled' },
 
-  // ============ CLASSES ============
-  { key: 'class_registration_confirmation', label: 'Class Registration', description: 'Confirms registration for a class session', category: 'Classes', scope: 'subaccount', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'class-registration' },
-  { key: 'class_session_cancelled', label: 'Class Session Cancelled', description: 'Notifies registered participants when a class is cancelled', category: 'Classes', scope: 'subaccount', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'class-cancelled' },
+  // ============ PAYMENTS (patient) ============
+  // payment_receipt has source_filters because one event type (receipt) fires
+  // from many sources. Admin picks which to send.
+  {
+    key: 'payment_receipt', scope: 'subaccount', audience: 'patient', category: 'Payments',
+    channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null,
+    status: 'live', template_type: 'payment-receipt',
+    label: 'Payment Receipt',
+    description: 'Receipt sent to a patient after they pay. Choose which payment sources send a receipt.',
+    source_filters: {
+      available: [
+        { key: 'pos',               label: 'POS Transactions',         default: true },
+        { key: 'appointment',       label: 'Appointment Payments',     default: true },
+        { key: 'recurring_billing', label: 'Recurring Billing Charges', default: true },
+        { key: 'gift_card',         label: 'Gift Card Purchases',      default: true },
+        { key: 'session_pack',      label: 'Session Pack Purchases',   default: true },
+        { key: 'product',           label: 'Product Orders',           default: true }
+      ]
+    }
+  },
+  { key: 'payment_failed', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'payment-failed', label: 'Payment Failed', description: 'Alerts a patient when their payment attempt fails' },
+  { key: 'refund_receipt', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'refund-receipt', label: 'Refund Receipt', description: 'Confirms to a patient that they have been refunded' },
+  { key: 'gift_card_purchase', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'gift-card-purchase', label: 'Gift Card Purchase', description: 'Delivers a gift card code. Routes automatically to recipient if set, otherwise buyer.' },
+  { key: 'product_order_confirmation', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'product-order', label: 'Product Order Confirmation', description: 'Confirms a product order to the patient' },
+  { key: 'session_pack_purchase', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'session-pack-purchase', label: 'Session Pack Purchase', description: 'Confirms a session pack purchase to the patient' },
+  { key: 'session_pack_low_balance', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'session-pack-low', label: 'Session Pack Low Balance', description: 'Warns a patient when their session pack is running low (default threshold: 2 remaining)' },
 
-  // ============ POS / SALES ============
-  { key: 'pos_payment_receipt', label: 'POS Payment Receipt', description: 'Receipt for in-person POS payment', category: 'Sales', scope: 'subaccount', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'pos-receipt' },
-  { key: 'gift_card_sale_confirmation', label: 'Gift Card Purchase', description: 'Delivers the gift card code to the buyer', category: 'Sales', scope: 'subaccount', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'gift-card-sale' },
+  // ============ RECURRING BILLING (patient) ============
+  // Subaccount admin sets up recurring billing for patients in the Payments
+  // tab under Subscriptions. These notifications go to the patient.
+  { key: 'recurring_billing_enrollment', scope: 'subaccount', audience: 'patient', category: 'Recurring Billing', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'recurring-enrollment', label: 'Enrollment Confirmation', description: 'Welcome message when a patient enrolls in recurring billing' },
+  { key: 'recurring_billing_upcoming_charge', scope: 'subaccount', audience: 'patient', category: 'Recurring Billing', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 4320, status: 'planned', template_type: 'recurring-upcoming', label: 'Upcoming Charge Reminder', description: 'Reminds a patient before their card will be charged' },
+  { key: 'recurring_billing_payment_failed', scope: 'subaccount', audience: 'patient', category: 'Recurring Billing', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'recurring-failed', label: 'Recurring Charge Failed', description: 'Alerts a patient when their recurring charge fails' },
+  { key: 'recurring_billing_suspended', scope: 'subaccount', audience: 'patient', category: 'Recurring Billing', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'recurring-suspended', label: 'Recurring Billing Suspended', description: 'Notifies a patient when their recurring billing is suspended due to failed payments' },
+  { key: 'recurring_billing_paused', scope: 'subaccount', audience: 'patient', category: 'Recurring Billing', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'recurring-paused', label: 'Recurring Billing Paused', description: 'Notifies a patient that their recurring billing has been paused' },
+  { key: 'recurring_billing_resumed', scope: 'subaccount', audience: 'patient', category: 'Recurring Billing', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'recurring-resumed', label: 'Recurring Billing Resumed', description: 'Notifies a patient when their recurring billing resumes' },
+  { key: 'recurring_billing_cancelled', scope: 'subaccount', audience: 'patient', category: 'Recurring Billing', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'recurring-cancelled', label: 'Recurring Billing Cancelled', description: 'Confirms to a patient that their recurring billing has been cancelled' },
+  { key: 'recurring_billing_trial_ending', scope: 'subaccount', audience: 'patient', category: 'Recurring Billing', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 4320, status: 'live', template_type: 'subscription-trial-reminder', label: 'Trial Ending Soon', description: 'Reminds a patient their trial is ending and a charge is coming' },
 
-  // ============ MEMBERSHIPS (subaccount-to-patient subscriptions) ============
-  { key: 'patient_subscription_trial_reminder', scope: 'subaccount', label: 'Membership Trial Ending', description: 'Reminds a patient their trial membership is about to end and a charge is coming', category: 'Memberships', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 4320, status: 'live', template_type: 'subscription-trial-reminder' },
-  { key: 'patient_subscription_charge_success', scope: 'subaccount', label: 'Membership Charged', description: 'Receipt to a patient when their recurring membership charges successfully', category: 'Memberships', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'patient-subscription-receipt' },
-  { key: 'patient_subscription_payment_failed', scope: 'subaccount', label: 'Membership Payment Failed', description: 'Alerts a patient when their recurring membership charge fails', category: 'Memberships', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'patient-subscription-failed' },
-  { key: 'patient_subscription_cancelled', scope: 'subaccount', label: 'Membership Cancelled', description: 'Confirms to a patient that their membership has been cancelled', category: 'Memberships', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'patient-subscription-cancelled' },
-  { key: 'patient_subscription_paused', scope: 'subaccount', label: 'Membership Paused', description: 'Notifies a patient that their membership has been paused', category: 'Memberships', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'patient-subscription-paused' },
+  // ============ CONTRACTS (patient) ============
+  { key: 'contract_sent', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-sent', label: 'Contract Sent', description: 'Delivers a contract to a patient for signature' },
+  { key: 'contract_signed', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-signed', label: 'Contract Signed Confirmation', description: 'Confirms to a patient that their signed contract was received' },
+  { key: 'contract_receipt', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-receipt', label: 'Contract Receipt', description: 'Receipt for a contract that included payment' },
 
-  // ============ BILLING (agency-to-subaccount, hidden from subaccount UI) ============
-  { key: 'subscription_charge_success', label: 'Subscription Charged', description: 'Confirmation when a subscription successfully charges', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-  { key: 'subscription_receipt', label: 'Subscription Receipt', description: 'Detailed receipt for subscription payment', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'receipt' },
-  { key: 'subscription_past_due', label: 'Subscription Past Due', description: 'Alerts admin when subscription payment is past due', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'past_due' },
-  { key: 'subscription_payment_failed', label: 'Subscription Payment Failed', description: 'Alerts admin when a charge attempt fails', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'payment_failed' },
-  { key: 'subscription_suspended', label: 'Subscription Suspended', description: 'Notifies admin when subscription is suspended', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'suspended' },
-  { key: 'subscription_trial_ending', label: 'Trial Ending Soon', description: 'Reminds admin their trial is about to end', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 4320, status: 'live', template_type: 'trial_ending_soon' },
-  { key: 'subscription_cancelled', label: 'Subscription Cancelled', description: 'Confirms subscription cancellation', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'cancellation_confirmed' },
-  { key: 'subscription_reactivated_charged', label: 'Subscription Reactivated', description: 'Confirms reactivation with a charge', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'reactivation_confirmed' },
-  { key: 'subscription_reactivated_no_charge', label: 'Subscription Reactivated (No Charge)', description: 'Confirms reactivation when no immediate charge needed', category: 'Billing', scope: 'agency', audience: 'admin', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'reactivation_no_charge' },
+  // ============ MARKETING (patient) ============
+  { key: 'welcome_new_patient', scope: 'subaccount', audience: 'patient', category: 'Marketing', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'welcome', label: 'Welcome New Patient', description: 'Sent automatically when a new patient is created' },
+  { key: 'review_request', scope: 'subaccount', audience: 'patient', category: 'Marketing', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'review-request', label: 'Review Request', description: 'Asks for a review after an appointment' },
+  { key: 'no_show_followup', scope: 'subaccount', audience: 'patient', category: 'Marketing', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'no-show-followup', label: 'No-Show Follow-up', description: 'Gentle re-engagement after a missed appointment' },
 
-  // ============ AUTH ============
-  { key: 'password_reset', label: 'Password Reset', description: 'Sends password reset link to a user', category: 'Auth', scope: 'system', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-
-  // ============ CONTRACTS ============
-  { key: 'contract_sent', label: 'Contract Sent', description: 'Delivers a contract to a client for signature', category: 'Contracts', scope: 'subaccount', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-sent' },
-  { key: 'contract_signed_notification', label: 'Contract Signed', description: 'Notifies clinic when a contract is signed', category: 'Contracts', scope: 'subaccount', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-signed' },
-  { key: 'contract_receipt', label: 'Contract Receipt', description: 'Receipt for contract payment', category: 'Contracts', scope: 'subaccount', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-receipt' },
-
-  // ============ SYSTEM ============
-  { key: 'email_domain_grace_warning', label: 'Email Domain Verification', description: 'Warns admin about pending email domain verification', category: 'System', scope: 'system', audience: 'admin', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-
-  // ============ AUTOMATIONS / JOURNEYS ============
-  { key: 'journey_email_step', label: 'Journey Email Step', description: 'Email step in an automation journey', category: 'Automations', scope: 'subaccount', audience: 'patient', risk_level: 'optional', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-  { key: 'journey_sms_step', label: 'Journey SMS Step', description: 'SMS step in an automation journey', category: 'Automations', scope: 'subaccount', audience: 'patient', risk_level: 'optional', channels: ['sms'], default_email: false, default_sms: true, default_timing_minutes_before: null, status: 'live', template_type: null },
-
-  // ============ MARKETING ============
-  { key: 'welcome_new_patient', label: 'Welcome New Patient', description: 'Sent automatically when a new contact is created', category: 'Marketing', scope: 'subaccount', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'welcome' },
-  { key: 'review_request', label: 'Review Request', description: 'Asks for a review after an appointment', category: 'Marketing', scope: 'subaccount', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'review-request' },
-  { key: 'no_show_followup', label: 'No-Show Follow-up', description: 'Gentle re-engagement after a missed appointment', category: 'Marketing', scope: 'subaccount', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'no-show-followup' },
+  // ============ AUTOMATIONS (patient) ============
+  { key: 'journey_email_step', scope: 'subaccount', audience: 'patient', category: 'Automations', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Journey Email Step', description: 'Email step in an automation journey' },
+  { key: 'journey_sms_step', scope: 'subaccount', audience: 'patient', category: 'Automations', channels: ['sms'], default_email: false, default_sms: true, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Journey SMS Step', description: 'SMS step in an automation journey' },
 
   // ============ INTERNAL (staff dashboard) ============
-  { key: 'internal_overdue_tasks', label: 'Overdue Tasks', description: 'Dashboard alert for overdue tasks', category: 'Internal', scope: 'subaccount', audience: 'internal', risk_level: 'optional', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-  { key: 'internal_tasks_due_today', label: 'Tasks Due Today', description: 'Dashboard alert for tasks due today', category: 'Internal', scope: 'subaccount', audience: 'internal', risk_level: 'optional', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-  { key: 'internal_tasks_due_tomorrow', label: 'Tasks Due Tomorrow', description: 'Dashboard alert for tasks due tomorrow', category: 'Internal', scope: 'subaccount', audience: 'internal', risk_level: 'optional', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-  { key: 'internal_appointments_today', label: 'Appointments Today', description: 'Dashboard alert for today\'s appointments', category: 'Internal', scope: 'subaccount', audience: 'internal', risk_level: 'optional', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-  { key: 'internal_appointments_tomorrow', label: 'Appointments Tomorrow', description: 'Dashboard alert for tomorrow\'s appointments', category: 'Internal', scope: 'subaccount', audience: 'internal', risk_level: 'optional', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null }
+  { key: 'internal_overdue_tasks', scope: 'subaccount', audience: 'internal', category: 'Internal', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Overdue Tasks', description: 'Dashboard alert for overdue tasks' },
+  { key: 'internal_tasks_due_today', scope: 'subaccount', audience: 'internal', category: 'Internal', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Tasks Due Today', description: 'Dashboard alert for tasks due today' },
+  { key: 'internal_tasks_due_tomorrow', scope: 'subaccount', audience: 'internal', category: 'Internal', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Tasks Due Tomorrow', description: 'Dashboard alert for tasks due tomorrow' },
+  { key: 'internal_appointments_today', scope: 'subaccount', audience: 'internal', category: 'Internal', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Appointments Today', description: "Dashboard alert for today's appointments" },
+  { key: 'internal_appointments_tomorrow', scope: 'subaccount', audience: 'internal', category: 'Internal', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Appointments Tomorrow', description: "Dashboard alert for tomorrow's appointments" },
+
+  // =====================================================================
+  // AGENCY SCOPE - configured in future agency dashboard, NOT in subaccount UI
+  // These are LitBiz Media (the platform vendor) billing the subaccount admin
+  // for their MySpark+ SaaS subscription. Different from patient recurring billing.
+  // =====================================================================
+  { key: 'subscription_charge_success', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'SaaS Subscription Charged', description: 'Confirmation when a subaccount SaaS subscription successfully charges' },
+  { key: 'subscription_receipt', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'receipt', label: 'SaaS Subscription Receipt', description: 'Detailed receipt for SaaS subscription payment' },
+  { key: 'subscription_past_due', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'past_due', label: 'SaaS Subscription Past Due', description: 'Alerts admin when SaaS subscription payment is past due' },
+  { key: 'subscription_payment_failed', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'payment_failed', label: 'SaaS Subscription Payment Failed', description: 'Alerts admin when a SaaS charge attempt fails' },
+  { key: 'subscription_suspended', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'suspended', label: 'SaaS Subscription Suspended', description: 'Notifies admin when SaaS subscription is suspended' },
+  { key: 'subscription_trial_ending', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: 4320, status: 'live', template_type: 'trial_ending_soon', label: 'SaaS Trial Ending Soon', description: 'Reminds admin their MySpark+ trial is about to end' },
+  { key: 'subscription_cancelled', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'cancellation_confirmed', label: 'SaaS Subscription Cancelled', description: 'Confirms MySpark+ subscription cancellation' },
+  { key: 'subscription_reactivated_charged', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'reactivation_confirmed', label: 'SaaS Subscription Reactivated', description: 'Confirms MySpark+ reactivation with a charge' },
+  { key: 'subscription_reactivated_no_charge', scope: 'agency', audience: 'admin', category: 'SaaS Billing', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'reactivation_no_charge', label: 'SaaS Subscription Reactivated (No Charge)', description: 'Confirms MySpark+ reactivation when no immediate charge needed' },
+
+  // =====================================================================
+  // SYSTEM SCOPE - transactional, never user-configurable
+  // =====================================================================
+  { key: 'password_reset', scope: 'system', audience: 'admin', category: 'Auth', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Password Reset', description: 'Sends password reset link to a user' },
+  { key: 'email_domain_grace_warning', scope: 'system', audience: 'admin', category: 'System', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Email Domain Verification', description: 'Warns admin about pending email domain verification' }
 ];
 
 // Quick-lookup map by key
 const BY_KEY = Object.fromEntries(CATALOG.map(t => [t.key, t]));
 
+// ===== Lookup helpers =====
 function getType(key) {
   return BY_KEY[key] || null;
 }
@@ -108,14 +145,7 @@ function getTypesByCategory() {
   return byCategory;
 }
 
-// 2026-05-22 audience model: 'patient' (clinic's patients), 'admin'
-// (system communications to subaccount admin), 'internal' (staff dashboard).
-// getCustomerTypes is retained for backward compatibility but now returns
-// patient + admin combined (all externally-deliverable notifications).
-function getCustomerTypes() {
-  return CATALOG.filter(t => t.audience === 'patient' || t.audience === 'admin');
-}
-
+// ===== Audience filters =====
 function getPatientTypes() {
   return CATALOG.filter(t => t.audience === 'patient');
 }
@@ -128,14 +158,13 @@ function getInternalTypes() {
   return CATALOG.filter(t => t.audience === 'internal');
 }
 
-function getLiveTypes() {
-  return CATALOG.filter(t => t.status === 'live');
+// Deprecated: 'customer' is the old name for patient + admin combined.
+// Kept for backward compatibility. New code should use getPatientTypes etc.
+function getCustomerTypes() {
+  return CATALOG.filter(t => t.audience === 'patient' || t.audience === 'admin');
 }
 
-// Scope-aware filters (2026-05-22): scope determines WHERE a notification is
-// configured. 'subaccount' renders in the clinic admin Notifications tab.
-// 'agency' renders in the future agency dashboard (LitBiz-side).
-// 'system' is never user-configurable (password reset, domain warnings).
+// ===== Scope filters =====
 function getSubaccountScopedTypes() {
   return CATALOG.filter(t => t.scope === 'subaccount');
 }
@@ -148,17 +177,27 @@ function getSystemScopedTypes() {
   return CATALOG.filter(t => t.scope === 'system');
 }
 
+// ===== Status filters =====
+function getLiveTypes() {
+  return CATALOG.filter(t => t.status === 'live');
+}
+
+function getPlannedTypes() {
+  return CATALOG.filter(t => t.status === 'planned');
+}
+
 module.exports = {
   CATALOG,
   getType,
   getAllTypes,
   getTypesByCategory,
-  getCustomerTypes,
   getPatientTypes,
   getAdminTypes,
   getInternalTypes,
-  getLiveTypes,
+  getCustomerTypes,
   getSubaccountScopedTypes,
   getAgencyScopedTypes,
-  getSystemScopedTypes
+  getSystemScopedTypes,
+  getLiveTypes,
+  getPlannedTypes
 };
