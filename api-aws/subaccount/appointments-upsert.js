@@ -593,6 +593,7 @@ async function handler(req, res) {
 
           if (slug) {
             await sendAppointmentConfirmations({
+              subaccountId,
               subaccountSlug: slug,
               appointmentTitle: serviceName || a.title,
               appointmentDate: a.date,

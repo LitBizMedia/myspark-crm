@@ -39,7 +39,7 @@ const CATALOG = [
   // applies to every booking source.
   { key: 'appointment_confirmation', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-confirmation', label: 'Appointment Confirmation', description: 'Sent when an appointment is booked, regardless of booking source' },
   { key: 'appointment_reminder', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 1440, status: 'live', template_type: 'appt-reminder', label: 'Appointment Reminder', description: 'Reminds patients before their appointment or class' },
-  { key: 'appointment_cancellation', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-cancel', label: 'Appointment Cancellation', description: 'Sent when an appointment or class is cancelled' },
+  { key: 'appointment_cancellation', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'appt-cancel', label: 'Appointment Cancellation', description: 'Sent when an appointment or class is cancelled' },
   { key: 'appointment_reschedule', scope: 'subaccount', audience: 'patient', category: 'Appointments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-reschedule', label: 'Appointment Reschedule', description: 'Sent when an appointment is rescheduled' },
 
   // ============ PAYMENTS (patient) ============
@@ -48,7 +48,7 @@ const CATALOG = [
   {
     key: 'payment_receipt', scope: 'subaccount', audience: 'patient', category: 'Payments',
     channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null,
-    status: 'live', template_type: 'payment-receipt',
+    status: 'planned', template_type: 'payment-receipt',
     label: 'Payment Receipt',
     description: 'Receipt sent to a patient after they pay. Choose which payment sources send a receipt.',
     source_filters: {
@@ -62,7 +62,7 @@ const CATALOG = [
       ]
     }
   },
-  { key: 'payment_failed', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'payment-failed', label: 'Payment Failed', description: 'Alerts a patient when their payment attempt fails' },
+  { key: 'payment_failed', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'payment-failed', label: 'Payment Failed', description: 'Alerts a patient when their payment attempt fails' },
   { key: 'refund_receipt', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'refund-receipt', label: 'Refund Receipt', description: 'Confirms to a patient that they have been refunded' },
   { key: 'gift_card_purchase', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'gift-card-purchase', label: 'Gift Card Purchase', description: 'Delivers a gift card code. Routes automatically to recipient if set, otherwise buyer.' },
   { key: 'product_order_confirmation', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'product-order', label: 'Product Order Confirmation', description: 'Confirms a product order to the patient' },
@@ -83,17 +83,13 @@ const CATALOG = [
 
   // ============ CONTRACTS (patient) ============
   { key: 'contract_sent', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-sent', label: 'Contract Sent', description: 'Delivers a contract to a patient for signature' },
-  { key: 'contract_signed', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-signed', label: 'Contract Signed Confirmation', description: 'Confirms to a patient that their signed contract was received' },
-  { key: 'contract_receipt', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-receipt', label: 'Contract Receipt', description: 'Receipt for a contract that included payment' },
+  { key: 'contract_signed', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'contract-signed', label: 'Contract Signed Confirmation', description: 'Confirms to a patient that their signed contract was received' },
+  { key: 'contract_receipt', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'contract-receipt', label: 'Contract Receipt', description: 'Receipt for a contract that included payment (requires contract-with-payment feature)' },
 
   // ============ MARKETING (patient) ============
   { key: 'welcome_new_patient', scope: 'subaccount', audience: 'patient', category: 'Marketing', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'welcome', label: 'Welcome New Patient', description: 'Sent automatically when a new patient is created' },
   { key: 'review_request', scope: 'subaccount', audience: 'patient', category: 'Marketing', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'review-request', label: 'Review Request', description: 'Asks for a review after an appointment' },
   { key: 'no_show_followup', scope: 'subaccount', audience: 'patient', category: 'Marketing', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'no-show-followup', label: 'No-Show Follow-up', description: 'Gentle re-engagement after a missed appointment' },
-
-  // ============ AUTOMATIONS (patient) ============
-  { key: 'journey_email_step', scope: 'subaccount', audience: 'patient', category: 'Automations', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Journey Email Step', description: 'Email step in an automation journey' },
-  { key: 'journey_sms_step', scope: 'subaccount', audience: 'patient', category: 'Automations', channels: ['sms'], default_email: false, default_sms: true, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Journey SMS Step', description: 'SMS step in an automation journey' },
 
   // ============ INTERNAL (staff dashboard) ============
   { key: 'internal_overdue_tasks', scope: 'subaccount', audience: 'internal', category: 'Internal', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null, label: 'Overdue Tasks', description: 'Dashboard alert for overdue tasks' },

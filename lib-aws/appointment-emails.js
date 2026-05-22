@@ -9,6 +9,8 @@
 // per current policy ("by call only").
 
 const { sendEmail } = require('./mailgun');
+const db = require('./db');
+const { shouldSend } = require('./notifications');
 
 function fmtDate(d) {
   if (!d) return '';
@@ -75,6 +77,7 @@ function buildHtml({ clientName, serviceName, dateStr, timeStr, staffName, locat
 // Skips silently on errors so a Mailgun hiccup never breaks the booking flow.
 async function sendAppointmentConfirmations(opts) {
   const {
+    subaccountId,
     subaccountSlug, appointmentTitle, appointmentDate, appointmentTime,
     location, recipients, staffName, businessName,
     // Optional overrides used by reschedule flow (and any future variant).
@@ -87,11 +90,20 @@ async function sendAppointmentConfirmations(opts) {
   if (!Array.isArray(recipients) || !recipients.length) return { sent: 0 };
   if (!subaccountSlug) return { sent: 0, error: 'no slug' };
 
+  const isReschedule = !!(oldDate && oldTime);
+
+  // Gate via subaccount Notifications tab. If subaccountId not passed
+  // (older callers), skip the gate and send (backward compatible).
+  if (subaccountId) {
+    const typeKey = isReschedule ? 'appointment_reschedule' : 'appointment_confirmation';
+    const gate = await shouldSend(subaccountId, typeKey, db);
+    if (!gate.ok) return { sent: 0, skipped: true, reason: gate.reason || 'disabled' };
+  }
+
   const dateStr = fmtDate(appointmentDate);
   const timeStr = fmtTime(appointmentTime);
   const oldDateStr = oldDate ? fmtDate(oldDate) : '';
   const oldTimeStr = oldTime ? fmtTime(oldTime) : '';
-  const isReschedule = !!(oldDate && oldTime);
   let sent = 0;
 
   for (const r of recipients) {

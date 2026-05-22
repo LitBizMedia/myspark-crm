@@ -23,6 +23,7 @@ const { isLineTaxable } = require('./lib/tax');
 const contactsLib = require('./lib/contacts');
 const { processSub } = require('./lib/sub-charge');
 const { sendEmail } = require('./lib/mailgun');
+const { shouldSend } = require('./lib/notifications');
 const { DEFAULT_TZ } = require('./lib/timezone');
 
 function fmt$(n) {
@@ -115,6 +116,15 @@ async function runReminderScan(summary, dryRun) {
       summary.reminders_sent = (summary.reminders_sent || 0) + 1;
       summary.reminder_results = summary.reminder_results || [];
       summary.reminder_results.push({ sub_id: row.id, dry_run: true, would_send_to: contact.email });
+      continue;
+    }
+
+    // Gate: subaccount admin can disable this in Notifications tab
+    const reminderGate = await shouldSend(row.subaccount_id, 'recurring_billing_trial_ending', db);
+    if (!reminderGate.ok) {
+      summary.reminders_skipped = (summary.reminders_skipped || 0) + 1;
+      summary.reminder_results = summary.reminder_results || [];
+      summary.reminder_results.push({ sub_id: row.id, skipped: true, reason: reminderGate.reason || 'disabled' });
       continue;
     }
 

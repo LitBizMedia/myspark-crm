@@ -18,6 +18,7 @@ const tokens = require('./lib/contract-tokens');
 const sanitize = require('./lib/html-sanitize');
 const templateVars = require('./lib/template-vars');
 const mailgun = require('./lib/mailgun');
+const { shouldSend } = require('./lib/notifications');
 
 const SIGNING_BASE_URL = 'https://sign.mysparkplus.app';
 
@@ -300,7 +301,18 @@ async function handler(req, res) {
   // 11. Derive slug from subaccount_id (strip 'sub-' prefix)
   const slug = subaccount.slug || subaccountId.replace(/^sub-/, '');
 
-  // 12. Send email
+  // 12. Send email - first check subaccount Notifications tab gate
+  const sendGate = await shouldSend(subaccount_id, 'contract_sent', db);
+  if (!sendGate.ok) {
+    return res.status(200).json({
+      ok: true,
+      envelope_id: envelopeId,
+      skipped_send: true,
+      reason: sendGate.reason || 'contract_sent disabled in Notifications settings',
+      message: 'Contract envelope created but sending was skipped by subaccount settings'
+    });
+  }
+
   let sendResult;
   try {
     sendResult = await mailgun.sendEmail(slug, {

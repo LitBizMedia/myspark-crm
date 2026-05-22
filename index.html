@@ -624,6 +624,12 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .notif-section-title:first-of-type{margin-top:0}
 .notif-section-desc{font-size:12px;color:var(--main-text-muted);margin-bottom:16px;line-height:1.5}
 .notif-section-icon{display:inline-flex;align-items:center;color:var(--main-text-muted)}
+.notif-row.has-sub-controls{display:block;padding:14px 16px}
+.notif-row.has-sub-controls .notif-row-main{display:flex;align-items:center;gap:16px;justify-content:space-between}
+.notif-source-filters{margin:14px 0 0;padding:12px 14px 4px;border-top:1px solid var(--main-border);display:flex;flex-wrap:wrap;gap:10px 18px}
+.notif-source-filters-label{width:100%;font-size:11px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 6px}
+.notif-source-check{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--main-text);cursor:pointer;user-select:none}
+.notif-source-check input{width:14px;height:14px;cursor:pointer;accent-color:var(--purple)}
 .notif-toggle{width:38px;height:20px;border-radius:10px;background:var(--border);cursor:pointer;position:relative;flex-shrink:0;transition:background 0.15s}
 .notif-toggle.on{background:var(--purple)}
 .notif-toggle::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left 0.15s}
@@ -12034,6 +12040,8 @@ async function doSync(){
 }
 
 async function fetchFromServer(opts){
+  _ensureNotificationsLoaded();
+  _ensureNotificationsLoaded();
   // opts.includeContacts (default true): pull /contact-list along with /data-load.
   // 30s auto-poll passes false to skip the 3MB+ contacts payload. Page nav to
   // contacts, contact mutations, and the dedicated 5min contacts poll pass true.
@@ -12795,6 +12803,46 @@ function renderSettings(){
 // notifications merged with subaccount overrides. Phase 2B-2 will render
 // the category groupings and toggles. Phase 2B-3 wires save + preview.
 
+// Lightweight fetch used at boot to populate internal notification states
+// so getNotifs() / updateNotifBadge() can read RDS-backed values without
+// requiring the Notifications tab to be opened first.
+async function _ensureNotificationsLoaded(){
+  if(_notificationsState && _notificationsState.loadedAt &&
+     (Date.now() - _notificationsState.loadedAt) < 60000) return;
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/notification-settings'),
+      { credentials: 'include' });
+    if(!r.ok) return;
+    var data = await r.json();
+    _notificationsState.settings = data.settings || [];
+    _notificationsState.loadedAt = Date.now();
+    // Refresh badge with new data
+    if(typeof updateNotifBadge === 'function') updateNotifBadge();
+  } catch(e) {
+    console.warn('boot notification fetch failed (non-fatal):', e.message);
+  }
+}
+
+// Lightweight fetch used at boot to populate internal notification states
+// so getNotifs() / updateNotifBadge() can read RDS-backed values without
+// requiring the Notifications tab to be opened first.
+async function _ensureNotificationsLoaded(){
+  if(_notificationsState && _notificationsState.loadedAt &&
+     (Date.now() - _notificationsState.loadedAt) < 60000) return;
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/notification-settings'),
+      { credentials: 'include' });
+    if(!r.ok) return;
+    var data = await r.json();
+    _notificationsState.settings = data.settings || [];
+    _notificationsState.loadedAt = Date.now();
+    // Refresh badge with new data
+    if(typeof updateNotifBadge === 'function') updateNotifBadge();
+  } catch(e) {
+    console.warn('boot notification fetch failed (non-fatal):', e.message);
+  }
+}
+
 var _notificationsState = {
   loading: false,
   error: null,
@@ -12884,7 +12932,10 @@ function _renderNotificationsContent(){
   if(patientLive.length > 0){
     html += '<div class="notif-section-title"><span class="notif-section-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>Patient Notifications</div>';
     html += '<div class="notif-section-desc">Sent to your patients. Choose email, SMS, or both per type. SMS requires A2P campaign approval.</div>';
-    Object.keys(patientByCategory).forEach(function(cat){
+    // Render in catalog-defined category order, not Object.keys order
+    var PATIENT_CAT_ORDER = ['Appointments', 'Payments', 'Recurring Billing', 'Contracts', 'Marketing', 'Automations'];
+    PATIENT_CAT_ORDER.forEach(function(cat){
+      if(!patientByCategory[cat] || patientByCategory[cat].length === 0) return;
       html += '<div class="notif-cat">';
       html += '  <div class="notif-cat-title">' + esc(cat) + '</div>';
       patientByCategory[cat].forEach(function(n){
@@ -12933,18 +12984,22 @@ function _notifRowHtml(n, isPlanned){
     enabled: edits.enabled !== undefined ? edits.enabled : n.enabled,
     email_enabled: edits.email_enabled !== undefined ? edits.email_enabled : n.email_enabled,
     sms_enabled: edits.sms_enabled !== undefined ? edits.sms_enabled : n.sms_enabled,
-    timing_minutes_before: edits.timing_minutes_before !== undefined ? edits.timing_minutes_before : n.timing_minutes_before
+    timing_minutes_before: edits.timing_minutes_before !== undefined ? edits.timing_minutes_before : n.timing_minutes_before,
+    source_filters_enabled: edits.source_filters_enabled !== undefined ? edits.source_filters_enabled : n.source_filters_enabled
   };
 
   var audience = n.audience || 'patient';
   var hasTimingField = (n.timing_minutes_before !== null && n.timing_minutes_before !== undefined);
+  var hasSourceFilters = !!(n.source_filters && n.source_filters.available && n.source_filters.available.length);
 
   var rowClasses = ['notif-row'];
   if(isPlanned) rowClasses.push('planned');
+  if(hasSourceFilters) rowClasses.push('has-sub-controls');
 
   var disabledAttr = isPlanned ? ' style="pointer-events:none"' : '';
 
   var html = '<div class="' + rowClasses.join(' ') + '" data-type="' + esc(n.type_key) + '"' + disabledAttr + '>';
+  if(hasSourceFilters) html += '<div class="notif-row-main">';
   html += '  <div class="notif-info">';
   html += '    <div class="notif-label">' + esc(n.label) + (isPlanned ? ' <span style="font-size:11px;color:var(--main-text-muted);font-weight:500">(Coming Soon)</span>' : '') + '</div>';
   html += '    <div class="notif-desc">' + esc(n.description || '') + '</div>';
@@ -12992,9 +13047,74 @@ function _notifRowHtml(n, isPlanned){
   }
 
   html += '  </div>';
+  if(hasSourceFilters) html += '</div>'; // close .notif-row-main
+  if(hasSourceFilters) html += _notifSourceFiltersHtml(n, effective, isPlanned);
   html += '</div>';
 
   return html;
+}
+
+// Render sub-checkboxes for a row that has source_filters defined in catalog.
+function _notifSourceFiltersHtml(n, effective, isPlanned){
+  var available = n.source_filters.available;
+  var enabled = effective.source_filters_enabled || {};
+  var disabled = isPlanned ? ' disabled' : '';
+  var html = '<div class="notif-source-filters">';
+  html += '<div class="notif-source-filters-label">Sources</div>';
+  available.forEach(function(src){
+    var isOn = enabled[src.key] !== undefined ? enabled[src.key] : src.default;
+    var checked = isOn ? ' checked' : '';
+    var onclick = isPlanned ? '' : ' onchange="_notifToggleSourceFilter(\'' + esc(n.type_key) + '\', \'' + esc(src.key) + '\')"';
+    html += '<label class="notif-source-check">';
+    html += '  <input type="checkbox"' + checked + disabled + onclick + '>';
+    html += '  ' + esc(src.label);
+    html += '</label>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// Toggle a single source filter checkbox. Tracks per-row edit in
+// _notificationsState.edits[typeKey].source_filters_enabled.
+function _notifToggleSourceFilter(typeKey, sourceKey){
+  var n = _notificationsState.settings.find(function(s){ return s.type_key === typeKey; });
+  if(!n || !n.source_filters) return;
+
+  // Start from the current effective state (override or catalog default)
+  var edits = _notificationsState.edits[typeKey] || {};
+  var current = edits.source_filters_enabled !== undefined
+    ? edits.source_filters_enabled
+    : (n.source_filters_enabled || {});
+
+  // Build catalog defaults map for comparison after toggle
+  var catalogDefaults = {};
+  n.source_filters.available.forEach(function(src){
+    catalogDefaults[src.key] = src.default;
+  });
+
+  // Copy current state and flip the toggled key
+  var next = {};
+  n.source_filters.available.forEach(function(src){
+    next[src.key] = current[src.key] !== undefined ? current[src.key] : src.default;
+  });
+  next[sourceKey] = !next[sourceKey];
+
+  // If next equals the row's saved state (or catalog defaults if no override),
+  // remove the edit; otherwise store it.
+  var savedState = n.source_filters_enabled || catalogDefaults;
+  var matchesSaved = Object.keys(next).every(function(k){ return next[k] === savedState[k]; });
+
+  if(!_notificationsState.edits[typeKey]) _notificationsState.edits[typeKey] = {};
+  if(matchesSaved){
+    delete _notificationsState.edits[typeKey].source_filters_enabled;
+    if(Object.keys(_notificationsState.edits[typeKey]).length === 0){
+      delete _notificationsState.edits[typeKey];
+    }
+  } else {
+    _notificationsState.edits[typeKey].source_filters_enabled = next;
+  }
+  _renderNotificationsContent();
+  _notifUpdateSaveBar();
 }
 
 // Timing inputs as d/h/m. Extracted so admin and patient both reuse it.
@@ -14527,9 +14647,36 @@ function confirmClearReadNotifs(){db.readNotifs=[];saveData();closeModal();updat
 // =====================================================
 // OVERRIDE: getNotifs — respect settings + generate keys
 // =====================================================
+// Read internal notification enabled state from RDS-backed Notifications tab
+// settings (preferred) with blob fallback for backward compat during transition.
+function _internalNotifTypes(){
+  var blobTypes = (db.settings.notifSettings && db.settings.notifSettings.types) || {};
+  var defaults = {overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true};
+
+  // If RDS-backed state is loaded, use it (authoritative)
+  if(_notificationsState && Array.isArray(_notificationsState.settings) && _notificationsState.settings.length){
+    var keyMap = {
+      overdueTasks:'internal_overdue_tasks',
+      tasksDueToday:'internal_tasks_due_today',
+      tasksDueTomorrow:'internal_tasks_due_tomorrow',
+      apptToday:'internal_appointments_today',
+      apptTomorrow:'internal_appointments_tomorrow'
+    };
+    var out = {};
+    Object.keys(keyMap).forEach(function(blobKey){
+      var row = _notificationsState.settings.find(function(s){ return s.type_key === keyMap[blobKey]; });
+      out[blobKey] = row ? !!row.enabled : (blobTypes[blobKey] !== undefined ? !!blobTypes[blobKey] : defaults[blobKey]);
+    });
+    return out;
+  }
+
+  // Fallback: read directly from blob (legacy path until RDS state loads)
+  return Object.assign({}, defaults, blobTypes);
+}
+
 function getNotifs(){
   const ns=db.settings.notifSettings||{};
-  const types=ns.types||{overdueTasks:true,tasksDueToday:true,tasksDueTomorrow:false,apptToday:true,apptTomorrow:true};
+  const types=_internalNotifTypes();
   const apptAdvH=ns.apptAdvanceHours||24;
   const td=todayStr(),uid=state.user&&state.user.id,isAdmin=state.user&&state.user.role==='admin';
   const now2=new Date();

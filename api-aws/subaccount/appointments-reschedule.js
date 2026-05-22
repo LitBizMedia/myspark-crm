@@ -273,6 +273,7 @@ async function handler(req, res) {
           const subject = 'Appointment Rescheduled: ' + serviceName + ' moved to ' +
             newDate + (newTime ? ' at ' + newTime : '');
           await sendAppointmentConfirmations({
+            subaccountId,
             subaccountSlug: slug,
             appointmentTitle: serviceName || orig.title,
             appointmentDate: newDate,
