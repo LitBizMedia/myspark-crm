@@ -18,6 +18,7 @@ const { sendSms } = require('./lib/twilio');
 const { wrap } = require('./lib/lambda-adapter');
 const { apptTimestampInTz } = require('./lib/timezone');
 const { canSubaccountSendSms } = require('./lib/sms-gate');
+const { shouldSend } = require('./lib/notifications');
 
 async function getCronSecret() {
   return secrets.getKey('myspark/cron/secret', 'CRON_SECRET');
@@ -204,18 +205,28 @@ async function runReminders() {
 
     const hoursUntilDate = (apptDate - now) / 3600000;
 
-    // Determine reminder config: per-widget for widget-booked appts, defaults otherwise.
-    // Non-widget defaults preserve existing behavior (24h, both channels attempted).
-    let hoursBefore = 24;
-    let emailEnabled = true;
-    let smsEnabled = true;
+    // Subaccount-level notification settings are the authoritative gate.
+    // If the admin has disabled appointment_reminder for this subaccount,
+    // skip the appointment entirely regardless of widget config.
+    const notifGate = await shouldSend(appt.subaccount_id, 'appointment_reminder', db);
+    if (!notifGate.ok) { skipped++; continue; }
+
+    // Start with subaccount-level settings as the baseline.
+    let hoursBefore = notifGate.timing_minutes_before
+      ? Math.round(notifGate.timing_minutes_before / 60)
+      : 24;
+    let emailEnabled = notifGate.email_enabled;
+    let smsEnabled = notifGate.sms_enabled;
+
+    // Widget-level config can further restrict but not expand. AND-logic
+    // ensures a widget cannot bypass a subaccount-level disable.
     if (appt.booked_via === 'widget' && appt.widget_id) {
       const widgetCfgs = await getCachedWidgetCfgs(appt.subaccount_id);
       const cfg = widgetCfgs[appt.widget_id];
       if (cfg) {
         hoursBefore = cfg.reminder_hours_before;
-        emailEnabled = cfg.send_reminder_email;
-        smsEnabled = cfg.send_reminder_sms;
+        emailEnabled = emailEnabled && cfg.send_reminder_email;
+        smsEnabled = smsEnabled && cfg.send_reminder_sms;
       }
     }
 
