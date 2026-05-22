@@ -12849,8 +12849,8 @@ function _renderNotificationsContent(){
   var liveSettings = settings.filter(function(n){ return n.status === 'live'; });
   var plannedSettings = settings.filter(function(n){ return n.status === 'planned'; });
 
+  // Backend filters by scope='subaccount' so we only see patient + internal here
   var patientLive = liveSettings.filter(function(n){ return n.audience === 'patient'; });
-  var adminLive   = liveSettings.filter(function(n){ return n.audience === 'admin'; });
   var internalLive = liveSettings.filter(function(n){ return n.audience === 'internal'; });
 
   function groupByCategory(rows){
@@ -12863,7 +12863,6 @@ function _renderNotificationsContent(){
   }
 
   var patientByCategory = groupByCategory(patientLive);
-  var adminByCategory   = groupByCategory(adminLive);
   var internalByCategory = groupByCategory(internalLive);
 
   var html = '';
@@ -12879,7 +12878,7 @@ function _renderNotificationsContent(){
 
   html += '<div class="s-card full">';
   html += '  <div class="s-card-title">Notifications</div>';
-  html += '  <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">Control every automated email and SMS your clinic sends. Patient notifications give you full control over channel and timing. System notifications are operational alerts to your admin email and stay on for safety. Internal notifications appear on the staff dashboard.</div>';
+  html += '  <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">Control every automated email and SMS your clinic sends. Patient notifications give you full control over channel and timing. Internal notifications appear on the staff dashboard.</div>';
 
   // ============ PATIENT NOTIFICATIONS ============
   if(patientLive.length > 0){
@@ -12889,20 +12888,6 @@ function _renderNotificationsContent(){
       html += '<div class="notif-cat">';
       html += '  <div class="notif-cat-title">' + esc(cat) + '</div>';
       patientByCategory[cat].forEach(function(n){
-        html += _notifRowHtml(n, false);
-      });
-      html += '</div>';
-    });
-  }
-
-  // ============ SYSTEM NOTIFICATIONS ============
-  if(adminLive.length > 0){
-    html += '<div class="notif-section-title"><span class="notif-section-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>System Notifications</div>';
-    html += '<div class="notif-section-desc">Operational alerts sent to your admin email. Locked to email for delivery reliability. You can adjust timing where applicable.</div>';
-    Object.keys(adminByCategory).forEach(function(cat){
-      html += '<div class="notif-cat">';
-      html += '  <div class="notif-cat-title">' + esc(cat) + '</div>';
-      adminByCategory[cat].forEach(function(n){
         html += _notifRowHtml(n, false);
       });
       html += '</div>';

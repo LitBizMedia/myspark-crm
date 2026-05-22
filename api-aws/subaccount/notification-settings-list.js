@@ -22,7 +22,7 @@ const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
-const { getCustomerTypes, getInternalTypes, getTypesByCategory } = require('./lib/notifications-catalog');
+const { getSubaccountScopedTypes, getTypesByCategory } = require('./lib/notifications-catalog');
 const { getEffectiveSettings } = require('./lib/notifications');
 
 async function handler(req, res) {
@@ -30,8 +30,9 @@ async function handler(req, res) {
   if (!auth) return;
   const subaccountId = auth.subaccount_id;
 
-  // Build full settings list by iterating the catalog and merging overrides
-  const allTypes = [...getCustomerTypes(), ...getInternalTypes()];
+  // Build full settings list by iterating only subaccount-scoped catalog
+  // types (agency and system scopes are configured elsewhere).
+  const allTypes = getSubaccountScopedTypes();
   const settings = [];
   for (const t of allTypes) {
     const eff = await getEffectiveSettings(subaccountId, t.key, db);
