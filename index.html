@@ -12920,7 +12920,7 @@ function _renderNotificationsContent(){
   html += '  <div class="notif-save-bar-text"><strong id="notif-edit-count">0</strong> unsaved change<span id="notif-edit-plural">s</span></div>';
   html += '  <div class="notif-save-bar-actions">';
   html += '    <button class="btn-secondary" onclick="_notifDiscardEdits()">Discard</button>';
-  html += '    <button class="btn-primary" onclick="_notifSaveEdits()" disabled title="Save flow lands in Phase 2B-3">Save Changes</button>';
+  html += '    <button class="btn-primary" id="notif-save-btn" onclick="_notifSaveEdits()">Save Changes</button>';
   html += '  </div>';
   html += '</div>';
 
@@ -13229,8 +13229,111 @@ function _notifDiscardEdits(){
   _renderNotificationsContent();
 }
 
-function _notifSaveEdits(){
-  alert('Save flow lands in the next deploy.');
+// Discard all pending edits and re-render.
+function _notifDiscardEdits(){
+  _notificationsState.edits = {};
+  _renderNotificationsContent();
+  _notifUpdateSaveBar();
+}
+
+// Sequentially PUT each edited row to the upsert endpoint. On success,
+// merge the saved values back into _notificationsState.settings and clear
+// that row's edit. On failure, stop and leave the remaining edits intact
+// so the user can fix the issue and retry.
+async function _notifSaveEdits(){
+  var edits = _notificationsState.edits || {};
+  var keys = Object.keys(edits);
+  if(!keys.length) return;
+
+  var saveBtn = document.getElementById('notif-save-btn');
+  var origBtnText = saveBtn ? saveBtn.textContent : 'Save Changes';
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+  var saved = [];
+  var failed = null;
+
+  for (var i = 0; i < keys.length; i++) {
+    var typeKey = keys[i];
+    var edit = edits[typeKey];
+    var row = _notificationsState.settings.find(function(s){ return s.type_key === typeKey; });
+    if(!row){
+      console.warn('Save: row not in state', typeKey);
+      continue;
+    }
+
+    if(saveBtn) saveBtn.textContent = 'Saving (' + (i+1) + ' of ' + keys.length + ')...';
+
+    // Build the PUT body. For each field, prefer the edit value, fall back
+    // to the row's current effective value (so we send a complete picture).
+    var body = {
+      type_key: typeKey,
+      enabled: edit.enabled !== undefined ? edit.enabled : (row.enabled !== undefined ? row.enabled : true),
+      email_enabled: edit.email_enabled !== undefined ? edit.email_enabled : !!row.email_enabled,
+      sms_enabled: edit.sms_enabled !== undefined ? edit.sms_enabled : !!row.sms_enabled,
+      timing_minutes_before: edit.timing_minutes_before !== undefined ? edit.timing_minutes_before : row.timing_minutes_before,
+      source_filters_enabled: edit.source_filters_enabled !== undefined ? edit.source_filters_enabled : row.source_filters_enabled
+    };
+
+    try {
+      var resp = await fetch(apiUrl('/api/subaccount/notification-settings'), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if(!resp.ok){
+        var errData = null;
+        try { errData = await resp.json(); } catch(e){ errData = null; }
+        failed = { typeKey: typeKey, label: row.label || typeKey, status: resp.status, error: (errData && errData.error) || ('HTTP ' + resp.status) };
+        break;
+      }
+
+      var data = await resp.json();
+      // Merge saved state back into settings. Backend returns { setting: row }
+      // or { ok: true, setting: row }; handle either.
+      var savedRow = data.setting || data;
+      var idx = _notificationsState.settings.findIndex(function(s){ return s.type_key === typeKey; });
+      if(idx >= 0 && savedRow){
+        _notificationsState.settings[idx] = Object.assign({}, _notificationsState.settings[idx], {
+          enabled: savedRow.enabled !== undefined ? savedRow.enabled : _notificationsState.settings[idx].enabled,
+          email_enabled: savedRow.email_enabled !== undefined ? savedRow.email_enabled : _notificationsState.settings[idx].email_enabled,
+          sms_enabled: savedRow.sms_enabled !== undefined ? savedRow.sms_enabled : _notificationsState.settings[idx].sms_enabled,
+          timing_minutes_before: savedRow.timing_minutes_before !== undefined ? savedRow.timing_minutes_before : _notificationsState.settings[idx].timing_minutes_before,
+          source_filters_enabled: savedRow.source_filters_enabled !== undefined ? savedRow.source_filters_enabled : _notificationsState.settings[idx].source_filters_enabled,
+          has_override: true
+        });
+      }
+
+      delete _notificationsState.edits[typeKey];
+      saved.push(typeKey);
+
+    } catch (e) {
+      failed = { typeKey: typeKey, label: row.label || typeKey, error: e.message };
+      break;
+    }
+  }
+
+  // Re-render to reflect saved state + remaining unsaved edits
+  _renderNotificationsContent();
+  _notifUpdateSaveBar();
+
+  if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = origBtnText; }
+
+  // User feedback
+  if(failed){
+    var msg;
+    if(failed.error && /A2P|sms.*not.*live|campaign/i.test(failed.error)){
+      msg = 'SMS cannot be enabled for ' + failed.label + ' until A2P campaign is approved.';
+    } else if(failed.status === 401 || failed.status === 403){
+      msg = 'Session expired. Please log in again.';
+    } else {
+      msg = 'Failed to save ' + failed.label + (failed.error ? ': ' + failed.error : '');
+    }
+    toast(msg, 'danger');
+  } else if(saved.length){
+    toast('Saved ' + saved.length + ' change' + (saved.length > 1 ? 's' : ''), 'success');
+  }
 }
 
 function _notifToggleComingSoon(){
