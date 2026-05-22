@@ -2583,12 +2583,14 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <button class="stab" id="stab-customization" onclick="switchSettingsTab('customization')">Customization</button>
           <button class="stab" id="stab-email" onclick="switchSettingsTab('email')">Email</button>
           <button class="stab" id="stab-sms" onclick="switchSettingsTab('sms')">SMS</button>
+          <button class="stab" id="stab-notifications" onclick="switchSettingsTab('notifications')">Notifications</button>
           <button class="stab hidden" id="stab-activity" onclick="switchSettingsTab('activity')">Activity Log</button>
         </div>
         <div id="stab-content-billing" class="hidden" style="padding-top:4px"><div id="billing-container"></div></div>
         <div id="stab-content-customization" class="hidden" style="padding-top:4px"><div id="customization-container"></div></div>
         <div id="stab-content-email" class="hidden" style="padding-top:4px"><div id="email-domain-container"></div><div id="email-templates-container" style="margin-top:32px"></div></div>
         <div id="stab-content-sms" class="hidden" style="padding-top:4px"><div id="sms-settings-container"></div></div>
+        <div id="stab-content-notifications" class="hidden" style="padding-top:4px"><div id="notifications-container"></div></div>
         <div id="stab-content-activity" class="hidden" style="padding-top:4px"><div id="activity-log-container"></div></div>
         <div class="settings-grid" id="stab-content-general">
 
@@ -12742,6 +12744,86 @@ function renderSettings(){
 }
 
 // =====================================================
+// NOTIFICATIONS TAB (Phase 2B-1: shell + fetch)
+// =====================================================
+// Renders the new Notifications tab. Fetches the full catalog of automated
+// notifications merged with subaccount overrides. Phase 2B-2 will render
+// the category groupings and toggles. Phase 2B-3 wires save + preview.
+
+var _notificationsState = {
+  loading: false,
+  error: null,
+  settings: null,
+  categories: null,
+  loadedAt: null
+};
+
+async function renderNotificationsTab(){
+  var el = document.getElementById('notifications-container');
+  if(!el) return;
+
+  // Skip refetch if loaded within last 60 seconds (avoid spam on tab switching)
+  if(_notificationsState.settings && _notificationsState.loadedAt && (Date.now() - _notificationsState.loadedAt) < 60000){
+    _renderNotificationsContent();
+    return;
+  }
+
+  _notificationsState.loading = true;
+  _notificationsState.error = null;
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--main-text-muted)">Loading notification settings...</div>';
+
+  try {
+    var r = await fetch(apiUrl('/api/subaccount/notification-settings'), { credentials: 'include' });
+    if(!r.ok){
+      var msg = 'Failed to load notification settings (status ' + r.status + ')';
+      _notificationsState.error = msg;
+      _notificationsState.loading = false;
+      el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger-text)">' + esc(msg) + '<br><button class="btn-secondary" style="margin-top:16px" onclick="renderNotificationsTab()">Retry</button></div>';
+      return;
+    }
+    var data = await r.json();
+    _notificationsState.settings = data.settings || [];
+    _notificationsState.categories = data.categories || [];
+    _notificationsState.loadedAt = Date.now();
+    _notificationsState.loading = false;
+    _renderNotificationsContent();
+  } catch(e){
+    _notificationsState.error = e.message || 'Network error';
+    _notificationsState.loading = false;
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger-text)">Could not reach the server. <br><button class="btn-secondary" style="margin-top:16px" onclick="renderNotificationsTab()">Retry</button></div>';
+  }
+}
+
+function _renderNotificationsContent(){
+  var el = document.getElementById('notifications-container');
+  if(!el) return;
+  var s = _notificationsState.settings || [];
+  var cats = _notificationsState.categories || [];
+
+  // Phase 2B-1 placeholder: confirm data loaded, show counts. Real UI lands in 2B-2.
+  var customer = s.filter(function(n){ return n.audience === 'customer'; });
+  var internal = s.filter(function(n){ return n.audience === 'internal'; });
+  var live = s.filter(function(n){ return n.status === 'live'; });
+  var planned = s.filter(function(n){ return n.status === 'planned'; });
+
+  el.innerHTML = ''
+    + '<div class="s-card full">'
+    + '  <div class="s-card-title">Notifications</div>'
+    + '  <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Control every automated email and SMS your clinic sends. Toggle by type, channel, timing, and template.</div>'
+    + '  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
+    + '    <div style="padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)"><div style="font-size:11px;color:var(--main-text-muted);text-transform:uppercase">Customer-facing</div><div style="font-size:22px;font-weight:600;color:var(--main-text);margin-top:4px">' + customer.length + '</div></div>'
+    + '    <div style="padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)"><div style="font-size:11px;color:var(--main-text-muted);text-transform:uppercase">Internal</div><div style="font-size:22px;font-weight:600;color:var(--main-text);margin-top:4px">' + internal.length + '</div></div>'
+    + '    <div style="padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)"><div style="font-size:11px;color:var(--main-text-muted);text-transform:uppercase">Live</div><div style="font-size:22px;font-weight:600;color:var(--success);margin-top:4px">' + live.length + '</div></div>'
+    + '    <div style="padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)"><div style="font-size:11px;color:var(--main-text-muted);text-transform:uppercase">Planned</div><div style="font-size:22px;font-weight:600;color:var(--text-muted);margin-top:4px">' + planned.length + '</div></div>'
+    + '  </div>'
+    + '  <div style="padding:14px;background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);color:var(--main-text);font-size:13px;line-height:1.6">'
+    + '    <strong>Categories loaded:</strong> ' + cats.map(esc).join(', ')
+    + '    <div style="margin-top:8px;color:var(--main-text-muted);font-size:12px">Full toggle interface arrives in the next deploy.</div>'
+    + '  </div>'
+    + '</div>';
+}
+
+// =====================================================
 // ACTIVITY LOG (HIPAA: subaccount audit log viewer, admin-only)
 // =====================================================
 // Mirrors the agency dashboard audit log viewer but scoped server-side
@@ -13654,7 +13736,7 @@ async function toggleSmsEnabled(){
 }
 
 function switchSettingsTab(tab){
-  ['general','billing','customization','email','sms','activity'].forEach(function(t){
+  ['general','billing','customization','email','sms','notifications','activity'].forEach(function(t){
     var btn=document.getElementById('stab-'+t);
     var content=document.getElementById('stab-content-'+t);
     if(btn)btn.classList.toggle('active',t===tab);
@@ -13668,6 +13750,9 @@ function switchSettingsTab(tab){
   }
   if(tab==='activity'){
     renderActivityLog();
+  }
+  if(tab==='notifications'){
+    renderNotificationsTab();
   }
   if(tab==='email'){
     state.emailDomain=undefined;
