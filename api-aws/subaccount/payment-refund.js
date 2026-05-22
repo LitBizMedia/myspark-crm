@@ -31,6 +31,8 @@
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
+const { sendRefundReceipt } = require('./lib/refund-email');
+const contactsLib = require('./lib/contacts');
 const { wrap } = require('./lib/lambda-adapter');
 
 function num(v, d) {
@@ -175,6 +177,43 @@ async function handler(req, res) {
       gc_restored: gcRestored
     }
   });
+
+  // Send refund receipt to patient (non-fatal). Looks up contact + business
+  // name; if contact has no email or notification is disabled, skips silently.
+  try {
+    const pmt = result.payment;
+    if (pmt && pmt.contact_id) {
+      const contact = await contactsLib.getContactById(auth.subaccount_id, pmt.contact_id);
+      if (contact && contact.email) {
+        // Pull business name from subaccount_data settings (or fall back to subaccount name)
+        let businessName = 'MySpark+';
+        try {
+          const sdRow = await db.findOne('subaccount_data', { subaccount_id: auth.subaccount_id });
+          const settings = (sdRow && sdRow.data && sdRow.data.settings) || {};
+          businessName = settings.businessName || settings.business_name || businessName;
+        } catch (e) { /* fall back to default */ }
+
+        const slug = auth.subaccount_id.replace(/^sub-/, '');
+        await sendRefundReceipt({
+          subaccountId: auth.subaccount_id,
+          subaccountSlug: slug,
+          recipientEmail: contact.email,
+          recipientName: contact.name || contact.first_name || '',
+          contactId: contact.id,
+          businessName: businessName,
+          refundTotal: refundTotal,
+          cardPortion: cardPortion,
+          giftCardPortion: giftCardPortion,
+          reason: reason,
+          originalDate: pmt.created_at || pmt.createdAt || null,
+          originalTotal: num(pmt.total, 0),
+          newStatus: result.newStatus
+        });
+      }
+    }
+  } catch (sendErr) {
+    console.warn('refund receipt send failed (non-fatal):', sendErr.message);
+  }
 
   res.status(200).json({
     ok: true,
