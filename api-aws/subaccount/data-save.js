@@ -23,7 +23,9 @@ const { logAudit } = require('./lib/audit');
 // frontend regressed.
 const STRIPPED_TOP_LEVEL = ['contacts', 'creditBalance', 'creditHistory'];
 // Settings keys are managed by frontend allowlist + self-heal. Empty by design.
-const STRIPPED_SETTINGS = [];
+const STRIPPED_SETTINGS = [
+  'notifSettings'  // 2026-05-22: migrated to subaccount_notification_settings RDS table
+];
 
 function sanitize(data) {
   const out = { ...data };

@@ -2708,19 +2708,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
             </div>
           </div>
-          <div class="s-card full" id="notif-settings-card">
-            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Notification Settings</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:14px;max-width:600px" id="ns-type-grid"></div>
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Timing</div>
-            <div class="form-row" style="max-width:440px">
-              <div class="form-group"><label>Show tasks due within (days)</label><input id="ns-task-days" type="number" min="1" max="90" value="7"></div>
-              <div class="form-group"><label>Show appointments within</label><select id="ns-appt-hours"><option value="1">1 hour before</option><option value="2">2 hours before</option><option value="4">4 hours before</option><option value="24" selected>1 day before</option><option value="48">2 days before</option><option value="168">1 week before</option></select></div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-              <button class="btn btn-purple btn-sm" onclick="saveNotifSettings()">Save Settings</button>
-              <button class="btn btn-ghost btn-sm" onclick="clearReadNotifs()">Clear Read History</button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -12780,7 +12767,7 @@ function renderCustomizationTab(){
 // OVERRIDE: renderSettings — include notification settings
 // =====================================================
 function renderSettings(){
-  renderUserList();renderTagMgr();renderBH();renderBlackoutList();renderNotifSettings();cfRenderSettings();renderSquareCard();renderTimezoneSelect();renderBusinessInfo();renderBusinessLogo();
+  renderUserList();renderTagMgr();renderBH();renderBlackoutList();cfRenderSettings();renderSquareCard();renderTimezoneSelect();renderBusinessInfo();renderBusinessLogo();
   // Activity Log tab visible only for admins
   var actBtn=document.getElementById('stab-activity');
   if(actBtn){
@@ -13222,11 +13209,6 @@ function _notifUpdateSaveBar(){
     if(countEl) countEl.textContent = String(count);
     if(pluralEl) pluralEl.textContent = count === 1 ? '' : 's';
   }
-}
-
-function _notifDiscardEdits(){
-  _notificationsState.edits = {};
-  _renderNotificationsContent();
 }
 
 // Discard all pending edits and re-render.
@@ -14710,42 +14692,6 @@ async function _doRemoveEmailDomain(domainId){
   }
 }
 
-function renderNotifSettings(){
-  const el=document.getElementById('ns-type-grid');if(!el)return;
-  const ns=db.settings.notifSettings||{};
-  const types=ns.types||{};
-  const rows=[
-    {key:'overdueTasks',label:'Overdue Tasks'},
-    {key:'tasksDueToday',label:'Tasks Due Today'},
-    {key:'tasksDueTomorrow',label:'Tasks Due Tomorrow'},
-    {key:'apptToday',label:'Appointments Today'},
-    {key:'apptTomorrow',label:'Appointments Tomorrow'},
-  ];
-  el.innerHTML=rows.map(r=>'<div class="ns-type-row"><span class="ns-type-label">'+r.label+'</span><button class="ns-sw'+(types[r.key]!==false?' on':'')+'" id="ns-'+r.key+'" data-key="'+r.key+'" onclick="toggleNsSw(this)"></button></div>').join('');
-  const td=document.getElementById('ns-task-days');if(td)td.value=ns.taskAdvanceDays||7;
-  const ah=document.getElementById('ns-appt-hours');if(ah)ah.value=String(ns.apptAdvanceHours||24);
-}
-
-function toggleNsSw(btn){btn.classList.toggle('on')}
-
-function saveNotifSettings(){
-  const keys=['overdueTasks','tasksDueToday','tasksDueTomorrow','apptToday','apptTomorrow'];
-  const types={};
-  keys.forEach(k=>{const el=document.getElementById('ns-'+k);types[k]=el?el.classList.contains('on'):true});
-  const td=document.getElementById('ns-task-days'),ah=document.getElementById('ns-appt-hours');
-  db.settings.notifSettings={types,taskAdvanceDays:parseInt(td&&td.value)||7,apptAdvanceHours:parseInt(ah&&ah.value)||24};
-  saveData();updateNotifBadge();toast('Notification settings saved.','success');
-}
-
-function clearReadNotifs(){
-  state.modal={type:'clear-notifs'};
-  document.getElementById('modal-title').textContent='Clear Read History';
-  document.getElementById('modal-box').className='modal';
-  document.getElementById('modal-body').innerHTML='<div class="warn-box">Clear all read notification history? This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmClearReadNotifs()">Clear</button>';
-  document.getElementById('modal-overlay').classList.add('open');
-}
-function confirmClearReadNotifs(){db.readNotifs=[];saveData();closeModal();updateNotifBadge();toast('Read history cleared.','success')}
 
 // =====================================================
 // OVERRIDE: getNotifs — respect settings + generate keys
