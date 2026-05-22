@@ -8,6 +8,7 @@
 
 const crypto = require('crypto');
 const db = require('./db');
+const { canSubaccountSendSms } = require('./sms-gate');
 const secrets = require('./secrets');
 
 // Match the email-conversation token pattern from lib/ses.js so any future
@@ -167,13 +168,24 @@ async function sendSms(slug, opts) {
   const toNormalized = normalizePhone(opts.to);
   if (!toNormalized) return { ok: false, error: 'Invalid destination phone number' };
 
-  const settings = await getSmsSettings(subaccountId);
-  if (!settings) return { ok: false, error: 'SMS not configured for this workspace' };
-  // Single status gate: only 'live' allows sending
-  if (settings.campaign_status === 'pending') return { ok: false, error: 'SMS campaign is pending carrier approval' };
-  if (settings.campaign_status === 'paused') return { ok: false, error: 'SMS is paused for this workspace' };
-  if (settings.campaign_status !== 'live') return { ok: false, error: 'SMS is not yet active for this workspace' };
-  if (!settings.twilio_number) return { ok: false, error: 'No Twilio number assigned to this workspace' };
+  // Canonical SMS gate: checks sms_settings row exists, twilio_number is set,
+  // and campaign_status is in ALLOWED_STATUSES (currently ['live']).
+  // Returns structured reason codes; we map them to human-readable errors here.
+  const gate = await canSubaccountSendSms(subaccountId, db);
+  if (!gate.ok) {
+    const errorMap = {
+      no_sms_settings: 'SMS not configured for this workspace',
+      missing_twilio_number: 'No Twilio number assigned to this workspace',
+      campaign_not_live:
+        gate.status === 'pending' ? 'SMS campaign is pending carrier approval' :
+        gate.status === 'paused'  ? 'SMS is paused for this workspace' :
+                                    'SMS is not yet active for this workspace',
+      no_subaccount_id: 'Subaccount ID required',
+      gate_error: 'SMS gate check failed: ' + (gate.error || 'unknown')
+    };
+    return { ok: false, error: errorMap[gate.reason] || ('SMS unavailable: ' + gate.reason) };
+  }
+  const settings = gate.settings;
 
   const fromNumber = settings.twilio_number;
   const body = opts.vars ? applyVars(opts.body, opts.vars) : opts.body;
@@ -217,6 +229,7 @@ async function sendSms(slug, opts) {
     if (opts.contactId) {
       try {
         const db = require('./db');
+const { canSubaccountSendSms } = require('./sms-gate');
         const consentRow = await db.query(
           'SELECT sms_consent_transactional, sms_consent_marketing FROM contacts WHERE id = $1 AND subaccount_id = $2',
           [opts.contactId, subaccountId]
