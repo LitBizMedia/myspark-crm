@@ -25,53 +25,53 @@
 
 const CATALOG = [
   // ============ APPOINTMENTS ============
-  { key: 'appointment_confirmation', label: 'Appointment Confirmation', description: 'Sent when an appointment is created', category: 'Appointments', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-confirmation' },
-  { key: 'appointment_reminder', label: 'Appointment Reminder', description: 'Reminds patients before their appointment', category: 'Appointments', audience: 'customer', risk_level: 'optional', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 1440, status: 'live', template_type: 'appt-reminder' },
-  { key: 'appointment_cancel_notification', label: 'Appointment Cancellation', description: 'Sent when an appointment is cancelled', category: 'Appointments', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-cancel' },
-  { key: 'appointment_reschedule_notification', label: 'Appointment Reschedule', description: 'Sent when an appointment is rescheduled', category: 'Appointments', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-reschedule' },
-  { key: 'appointment_payment_receipt', label: 'Appointment Payment Receipt', description: 'Receipt for appointment payment', category: 'Appointments', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'appt-receipt' },
+  { key: 'appointment_confirmation', label: 'Appointment Confirmation', description: 'Sent when an appointment is created', category: 'Appointments', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-confirmation' },
+  { key: 'appointment_reminder', label: 'Appointment Reminder', description: 'Reminds patients before their appointment', category: 'Appointments', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 1440, status: 'live', template_type: 'appt-reminder' },
+  { key: 'appointment_cancel_notification', label: 'Appointment Cancellation', description: 'Sent when an appointment is cancelled', category: 'Appointments', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-cancel' },
+  { key: 'appointment_reschedule_notification', label: 'Appointment Reschedule', description: 'Sent when an appointment is rescheduled', category: 'Appointments', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'appt-reschedule' },
+  { key: 'appointment_payment_receipt', label: 'Appointment Payment Receipt', description: 'Receipt for appointment payment', category: 'Appointments', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'appt-receipt' },
 
   // ============ BOOKING WIDGET ============
-  { key: 'booking_confirmation', label: 'Booking Confirmation', description: 'Sent after public booking widget submission', category: 'Booking', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'booking-confirmation' },
+  { key: 'booking_confirmation', label: 'Booking Confirmation', description: 'Sent after public booking widget submission', category: 'Booking', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'booking-confirmation' },
 
   // ============ CLASSES ============
-  { key: 'class_registration_confirmation', label: 'Class Registration', description: 'Confirms registration for a class session', category: 'Classes', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'class-registration' },
-  { key: 'class_session_cancelled', label: 'Class Session Cancelled', description: 'Notifies registered participants when a class is cancelled', category: 'Classes', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'class-cancelled' },
+  { key: 'class_registration_confirmation', label: 'Class Registration', description: 'Confirms registration for a class session', category: 'Classes', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'class-registration' },
+  { key: 'class_session_cancelled', label: 'Class Session Cancelled', description: 'Notifies registered participants when a class is cancelled', category: 'Classes', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'class-cancelled' },
 
   // ============ POS / SALES ============
-  { key: 'pos_payment_receipt', label: 'POS Payment Receipt', description: 'Receipt for in-person POS payment', category: 'Sales', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'pos-receipt' },
-  { key: 'gift_card_sale_confirmation', label: 'Gift Card Purchase', description: 'Delivers the gift card code to the buyer', category: 'Sales', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'gift-card-sale' },
+  { key: 'pos_payment_receipt', label: 'POS Payment Receipt', description: 'Receipt for in-person POS payment', category: 'Sales', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'pos-receipt' },
+  { key: 'gift_card_sale_confirmation', label: 'Gift Card Purchase', description: 'Delivers the gift card code to the buyer', category: 'Sales', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'gift-card-sale' },
 
   // ============ BILLING (subscription, agency-to-subaccount) ============
-  { key: 'subscription_charge_success', label: 'Subscription Charged', description: 'Confirmation when a subscription successfully charges', category: 'Billing', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-  { key: 'subscription_receipt', label: 'Subscription Receipt', description: 'Detailed receipt for subscription payment', category: 'Billing', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'receipt' },
-  { key: 'subscription_past_due', label: 'Subscription Past Due', description: 'Alerts admin when subscription payment is past due', category: 'Billing', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'past_due' },
-  { key: 'subscription_payment_failed', label: 'Subscription Payment Failed', description: 'Alerts admin when a charge attempt fails', category: 'Billing', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'payment_failed' },
-  { key: 'subscription_suspended', label: 'Subscription Suspended', description: 'Notifies admin when subscription is suspended', category: 'Billing', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'suspended' },
-  { key: 'subscription_trial_ending', label: 'Trial Ending Soon', description: 'Reminds admin their trial is about to end', category: 'Billing', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: 4320, status: 'live', template_type: 'trial_ending_soon' },
-  { key: 'subscription_cancelled', label: 'Subscription Cancelled', description: 'Confirms subscription cancellation', category: 'Billing', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'cancellation_confirmed' },
-  { key: 'subscription_reactivated_charged', label: 'Subscription Reactivated', description: 'Confirms reactivation with a charge', category: 'Billing', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'reactivation_confirmed' },
-  { key: 'subscription_reactivated_no_charge', label: 'Subscription Reactivated (No Charge)', description: 'Confirms reactivation when no immediate charge needed', category: 'Billing', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'reactivation_no_charge' },
+  { key: 'subscription_charge_success', label: 'Subscription Charged', description: 'Confirmation when a subscription successfully charges', category: 'Billing', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
+  { key: 'subscription_receipt', label: 'Subscription Receipt', description: 'Detailed receipt for subscription payment', category: 'Billing', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'receipt' },
+  { key: 'subscription_past_due', label: 'Subscription Past Due', description: 'Alerts admin when subscription payment is past due', category: 'Billing', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'past_due' },
+  { key: 'subscription_payment_failed', label: 'Subscription Payment Failed', description: 'Alerts admin when a charge attempt fails', category: 'Billing', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'payment_failed' },
+  { key: 'subscription_suspended', label: 'Subscription Suspended', description: 'Notifies admin when subscription is suspended', category: 'Billing', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'suspended' },
+  { key: 'subscription_trial_ending', label: 'Trial Ending Soon', description: 'Reminds admin their trial is about to end', category: 'Billing', audience: 'admin', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: 4320, status: 'live', template_type: 'trial_ending_soon' },
+  { key: 'subscription_cancelled', label: 'Subscription Cancelled', description: 'Confirms subscription cancellation', category: 'Billing', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'cancellation_confirmed' },
+  { key: 'subscription_reactivated_charged', label: 'Subscription Reactivated', description: 'Confirms reactivation with a charge', category: 'Billing', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'reactivation_confirmed' },
+  { key: 'subscription_reactivated_no_charge', label: 'Subscription Reactivated (No Charge)', description: 'Confirms reactivation when no immediate charge needed', category: 'Billing', audience: 'admin', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'reactivation_no_charge' },
 
   // ============ AUTH ============
-  { key: 'password_reset', label: 'Password Reset', description: 'Sends password reset link to a user', category: 'Auth', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
+  { key: 'password_reset', label: 'Password Reset', description: 'Sends password reset link to a user', category: 'Auth', audience: 'admin', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
 
   // ============ CONTRACTS ============
-  { key: 'contract_sent', label: 'Contract Sent', description: 'Delivers a contract to a client for signature', category: 'Contracts', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-sent' },
-  { key: 'contract_signed_notification', label: 'Contract Signed', description: 'Notifies clinic when a contract is signed', category: 'Contracts', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-signed' },
-  { key: 'contract_receipt', label: 'Contract Receipt', description: 'Receipt for contract payment', category: 'Contracts', audience: 'customer', risk_level: 'required', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-receipt' },
+  { key: 'contract_sent', label: 'Contract Sent', description: 'Delivers a contract to a client for signature', category: 'Contracts', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-sent' },
+  { key: 'contract_signed_notification', label: 'Contract Signed', description: 'Notifies clinic when a contract is signed', category: 'Contracts', audience: 'patient', risk_level: 'recommended', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-signed' },
+  { key: 'contract_receipt', label: 'Contract Receipt', description: 'Receipt for contract payment', category: 'Contracts', audience: 'patient', risk_level: 'required', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-receipt' },
 
   // ============ SYSTEM ============
-  { key: 'email_domain_grace_warning', label: 'Email Domain Verification', description: 'Warns admin about pending email domain verification', category: 'System', audience: 'customer', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
+  { key: 'email_domain_grace_warning', label: 'Email Domain Verification', description: 'Warns admin about pending email domain verification', category: 'System', audience: 'admin', risk_level: 'recommended', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
 
   // ============ AUTOMATIONS / JOURNEYS ============
-  { key: 'journey_email_step', label: 'Journey Email Step', description: 'Email step in an automation journey', category: 'Automations', audience: 'customer', risk_level: 'optional', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
-  { key: 'journey_sms_step', label: 'Journey SMS Step', description: 'SMS step in an automation journey', category: 'Automations', audience: 'customer', risk_level: 'optional', channels: ['sms'], default_email: false, default_sms: true, default_timing_minutes_before: null, status: 'live', template_type: null },
+  { key: 'journey_email_step', label: 'Journey Email Step', description: 'Email step in an automation journey', category: 'Automations', audience: 'patient', risk_level: 'optional', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
+  { key: 'journey_sms_step', label: 'Journey SMS Step', description: 'SMS step in an automation journey', category: 'Automations', audience: 'patient', risk_level: 'optional', channels: ['sms'], default_email: false, default_sms: true, default_timing_minutes_before: null, status: 'live', template_type: null },
 
   // ============ MARKETING ============
-  { key: 'welcome_new_patient', label: 'Welcome New Patient', description: 'Sent automatically when a new contact is created', category: 'Marketing', audience: 'customer', risk_level: 'optional', channels: ['email'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'welcome' },
-  { key: 'review_request', label: 'Review Request', description: 'Asks for a review after an appointment', category: 'Marketing', audience: 'customer', risk_level: 'optional', channels: ['email'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'review-request' },
-  { key: 'no_show_followup', label: 'No-Show Follow-up', description: 'Gentle re-engagement after a missed appointment', category: 'Marketing', audience: 'customer', risk_level: 'optional', channels: ['email'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'no-show-followup' },
+  { key: 'welcome_new_patient', label: 'Welcome New Patient', description: 'Sent automatically when a new contact is created', category: 'Marketing', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'welcome' },
+  { key: 'review_request', label: 'Review Request', description: 'Asks for a review after an appointment', category: 'Marketing', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'review-request' },
+  { key: 'no_show_followup', label: 'No-Show Follow-up', description: 'Gentle re-engagement after a missed appointment', category: 'Marketing', audience: 'patient', risk_level: 'optional', channels: ['email', 'sms'], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'no-show-followup' },
 
   // ============ INTERNAL (staff dashboard) ============
   { key: 'internal_overdue_tasks', label: 'Overdue Tasks', description: 'Dashboard alert for overdue tasks', category: 'Internal', audience: 'internal', risk_level: 'optional', channels: [], default_email: false, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: null },
@@ -101,8 +101,20 @@ function getTypesByCategory() {
   return byCategory;
 }
 
+// 2026-05-22 audience model: 'patient' (clinic's patients), 'admin'
+// (system communications to subaccount admin), 'internal' (staff dashboard).
+// getCustomerTypes is retained for backward compatibility but now returns
+// patient + admin combined (all externally-deliverable notifications).
 function getCustomerTypes() {
-  return CATALOG.filter(t => t.audience === 'customer');
+  return CATALOG.filter(t => t.audience === 'patient' || t.audience === 'admin');
+}
+
+function getPatientTypes() {
+  return CATALOG.filter(t => t.audience === 'patient');
+}
+
+function getAdminTypes() {
+  return CATALOG.filter(t => t.audience === 'admin');
 }
 
 function getInternalTypes() {
@@ -119,6 +131,8 @@ module.exports = {
   getAllTypes,
   getTypesByCategory,
   getCustomerTypes,
+  getPatientTypes,
+  getAdminTypes,
   getInternalTypes,
   getLiveTypes
 };

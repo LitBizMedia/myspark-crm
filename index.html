@@ -603,6 +603,51 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .bh-toggle::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;
   border-radius:50%;background:#fff;transition:left .2s}
 .bh-toggle.on::after{left:21px}
+/* Notifications tab styles (Phase 2B-2) */
+.notif-cat{margin-bottom:24px}
+.notif-cat-title{font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:0.5px;padding:0 0 8px;border-bottom:1px solid var(--main-border);margin-bottom:12px}
+.notif-row{display:grid;grid-template-columns:1fr auto;gap:16px;padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);margin-bottom:8px;align-items:center}
+.notif-row.planned{opacity:0.55;background:var(--main-bg)}
+.notif-row.locked .notif-toggle{cursor:not-allowed;opacity:0.6}
+.notif-info{min-width:0}
+.notif-label{font-size:14px;font-weight:600;color:var(--main-text);display:flex;align-items:center;gap:8px}
+.notif-label-icon{display:inline-flex;align-items:center;color:var(--main-text-muted)}
+.notif-label-icon.lock{color:var(--purple)}
+.notif-label-icon.warn{color:var(--warning)}
+.notif-desc{font-size:12px;color:var(--main-text-muted);margin-top:2px;line-height:1.5}
+.notif-controls{display:grid;align-items:center;gap:14px;justify-content:end;justify-items:start}
+.notif-controls.audience-patient{grid-template-columns:95px 95px 195px}
+.notif-controls.audience-admin{grid-template-columns:95px 195px}
+.notif-controls.audience-internal{grid-template-columns:38px}
+.notif-chip.locked{cursor:not-allowed;opacity:0.85;background:var(--purple-dim);border-color:var(--purple-border);color:var(--purple)}
+.notif-section-title{font-size:13px;font-weight:700;color:var(--main-text);margin:32px 0 4px;display:flex;align-items:center;gap:8px}
+.notif-section-title:first-of-type{margin-top:0}
+.notif-section-desc{font-size:12px;color:var(--main-text-muted);margin-bottom:16px;line-height:1.5}
+.notif-section-icon{display:inline-flex;align-items:center;color:var(--main-text-muted)}
+.notif-toggle{width:38px;height:20px;border-radius:10px;background:var(--border);cursor:pointer;position:relative;flex-shrink:0;transition:background 0.15s}
+.notif-toggle.on{background:var(--purple)}
+.notif-toggle::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left 0.15s}
+.notif-toggle.on::after{left:21px}
+.notif-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius-full);font-size:12px;color:var(--main-text-muted);cursor:pointer;transition:all 0.15s;justify-self:start;min-width:78px;justify-content:center}
+.notif-chip.on{background:var(--purple-dim);border-color:var(--purple-border);color:var(--purple)}
+.notif-chip.disabled{cursor:not-allowed;opacity:0.4}
+.notif-chip-icon{display:inline-flex;align-items:center}
+.notif-timing{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--main-text-muted)}
+.notif-timing input{width:38px;padding:4px 6px;border:1px solid var(--main-input-border);border-radius:var(--radius-sm);background:var(--main-input);color:var(--main-text);font-size:12px;text-align:center}
+.notif-timing input:disabled{opacity:0.6;cursor:not-allowed}
+.notif-timing-label{font-size:10px;color:var(--main-text-muted);text-transform:uppercase;font-weight:500}
+.notif-timing-suffix{font-size:11px;color:var(--main-text-muted);margin-left:4px}
+.notif-coming-soon{margin-top:24px;padding:14px;background:var(--main-bg);border:1px dashed var(--main-border);border-radius:var(--radius)}
+.notif-coming-soon-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:13px;font-weight:600;color:var(--main-text-muted)}
+.notif-coming-soon-header svg{transition:transform 0.15s}
+.notif-coming-soon.expanded .notif-coming-soon-header svg{transform:rotate(90deg)}
+.notif-coming-soon-body{display:none;margin-top:12px}
+.notif-coming-soon.expanded .notif-coming-soon-body{display:block}
+.notif-save-bar{position:sticky;top:0;background:var(--main-card);border:1px solid var(--purple-border);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;z-index:10;box-shadow:var(--shadow-md)}
+.notif-save-bar.hidden{display:none}
+.notif-save-bar-text{font-size:13px;color:var(--main-text)}
+.notif-save-bar-text strong{color:var(--purple)}
+.notif-save-bar-actions{display:flex;gap:8px}
 .bh-time{background:var(--bg-input);border:1px solid var(--border);border-radius:6px;
   color:var(--text);padding:4px 8px;font-size:12px;font-family:Lato,sans-serif;outline:none;width:120px}
 .bh-time:focus{border-color:var(--purple)}
@@ -12797,30 +12842,295 @@ async function renderNotificationsTab(){
 function _renderNotificationsContent(){
   var el = document.getElementById('notifications-container');
   if(!el) return;
-  var s = _notificationsState.settings || [];
-  var cats = _notificationsState.categories || [];
+  var settings = _notificationsState.settings || [];
 
-  // Phase 2B-1 placeholder: confirm data loaded, show counts. Real UI lands in 2B-2.
-  var customer = s.filter(function(n){ return n.audience === 'customer'; });
-  var internal = s.filter(function(n){ return n.audience === 'internal'; });
-  var live = s.filter(function(n){ return n.status === 'live'; });
-  var planned = s.filter(function(n){ return n.status === 'planned'; });
+  if(!_notificationsState.edits) _notificationsState.edits = {};
 
-  el.innerHTML = ''
-    + '<div class="s-card full">'
-    + '  <div class="s-card-title">Notifications</div>'
-    + '  <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Control every automated email and SMS your clinic sends. Toggle by type, channel, timing, and template.</div>'
-    + '  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
-    + '    <div style="padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)"><div style="font-size:11px;color:var(--main-text-muted);text-transform:uppercase">Customer-facing</div><div style="font-size:22px;font-weight:600;color:var(--main-text);margin-top:4px">' + customer.length + '</div></div>'
-    + '    <div style="padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)"><div style="font-size:11px;color:var(--main-text-muted);text-transform:uppercase">Internal</div><div style="font-size:22px;font-weight:600;color:var(--main-text);margin-top:4px">' + internal.length + '</div></div>'
-    + '    <div style="padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)"><div style="font-size:11px;color:var(--main-text-muted);text-transform:uppercase">Live</div><div style="font-size:22px;font-weight:600;color:var(--success);margin-top:4px">' + live.length + '</div></div>'
-    + '    <div style="padding:14px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius)"><div style="font-size:11px;color:var(--main-text-muted);text-transform:uppercase">Planned</div><div style="font-size:22px;font-weight:600;color:var(--text-muted);margin-top:4px">' + planned.length + '</div></div>'
-    + '  </div>'
-    + '  <div style="padding:14px;background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);color:var(--main-text);font-size:13px;line-height:1.6">'
-    + '    <strong>Categories loaded:</strong> ' + cats.map(esc).join(', ')
-    + '    <div style="margin-top:8px;color:var(--main-text-muted);font-size:12px">Full toggle interface arrives in the next deploy.</div>'
-    + '  </div>'
-    + '</div>';
+  var liveSettings = settings.filter(function(n){ return n.status === 'live'; });
+  var plannedSettings = settings.filter(function(n){ return n.status === 'planned'; });
+
+  var patientLive = liveSettings.filter(function(n){ return n.audience === 'patient'; });
+  var adminLive   = liveSettings.filter(function(n){ return n.audience === 'admin'; });
+  var internalLive = liveSettings.filter(function(n){ return n.audience === 'internal'; });
+
+  function groupByCategory(rows){
+    var map = {};
+    rows.forEach(function(n){
+      if(!map[n.category]) map[n.category] = [];
+      map[n.category].push(n);
+    });
+    return map;
+  }
+
+  var patientByCategory = groupByCategory(patientLive);
+  var adminByCategory   = groupByCategory(adminLive);
+  var internalByCategory = groupByCategory(internalLive);
+
+  var html = '';
+
+  // Sticky save bar
+  html += '<div id="notif-save-bar" class="notif-save-bar hidden">';
+  html += '  <div class="notif-save-bar-text"><strong id="notif-edit-count">0</strong> unsaved change<span id="notif-edit-plural">s</span></div>';
+  html += '  <div class="notif-save-bar-actions">';
+  html += '    <button class="btn-secondary" onclick="_notifDiscardEdits()">Discard</button>';
+  html += '    <button class="btn-primary" onclick="_notifSaveEdits()" disabled title="Save flow lands in Phase 2B-3">Save Changes</button>';
+  html += '  </div>';
+  html += '</div>';
+
+  html += '<div class="s-card full">';
+  html += '  <div class="s-card-title">Notifications</div>';
+  html += '  <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">Control every automated email and SMS your clinic sends. Patient notifications give you full control over channel and timing. System notifications are operational alerts to your admin email and stay on for safety. Internal notifications appear on the staff dashboard.</div>';
+
+  // ============ PATIENT NOTIFICATIONS ============
+  if(patientLive.length > 0){
+    html += '<div class="notif-section-title"><span class="notif-section-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>Patient Notifications</div>';
+    html += '<div class="notif-section-desc">Sent to your patients. Choose email, SMS, or both per type. SMS requires A2P campaign approval.</div>';
+    Object.keys(patientByCategory).forEach(function(cat){
+      html += '<div class="notif-cat">';
+      html += '  <div class="notif-cat-title">' + esc(cat) + '</div>';
+      patientByCategory[cat].forEach(function(n){
+        html += _notifRowHtml(n, false);
+      });
+      html += '</div>';
+    });
+  }
+
+  // ============ SYSTEM NOTIFICATIONS ============
+  if(adminLive.length > 0){
+    html += '<div class="notif-section-title"><span class="notif-section-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>System Notifications</div>';
+    html += '<div class="notif-section-desc">Operational alerts sent to your admin email. Locked to email for delivery reliability. You can adjust timing where applicable.</div>';
+    Object.keys(adminByCategory).forEach(function(cat){
+      html += '<div class="notif-cat">';
+      html += '  <div class="notif-cat-title">' + esc(cat) + '</div>';
+      adminByCategory[cat].forEach(function(n){
+        html += _notifRowHtml(n, false);
+      });
+      html += '</div>';
+    });
+  }
+
+  // ============ INTERNAL NOTIFICATIONS ============
+  if(internalLive.length > 0){
+    html += '<div class="notif-section-title"><span class="notif-section-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>Internal Dashboard</div>';
+    html += '<div class="notif-section-desc">In-app alerts shown to your staff. Toggle each type on or off.</div>';
+    Object.keys(internalByCategory).forEach(function(cat){
+      html += '<div class="notif-cat">';
+      internalByCategory[cat].forEach(function(n){
+        html += _notifRowHtml(n, false);
+      });
+      html += '</div>';
+    });
+  }
+
+  // ============ COMING SOON ============
+  if(plannedSettings.length > 0){
+    html += '<div class="notif-coming-soon" id="notif-coming-soon">';
+    html += '  <div class="notif-coming-soon-header" onclick="_notifToggleComingSoon()">';
+    html += '    <span>Coming Soon (' + plannedSettings.length + ')</span>';
+    html += '    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>';
+    html += '  </div>';
+    html += '  <div class="notif-coming-soon-body">';
+    plannedSettings.forEach(function(n){
+      html += _notifRowHtml(n, true);
+    });
+    html += '  </div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// Render one notification row. Audience determines which controls appear.
+function _notifRowHtml(n, isPlanned){
+  var edits = _notificationsState.edits[n.type_key] || {};
+  var effective = {
+    enabled: edits.enabled !== undefined ? edits.enabled : n.enabled,
+    email_enabled: edits.email_enabled !== undefined ? edits.email_enabled : n.email_enabled,
+    sms_enabled: edits.sms_enabled !== undefined ? edits.sms_enabled : n.sms_enabled,
+    timing_minutes_before: edits.timing_minutes_before !== undefined ? edits.timing_minutes_before : n.timing_minutes_before
+  };
+
+  var audience = n.audience || 'patient';
+  var hasTimingField = (n.timing_minutes_before !== null && n.timing_minutes_before !== undefined);
+
+  var rowClasses = ['notif-row'];
+  if(isPlanned) rowClasses.push('planned');
+
+  var disabledAttr = isPlanned ? ' style="pointer-events:none"' : '';
+
+  var html = '<div class="' + rowClasses.join(' ') + '" data-type="' + esc(n.type_key) + '"' + disabledAttr + '>';
+  html += '  <div class="notif-info">';
+  html += '    <div class="notif-label">' + esc(n.label) + (isPlanned ? ' <span style="font-size:11px;color:var(--main-text-muted);font-weight:500">(Coming Soon)</span>' : '') + '</div>';
+  html += '    <div class="notif-desc">' + esc(n.description || '') + '</div>';
+  html += '  </div>';
+  html += '  <div class="notif-controls audience-' + esc(audience) + '">';
+
+  if(audience === 'internal'){
+    // Single on/off toggle, no channels
+    var toggleClass = 'notif-toggle' + (effective.enabled ? ' on' : '');
+    var toggleOnclick = isPlanned ? '' : ' onclick="_notifToggle(\'' + esc(n.type_key) + '\', \'enabled\')"';
+    html += '    <div class="' + toggleClass + '"' + toggleOnclick + ' title="Enable or disable"></div>';
+  } else if(audience === 'admin'){
+    // Email chip (locked on), then timing-or-empty
+    html += '    <div class="notif-chip on locked" title="System notifications are locked to email">';
+    html += '      <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>';
+    html += '      Email';
+    html += '    </div>';
+
+    if(hasTimingField){
+      html += _notifTimingHtml(n, effective, isPlanned);
+    } else {
+      html += '    <div></div>';
+    }
+  } else {
+    // Patient audience: email + sms + timing-or-empty
+    var emailClass = 'notif-chip' + (effective.email_enabled ? ' on' : '') + (isPlanned ? ' disabled' : '');
+    var emailOnclick = isPlanned ? '' : ' onclick="_notifToggle(\'' + esc(n.type_key) + '\', \'email_enabled\')"';
+    html += '    <div class="' + emailClass + '"' + emailOnclick + '>';
+    html += '      <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>';
+    html += '      Email';
+    html += '    </div>';
+
+    var smsClass = 'notif-chip' + (effective.sms_enabled ? ' on' : '') + (isPlanned ? ' disabled' : '');
+    var smsOnclick = isPlanned ? '' : ' onclick="_notifToggle(\'' + esc(n.type_key) + '\', \'sms_enabled\')"';
+    html += '    <div class="' + smsClass + '"' + smsOnclick + '>';
+    html += '      <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>';
+    html += '      SMS';
+    html += '    </div>';
+
+    if(hasTimingField){
+      html += _notifTimingHtml(n, effective, isPlanned);
+    } else {
+      html += '    <div></div>';
+    }
+  }
+
+  html += '  </div>';
+  html += '</div>';
+
+  return html;
+}
+
+// Timing inputs as d/h/m. Extracted so admin and patient both reuse it.
+function _notifTimingHtml(n, effective, isPlanned){
+  var timingDisabled = isPlanned ? ' disabled' : '';
+  var totalMin = effective.timing_minutes_before || 0;
+  var days = Math.floor(totalMin / 1440);
+  var hours = Math.floor((totalMin % 1440) / 60);
+  var mins = totalMin % 60;
+  var html = '<div class="notif-timing">';
+  html += '  <input type="number" min="0" max="365" value="' + days + '"' + timingDisabled + ' onchange="_notifSetTimingPart(\'' + esc(n.type_key) + '\', \'d\', this.value)" title="Days"><span class="notif-timing-label">d</span>';
+  html += '  <input type="number" min="0" max="23" value="' + hours + '"' + timingDisabled + ' onchange="_notifSetTimingPart(\'' + esc(n.type_key) + '\', \'h\', this.value)" title="Hours"><span class="notif-timing-label">h</span>';
+  html += '  <input type="number" min="0" max="59" value="' + mins + '"' + timingDisabled + ' onchange="_notifSetTimingPart(\'' + esc(n.type_key) + '\', \'m\', this.value)" title="Minutes"><span class="notif-timing-label">m</span>';
+  html += '  <span class="notif-timing-suffix">before</span>';
+  html += '</div>';
+  return html;
+}
+
+function _notifToggle(typeKey, field){
+  var n = _notificationsState.settings.find(function(s){ return s.type_key === typeKey; });
+  if(!n) return;
+  if(!_notificationsState.edits[typeKey]) _notificationsState.edits[typeKey] = {};
+
+  var currentValue = _notificationsState.edits[typeKey][field] !== undefined
+    ? _notificationsState.edits[typeKey][field]
+    : n[field];
+  _notificationsState.edits[typeKey][field] = !currentValue;
+
+  if(_notificationsState.edits[typeKey][field] === n[field]){
+    delete _notificationsState.edits[typeKey][field];
+    if(Object.keys(_notificationsState.edits[typeKey]).length === 0){
+      delete _notificationsState.edits[typeKey];
+    }
+  }
+
+  _renderNotificationsContent();
+  _notifUpdateSaveBar();
+}
+
+function _notifSetTiming(typeKey, value){
+  var n = _notificationsState.settings.find(function(s){ return s.type_key === typeKey; });
+  if(!n) return;
+  if(!_notificationsState.edits[typeKey]) _notificationsState.edits[typeKey] = {};
+
+  var num = parseInt(value, 10);
+  if(isNaN(num) || num < 0) num = 0;
+
+  if(num === n.timing_minutes_before){
+    delete _notificationsState.edits[typeKey].timing_minutes_before;
+    if(Object.keys(_notificationsState.edits[typeKey]).length === 0){
+      delete _notificationsState.edits[typeKey];
+    }
+  } else {
+    _notificationsState.edits[typeKey].timing_minutes_before = num;
+  }
+  _notifUpdateSaveBar();
+}
+
+// Set timing by individual part (d/h/m). Recomputes total minutes and saves
+// as a single integer. Caps each part so users cannot type 99 hours.
+function _notifSetTimingPart(typeKey, part, value){
+  var n = _notificationsState.settings.find(function(s){ return s.type_key === typeKey; });
+  if(!n) return;
+
+  var edits = _notificationsState.edits[typeKey] || {};
+  var currentTotal = edits.timing_minutes_before !== undefined ? edits.timing_minutes_before : (n.timing_minutes_before || 0);
+
+  var d = Math.floor(currentTotal / 1440);
+  var h = Math.floor((currentTotal % 1440) / 60);
+  var m = currentTotal % 60;
+
+  var v = parseInt(value, 10);
+  if(isNaN(v) || v < 0) v = 0;
+
+  if(part === 'd'){ if(v > 365) v = 365; d = v; }
+  if(part === 'h'){ if(v > 23) v = 23; h = v; }
+  if(part === 'm'){ if(v > 59) v = 59; m = v; }
+
+  var newTotal = (d * 1440) + (h * 60) + m;
+
+  if(!_notificationsState.edits[typeKey]) _notificationsState.edits[typeKey] = {};
+
+  if(newTotal === n.timing_minutes_before){
+    delete _notificationsState.edits[typeKey].timing_minutes_before;
+    if(Object.keys(_notificationsState.edits[typeKey]).length === 0){
+      delete _notificationsState.edits[typeKey];
+    }
+  } else {
+    _notificationsState.edits[typeKey].timing_minutes_before = newTotal;
+  }
+  _renderNotificationsContent();
+  _notifUpdateSaveBar();
+}
+
+function _notifUpdateSaveBar(){
+  var bar = document.getElementById('notif-save-bar');
+  if(!bar) return;
+  var count = Object.keys(_notificationsState.edits || {}).length;
+  if(count === 0){
+    bar.classList.add('hidden');
+  } else {
+    bar.classList.remove('hidden');
+    var countEl = document.getElementById('notif-edit-count');
+    var pluralEl = document.getElementById('notif-edit-plural');
+    if(countEl) countEl.textContent = String(count);
+    if(pluralEl) pluralEl.textContent = count === 1 ? '' : 's';
+  }
+}
+
+function _notifDiscardEdits(){
+  _notificationsState.edits = {};
+  _renderNotificationsContent();
+}
+
+function _notifSaveEdits(){
+  alert('Save flow lands in the next deploy.');
+}
+
+function _notifToggleComingSoon(){
+  var el = document.getElementById('notif-coming-soon');
+  if(el) el.classList.toggle('expanded');
 }
 
 // =====================================================

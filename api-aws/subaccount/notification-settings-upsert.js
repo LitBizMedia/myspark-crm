@@ -36,17 +36,15 @@ async function handler(req, res) {
   const type = getType(typeKey);
   if (!type) return res.status(400).json({ error: 'Unknown notification type: ' + typeKey });
 
-  // Required-risk lock at API level
-  if (type.risk_level === 'required' && body.enabled === false) {
-    return res.status(400).json({
-      error: 'Cannot disable required notification type',
-      type_key: typeKey,
-      risk_level: type.risk_level
-    });
-  }
+  // System-audience types (admin-facing billing/auth/system emails) are
+  // locked to email-only and always-on by design. We silently coerce the
+  // saved values rather than rejecting, so the UI does not need to know
+  // the rule. The UI does not let users toggle these fields in the first
+  // place, but defense-in-depth.
+  const isSystem = type.audience === 'admin';
 
-  // SMS channel gate: cannot enable SMS if subaccount is not A2P-live
-  if (body.sms_enabled === true) {
+  // SMS channel gate (non-system only): cannot enable SMS if A2P not live
+  if (!isSystem && body.sms_enabled === true) {
     const smsGate = await canSubaccountSendSms(subaccountId, db);
     if (!smsGate.ok) {
       return res.status(400).json({
@@ -57,13 +55,13 @@ async function handler(req, res) {
     }
   }
 
-  // Build the row to upsert. Use catalog defaults for any field not provided.
+  // Build the row to upsert. System types are coerced to locked values.
   const row = {
     subaccount_id: subaccountId,
     notification_type: typeKey,
-    enabled: body.enabled !== undefined ? !!body.enabled : true,
-    email_enabled: body.email_enabled !== undefined ? !!body.email_enabled : type.default_email,
-    sms_enabled: body.sms_enabled !== undefined ? !!body.sms_enabled : type.default_sms,
+    enabled: isSystem ? true : (body.enabled !== undefined ? !!body.enabled : true),
+    email_enabled: isSystem ? true : (body.email_enabled !== undefined ? !!body.email_enabled : type.default_email),
+    sms_enabled: isSystem ? false : (body.sms_enabled !== undefined ? !!body.sms_enabled : type.default_sms),
     timing_minutes_before: body.timing_minutes_before !== undefined
       ? (body.timing_minutes_before === null ? null : parseInt(body.timing_minutes_before, 10))
       : type.default_timing_minutes_before,

@@ -39,22 +39,24 @@ async function shouldSend(subaccountId, typeKey, db) {
     return { ok: false, reason: 'db_error', error: e.message };
   }
 
-  // Merge catalog defaults with override (override wins per-field)
-  const enabled = type.risk_level === 'required'
+  // Admin-audience types are system communications (billing, auth, domain).
+  // These are locked to email-only and always-on per platform design.
+  // password_reset is locked email-only today; if patient portals ship later,
+  // we may add SMS support behind a feature flag.
+  const isSystem = type.audience === 'admin';
+
+  const enabled = isSystem
     ? true
     : (override && override.enabled !== null && override.enabled !== undefined ? override.enabled : true);
 
-  // For required-risk types, channels are locked to catalog defaults.
-  // Prevents accidental or malicious disable of critical channels via direct
-  // DB writes. The UI prevents toggling required types, this is defense-in-depth.
-  const email_enabled = type.risk_level === 'required'
-    ? type.default_email
+  const email_enabled = isSystem
+    ? true
     : (override && override.email_enabled !== null && override.email_enabled !== undefined
       ? override.email_enabled
       : type.default_email);
 
-  const sms_enabled = type.risk_level === 'required'
-    ? type.default_sms
+  const sms_enabled = isSystem
+    ? false
     : (override && override.sms_enabled !== null && override.sms_enabled !== undefined
       ? override.sms_enabled
       : type.default_sms);
@@ -101,6 +103,8 @@ async function getEffectiveSettings(subaccountId, typeKey, db) {
     override = null;
   }
 
+  const isSystem = type.audience === 'admin';
+
   return {
     type_key: typeKey,
     label: type.label,
@@ -110,12 +114,13 @@ async function getEffectiveSettings(subaccountId, typeKey, db) {
     risk_level: type.risk_level,
     status: type.status,
     channels: type.channels,
-    enabled: override ? override.enabled : true,
-    email_enabled: override ? override.email_enabled : type.default_email,
-    sms_enabled: override ? override.sms_enabled : type.default_sms,
+    enabled: isSystem ? true : (override ? override.enabled : true),
+    email_enabled: isSystem ? true : (override ? override.email_enabled : type.default_email),
+    sms_enabled: isSystem ? false : (override ? override.sms_enabled : type.default_sms),
     timing_minutes_before: override ? override.timing_minutes_before : type.default_timing_minutes_before,
     template_type: override && override.template_type ? override.template_type : type.template_type,
-    has_override: !!override
+    has_override: !!override,
+    is_system: isSystem
   };
 }
 
