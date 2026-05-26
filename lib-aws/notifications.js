@@ -69,6 +69,20 @@ async function shouldSend(subaccountId, typeKey, db) {
     ? override.template_type
     : type.template_type;
 
+  // source_filters: catalog defines available sources; override stores enabled state
+  // (Mirrors getEffectiveSettings; senders need this to honor admin's per-source toggles)
+  let source_filters_enabled = null;
+  if (type.source_filters && type.source_filters.available) {
+    if (override && override.source_filters_enabled) {
+      source_filters_enabled = override.source_filters_enabled;
+    } else {
+      source_filters_enabled = {};
+      type.source_filters.available.forEach(src => {
+        source_filters_enabled[src.key] = src.default;
+      });
+    }
+  }
+
   if (!enabled) {
     return { ok: false, reason: 'notification_disabled', type_key: typeKey };
   }
@@ -82,7 +96,8 @@ async function shouldSend(subaccountId, typeKey, db) {
     template_type,
     risk_level: type.risk_level,
     audience: type.audience,
-    status: type.status
+    status: type.status,
+    source_filters_enabled
   };
 }
 
