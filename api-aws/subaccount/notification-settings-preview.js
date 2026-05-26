@@ -1,12 +1,14 @@
 // POST /api/subaccount/notification-settings/preview
 //
-// Renders a notification email template with sample variables for the UI
-// preview button. Reads from email_templates table when template_type is
-// configured, otherwise falls back to inline catalog defaults if any.
+// Renders a notification email template for the UI preview button.
 //
-// Body: { type_key, sample_vars? }
+// Logic:
+//   1. Look up custom template in email_templates table (future feature)
+//   2. If not found, call the matching lib builder for the type_key
+//   3. If no lib builder exists, return placeholder
 //
-// Response: { subject, html, vars_used }
+// Body: { type_key }
+// Response: { subject, html, source: 'custom_template' | 'builtin' | 'placeholder' }
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
@@ -15,36 +17,134 @@ const { logAudit } = require('./lib/audit');
 const { getType } = require('./lib/notifications-catalog');
 const { getEffectiveSettings } = require('./lib/notifications');
 
-// Sample vars by category, used when admin doesn't supply their own
-const SAMPLE_VARS = {
-  Appointments: {
-    contact_name: 'Sample Patient',
-    contact_email: 'patient@example.com',
-    contact_phone: '(317) 555-0100',
-    appointment_date: 'Tomorrow',
-    appointment_time: '2:30 PM',
-    appointment_service: 'Consultation',
-    staff_name: 'Dr. Smith',
-    business_name: 'Your Clinic'
-  },
-  Booking: {
-    contact_name: 'Sample Patient',
-    contact_email: 'patient@example.com',
-    appointment_date: 'Tomorrow',
-    appointment_time: '2:30 PM',
-    business_name: 'Your Clinic'
-  },
-  Billing: {
-    subName: 'Premium Plan',
-    dollars: '49.00',
-    nextBillingDate: 'June 22, 2026'
-  },
-  Contracts: {
-    contact_name: 'Sample Patient',
-    business_name: 'Your Clinic',
-    contract_title: 'Service Agreement'
-  }
+// Sample data used by built-in builders. Designed to look realistic so admin
+// can judge layout and copy.
+const SAMPLE = {
+  clientName: 'Jane Doe',
+  patientName: 'Jane Doe',
+  contact_name: 'Jane Doe',
+  serviceName: 'Initial Consultation',
+  appointment_title: 'Initial Consultation',
+  appointment_date: 'Friday, June 12',
+  appointment_time: '2:30 PM',
+  dateStr: 'Friday, June 12',
+  timeStr: '2:30 PM',
+  staffName: 'Dr. Sarah Smith',
+  staff_name: 'Dr. Sarah Smith',
+  location: '',
+  businessName: 'Your Clinic',
+  business_name: 'Your Clinic',
+  // refund-receipt
+  refundTotal: 75.00,
+  cardPortion: 75.00,
+  giftCardPortion: 0,
+  reason: 'Customer requested',
+  originalDate: new Date(Date.now() - 5 * 86400000).toISOString(),
+  originalTotal: 125.00,
+  newStatus: 'partial_refund',
+  // recurring billing
+  planName: 'Hosting - Standard',
+  amount: 25.00,
+  billingCycle: 'monthly',
+  nextDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
+  timezone: 'America/Indiana/Indianapolis'
 };
+
+// Lazy-require lib builders so this Lambda doesn't fail to load if one is missing.
+function tryRequire(libPath) {
+  try { return require(libPath); } catch (e) { return null; }
+}
+
+function renderBuiltin(typeKey) {
+  // Appointments
+  if (typeKey === 'appointment_confirmation' || typeKey === 'appointment_reschedule') {
+    const lib = tryRequire('./lib/appointment-emails');
+    if (!lib || !lib.buildHtml) return null;
+    const isReschedule = typeKey === 'appointment_reschedule';
+    const opts = {
+      clientName: SAMPLE.clientName,
+      serviceName: SAMPLE.serviceName,
+      dateStr: SAMPLE.dateStr,
+      timeStr: SAMPLE.timeStr,
+      staffName: SAMPLE.staffName,
+      location: SAMPLE.location,
+      businessName: SAMPLE.businessName,
+      rescheduleFromDateStr: isReschedule ? 'Thursday, June 11' : null,
+      rescheduleFromTimeStr: isReschedule ? '1:00 PM' : null
+    };
+    return {
+      subject: isReschedule
+        ? ('Appointment Rescheduled: ' + SAMPLE.serviceName + ' on ' + SAMPLE.dateStr)
+        : ('Appointment Confirmed: ' + SAMPLE.serviceName + ' on ' + SAMPLE.dateStr),
+      html: lib.buildHtml(opts)
+    };
+  }
+
+  if (typeKey === 'appointment_reminder') {
+    const lib = tryRequire('./lib/reminder-email');
+    if (!lib || !lib.buildHtml) return null;
+    const vars = {
+      contact_name: SAMPLE.contact_name,
+      appointment_title: SAMPLE.appointment_title,
+      appointment_date: SAMPLE.appointment_date,
+      appointment_time: SAMPLE.appointment_time,
+      staff_name: SAMPLE.staff_name,
+      business_name: SAMPLE.business_name
+    };
+    return {
+      subject: lib.buildSubject(vars),
+      html: lib.buildHtml(vars)
+    };
+  }
+
+  // Refund
+  if (typeKey === 'refund_receipt') {
+    const lib = tryRequire('./lib/refund-email');
+    if (!lib || !lib.buildHtml) return null;
+    return {
+      subject: lib.buildSubject(SAMPLE),
+      html: lib.buildHtml(SAMPLE)
+    };
+  }
+
+  // Recurring billing: 7 events map to the same lib with different eventType
+  const RB_MAP = {
+    recurring_billing_enrollment:      'enrollment',
+    recurring_billing_upcoming_charge: 'upcoming_charge',
+    recurring_billing_payment_failed:  'payment_failed',
+    recurring_billing_suspended:       'suspended',
+    recurring_billing_paused:          'paused',
+    recurring_billing_resumed:         'resumed',
+    recurring_billing_cancelled:       'cancelled'
+  };
+  if (RB_MAP[typeKey]) {
+    const lib = tryRequire('./lib/recurring-billing-email');
+    if (!lib || !lib.buildHtml) return null;
+    const eventType = RB_MAP[typeKey];
+    return {
+      subject: lib.buildSubject(eventType, SAMPLE),
+      html: lib.buildHtml(eventType, SAMPLE)
+    };
+  }
+
+  // trial_ending uses recurring-billing-email too once we expose its template,
+  // but trial_ending currently lives in subscriptions-charge.js cron inline.
+  // For now it falls through to placeholder.
+
+  return null; // no builder; caller will show placeholder
+}
+
+function buildPlaceholder(type) {
+  const subject = '(Default template) ' + type.label;
+  const html = '<div style="font-family:Arial,sans-serif;max-width:600px;padding:24px;color:#1a1030;">'
+    + '<p style="color:#5a4d7a;font-size:13px;margin:0 0 16px;">'
+    + 'No template preview available yet for this notification. The system will send a built-in default when this triggers.'
+    + '</p>'
+    + '<h2 style="color:#6b21ea;">' + type.label + '</h2>'
+    + '<p>' + (type.description || '') + '</p>'
+    + '</div>';
+  return { subject, html };
+}
 
 function applyVars(str, vars) {
   if (!str || !vars) return str;
@@ -74,46 +174,47 @@ async function handler(req, res) {
   const eff = await getEffectiveSettings(subaccountId, typeKey, db);
   const templateType = eff.template_type;
 
-  // Look up the template if configured
-  let template = null;
+  // Source priority:
+  //   1. Custom template in email_templates table
+  //   2. Built-in lib builder
+  //   3. Placeholder
+  let subject = '';
+  let html = '';
+  let source = 'placeholder';
+
+  // Try custom template first
   if (templateType) {
     try {
-      template = await db.findOne('email_templates',
+      const template = await db.findOne('email_templates',
         { subaccount_id: subaccountId, template_type: templateType, enabled: true },
         { select: 'subject, body_html' }
       );
+      if (template) {
+        subject = applyVars(template.subject || '', SAMPLE);
+        html = applyVars(template.body_html || '', SAMPLE);
+        source = 'custom_template';
+      }
     } catch (e) {
-      template = null;
+      // fall through to builtin
     }
   }
 
-  // Sample vars: caller-provided override catalog defaults for that category
-  const sampleVars = Object.assign(
-    {},
-    SAMPLE_VARS[type.category] || SAMPLE_VARS.Appointments,
-    body.sample_vars || {}
-  );
+  // Fall back to built-in lib builder
+  if (!html) {
+    const built = renderBuiltin(typeKey);
+    if (built) {
+      subject = built.subject;
+      html = built.html;
+      source = 'builtin';
+    }
+  }
 
-  let subject = '';
-  let html = '';
-
-  if (template) {
-    subject = applyVars(template.subject || '', sampleVars);
-    html = applyVars(template.body_html || '', sampleVars);
-  } else {
-    // No custom template configured; show a generic placeholder
-    subject = '(Default template) ' + type.label;
-    html = '<div style="font-family:Arial,sans-serif;max-width:600px;padding:24px;color:#1a1030;">'
-      + '<p style="color:#5a4d7a;font-size:13px;margin:0 0 16px;">'
-      + 'No custom template configured for this notification. The system will send a built-in default.'
-      + '</p>'
-      + '<h2 style="color:#6b21ea;">' + type.label + '</h2>'
-      + '<p>' + type.description + '</p>'
-      + '<p style="color:#5a4d7a;font-size:13px;margin-top:24px;">'
-      + 'To customize this notification, configure a template with template_type = '
-      + (templateType || 'none required') + '.'
-      + '</p>'
-      + '</div>';
+  // Final fallback: placeholder
+  if (!html) {
+    const ph = buildPlaceholder(type);
+    subject = ph.subject;
+    html = ph.html;
+    source = 'placeholder';
   }
 
   await logAudit({
@@ -125,16 +226,10 @@ async function handler(req, res) {
     action: 'subaccount.notification_settings.preview',
     targetType: 'notification_settings',
     targetSubaccountId: subaccountId,
-    metadata: { type_key: typeKey, has_custom_template: !!template }
+    metadata: { type_key: typeKey, source: source }
   });
 
-  return res.status(200).json({
-    subject,
-    html,
-    vars_used: sampleVars,
-    has_custom_template: !!template,
-    template_type: templateType
-  });
+  return res.status(200).json({ subject, html, source, template_type: templateType });
 }
 
 exports.handler = wrap(handler);

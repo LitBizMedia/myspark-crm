@@ -19,6 +19,7 @@ const { wrap } = require('./lib/lambda-adapter');
 const { apptTimestampInTz } = require('./lib/timezone');
 const { canSubaccountSendSms } = require('./lib/sms-gate');
 const { shouldSend } = require('./lib/notifications');
+const reminderEmail = require('./lib/reminder-email');
 
 async function getCronSecret() {
   return secrets.getKey('myspark/cron/secret', 'CRON_SECRET');
@@ -283,19 +284,9 @@ async function runReminders() {
           subject = applyVars(tpl.subject, vars);
           html = applyVars(tpl.body_html, vars);
         } else {
-          subject = 'Reminder: ' + appt.title + ' tomorrow' + (timeStr ? ' at ' + timeStr : '');
-          html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
-            + '<h2 style="color:#6b21ea;margin:0 0 8px">Appointment Reminder</h2>'
-            + '<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">Hi ' + contact.name + ', this is a reminder about your appointment tomorrow.</p>'
-            + '<table style="width:100%;border-collapse:collapse;margin:0 0 24px">'
-            + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Service</td><td style="padding:8px 0;font-weight:600">' + appt.title + '</td></tr>'
-            + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Date</td><td style="padding:8px 0;font-weight:600">' + dateStr + '</td></tr>'
-            + (timeStr ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Time</td><td style="padding:8px 0;font-weight:600">' + timeStr + '</td></tr>' : '')
-            + (staffName ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">With</td><td style="padding:8px 0;font-weight:600">' + staffName + '</td></tr>' : '')
-            + '</table>'
-            + '<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">Need to reschedule? Reply to this email or give us a call.</p>'
-            + '<p style="color:#5a4d7a;font-size:14px;margin:0">' + bizName + '</p>'
-            + '</div>';
+          // Fallback to default template from reminder-email lib
+          subject = reminderEmail.buildSubject(vars);
+          html = reminderEmail.buildHtml(vars);
         }
         const result = await sendEmail(slug, {
           scope: 'subaccount',

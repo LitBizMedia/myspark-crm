@@ -156,4 +156,10 @@ async function sendRefundReceipt(opts) {
   }
 }
 
-module.exports = { sendRefundReceipt };
+// Expose builder for preview Lambda
+function buildSubject(opts) {
+  return (opts.newStatus === 'refunded' ? 'Refund processed: ' : 'Partial refund processed: ')
+    + fmt$(opts.refundTotal);
+}
+
+module.exports = { sendRefundReceipt, buildHtml, buildSubject };

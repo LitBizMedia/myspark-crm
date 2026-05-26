@@ -260,4 +260,18 @@ async function sendRecurringBillingEmail(eventType, opts) {
   }
 }
 
-module.exports = { sendRecurringBillingEmail, EVENT_TO_TYPE_KEY, _loadContext };
+// Expose builders for preview Lambda
+function buildSubject(eventType, opts) {
+  const subjects = {
+    enrollment:      'Welcome to ' + (opts.planName || 'your subscription'),
+    upcoming_charge: 'Upcoming charge: ' + fmt$(opts.amount || 0),
+    payment_failed:  'Payment failed for your subscription',
+    suspended:       'Your subscription has been suspended',
+    paused:          'Your subscription has been paused',
+    resumed:         'Your subscription is active again',
+    cancelled:       'Your subscription has been cancelled'
+  };
+  return subjects[eventType] || 'Subscription update';
+}
+
+module.exports = { sendRecurringBillingEmail, EVENT_TO_TYPE_KEY, _loadContext, buildHtml, buildSubject };

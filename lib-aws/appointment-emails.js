@@ -147,4 +147,4 @@ async function sendAppointmentConfirmations(opts) {
   return { sent };
 }
 
-module.exports = { sendAppointmentConfirmations };
+module.exports = { sendAppointmentConfirmations, buildHtml };

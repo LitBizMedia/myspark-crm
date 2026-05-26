@@ -615,6 +615,13 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .notif-label-icon.lock{color:var(--purple)}
 .notif-label-icon.warn{color:var(--warning)}
 .notif-desc{font-size:12px;color:var(--main-text-muted);margin-top:2px;line-height:1.5}
+.notif-preview-link{display:inline-block;font-size:11px;color:var(--purple);margin-top:6px;text-decoration:none;cursor:pointer;font-weight:500}
+.notif-preview-link:hover{text-decoration:underline}
+.notif-preview-banner{background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--main-text-muted);margin-bottom:14px}
+.notif-preview-subject{font-size:14px;font-weight:600;color:var(--main-text);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--main-border)}
+.notif-preview-subject-label{font-size:11px;color:var(--main-text-muted);font-weight:500;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px}
+.notif-preview-iframe-wrap{border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden;background:#fff}
+.notif-preview-iframe{width:100%;border:none;display:block;min-height:400px}
 .notif-controls{display:grid;align-items:center;gap:14px;justify-content:end;justify-items:start}
 .notif-controls.audience-patient{grid-template-columns:95px 95px 195px}
 .notif-controls.audience-admin{grid-template-columns:95px 195px}
@@ -12923,7 +12930,7 @@ function _renderNotificationsContent(){
     html += '<div class="notif-section-title"><span class="notif-section-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>Patient Notifications</div>';
     html += '<div class="notif-section-desc">Sent to your patients. Choose email, SMS, or both per type. SMS requires A2P campaign approval.</div>';
     // Render in catalog-defined category order, not Object.keys order
-    var PATIENT_CAT_ORDER = ['Appointments', 'Payments', 'Recurring Billing', 'Contracts', 'Marketing', 'Automations'];
+    var PATIENT_CAT_ORDER = ['Appointments', 'Payments', 'Subscriptions', 'Contracts', 'Marketing', 'Automations'];
     PATIENT_CAT_ORDER.forEach(function(cat){
       if(!patientByCategory[cat] || patientByCategory[cat].length === 0) return;
       html += '<div class="notif-cat">';
@@ -12993,6 +13000,7 @@ function _notifRowHtml(n, isPlanned){
   html += '  <div class="notif-info">';
   html += '    <div class="notif-label">' + esc(n.label) + (isPlanned ? ' <span style="font-size:11px;color:var(--main-text-muted);font-weight:500">(Coming Soon)</span>' : '') + '</div>';
   html += '    <div class="notif-desc">' + esc(n.description || '') + '</div>';
+  html += '    <a href="#" class="notif-preview-link" onclick="event.preventDefault(); _notifPreview(\'' + esc(n.type_key) + '\'); return false;">Preview</a>';
   html += '  </div>';
   html += '  <div class="notif-controls audience-' + esc(audience) + '">';
 
@@ -13105,6 +13113,73 @@ function _notifToggleSourceFilter(typeKey, sourceKey){
   }
   _renderNotificationsContent();
   _notifUpdateSaveBar();
+}
+
+// Open a preview modal for a notification type. Calls the backend preview
+// endpoint, which returns subject + HTML (either a custom email_templates
+// row, a built-in lib builder, or a placeholder).
+async function _notifPreview(typeKey){
+  // Look up the row for the title
+  var n = _notificationsState.settings.find(function(s){ return s.type_key === typeKey; });
+  if(!n) return;
+
+  // Show modal immediately with a loading state
+  var body = '<div class="notif-preview-banner">Loading preview...</div>';
+  openModal('Preview: ' + (n.label || typeKey), body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
+
+  try{
+    var r = await fetch(apiUrl('/api/subaccount/notification-settings/preview'), {
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ type_key: typeKey })
+    });
+    if(!r.ok){
+      document.getElementById('modal-body').innerHTML =
+        '<div class="notif-preview-banner" style="color:var(--danger)">Could not load preview. Please try again.</div>';
+      return;
+    }
+    var data = await r.json();
+    var subject = data.subject || '(no subject)';
+    var html = data.html || '<p>No preview content available.</p>';
+    var source = data.source || 'placeholder';
+
+    var banner = '';
+    if(source === 'custom_template'){
+      banner = '<div class="notif-preview-banner">Showing your custom template, rendered with sample data.</div>';
+    } else if(source === 'builtin'){
+      banner = '<div class="notif-preview-banner">Showing the built-in default. Custom templates not yet supported.</div>';
+    } else {
+      banner = '<div class="notif-preview-banner">No template preview available yet for this notification.</div>';
+    }
+
+    // Subject + iframe with rendered HTML (iframe isolates email CSS from the app)
+    var modalBody = banner
+      + '<div class="notif-preview-subject"><span class="notif-preview-subject-label">Subject</span>' + esc(subject) + '</div>'
+      + '<div class="notif-preview-iframe-wrap"><iframe class="notif-preview-iframe" id="notif-preview-iframe" sandbox=""></iframe></div>';
+
+    document.getElementById('modal-body').innerHTML = modalBody;
+
+    // Write the email HTML into the iframe via srcdoc-style document.write
+    var iframe = document.getElementById('notif-preview-iframe');
+    if(iframe){
+      var doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      // Auto-resize iframe to content height after a tick
+      setTimeout(function(){
+        try{
+          var h = doc.body.scrollHeight + 24;
+          iframe.style.height = Math.max(400, h) + 'px';
+        }catch(e){ /* cross-frame edge case */ }
+      }, 100);
+    }
+  }catch(e){
+    document.getElementById('modal-body').innerHTML =
+      '<div class="notif-preview-banner" style="color:var(--danger)">Could not load preview: ' + esc(e.message) + '</div>';
+  }
 }
 
 // Timing inputs as d/h/m. Extracted so admin and patient both reuse it.
