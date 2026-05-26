@@ -619,9 +619,9 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .notif-preview-eye{background:transparent;border:none;padding:4px;border-radius:var(--radius-sm);cursor:pointer;color:var(--main-text-muted);display:inline-flex;align-items:center;justify-content:center;transition:all .15s ease}
 .notif-preview-eye:hover{color:var(--purple);background:var(--purple-dim)}
 .notif-preview-eye svg{display:block}
-.notif-preview-banner{background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--main-text-muted);margin-bottom:14px}
-.notif-preview-subject{font-size:14px;font-weight:600;color:var(--main-text);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--main-border)}
-.notif-preview-subject-label{font-size:11px;color:var(--main-text-muted);font-weight:500;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px}
+.notif-preview-banner{background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--text-muted);margin-bottom:14px}
+.notif-preview-subject{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.notif-preview-subject-label{font-size:11px;color:var(--text-muted);font-weight:500;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px}
 .notif-preview-iframe-wrap{border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden;background:#fff}
 .notif-preview-iframe{width:100%;border:none;display:block;min-height:400px}
 .notif-controls{display:grid;align-items:center;gap:14px;justify-content:end;justify-items:start}
@@ -13146,7 +13146,7 @@ async function _notifPreview(typeKey, channel){
   if(channel === 'sms'){
     var smsBody = '<div class="notif-preview-banner">SMS templates are coming when SMS dispatch is wired. The SMS toggle saves your preference, but no SMS is sent today.</div>'
       + '<div class="notif-preview-subject"><span class="notif-preview-subject-label">When ready, this SMS would notify the patient about:</span>' + esc(n.label) + '</div>'
-      + '<div style="padding:14px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text-muted);font-size:13px">'
+      + '<div style="padding:14px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-muted);font-size:13px">'
       + esc(n.description || '')
       + '</div>';
     openModal(modalTitle, smsBody,
