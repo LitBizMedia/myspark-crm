@@ -129,11 +129,72 @@ function sendError(res, status, message, details) {
   return res.status(status).json(body);
 }
 
+// Refresh a Square OAuth access token using the stored refresh_token.
+// Returns { ok: true, expires_at, new_refresh_token } on success.
+// Returns { ok: false, error } on failure.
+// Does NOT write to DB; caller decides what to persist.
+async function refreshAccessToken(slug) {
+  if (!slug) return { ok: false, error: 'slug is required' };
+  const creds = await getSquareCreds(slug);
+  if (!creds) return { ok: false, error: 'no credentials row for slug' };
+  if (!creds.refresh_token) return { ok: false, error: 'no refresh_token stored' };
+
+  const [appId, appSecret, env] = await Promise.all([
+    getOAuthAppId(),
+    getOAuthAppSecret(),
+    getSquareEnv()
+  ]);
+  if (!appId || !appSecret) return { ok: false, error: 'oauth credentials not configured' };
+
+  const url = (env === 'production'
+    ? 'https://connect.squareup.com'
+    : 'https://connect.squareupsandbox.com') + '/oauth2/token';
+
+  let resp, data;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Square-Version': '2025-01-23' },
+      body: JSON.stringify({
+        client_id: appId,
+        client_secret: appSecret,
+        grant_type: 'refresh_token',
+        refresh_token: creds.refresh_token
+      })
+    });
+    data = await resp.json();
+  } catch (e) {
+    return { ok: false, error: 'network error: ' + e.message };
+  }
+
+  if (!resp.ok || !data.access_token) {
+    const msg = (data && data.errors && data.errors[0] && data.errors[0].detail) || ('HTTP ' + resp.status);
+    return { ok: false, error: msg };
+  }
+
+  // Persist new token (and any rotated refresh_token; Square may rotate)
+  try {
+    await upsertSquareCreds(slug, {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token || creds.refresh_token,
+      merchantId: creds.merchant_id,
+      locationId: creds.location_id,
+      sandbox: creds.sandbox,
+      expiresAt: data.expires_at || null
+    });
+  } catch (e) {
+    return { ok: false, error: 'db write failed: ' + e.message };
+  }
+
+  return { ok: true, expires_at: data.expires_at, rotated_refresh: !!(data.refresh_token && data.refresh_token !== creds.refresh_token) };
+}
+
 module.exports = {
   // Per-subaccount workspace token helpers
   getSquareCreds,
   upsertSquareCreds,
   deleteSquareCreds,
+  refreshAccessToken,
   // Application-level OAuth credential helpers
   getSquareEnv,
   getOAuthAppId,
