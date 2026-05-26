@@ -62,11 +62,8 @@ const CATALOG = [
       ]
     }
   },
-  { key: 'payment_failed', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'payment-failed', label: 'Payment Failed', description: 'Alerts a patient when their payment attempt fails' },
   { key: 'refund_receipt', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'refund-receipt', label: 'Refund Receipt', description: 'Confirms to a patient that they have been refunded' },
   { key: 'gift_card_purchase', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'gift-card-purchase', label: 'Gift Card Purchase', description: 'Delivers a gift card code. Routes automatically to recipient if set, otherwise buyer.' },
-  { key: 'product_order_confirmation', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'product-order', label: 'Product Order Confirmation', description: 'Confirms a product order to the patient' },
-  { key: 'session_pack_purchase', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'session-pack-purchase', label: 'Session Pack Purchase', description: 'Confirms a session pack purchase to the patient' },
   { key: 'session_pack_low_balance', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'session-pack-low', label: 'Session Pack Low Balance', description: 'Warns a patient when their session pack is running low (default threshold: 2 remaining)' },
 
   // ============ RECURRING BILLING (patient) ============
