@@ -306,7 +306,7 @@ async function handleChargeFailure(sub, errMessage, breakdown) {
       if (ctx) {
         await recurringEmail.sendRecurringBillingEmail('payment_failed', Object.assign({}, ctx, {
           planName: sub.plan_name_snapshot || 'your subscription',
-          amount: parseFloat(sub.cycle_price) || 0,
+          amount: (breakdown && typeof breakdown.total === 'number') ? breakdown.total : (parseFloat(sub.cycle_price) || 0),
           billingCycle: sub.billing_cycle || '',
           nextDate: sub.next_due_date || null,
           reason: String(errMessage || '').slice(0, 200)
@@ -314,7 +314,7 @@ async function handleChargeFailure(sub, errMessage, breakdown) {
         if (willSuspend) {
           await recurringEmail.sendRecurringBillingEmail('suspended', Object.assign({}, ctx, {
             planName: sub.plan_name_snapshot || 'your subscription',
-            amount: parseFloat(sub.cycle_price) || 0,
+            amount: (breakdown && typeof breakdown.total === 'number') ? breakdown.total : (parseFloat(sub.cycle_price) || 0),
             billingCycle: sub.billing_cycle || ''
           }));
         }

@@ -240,7 +240,7 @@ async function sendRecurringBillingEmail(eventType, opts) {
   try {
     const result = await sendEmail(opts.subaccountSlug, {
       scope: 'subaccount',
-      source: 'recurring-billing-' + eventType,
+      source: 'system',
       to: opts.recipientEmail,
       subject: subject,
       html: html,
