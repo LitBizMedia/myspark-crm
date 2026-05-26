@@ -8974,7 +8974,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var rescheduleBtn = canReschedule
     ? '<button class="btn btn-ghost" onclick="openRescheduleModal(\''+a.id+'\')">Reschedule</button>'
     : '';
-  var detailFooter = (a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="delAppt(\''+a.id+'\')">Delete</button>':'')+rescheduleBtn+'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
+  var detailFooter = (a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="hardDelAppt(\''+a.id+'\')">Delete Forever</button>':'')+'<button class="btn btn-ghost" onclick="delAppt(\''+a.id+'\')">Cancel Appointment</button>'+rescheduleBtn+'<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
 
   openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
   setTimeout(function(){
@@ -11171,10 +11171,10 @@ function _reopenWithOverride(editingId){
 function delAppt(id){
   const a=db.appointments.find(x=>x.id===id);
   state.modal={type:'del-appt',id:id};
-  document.getElementById('modal-title').textContent='Delete Appointment';
+  document.getElementById('modal-title').textContent='Cancel Appointment';
   document.getElementById('modal-box').className='modal';
-  document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+(a?esc(a.title):'this appointment')+'</strong>? This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelAppt()">Delete</button>';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box">Cancel <strong>'+(a?esc(a.title):'this appointment')+'</strong>? The patient will receive a cancellation email if notifications are enabled.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-action" onclick="confirmDelAppt()">Yes, cancel it</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function confirmDelAppt(){
@@ -11193,6 +11193,50 @@ function confirmDelAppt(){
   if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();
   typeof renderApptList==='function'&&renderApptList();
   toast('Appointment cancelled.','success');
+}
+
+// HARD-DELETE: permanently remove an appointment from the database.
+// Different from confirmDelAppt (which soft-cancels). Used for test data
+// cleanup, GDPR right-to-erasure, or mistaken bookings. Patient does NOT
+// receive an email; the row is just gone.
+function hardDelAppt(id){
+  const a=db.appointments.find(x=>x.id===id);
+  if(!a)return;
+  state.modal={type:'hard-del-appt',id:id};
+  document.getElementById('modal-title').textContent='Permanently Delete Appointment';
+  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-body').innerHTML='<div class="warn-box" style="border-color:var(--danger);background:var(--danger-dim);color:var(--danger-text)">Permanently delete <strong>'+esc(a.title)+'</strong>? This cannot be undone. The patient will NOT be notified. No email will be sent. Use this only for test data, mistaken bookings, or data removal requests.</div>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-danger" onclick="confirmHardDelAppt()">Yes, permanently delete</button>';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function confirmHardDelAppt(){
+  const id=state.modal&&state.modal.id;if(!id)return;
+  const btn=document.querySelector('#modal-foot button.btn-danger');
+  if(btn){btn.disabled=true;btn.textContent='Deleting...';}
+  try{
+    const r=await fetch(apiUrl('/api/subaccount/appointments-hard-delete'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:id})
+    });
+    if(!r.ok){
+      const errData=await r.json().catch(()=>({}));
+      toast('Failed to delete: '+(errData.error||'unknown error'),'error');
+      if(btn){btn.disabled=false;btn.textContent='Yes, permanently delete';}
+      return;
+    }
+    // Successfully deleted: remove from local state
+    db.appointments=db.appointments.filter(a=>a.id!==id);
+    saveData();closeModal();
+    if(state.panel==='calendar')renderCal();if(state.drawer)renderDrawer();
+    typeof renderApptList==='function'&&renderApptList();
+    toast('Appointment permanently deleted.','success');
+  }catch(e){
+    toast('Network error: '+e.message,'error');
+    if(btn){btn.disabled=false;btn.textContent='Yes, permanently delete';}
+  }
 }
 
 // TASK MODAL
