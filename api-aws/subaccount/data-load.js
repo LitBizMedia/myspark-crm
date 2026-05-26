@@ -186,6 +186,7 @@ function subscriptionToFrontend(row) {
     cardId: row.card_id,
     ownerUserId: row.owner_user_id,
     failedChargeCount: row.failed_charge_count || 0,
+    firstFailureAt: row.first_failure_at instanceof Date ? row.first_failure_at.toISOString() : row.first_failure_at,
     lastFailureAt: row.last_failure_at instanceof Date ? row.last_failure_at.toISOString() : row.last_failure_at,
     lastFailureReason: row.last_failure_reason,
     notes: row.notes,

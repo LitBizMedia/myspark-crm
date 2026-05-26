@@ -955,6 +955,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .sub-row:hover{border-color:var(--purple-border);box-shadow:0 2px 12px rgba(107,33,234,.1)}
 .sub-row.active{border-left:3px solid var(--success-light)}
 .sub-row.paused{border-left:3px solid var(--orange);opacity:.85}
+.sub-row.past_due{border-left:3px solid var(--warning-light)}
 .sub-row.suspended{border-left:3px solid var(--danger-light)}
 .sub-row.cancelled{border-left:3px solid var(--text-dim);opacity:.55}
 .sub-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -5201,6 +5202,7 @@ function _dPaySubscriptions(c,cSubs){
   const buckets={
     active:cSubs.filter(function(s){return s.status==='active';}),
     paused:cSubs.filter(function(s){return s.status==='paused';}),
+    past_due:cSubs.filter(function(s){return s.status==='past_due';}),
     suspended:cSubs.filter(function(s){return s.status==='suspended';}),
     cancelled:cSubs.filter(function(s){return s.status==='cancelled';})
   };
@@ -5210,6 +5212,7 @@ function _dPaySubscriptions(c,cSubs){
     +'<div class="task-chip-row" style="margin-bottom:0">'
     +'<button class="chip'+(filter==='active'?' active':'')+'" onclick="setDPaySubFilter(\'active\')">Active ('+buckets.active.length+')</button>'
     +'<button class="chip'+(filter==='paused'?' active':'')+'" onclick="setDPaySubFilter(\'paused\')">Paused ('+buckets.paused.length+')</button>'
+    +'<button class="chip'+(filter==='past_due'?' active':'')+'" onclick="setDPaySubFilter(\'past_due\')">Past Due ('+buckets.past_due.length+')</button>'
     +'<button class="chip'+(filter==='suspended'?' active':'')+'" onclick="setDPaySubFilter(\'suspended\')">Suspended ('+buckets.suspended.length+')</button>'
     +'<button class="chip'+(filter==='cancelled'?' active':'')+'" onclick="setDPaySubFilter(\'cancelled\')">Cancelled ('+buckets.cancelled.length+')</button>'
     +'</div>'
@@ -15155,8 +15158,8 @@ function invBadge(p){
 const SUB_CYCLES=['weekly','monthly','quarterly','annual'];
 const SUBS_PER_PAGE=10;
 const SUB_STATUSES=['trialing','active','paused','suspended','cancelled'];
-const SUB_STATUS_LABEL={trialing:'Trial',active:'Active',paused:'Paused',suspended:'Suspended',cancelled:'Cancelled'};
-const SUB_STATUS_COLOR={trialing:'var(--warning-light)',active:'var(--success-light)',paused:'var(--orange)',suspended:'var(--danger-light)',cancelled:'var(--text-dim)'};
+const SUB_STATUS_LABEL={trialing:'Trial',active:'Active',paused:'Paused',past_due:'Past Due',suspended:'Suspended',cancelled:'Cancelled'};
+const SUB_STATUS_COLOR={trialing:'var(--warning-light)',active:'var(--success-light)',paused:'var(--orange)',past_due:'var(--warning-light)',suspended:'var(--danger-light)',cancelled:'var(--text-dim)'};
 const SUB_STATUS_ORDER={active:0,paused:1,suspended:2,cancelled:3};
 const CANCELLATION_REASONS=[
   'Customer requested',
@@ -15620,6 +15623,19 @@ function renderSubscriptions(){
     const discounted=hasActiveDiscount(s)&&breakdown.discount>0;
     const nd=s.nextDueDate||calcNextDueDate(s.startDate,cycle);
     const failBadge=(s.status==='suspended'&&s.failedChargeCount)?'<span style="font-size:10px;font-weight:700;color:var(--danger-light);margin-left:6px">'+s.failedChargeCount+' failed charge'+(s.failedChargeCount===1?'':'s')+'</span>':'';
+    // Past Due context: show retry count and how many days into the dunning window
+    const pastDueBadge=(function(){
+      if(s.status!=='past_due')return '';
+      const cnt=s.failedChargeCount||0;
+      const ff=s.firstFailureAt;
+      let dayTxt='';
+      if(ff){
+        const days=Math.floor((Date.now()-new Date(ff).getTime())/86400000);
+        const remaining=Math.max(0,4-days);
+        dayTxt=remaining>0?' • '+remaining+' day'+(remaining===1?'':'s')+' until suspension':' • suspending today if charge fails';
+      }
+      return '<span style="font-size:10px;font-weight:700;color:var(--warning-light);margin-left:6px">'+cnt+' failed charge'+(cnt===1?'':'s')+dayTxt+'</span>';
+    })();
     // Trial badge: shown only for trialing subs with a trial_ends_at date
     const trialEnd=s.trialEndsAt||s.trial_ends_at;
     const trialBadge=(s.status==='trialing'&&trialEnd)?'<span style="font-size:10px;font-weight:700;color:var(--warning-light);margin-left:6px">trial ends '+fmtDate(trialEnd)+'</span>':'';
@@ -15636,14 +15652,14 @@ function renderSubscriptions(){
     html+='<div class="sub-row '+s.status+'" onclick="openSubDetail(\''+s.id+'\')">'
       +'<div><div class="sub-name">'+(c?esc(c.name):esc(s.planName||'Unnamed'))+'</div>'
       +(c&&c.company?'<div class="sub-biz">'+esc(c.company)+'</div>':'')
-      +'<div style="margin-top:5px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">'+statusPill+'<span class="sub-cycle-badge">'+cycle+'</span>'+failBadge+trialBadge+'</div></div>'
+      +'<div style="margin-top:5px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">'+statusPill+'<span class="sub-cycle-badge">'+cycle+'</span>'+failBadge+pastDueBadge+trialBadge+'</div></div>'
       +'<div class="sub-date-cell"><strong>'+fmtDate(s.startDate)+'</strong>Started</div>'
       +'<div class="sub-date-cell"><strong>'+(nd?fmtDate(nd):'TBD')+'</strong>Next Due</div>'
       +'<div>'+priceCell+'</div>'
       +'<div class="sub-actions" onclick="event.stopPropagation()">'
       +(canManageSubscriptions()?'<button class="btn btn-ghost btn-sm" onclick="openSubModal(\''+s.id+'\')">Edit</button>':'')
       +(canManageSubscriptions()&&s.status==='active'?'<button class="btn btn-sm" style="background:var(--orange-dim);color:var(--orange);border:1px solid var(--orange-border)" onclick="pauseSub(\''+s.id+'\')">Pause</button>':'')
-      +(canManageSubscriptions()&&(s.status==='paused'||s.status==='suspended')?'<button class="btn btn-purple btn-sm" onclick="restartSub(\''+s.id+'\')">Resume</button>':'')
+      +(canManageSubscriptions()&&(s.status==='paused'||s.status==='suspended'||s.status==='past_due')?'<button class="btn btn-purple btn-sm" onclick="restartSub(\''+s.id+'\')">Resume</button>':'')
       +(canManageSubscriptions()&&s.status!=='cancelled'?'<button class="btn btn-danger btn-sm" onclick="cancelSub(\''+s.id+'\')">Cancel</button>':'')
       +'</div></div>';
   });
@@ -15667,13 +15683,14 @@ function setSubsSort(v){
 
 function _renderSubsPills(){
   var subs=db.subscriptions||[];
-  var counts={all:subs.length,trialing:0,active:0,paused:0,suspended:0,cancelled:0};
+  var counts={all:subs.length,trialing:0,active:0,paused:0,past_due:0,suspended:0,cancelled:0};
   subs.forEach(function(s){if(counts.hasOwnProperty(s.status))counts[s.status]++;});
   var pills=[
     {k:'',label:'All',n:counts.all},
     {k:'trialing',label:'Trial',n:counts.trialing},
     {k:'active',label:'Active',n:counts.active},
     {k:'paused',label:'Paused',n:counts.paused},
+    {k:'past_due',label:'Past Due',n:counts.past_due},
     {k:'suspended',label:'Suspended',n:counts.suspended},
     {k:'cancelled',label:'Cancelled',n:counts.cancelled}
   ];

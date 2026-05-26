@@ -10,7 +10,7 @@ const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
-const VALID_STATUS = ['active', 'trialing', 'paused', 'suspended', 'cancelled'];
+const VALID_STATUS = ['active', 'trialing', 'paused', 'past_due', 'suspended', 'cancelled'];
 
 function rowToSubscription(row) {
   return {
@@ -33,6 +33,7 @@ function rowToSubscription(row) {
     cardId: row.card_id,
     ownerUserId: row.owner_user_id,
     failedChargeCount: row.failed_charge_count,
+    firstFailureAt: row.first_failure_at,
     lastFailureAt: row.last_failure_at,
     lastFailureReason: row.last_failure_reason,
     notes: row.notes,
