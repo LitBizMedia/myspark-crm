@@ -97,6 +97,26 @@ function renderBuiltin(typeKey) {
     };
   }
 
+  // Cancellation
+  if (typeKey === 'appointment_cancellation') {
+    const lib = tryRequire('./lib/appointment-cancellation-email');
+    if (!lib || !lib.buildHtml) return null;
+    const opts = {
+      patientName: SAMPLE.clientName,
+      appointmentTitle: SAMPLE.serviceName,
+      appointmentDate: '2026-06-12',
+      appointmentTime: '14:30',
+      staffName: SAMPLE.staffName,
+      businessName: SAMPLE.businessName,
+      dateStr: SAMPLE.dateStr,
+      timeStr: SAMPLE.timeStr
+    };
+    return {
+      subject: lib.buildSubject(opts),
+      html: lib.buildHtml(opts)
+    };
+  }
+
   // Refund
   if (typeKey === 'refund_receipt') {
     const lib = tryRequire('./lib/refund-email');

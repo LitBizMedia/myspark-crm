@@ -8,6 +8,7 @@ const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const mailgun = require('./lib/mailgun');
+const { sendCancellationEmail } = require('./lib/appointment-cancellation-email');
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -117,31 +118,24 @@ async function handler(req, res) {
       });
     } catch (e) { /* swallow */ }
 
-    // Send cancellation confirmation email (await; Lambda would suspend otherwise)
+    // Send cancellation confirmation email via the canonical lib (gated by
+    // Notifications tab). Non-fatal: email failure doesn't roll back the cancel.
     try {
       const contact = await getContact(tok.subaccount_id, appt.contact_id);
       const sub = await getSubaccountInfo(tok.subaccount_id);
       if (contact && contact.email && sub.slug) {
-        const dateStr = appt.date instanceof Date ? appt.date.toISOString().slice(0,10) : appt.date;
-        const html = `
-          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-            <h2 style="margin-bottom:4px;color:#1a1030">Appointment Cancelled</h2>
-            <p style="color:#6b7280;margin-top:0">${sub.bizName}</p>
-            <div style="background:#fef2f2;border-radius:8px;padding:20px;margin:20px 0">
-              <div style="margin-bottom:8px"><strong>Service:</strong> ${appt.title || 'Appointment'}</div>
-              <div style="margin-bottom:8px"><strong>Date:</strong> ${dateStr}</div>
-              <div style="margin-bottom:8px"><strong>Time:</strong> ${fmtTime(appt.time)}</div>
-            </div>
-            <p style="color:#374151">Your appointment has been cancelled. If this was a mistake or you'd like to book again, please contact ${sub.bizName} or visit the booking page.</p>
-            <p style="font-size:11px;color:#9ca3af;margin-top:24px;border-top:1px solid #f3f4f6;padding-top:16px">Powered by MySpark+</p>
-          </div>`;
-        await mailgun.sendEmail(sub.slug, {
-          scope: 'subaccount',
-          source: 'cancellation',
-          to: contact.email,
-          subject: `Appointment Cancelled - ${sub.bizName}`,
-          html,
-          contactId: appt.contact_id
+        await sendCancellationEmail({
+          subaccountId: tok.subaccount_id,
+          subaccountSlug: sub.slug,
+          recipientEmail: contact.email,
+          recipientName: contact.name || contact.first_name || '',
+          contactId: contact.id,
+          businessName: sub.bizName,
+          appointmentTitle: appt.title || 'Appointment',
+          appointmentDate: appt.date instanceof Date ? appt.date.toISOString().slice(0, 10) : appt.date,
+          appointmentTime: appt.time,
+          staffName: '',
+          source: 'patient_self_serve'
         });
       }
     } catch (e) { console.error('Cancel email failed:', e.message); }
