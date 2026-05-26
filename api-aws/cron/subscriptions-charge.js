@@ -296,12 +296,21 @@ exports.handler = async function (event) {
       ? `SELECT s.*, sd.data AS blob_data
          FROM subscriptions s
          LEFT JOIN subaccount_data sd ON sd.subaccount_id = s.subaccount_id
-         WHERE s.status IN ('active', 'trialing') AND s.id = $1`
+         WHERE s.status IN ('active', 'trialing', 'past_due') AND s.id = $1`
       : `SELECT s.*, sd.data AS blob_data
          FROM subscriptions s
          LEFT JOIN subaccount_data sd ON sd.subaccount_id = s.subaccount_id
-         WHERE s.status IN ('active', 'trialing')
-           AND s.next_due_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date)`;
+         WHERE (
+                 -- normal due charge
+                 (s.status IN ('active', 'trialing')
+                   AND s.next_due_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date))
+                 OR
+                 -- past_due dunning retry on days 2, 3, 5 since first_failure_at
+                 (s.status = 'past_due'
+                   AND s.first_failure_at IS NOT NULL
+                   AND ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date
+                        - s.first_failure_at::date) IN (1, 2, 4))
+               )`;
     const params = subIdFilter ? [subIdFilter] : [DEFAULT_TZ];
     const r = await db.query(sql, params);
     summary.found = r.rows.length;

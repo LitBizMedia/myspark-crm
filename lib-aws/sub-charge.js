@@ -20,6 +20,15 @@ const { todayInTz, DEFAULT_TZ } = require('./timezone');
 const { getContactById } = require('./contacts');
 const { isLineTaxable } = require('./tax');
 
+// GHL-style dunning schedule (days since first_failure_at):
+//   Day 0 = original due date, first attempt. Fail -> status='past_due'.
+//   Day 1 = retry attempt 2. Fail -> stay past_due.
+//   Day 2 = retry attempt 3. Fail -> stay past_due.
+//   Day 4 = retry attempt 4 (final). Fail -> status='suspended'.
+// Days 3, 5+: no retries. Past_due sits silent.
+const RETRY_DAY_OFFSETS = [1, 2, 4];
+const FINAL_RETRY_DAY_OFFSET = 4;
+// Legacy constants retained for compatibility; not used by new logic.
 const SUSPEND_AFTER = 3;
 const SUSPEND_WINDOW_DAYS = 7;
 
@@ -256,75 +265,100 @@ async function advanceSubAfterCharge(sub, tz) {
          failed_charge_count = 0,
          last_failure_at = NULL,
          last_failure_reason = NULL,
+         first_failure_at = NULL,
          updated_at = NOW()
-     WHERE id = $3 AND status IN ('active', 'trialing')`,
+     WHERE id = $3 AND status IN ('active', 'trialing', 'past_due')`,
     [JSON.stringify(remainingItems), newCyclePrice, sub.id]
   );
 }
 
 async function handleChargeFailure(sub, errMessage, breakdown) {
-  const r = await db.query(
-    `SELECT COUNT(*) AS recent_failures
-     FROM subscription_events
-     WHERE subscription_id = $1
-       AND event_type = 'charge_failed'
-       AND created_at > NOW() - INTERVAL '${SUSPEND_WINDOW_DAYS} days'`,
-    [sub.id]
-  );
-  const recentFailures = parseInt(r.rows[0].recent_failures, 10) || 0;
-  const willSuspend = (recentFailures + 1) >= SUSPEND_AFTER;
+  // GHL-style dunning state machine. Branches on current status:
+  //   active|trialing -> past_due (day 0 of dunning, first_failure_at = NOW)
+  //   past_due day 1 or 2 -> stay past_due, bump counter
+  //   past_due day 4 (final retry) -> suspended
+  //   past_due other days -> shouldn't happen; defensive no-status-change
+
+  const isFirstFailure = (sub.status === 'active' || sub.status === 'trialing');
+  let daysSinceFirstFailure = 0;
+  if (!isFirstFailure && sub.first_failure_at) {
+    const ffDate = new Date(sub.first_failure_at);
+    daysSinceFirstFailure = Math.floor((Date.now() - ffDate.getTime()) / 86400000);
+  }
+
+  const willSuspend = !isFirstFailure && daysSinceFirstFailure >= FINAL_RETRY_DAY_OFFSET;
+  let newStatus;
+  if (isFirstFailure) newStatus = 'past_due';
+  else if (willSuspend) newStatus = 'suspended';
+  else newStatus = sub.status; // remain past_due
+
+  // first_failure_at set only on the transition into past_due. Preserve otherwise.
+  const setFirstFailureAt = isFirstFailure;
 
   await db.query(
     `UPDATE subscriptions
      SET failed_charge_count = COALESCE(failed_charge_count, 0) + 1,
          last_failure_at = NOW(),
          last_failure_reason = $1,
-         status = CASE WHEN $2 THEN 'suspended' ELSE status END,
+         status = $2,
+         first_failure_at = CASE WHEN $3 THEN NOW() ELSE first_failure_at END,
          updated_at = NOW()
-     WHERE id = $3`,
-    [String(errMessage || '').slice(0, 500), willSuspend, sub.id]
+     WHERE id = $4`,
+    [String(errMessage || '').slice(0, 500), newStatus, setFirstFailureAt, sub.id]
   );
 
   await logEvent(sub, 'charge_failed', {
     error: errMessage,
     breakdown: breakdown || null,
-    recent_failures: recentFailures + 1,
+    days_since_first_failure: daysSinceFirstFailure,
+    transition: isFirstFailure ? 'active->past_due'
+              : willSuspend     ? 'past_due->suspended'
+                                : 'past_due (retry failed)',
     auto_suspended: willSuspend
   });
 
-  if (willSuspend) {
-    await logEvent(sub, 'auto_suspended', {
-      reason: `${recentFailures + 1} failed charges in ${SUSPEND_WINDOW_DAYS} days`,
+  if (isFirstFailure) {
+    await logEvent(sub, 'marked_past_due', {
+      reason: 'initial charge attempt failed',
       last_error: errMessage
     });
   }
 
-  // Fire patient notifications (non-fatal): payment_failed always, suspended if willSuspend.
-  try {
-    if (sub.contact_id) {
-      const ctx = await recurringEmail._loadContext(sub.subaccount_id, sub.contact_id);
-      if (ctx) {
-        await recurringEmail.sendRecurringBillingEmail('payment_failed', Object.assign({}, ctx, {
-          planName: sub.plan_name_snapshot || 'your subscription',
-          amount: (breakdown && typeof breakdown.total === 'number') ? breakdown.total : (parseFloat(sub.cycle_price) || 0),
-          billingCycle: sub.billing_cycle || '',
-          nextDate: sub.next_due_date || null,
-          reason: String(errMessage || '').slice(0, 200)
-        }));
-        if (willSuspend) {
-          await recurringEmail.sendRecurringBillingEmail('suspended', Object.assign({}, ctx, {
-            planName: sub.plan_name_snapshot || 'your subscription',
-            amount: (breakdown && typeof breakdown.total === 'number') ? breakdown.total : (parseFloat(sub.cycle_price) || 0),
-            billingCycle: sub.billing_cycle || ''
-          }));
-        }
-      }
-    }
-  } catch (rbErr) {
-    console.warn('recurring-billing payment_failed email failed (non-fatal):', rbErr.message);
+  if (willSuspend) {
+    await logEvent(sub, 'auto_suspended', {
+      reason: 'final retry on day ' + daysSinceFirstFailure + ' failed',
+      last_error: errMessage
+    });
   }
 
-
+  // Patient email notifications. Currently gated OFF by default (Session 4 wires
+  // the templates). Toggle env var SEND_RECURRING_BILLING_EMAILS=true to enable.
+  const emailsEnabled = process.env.SEND_RECURRING_BILLING_EMAILS === 'true';
+  if (emailsEnabled) {
+    try {
+      if (sub.contact_id) {
+        const ctx = await recurringEmail._loadContext(sub.subaccount_id, sub.contact_id);
+        if (ctx) {
+          await recurringEmail.sendRecurringBillingEmail('payment_failed', Object.assign({}, ctx, {
+            planName: sub.plan_name_snapshot || 'your subscription',
+            amount: (breakdown && typeof breakdown.total === 'number') ? breakdown.total : (parseFloat(sub.cycle_price) || 0),
+            billingCycle: sub.billing_cycle || '',
+            nextDate: sub.next_due_date || null,
+            reason: String(errMessage || '').slice(0, 200)
+          }));
+          if (willSuspend) {
+            await recurringEmail.sendRecurringBillingEmail('suspended', Object.assign({}, ctx, {
+              planName: sub.plan_name_snapshot || 'your subscription',
+              amount: (breakdown && typeof breakdown.total === 'number') ? breakdown.total : (parseFloat(sub.cycle_price) || 0),
+              billingCycle: sub.billing_cycle || ''
+            }));
+          }
+        }
+      }
+    } catch (rbErr) {
+      console.warn('recurring-billing payment_failed email failed (non-fatal):', rbErr.message);
+    }
+  }
 }
 
 async function logEvent(sub, eventType, metadata, paymentId) {
