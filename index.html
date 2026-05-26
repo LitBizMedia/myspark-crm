@@ -2663,16 +2663,16 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>Business Information</div>
             <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Used in email signatures, invoice headers, booking widget footers, and patient communications. Update once, applies everywhere.</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;max-width:720px">
-              <div class="form-group" style="grid-column:span 2"><label>Business Name</label><input id="bi-name" type="text" placeholder="Acme Health Clinic" onchange="saveBusinessInfo()"></div>
-              <div class="form-group" style="grid-column:span 2"><label>Address Line 1</label><input id="bi-addr1" type="text" placeholder="123 Main St" onchange="saveBusinessInfo()"></div>
-              <div class="form-group" style="grid-column:span 2"><label>Address Line 2</label><input id="bi-addr2" type="text" placeholder="Suite 200 (optional)" onchange="saveBusinessInfo()"></div>
-              <div class="form-group"><label>City</label><input id="bi-city" type="text" onchange="saveBusinessInfo()"></div>
-              <div class="form-group"><label>State</label><input id="bi-state" type="text" maxlength="2" placeholder="IN" onchange="saveBusinessInfo()"></div>
-              <div class="form-group"><label>ZIP Code</label><input id="bi-zip" type="text" maxlength="10" onchange="saveBusinessInfo()"></div>
-              <div class="form-group"><label>Phone</label><input id="bi-phone" type="tel" placeholder="(555) 123-4567" onchange="saveBusinessInfo()"></div>
-              <div class="form-group"><label>Email</label><input id="bi-email" type="email" placeholder="hello@clinic.com" onchange="saveBusinessInfo()"></div>
-              <div class="form-group"><label>Website</label><input id="bi-website" type="url" placeholder="https://" onchange="saveBusinessInfo()"></div>
-              <div class="form-group" style="grid-column:span 2"><label>Tax ID / EIN (optional)</label><input id="bi-taxid" type="text" placeholder="For invoice display" onchange="saveBusinessInfo()"></div>
+              <div class="form-group" style="grid-column:span 2"><label>Business Name</label><input id="bi-name" type="text" placeholder="Acme Health Clinic" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group" style="grid-column:span 2"><label>Address Line 1</label><input id="bi-addr1" type="text" placeholder="123 Main St" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group" style="grid-column:span 2"><label>Address Line 2</label><input id="bi-addr2" type="text" placeholder="Suite 200 (optional)" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group"><label>City</label><input id="bi-city" type="text" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group"><label>State</label><input id="bi-state" type="text" maxlength="2" placeholder="IN" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group"><label>ZIP Code</label><input id="bi-zip" type="text" maxlength="10" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group"><label>Phone</label><input id="bi-phone" type="tel" placeholder="(555) 123-4567" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group"><label>Email</label><input id="bi-email" type="email" placeholder="hello@clinic.com" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group"><label>Website</label><input id="bi-website" type="url" placeholder="https://" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
+              <div class="form-group" style="grid-column:span 2"><label>Tax ID / EIN (optional)</label><input id="bi-taxid" type="text" placeholder="For invoice display" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
             </div>
             <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
               <button class="btn btn-purple btn-sm" onclick="saveBusinessInfo(true)">Save Business Info</button>
@@ -12562,7 +12562,14 @@ function renderBusinessInfo(){
   if(!db.settings)return;
   if(!db.settings.businessInfo)db.settings.businessInfo={name:'',addressLine1:'',addressLine2:'',city:'',state:'',zip:'',phone:'',email:'',website:'',taxId:'',logoUrl:'',logoKey:'',logoFileId:''};
   var bi=db.settings.businessInfo;
-  function setVal(id,val){var el=document.getElementById(id);if(el)el.value=val||'';}
+  function setVal(id,val){
+    var el=document.getElementById(id);
+    if(!el)return;
+    // Skip overwrite if user is actively editing this input
+    if(document.activeElement===el)return;
+    if(el.dataset.dirty==='1')return;
+    el.value=val||'';
+  }
   setVal('bi-name',bi.name);
   setVal('bi-addr1',bi.addressLine1);
   setVal('bi-addr2',bi.addressLine2);
@@ -12595,7 +12602,7 @@ function saveBusinessInfo(explicit){
   var s=document.getElementById('bi-save-status');
   if(s){
     s.textContent=explicit===true?'Business info saved.':'Auto-saved.';
-    s.style.color='var(--success-light)';
+    s.style.color='var(--success-text)';
     clearTimeout(window._biStatusTimer);
     window._biStatusTimer=setTimeout(function(){s.textContent='';},explicit===true?2500:1500);
   }
