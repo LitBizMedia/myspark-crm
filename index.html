@@ -2674,9 +2674,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div class="form-group"><label>Website</label><input id="bi-website" type="url" placeholder="https://" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
               <div class="form-group" style="grid-column:span 2"><label>Tax ID / EIN (optional)</label><input id="bi-taxid" type="text" placeholder="For invoice display" oninput="this.dataset.dirty='1'" onchange="this.dataset.dirty='';saveBusinessInfo()"></div>
             </div>
-            <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
-              <button class="btn btn-purple btn-sm" onclick="saveBusinessInfo(true)">Save Business Info</button>
-              <div id="bi-save-status" style="font-size:11px;color:var(--text-muted);min-height:14px"></div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:14px;min-height:18px">
+              <div id="bi-save-status" style="font-size:12px;color:var(--main-text-muted);display:flex;align-items:center;gap:6px"></div>
             </div>
           </div>
 
@@ -12598,15 +12597,33 @@ function saveBusinessInfo(explicit){
   bi.taxId=getVal('bi-taxid');
   // Sync legacy businessName field for backward compatibility with the 10 existing call sites
   db.settings.businessName=bi.name;
-  saveData();
-  var s=document.getElementById('bi-save-status');
-  if(s){
-    s.textContent=explicit===true?'Business info saved.':'Auto-saved.';
-    s.style.color='var(--success-text)';
-    clearTimeout(window._biStatusTimer);
-    window._biStatusTimer=setTimeout(function(){s.textContent='';},explicit===true?2500:1500);
+  _showBizStatus('saved');
+  try{
+    var p=saveData();
+    if(p&&typeof p.then==='function'){
+      p.then(function(){_showBizStatus('saved');}).catch(function(){_showBizStatus('failed');});
+    }
+  }catch(e){
+    _showBizStatus('failed');
   }
-  if(explicit===true&&typeof toast==='function')toast('Business info saved.','success');
+}
+
+// Show inline status feedback for Business Info auto-save.
+// 'saved': green check, fades after 2s. 'failed': red, persists until next save attempt.
+function _showBizStatus(state){
+  var s=document.getElementById('bi-save-status');
+  if(!s)return;
+  clearTimeout(window._biStatusTimer);
+  if(state==='saved'){
+    s.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg><span>Saved</span>';
+    s.style.color='var(--success-text)';
+    window._biStatusTimer=setTimeout(function(){s.textContent='';},2000);
+  }else if(state==='failed'){
+    s.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>Save failed. Try again.</span>';
+    s.style.color='var(--danger-text)';
+  }else{
+    s.textContent='';
+  }
 }
 
 // =====================================================
