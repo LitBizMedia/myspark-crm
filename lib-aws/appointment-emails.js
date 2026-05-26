@@ -15,10 +15,20 @@ const { shouldSend } = require('./notifications');
 function fmtDate(d) {
   if (!d) return '';
   try {
-    const [y, m, day] = d.split('-').map(Number);
-    const dt = new Date(y, m - 1, day);
-    return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  } catch (e) { return d; }
+    // d may be a Date object (from pg date columns) or a YYYY-MM-DD string.
+    const s = (typeof d === 'string') ? d.slice(0, 10) : (d instanceof Date ? d.toISOString().slice(0, 10) : null);
+    if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const [y, m, day] = s.split('-').map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, day, 12));
+      return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Indiana/Indianapolis' });
+    }
+    // Fallback: try parsing whatever was passed
+    const dt = new Date(d);
+    if (!isNaN(dt.getTime())) {
+      return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    }
+    return String(d);
+  } catch (e) { return String(d); }
 }
 
 function fmtTime(t) {
