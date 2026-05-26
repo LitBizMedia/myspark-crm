@@ -97,6 +97,23 @@ function renderBuiltin(typeKey) {
     };
   }
 
+  // Contract signed (patient confirmation)
+  if (typeKey === 'contract_signed') {
+    const lib = tryRequire('./lib/contract-signed-email');
+    if (!lib || !lib.buildHtml) return null;
+    const opts = {
+      contractTitle: 'Service Agreement',
+      businessName: SAMPLE.businessName,
+      signedAt: new Date(),
+      envelopeId: 'env-sample-123',
+      hasPdfAttachment: true
+    };
+    return {
+      subject: lib.buildSubject(opts),
+      html: lib.buildHtml(opts)
+    };
+  }
+
   // Payment receipt: shows the 'appointment' source variant as a representative sample
   if (typeKey === 'payment_receipt') {
     const lib = tryRequire('./lib/payment-receipt-email');

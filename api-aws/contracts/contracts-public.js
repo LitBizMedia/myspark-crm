@@ -16,6 +16,7 @@ const { logAudit } = require('./lib/audit');
 const db = require('./lib/db');
 const tokens = require('./lib/contract-tokens');
 const mailgun = require('./lib/mailgun');
+const { sendContractSignedEmail } = require('./lib/contract-signed-email');
 const contractPdf = require('./lib/contract-pdf');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
@@ -463,47 +464,23 @@ async function handleSign(req, res){
     }
   });
 
-  // Email receipt to signer with PDF attachment
+  // Email receipt to signer with PDF attachment (gated via Notifications tab)
   try {
     var subForReceipt = await fetchSubaccountSummary(env.subaccount_id);
     var slugForReceipt = subForReceipt ? subForReceipt.slug : slugFromSubaccountId(env.subaccount_id);
     var businessNameForReceipt = (subForReceipt && subForReceipt.name) || 'MySpark+';
-    var safeTitle = String(env.title || '').replace(/[<>&"']/g, '');
-    var subject = 'Signed: ' + env.title;
-    var html =
-      '<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f5f7;padding:24px 16px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif">' +
-      '<tr><td align="center"><table cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">' +
-        '<tr><td style="padding:24px 32px;background:#10b981;color:#ffffff">' +
-          '<div style="font-size:14px;opacity:.85;margin-bottom:4px">Signed and confirmed</div>' +
-          '<div style="font-size:20px;font-weight:700">' + safeTitle + '</div>' +
-        '</td></tr>' +
-        '<tr><td style="padding:28px 32px">' +
-          '<p style="margin:0 0 16px;color:#1a1030;font-size:14px;line-height:1.6">Thank you for signing <strong>' + safeTitle + '</strong> with ' + businessNameForReceipt + '.</p>' +
-          '<p style="margin:0 0 20px;color:#5a4d7a;font-size:14px;line-height:1.6">Signed on <strong>' + formatDate(signedAt) + '</strong>.</p>' +
-          (pdfSha256 ? '<p style="margin:0 0 16px;color:#5a4d7a;font-size:13px;line-height:1.6">A signed PDF copy is attached to this email for your records.</p>' : '<p style="margin:0 0 16px;color:#5a4d7a;font-size:13px;line-height:1.6">Your signed copy is stored securely with ' + businessNameForReceipt + '.</p>') +
-          '<p style="margin:0;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:14px;margin-top:18px">Document ID: <code style="font-family:Menlo,monospace;font-size:11px">' + env.id + '</code></p>' +
-        '</td></tr>' +
-      '</table></td></tr></table>';
 
-    var emailOpts = {
-      scope: 'subaccount',
-      to: env.recipient_email,
+    await sendContractSignedEmail({
+      subaccountId: env.subaccount_id,
+      subaccountSlug: slugForReceipt,
+      recipientEmail: env.recipient_email,
       contactId: env.contact_id,
-      subject: subject,
-      html: html
-    };
-
-    // Attach PDF if generation succeeded
-    if (pdfResult && pdfResult.buffer) {
-      emailOpts.attachments = [{
-        filename: 'signed-contract.pdf',
-        content: pdfResult.buffer,
-        contentType: 'application/pdf'
-      }];
-    }
-
-    await mailgun.sendEmail(slugForReceipt, emailOpts)
-      .catch(e => console.warn('receipt email failed (non-fatal):', e.message));
+      businessName: businessNameForReceipt,
+      contractTitle: env.title,
+      signedAt: signedAt,
+      envelopeId: env.id,
+      pdfBuffer: (pdfResult && pdfResult.buffer) ? pdfResult.buffer : null
+    });
   } catch(e){
     console.warn('post-sign email block failed:', e.message);
   }

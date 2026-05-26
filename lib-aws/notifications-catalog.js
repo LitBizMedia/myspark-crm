@@ -83,7 +83,7 @@ const CATALOG = [
 
   // ============ CONTRACTS (patient) ============
   { key: 'contract_sent', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-sent', label: 'Contract Sent', description: 'Delivers a contract to a patient for signature' },
-  { key: 'contract_signed', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'contract-signed', label: 'Contract Signed Confirmation', description: 'Confirms to a patient that their signed contract was received' },
+  { key: 'contract_signed', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'contract-signed', label: 'Contract Signed Confirmation', description: 'Confirms to a patient that their signed contract was received' },
   { key: 'contract_receipt', scope: 'subaccount', audience: 'patient', category: 'Contracts', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'contract-receipt', label: 'Contract Receipt', description: 'Receipt for a contract that included payment (requires contract-with-payment feature)' },
 
   // ============ MARKETING (patient) ============
