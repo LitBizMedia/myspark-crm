@@ -23,7 +23,19 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const { chargeSetupFees, writeSetupFeePayment, writePendingSetupFeePayment } = require('./lib/sub-setup-fee');
+const { processSub } = require('./lib/sub-charge');
 const recurringEmail = require('./lib/recurring-billing-email');
+const { todayInTz, DEFAULT_TZ } = require('./lib/timezone');
+
+function intervalForCycle(cycle) {
+  switch (cycle) {
+    case 'weekly': return '7 days';
+    case 'monthly': return '1 month';
+    case 'quarterly': return '3 months';
+    case 'annual': return '1 year';
+    default: return '1 month';
+  }
+}
 
 // Validate and normalize one item being added (catalog or custom)
 async function buildItem(rawItem, billingCycle, subaccountId, addedAt) {
@@ -143,20 +155,88 @@ async function handler(req, res) {
         break;
       }
       case 'resume': {
-        if (sub.status !== 'paused' && sub.status !== 'suspended') {
-          return res.status(409).json({ error: `Cannot resume from status "${sub.status}"` });
+        const fromStatus = sub.status;
+        if (!['paused', 'past_due', 'suspended'].includes(fromStatus)) {
+          return res.status(409).json({ error: `Cannot resume from status "${fromStatus}"` });
         }
-        const wasSuspended = sub.status === 'suspended';
-        updates.push({ sql: "status = 'active'", value: null, raw: true });
-        updates.push({ sql: 'paused_at = NULL', value: null, raw: true });
-        if (wasSuspended) {
-          updates.push({ sql: 'failed_charge_count = 0', value: null, raw: true });
-          updates.push({ sql: 'last_failure_at = NULL', value: null, raw: true });
-          updates.push({ sql: 'last_failure_reason = NULL', value: null, raw: true });
-          eventType = 'resumed_from_suspension';
-        } else {
+
+        // Optional card override: admin can pick a different card before resume
+        if (b.cardId && b.cardId !== sub.card_id) {
+          await db.query(
+            `UPDATE subscriptions SET card_id = $1, updated_at = NOW() WHERE id = $2`,
+            [b.cardId, sub.id]
+          );
+          sub.card_id = b.cardId;
+        }
+
+        // === Paused path: just flip status, bump next_due_date if past ===
+        if (fromStatus === 'paused') {
+          updates.push({ sql: "status = 'active'", value: null, raw: true });
+          updates.push({ sql: 'paused_at = NULL', value: null, raw: true });
+          // If next_due is in the past, push to today + 1 cycle so cron doesn't fire immediately
+          const interval = intervalForCycle(sub.billing_cycle);
+          updates.push({
+            sql: `next_due_date = CASE WHEN next_due_date < CURRENT_DATE THEN (CURRENT_DATE + INTERVAL '${interval}')::date ELSE next_due_date END`,
+            value: null, raw: true
+          });
           eventType = 'resumed';
+          break;
         }
+
+        // === Past_due / Suspended path: attempt charge before resuming ===
+        // Load the blob the charge code needs (paySettings, timezone)
+        const blobRes = await db.query(
+          'SELECT data FROM subaccount_data WHERE subaccount_id = $1',
+          [auth.subaccount_id]
+        );
+        const blob = blobRes.rows[0] || { data: {} };
+
+        // Reload sub fresh in case card_id was just updated
+        const freshRes = await db.query('SELECT * FROM subscriptions WHERE id = $1', [sub.id]);
+        const freshSub = freshRes.rows[0];
+
+        const chargeResult = await processSub(freshSub, blob, { dry_run: false });
+
+        if (!chargeResult.success && !chargeResult.skipped && !chargeResult.deferred) {
+          // Charge failed. State machine in handleChargeFailure already ran:
+          // past_due stays past_due (or transitions to suspended on day 4).
+          // From suspended, the state machine WILL NOT advance (handleChargeFailure
+          // requires status active/trialing/past_due; suspended is terminal there).
+          // We need to short-circuit and tell the admin the charge failed.
+          return res.status(402).json({
+            error: 'Charge attempt failed: ' + (chargeResult.error || 'unknown'),
+            charge_failed: true,
+            square_error: chargeResult.error,
+            from_status: fromStatus
+          });
+        }
+
+        // Charge succeeded. processSub already advanced status to 'active' and
+        // bumped next_due_date by 1 cycle from the ORIGINAL next_due_date.
+        // For suspended-recovery, we override next_due_date to today + cycle
+        // (treating it as fresh re-enrollment per design).
+        if (fromStatus === 'suspended') {
+          const interval = intervalForCycle(sub.billing_cycle);
+          await db.query(
+            `UPDATE subscriptions
+             SET next_due_date = (CURRENT_DATE + INTERVAL '${interval}')::date,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [sub.id]
+          );
+        }
+
+        eventType = fromStatus === 'suspended' ? 'resumed_from_suspension' : 'resumed_from_past_due';
+        eventMeta = {
+          from_status: fromStatus,
+          charged_total: chargeResult.breakdown ? chargeResult.breakdown.total : null,
+          card_id_used: freshSub.card_id,
+          card_override: !!(b.cardId && b.cardId !== sub.card_id)
+        };
+
+        // Charge already wrote payment + advanced sub. No further `updates` needed.
+        // Set updates to empty so the transaction wrapper below is a no-op for this case.
+        updates.length = 0;
         break;
       }
       case 'cancel': {

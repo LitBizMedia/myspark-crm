@@ -267,7 +267,7 @@ async function advanceSubAfterCharge(sub, tz) {
          last_failure_reason = NULL,
          first_failure_at = NULL,
          updated_at = NOW()
-     WHERE id = $3 AND status IN ('active', 'trialing', 'past_due')`,
+     WHERE id = $3 AND status IN ('active', 'trialing', 'past_due', 'suspended')`,
     [JSON.stringify(remainingItems), newCyclePrice, sub.id]
   );
 }

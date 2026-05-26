@@ -16531,17 +16531,101 @@ async function _doPauseSub(id){
 function restartSub(id){
   if(!canManageSubscriptions()){toast('Permission denied.','error');return;}
   const s=getSub(id);if(!s)return;
-  const wasSuspended=s.status==='suspended';
-  openModal('Resume Subscription',
-    '<p style="color:var(--text-muted)">Resume this subscription? '+(wasSuspended?'This will clear the suspension flags. The next charge will retry on the existing due date.':'Billing will resume on the next due date.')+'</p>',
-    '<button class="btn btn-ghost" onclick="closeModal()">Nevermind</button><button class="btn btn-purple" onclick="_doResumeSub(\''+id+'\')">Resume</button>');
+
+  // Paused: simple flip. No charge attempt.
+  if(s.status==='paused'){
+    openModal('Resume Subscription',
+      '<p style="color:var(--main-text-muted)">Resume this subscription? Billing will resume on the next due date.</p>',
+      '<button class="btn btn-ghost" onclick="closeModal()">Nevermind</button><button class="btn btn-purple" onclick="_doResumeSubSimple(\''+id+'\')">Resume</button>');
+    return;
+  }
+
+  // Past_due or Suspended: show card picker + amount, attempt charge
+  if(s.status==='past_due'||s.status==='suspended'){
+    _renderResumeChargeModal(s);
+    return;
+  }
+
+  toast('Cannot resume from status "'+s.status+'".','error');
 }
-async function _doResumeSub(id){
+
+function _renderResumeChargeModal(s){
+  const c=s.contactId?getContact(s.contactId):null;
+  const cards=(c&&c.squareCards)||[];
+  const breakdown=calcSubTaxBreakdown(s);
+  const total=breakdown.total;
+  const isSuspended=s.status==='suspended';
+
+  // Build card options for the dropdown
+  let cardOptions='';
+  if(cards.length===0){
+    cardOptions='<option value="">No cards on file</option>';
+  }else{
+    cards.forEach(function(cd){
+      const selected=(cd.id===s.cardId)?' selected':'';
+      const label=(cd.brand||'Card')+' ending '+(cd.last4||'????');
+      cardOptions+='<option value="'+esc(cd.id)+'"'+selected+'>'+esc(label)+'</option>';
+    });
+  }
+
+  const headline=isSuspended?'Reactivate Subscription':'Resume Subscription';
+  const intro=isSuspended
+    ?'<p style="color:var(--main-text-muted);margin-bottom:14px">This subscription was suspended after failed charges. Reactivating will charge the card on file. If the charge fails, the subscription will remain suspended.</p>'
+    :'<p style="color:var(--main-text-muted);margin-bottom:14px">This subscription is past due. Resuming will attempt to charge the card on file now. If the charge fails, dunning will restart.</p>';
+
+  const body=intro
+    +'<div class="form-group">'
+    +'<label style="font-size:11px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.5px">Card to Charge</label>'
+    +'<select id="resume-card" '+(cards.length===0?'disabled':'')+'>'+cardOptions+'</select>'
+    +(cards.length===0?'<div style="font-size:11px;color:var(--warning-text);margin-top:4px">No cards on file. Add a card via the contact drawer before resuming.</div>':'<div style="font-size:11px;color:var(--main-text-muted);margin-top:4px">To add a new card, close this and add it from the contact drawer.</div>')
+    +'</div>'
+    +'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:12px;margin-top:10px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:13px;color:var(--main-text-muted)">Amount to charge</span>'
+    +'<span style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:700;color:var(--orange)">'+fmt$(total)+'</span>'
+    +'</div></div>';
+
+  const btnLabel=isSuspended?'Charge '+fmt$(total)+' and Reactivate':'Charge '+fmt$(total)+' and Resume';
+  const btnDisabled=cards.length===0?' disabled style="opacity:.5;cursor:not-allowed"':'';
+  const foot='<button class="btn btn-ghost" onclick="closeModal()">Nevermind</button>'
+    +'<button class="btn btn-purple" onclick="_doResumeSubWithCharge(\''+s.id+'\')"'+btnDisabled+'>'+btnLabel+'</button>';
+
+  openModal(headline,body,foot);
+}
+
+async function _doResumeSubSimple(id){
   try{await apiSubAction(id,'resume',{});}
   catch(e){toast(e.message,'error');return;}
   closeModal();await fetchFromServer();renderSubscriptions();
   if(state.drawer)renderDrawer();
   toast('Subscription resumed.','success');
+}
+
+async function _doResumeSubWithCharge(id){
+  const sel=document.getElementById('resume-card');
+  const cardId=sel?sel.value:'';
+  if(!cardId){toast('Pick a card to charge.','error');return;}
+
+  // Disable button to prevent double-clicks
+  const btns=document.querySelectorAll('.modal-foot button');
+  btns.forEach(function(b){b.disabled=true;});
+
+  let result;
+  try{
+    result=await apiSubAction(id,'resume',{cardId:cardId});
+  }catch(e){
+    btns.forEach(function(b){b.disabled=false;});
+    // 402 charge_failed comes through as a thrown error with the message
+    toast(e.message||'Charge failed','error');
+    await fetchFromServer();
+    renderSubscriptions();
+    if(state.drawer)renderDrawer();
+    return;
+  }
+
+  closeModal();await fetchFromServer();renderSubscriptions();
+  if(state.drawer)renderDrawer();
+  toast('Subscription charged and resumed.','success');
 }
 
 function cancelSub(id){
