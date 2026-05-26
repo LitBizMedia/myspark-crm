@@ -615,8 +615,10 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .notif-label-icon.lock{color:var(--purple)}
 .notif-label-icon.warn{color:var(--warning)}
 .notif-desc{font-size:12px;color:var(--main-text-muted);margin-top:2px;line-height:1.5}
-.notif-preview-link{display:inline-block;font-size:11px;color:var(--purple);margin-top:6px;text-decoration:none;cursor:pointer;font-weight:500}
-.notif-preview-link:hover{text-decoration:underline}
+.notif-chip-group{display:inline-flex;align-items:center;gap:4px}
+.notif-preview-eye{background:transparent;border:none;padding:4px;border-radius:var(--radius-sm);cursor:pointer;color:var(--main-text-muted);display:inline-flex;align-items:center;justify-content:center;transition:all .15s ease}
+.notif-preview-eye:hover{color:var(--purple);background:var(--purple-dim)}
+.notif-preview-eye svg{display:block}
 .notif-preview-banner{background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--main-text-muted);margin-bottom:14px}
 .notif-preview-subject{font-size:14px;font-weight:600;color:var(--main-text);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--main-border)}
 .notif-preview-subject-label{font-size:11px;color:var(--main-text-muted);font-weight:500;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px}
@@ -13000,7 +13002,6 @@ function _notifRowHtml(n, isPlanned){
   html += '  <div class="notif-info">';
   html += '    <div class="notif-label">' + esc(n.label) + (isPlanned ? ' <span style="font-size:11px;color:var(--main-text-muted);font-weight:500">(Coming Soon)</span>' : '') + '</div>';
   html += '    <div class="notif-desc">' + esc(n.description || '') + '</div>';
-  html += '    <a href="#" class="notif-preview-link" onclick="event.preventDefault(); _notifPreview(\'' + esc(n.type_key) + '\'); return false;">Preview</a>';
   html += '  </div>';
   html += '  <div class="notif-controls audience-' + esc(audience) + '">';
 
@@ -13011,9 +13012,14 @@ function _notifRowHtml(n, isPlanned){
     html += '    <div class="' + toggleClass + '"' + toggleOnclick + ' title="Enable or disable"></div>';
   } else if(audience === 'admin'){
     // Email chip (locked on), then timing-or-empty
-    html += '    <div class="notif-chip on locked" title="System notifications are locked to email">';
-    html += '      <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>';
-    html += '      Email';
+    html += '    <div class="notif-chip-group">';
+    html += '      <div class="notif-chip on locked" title="System notifications are locked to email">';
+    html += '        <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>';
+    html += '        Email';
+    html += '      </div>';
+    html += '      <button type="button" class="notif-preview-eye" onclick="_notifPreview(\'' + esc(n.type_key) + '\', \'email\')" title="Preview email">';
+    html += '        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    html += '      </button>';
     html += '    </div>';
 
     if(hasTimingField){
@@ -13025,16 +13031,26 @@ function _notifRowHtml(n, isPlanned){
     // Patient audience: email + sms + timing-or-empty
     var emailClass = 'notif-chip' + (effective.email_enabled ? ' on' : '') + (isPlanned ? ' disabled' : '');
     var emailOnclick = isPlanned ? '' : ' onclick="_notifToggle(\'' + esc(n.type_key) + '\', \'email_enabled\')"';
-    html += '    <div class="' + emailClass + '"' + emailOnclick + '>';
-    html += '      <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>';
-    html += '      Email';
+    html += '    <div class="notif-chip-group">';
+    html += '      <div class="' + emailClass + '"' + emailOnclick + '>';
+    html += '        <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>';
+    html += '        Email';
+    html += '      </div>';
+    html += '      <button type="button" class="notif-preview-eye" onclick="_notifPreview(\'' + esc(n.type_key) + '\', \'email\')" title="Preview email">';
+    html += '        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    html += '      </button>';
     html += '    </div>';
 
     var smsClass = 'notif-chip' + (effective.sms_enabled ? ' on' : '') + (isPlanned ? ' disabled' : '');
     var smsOnclick = isPlanned ? '' : ' onclick="_notifToggle(\'' + esc(n.type_key) + '\', \'sms_enabled\')"';
-    html += '    <div class="' + smsClass + '"' + smsOnclick + '>';
-    html += '      <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>';
-    html += '      SMS';
+    html += '    <div class="notif-chip-group">';
+    html += '      <div class="' + smsClass + '"' + smsOnclick + '>';
+    html += '        <span class="notif-chip-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>';
+    html += '        SMS';
+    html += '      </div>';
+    html += '      <button type="button" class="notif-preview-eye" onclick="_notifPreview(\'' + esc(n.type_key) + '\', \'sms\')" title="Preview SMS">';
+    html += '        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    html += '      </button>';
     html += '    </div>';
 
     if(hasTimingField){
@@ -13115,17 +13131,31 @@ function _notifToggleSourceFilter(typeKey, sourceKey){
   _notifUpdateSaveBar();
 }
 
-// Open a preview modal for a notification type. Calls the backend preview
-// endpoint, which returns subject + HTML (either a custom email_templates
-// row, a built-in lib builder, or a placeholder).
-async function _notifPreview(typeKey){
-  // Look up the row for the title
+// Open a preview modal for a notification type and channel.
+// channel: 'email' (default) or 'sms'
+// - email: calls backend preview endpoint, renders subject + HTML in iframe via srcdoc
+// - sms: shows a 'not yet built' placeholder (no SMS dispatch wired)
+async function _notifPreview(typeKey, channel){
+  channel = channel || 'email';
   var n = _notificationsState.settings.find(function(s){ return s.type_key === typeKey; });
   if(!n) return;
 
-  // Show modal immediately with a loading state
-  var body = '<div class="notif-preview-banner">Loading preview...</div>';
-  openModal('Preview: ' + (n.label || typeKey), body,
+  var modalTitle = (channel === 'sms' ? 'SMS Preview: ' : 'Email Preview: ') + (n.label || typeKey);
+
+  // SMS path: hardcoded placeholder, no API call
+  if(channel === 'sms'){
+    var smsBody = '<div class="notif-preview-banner">SMS templates are coming when SMS dispatch is wired. The SMS toggle saves your preference, but no SMS is sent today.</div>'
+      + '<div class="notif-preview-subject"><span class="notif-preview-subject-label">When ready, this SMS would notify the patient about:</span>' + esc(n.label) + '</div>'
+      + '<div style="padding:14px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text-muted);font-size:13px">'
+      + esc(n.description || '')
+      + '</div>';
+    openModal(modalTitle, smsBody,
+      '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
+    return;
+  }
+
+  // Email path: API call + iframe preview
+  openModal(modalTitle, '<div class="notif-preview-banner">Loading preview...</div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
 
   try{
@@ -13154,27 +13184,29 @@ async function _notifPreview(typeKey){
       banner = '<div class="notif-preview-banner">No template preview available yet for this notification.</div>';
     }
 
-    // Subject + iframe with rendered HTML (iframe isolates email CSS from the app)
+    // Use srcdoc to write HTML into iframe (works with sandbox; no cross-origin issue)
+    // Escape only the attribute boundary (the html string itself can contain HTML)
+    var srcdocAttr = html.split('"').join('&quot;');
     var modalBody = banner
       + '<div class="notif-preview-subject"><span class="notif-preview-subject-label">Subject</span>' + esc(subject) + '</div>'
-      + '<div class="notif-preview-iframe-wrap"><iframe class="notif-preview-iframe" id="notif-preview-iframe" sandbox=""></iframe></div>';
+      + '<div class="notif-preview-iframe-wrap">'
+      + '<iframe class="notif-preview-iframe" id="notif-preview-iframe" sandbox="allow-same-origin" srcdoc="' + srcdocAttr + '"></iframe>'
+      + '</div>';
 
     document.getElementById('modal-body').innerHTML = modalBody;
 
-    // Write the email HTML into the iframe via srcdoc-style document.write
+    // Auto-resize iframe to content height after it loads
     var iframe = document.getElementById('notif-preview-iframe');
     if(iframe){
-      var doc = iframe.contentDocument || iframe.contentWindow.document;
-      doc.open();
-      doc.write(html);
-      doc.close();
-      // Auto-resize iframe to content height after a tick
-      setTimeout(function(){
+      iframe.addEventListener('load', function(){
         try{
-          var h = doc.body.scrollHeight + 24;
-          iframe.style.height = Math.max(400, h) + 'px';
-        }catch(e){ /* cross-frame edge case */ }
-      }, 100);
+          var doc = iframe.contentDocument;
+          if(doc && doc.body){
+            var h = doc.body.scrollHeight + 24;
+            iframe.style.height = Math.max(400, h) + 'px';
+          }
+        }catch(e){ /* sandboxed iframe access edge case */ }
+      });
     }
   }catch(e){
     document.getElementById('modal-body').innerHTML =
