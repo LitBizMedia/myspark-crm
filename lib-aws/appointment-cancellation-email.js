@@ -110,7 +110,7 @@ async function sendCancellationEmail(opts) {
       subject: subject,
       html: html,
       fromName: opts.businessName || 'MySpark+',
-      templateType: 'appt-cancellation',
+      templateType: 'appt-cancel',
       contactId: opts.contactId,
       vars: {
         contact_name: opts.recipientName || '',
