@@ -25,9 +25,19 @@ async function getCronSecret() {
   return secrets.getKey('myspark/cron/secret', 'CRON_SECRET');
 }
 
-function fmtDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + 'T12:00:00');
+function fmtDate(dateInput) {
+  if (!dateInput) return '';
+  // dateInput may be a Date object (from pg date columns) or a YYYY-MM-DD string.
+  // Normalize to YYYY-MM-DD then anchor at noon to avoid timezone day-shift.
+  let yyyymmdd;
+  if (dateInput instanceof Date) {
+    yyyymmdd = dateInput.toISOString().slice(0, 10);
+  } else {
+    yyyymmdd = String(dateInput).slice(0, 10);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(yyyymmdd)) return String(dateInput);
+  const d = new Date(yyyymmdd + 'T12:00:00');
+  if (isNaN(d.getTime())) return String(dateInput);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
