@@ -4269,7 +4269,6 @@ function switchPanel(name){
   const sbMedia=document.querySelector('[data-panel="media"]');
   if(sbMedia)sbMedia.style.display='';
   renderPanel();
-  if(name==='settings')renderSquareCard();
   if(name==='help')showHelpView('#help-mount');
   if(name==='agency-tools')renderAgencyTools();
 }
@@ -7217,7 +7216,7 @@ async function processCharge(){  // ── Gift Card payment path ──
 // =====================================================
 // SETTINGS
 // =====================================================
-function renderSettings(){renderSquareCard();_updateSquareUnlinkedStatus();
+function renderSettings(){
   renderUserList();renderTagMgr();renderBH();renderBlackoutList();
   const s=db.settings;
   if(s.square){
@@ -12792,7 +12791,7 @@ function renderCustomizationTab(){
 // OVERRIDE: renderSettings — include notification settings
 // =====================================================
 function renderSettings(){
-  renderUserList();renderTagMgr();renderBH();renderBlackoutList();cfRenderSettings();renderSquareCard();renderTimezoneSelect();renderBusinessInfo();renderBusinessLogo();
+  renderUserList();renderTagMgr();renderBH();renderBlackoutList();cfRenderSettings();renderTimezoneSelect();renderBusinessInfo();renderBusinessLogo();
   // Activity Log tab visible only for admins
   var actBtn=document.getElementById('stab-activity');
   if(actBtn){
@@ -28915,7 +28914,7 @@ function handleSquareHash(){
     history.replaceState(null,'',window.location.pathname);
     toast('Square connected successfully.','success');
     fetchFromServer().then(function(){
-      if(state.panel==='settings')renderSquareCard();
+      if(state.panel==='payments')renderSquareCard();
     });
     return;
   }
@@ -28932,7 +28931,7 @@ function handleSquareHash(){
     localStorage.setItem(sqStorageKey(),JSON.stringify({accessToken:db.settings.square.accessToken,merchantId:db.settings.square.merchantId,sandbox:db.settings.square.sandbox}));
     history.replaceState(null,'',window.location.pathname);
     toast('Square connected successfully.','success');
-    if(state.panel==='settings')renderSquareCard();
+    if(state.panel==='payments')renderSquareCard();
   }else if(p.get('sq_error')){
     history.replaceState(null,'',window.location.pathname);
     toast('Square connection failed: '+decodeURIComponent(p.get('sq_error')),'error');
