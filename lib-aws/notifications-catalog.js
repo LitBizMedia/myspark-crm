@@ -48,7 +48,7 @@ const CATALOG = [
   {
     key: 'payment_receipt', scope: 'subaccount', audience: 'patient', category: 'Payments',
     channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null,
-    status: 'planned', template_type: 'payment-receipt',
+    status: 'live', template_type: 'payment-receipt',
     label: 'Payment Receipt',
     description: 'Receipt sent to a patient after they pay. Choose which payment sources send a receipt.',
     source_filters: {

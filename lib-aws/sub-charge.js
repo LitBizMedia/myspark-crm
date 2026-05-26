@@ -15,6 +15,8 @@
 
 const db = require('./db');
 const recurringEmail = require('./recurring-billing-email');
+const paymentReceipt = require('./payment-receipt-email');
+const contactsLibForReceipt = require('./contacts');
 const { getSquareCreds, squareHost, squareHeaders } = require('./square');
 const { todayInTz, DEFAULT_TZ } = require('./timezone');
 const { getContactById } = require('./contacts');
@@ -238,6 +240,54 @@ async function writePaymentRecord(sub, contact, card, breakdown, squarePayment, 
       `Subscription cycle: ${sub.plan_name_snapshot || 'Subscription'}`
     ]
   );
+
+  // Fire patient payment receipt (non-fatal). Gates via Notifications tab
+  // with source_filters_enabled['recurring_billing'] check inside the lib.
+  try {
+    if (contact && contact.email) {
+      // Look up business name from settings
+      let businessName = 'MySpark+';
+      try {
+        const sdRow = await db.findOne('subaccount_data', { subaccount_id: sub.subaccount_id });
+        const settings = (sdRow && sdRow.data && sdRow.data.settings) || {};
+        businessName = settings.businessName || settings.business_name || businessName;
+      } catch (e) { /* default */ }
+
+      const slug = String(sub.subaccount_id || '').replace(/^sub-/, '');
+
+      // Synthesize a payment row for the sender (matches DB shape)
+      const synth = {
+        id: paymentId,
+        subaccount_id: sub.subaccount_id,
+        contact_id: sub.contact_id,
+        status: 'completed',
+        total: breakdown.total,
+        payment_type: 'subscription',
+        payment_method: 'card_on_file',
+        card_last4: last4,
+        card_brand: brand,
+        tax_amount: breakdown.taxAmount,
+        tip_amount: 0,
+        created_at: new Date().toISOString(),
+        subscription_id: sub.id,
+        is_gift_card_sale: false,
+        is_session_pack_sale: false
+      };
+
+      await paymentReceipt.sendPaymentReceipt({
+        payment: synth,
+        subaccountId: sub.subaccount_id,
+        subaccountSlug: slug,
+        recipientEmail: contact.email,
+        recipientName: contact.name || contact.first_name || '',
+        contactId: contact.id,
+        businessName,
+        planName: sub.plan_name_snapshot || ''
+      });
+    }
+  } catch (recErr) {
+    console.warn('payment receipt send failed (non-fatal):', recErr.message);
+  }
 
   return paymentId;
 }

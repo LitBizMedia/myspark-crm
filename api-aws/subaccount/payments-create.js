@@ -10,6 +10,8 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
+const paymentReceipt = require('./lib/payment-receipt-email');
+const contactsLib = require('./lib/contacts');
 
 // Snake_case DB row -> camelCase shape the frontend uses.
 function paymentToFrontend(row) {
@@ -228,6 +230,51 @@ async function handler(req, res) {
       }
     } catch (autoErr) {
       console.error('Automation trigger fire error (non-fatal):', autoErr.message);
+    }
+
+    // Fire patient payment receipt (non-fatal). Gates via Notifications tab.
+    // Source detection + filter checking happens inside the lib.
+    try {
+      const pmt = result.rows[0];
+      if (pmt.contact_id && pmt.status === 'completed') {
+        const contact = await contactsLib.getContactById(subaccountId, pmt.contact_id);
+        if (contact && contact.email) {
+          // Look up business name from settings
+          let businessName = 'MySpark+';
+          try {
+            const sdRow = await db.findOne('subaccount_data', { subaccount_id: subaccountId });
+            const settings = (sdRow && sdRow.data && sdRow.data.settings) || {};
+            businessName = settings.businessName || settings.business_name || businessName;
+          } catch (e) { /* default */ }
+
+          const slug = subaccountId.replace(/^sub-/, '');
+
+          // Source-specific enrichment
+          let appointmentTitle = null;
+          if (pmt.appointment_id) {
+            try {
+              const apptRes = await db.query(
+                'SELECT title FROM appointments WHERE id = $1 AND subaccount_id = $2 LIMIT 1',
+                [pmt.appointment_id, subaccountId]
+              );
+              if (apptRes.rows[0]) appointmentTitle = apptRes.rows[0].title;
+            } catch (e) { /* skip */ }
+          }
+
+          await paymentReceipt.sendPaymentReceipt({
+            payment: pmt,
+            subaccountId,
+            subaccountSlug: slug,
+            recipientEmail: contact.email,
+            recipientName: contact.name || contact.first_name || '',
+            contactId: contact.id,
+            businessName,
+            appointmentTitle
+          });
+        }
+      }
+    } catch (recErr) {
+      console.warn('payment receipt send failed (non-fatal):', recErr.message);
     }
 
     return res.status(200).json({ success: true, payment: paymentToFrontend(result.rows[0]) });

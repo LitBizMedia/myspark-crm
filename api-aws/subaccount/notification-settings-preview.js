@@ -97,6 +97,28 @@ function renderBuiltin(typeKey) {
     };
   }
 
+  // Payment receipt: shows the 'appointment' source variant as a representative sample
+  if (typeKey === 'payment_receipt') {
+    const lib = tryRequire('./lib/payment-receipt-email');
+    if (!lib || !lib.buildHtml) return null;
+    const opts = {
+      total: 125.00,
+      paymentDate: '2026-06-12',
+      paymentMethod: 'card',
+      cardLast4: '4242',
+      cardBrand: 'Visa',
+      taxAmount: 8.75,
+      tipAmount: 0,
+      recipientName: SAMPLE.clientName,
+      businessName: SAMPLE.businessName,
+      appointmentTitle: SAMPLE.serviceName
+    };
+    return {
+      subject: lib.buildSubject('appointment', opts),
+      html: lib.buildHtml('appointment', opts)
+    };
+  }
+
   // Cancellation
   if (typeKey === 'appointment_cancellation') {
     const lib = tryRequire('./lib/appointment-cancellation-email');
