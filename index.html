@@ -249,7 +249,11 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:var(--radius);
   font-family:Lato,sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;
   transition:all .18s;white-space:nowrap}
-.btn-primary{background:var(--orange);color:#fff}.btn-primary:hover{background:var(--orange-light)}
+.btn-primary{background:var(--orange);color:#fff}
+.btn-action{background:var(--orange);color:#fff;border:none;border-radius:var(--radius)}
+.btn-action:hover{background:var(--orange-hover)}
+.btn-action:active{background:var(--orange-active)}
+.btn-action:disabled{opacity:.5;cursor:not-allowed}.btn-primary:hover{background:var(--orange-light)}
 .btn-purple{background:var(--purple);color:#fff}.btn-purple:hover{background:var(--purple-light)}
 .btn-ghost{background:transparent;color:var(--main-text-muted);border:1px solid var(--main-border)}
 .btn-ghost:hover{background:var(--main-bg);color:var(--main-text);border-color:var(--purple-border)}
@@ -8974,7 +8978,11 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var rescheduleBtn = canReschedule
     ? '<button class="btn btn-ghost" onclick="openRescheduleModal(\''+a.id+'\')">Reschedule</button>'
     : '';
-  var detailFooter = (a?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="hardDelAppt(\''+a.id+'\')">Delete Forever</button>':'')+'<button class="btn btn-ghost" onclick="delAppt(\''+a.id+'\')">Cancel Appointment</button>'+rescheduleBtn+'<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
+  var isExisting = !!a;
+  var isCancelled = a && a.status === 'cancelled';
+  var hardDeleteBtn = isExisting ? '<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="hardDelAppt(\''+a.id+'\')">Delete Forever</button>' : '';
+  var cancelBtn = (isExisting && !isCancelled) ? '<button class="btn btn-ghost" onclick="delAppt(\''+a.id+'\')">Cancel Appointment</button>' : '';
+  var detailFooter = hardDeleteBtn + cancelBtn + rescheduleBtn + '<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
 
   openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
   setTimeout(function(){
