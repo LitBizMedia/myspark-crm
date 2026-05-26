@@ -23,6 +23,7 @@ const { isLineTaxable } = require('./lib/tax');
 const contactsLib = require('./lib/contacts');
 const { processSub } = require('./lib/sub-charge');
 const { sendEmail } = require('./lib/mailgun');
+const recurringEmail = require('./lib/recurring-billing-email');
 const { shouldSend } = require('./lib/notifications');
 const { DEFAULT_TZ } = require('./lib/timezone');
 
@@ -172,6 +173,80 @@ async function runReminderScan(summary, dryRun) {
   }
 }
 
+// Upcoming-charge scan: find active subs whose next_due_date falls within
+// REMIND_DAYS of today (in the sub's own timezone) AND that haven't been
+// notified in the last REMIND_DAYS-1 days. Send patient an upcoming charge
+// reminder. Idempotent: relies on subscription_events containing
+// 'upcoming_charge_sent' for de-dupe.
+async function runUpcomingChargeScan(summary, dryRun) {
+  const REMIND_DAYS = 3;
+  const r = await db.query(
+    `SELECT s.*, sd.data AS blob_data
+     FROM subscriptions s
+     LEFT JOIN subaccount_data sd ON sd.subaccount_id = s.subaccount_id
+     WHERE s.status = 'active'
+       AND s.contact_id IS NOT NULL
+       AND s.next_due_date > ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date)
+       AND s.next_due_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date + INTERVAL '${REMIND_DAYS} days')
+       AND NOT EXISTS (
+         SELECT 1 FROM subscription_events e
+         WHERE e.subscription_id = s.id
+           AND e.event_type = 'upcoming_charge_sent'
+           AND e.created_at > NOW() - INTERVAL '${REMIND_DAYS} days'
+       )`,
+    [DEFAULT_TZ]
+  );
+  summary.upcoming_found = r.rows.length;
+
+  for (const row of r.rows) {
+    try {
+      const ctx = await recurringEmail._loadContext(row.subaccount_id, row.contact_id);
+      if (!ctx) {
+        summary.upcoming_skipped = (summary.upcoming_skipped || 0) + 1;
+        continue;
+      }
+
+      if (dryRun) {
+        summary.upcoming_sent = (summary.upcoming_sent || 0) + 1;
+        summary.upcoming_results = summary.upcoming_results || [];
+        summary.upcoming_results.push({ sub_id: row.id, dry_run: true, would_send_to: ctx.recipientEmail });
+        continue;
+      }
+
+      const result = await recurringEmail.sendRecurringBillingEmail('upcoming_charge', Object.assign({}, ctx, {
+        planName: row.plan_name_snapshot || 'your subscription',
+        amount: parseFloat(row.cycle_price) || 0,
+        billingCycle: row.billing_cycle || '',
+        nextDate: row.next_due_date
+      }));
+
+      if (result && result.ok && !result.skipped) {
+        await db.query(
+          `INSERT INTO subscription_events (
+            id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, metadata, created_at
+          ) VALUES ($1, $2, $3, 'upcoming_charge_sent', NULL, 'system', $4::jsonb, NOW())`,
+          [
+            `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            row.id, row.subaccount_id,
+            JSON.stringify({
+              next_due_date: row.next_due_date,
+              amount: parseFloat(row.cycle_price) || 0,
+              email: ctx.recipientEmail
+            })
+          ]
+        );
+        summary.upcoming_sent = (summary.upcoming_sent || 0) + 1;
+      } else {
+        summary.upcoming_skipped = (summary.upcoming_skipped || 0) + 1;
+      }
+    } catch (e) {
+      console.error('Upcoming charge send error:', e.message);
+      summary.upcoming_failed = (summary.upcoming_failed || 0) + 1;
+    }
+  }
+}
+
+
 exports.handler = async function (event) {
   const options = {};
   let subIdFilter = null;
@@ -247,6 +322,7 @@ exports.handler = async function (event) {
     if (!subIdFilter && !skipReminders) {
       try {
         await runReminderScan(summary, !!options.dry_run);
+        await runUpcomingChargeScan(summary, !!options.dry_run);
       } catch (remErr) {
         console.error('Reminder scan error:', remErr.stack);
         summary.reminder_scan_error = remErr.message;

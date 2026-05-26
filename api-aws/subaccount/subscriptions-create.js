@@ -13,6 +13,7 @@
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
+const recurringEmail = require('./lib/recurring-billing-email');
 const { wrap } = require('./lib/lambda-adapter');
 const { processSub } = require('./lib/sub-charge');
 const { chargeSetupFees, writeSetupFeePayment, writePendingSetupFeePayment } = require('./lib/sub-setup-fee');
@@ -374,6 +375,25 @@ async function handler(req, res) {
         initial_status: initialStatus
       }
     });
+
+    // Fire patient enrollment notification (non-fatal).
+    try {
+      if (contactId) {
+        const ctx = await recurringEmail._loadContext(subaccountId, contactId);
+        if (ctx) {
+          await recurringEmail.sendRecurringBillingEmail('enrollment', Object.assign({}, ctx, {
+            planName: planNameSnapshot || 'your subscription',
+            amount: parseFloat(cyclePrice) || 0,
+            billingCycle: billingCycle || '',
+            // next_due_date not held in a JS var here. Email composer skips
+            // the 'Next charge' row when nextDate is null.
+            nextDate: null
+          }));
+        }
+      }
+    } catch (rbErr) {
+      console.warn('recurring-billing enrollment email failed (non-fatal):', rbErr.message);
+    }
 
     const verify = await db.query('SELECT * FROM subscriptions WHERE id = $1', [id]);
 

@@ -14,6 +14,7 @@
 // Failures auto-suspend after SUSPEND_AFTER charges in SUSPEND_WINDOW_DAYS days.
 
 const db = require('./db');
+const recurringEmail = require('./recurring-billing-email');
 const { getSquareCreds, squareHost, squareHeaders } = require('./square');
 const { todayInTz, DEFAULT_TZ } = require('./timezone');
 const { getContactById } = require('./contacts');
@@ -297,6 +298,33 @@ async function handleChargeFailure(sub, errMessage, breakdown) {
       last_error: errMessage
     });
   }
+
+  // Fire patient notifications (non-fatal): payment_failed always, suspended if willSuspend.
+  try {
+    if (sub.contact_id) {
+      const ctx = await recurringEmail._loadContext(sub.subaccount_id, sub.contact_id);
+      if (ctx) {
+        await recurringEmail.sendRecurringBillingEmail('payment_failed', Object.assign({}, ctx, {
+          planName: sub.plan_name_snapshot || 'your subscription',
+          amount: parseFloat(sub.cycle_price) || 0,
+          billingCycle: sub.billing_cycle || '',
+          nextDate: sub.next_due_date || null,
+          reason: String(errMessage || '').slice(0, 200)
+        }));
+        if (willSuspend) {
+          await recurringEmail.sendRecurringBillingEmail('suspended', Object.assign({}, ctx, {
+            planName: sub.plan_name_snapshot || 'your subscription',
+            amount: parseFloat(sub.cycle_price) || 0,
+            billingCycle: sub.billing_cycle || ''
+          }));
+        }
+      }
+    }
+  } catch (rbErr) {
+    console.warn('recurring-billing payment_failed email failed (non-fatal):', rbErr.message);
+  }
+
+
 }
 
 async function logEvent(sub, eventType, metadata, paymentId) {

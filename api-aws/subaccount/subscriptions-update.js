@@ -23,6 +23,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const { chargeSetupFees, writeSetupFeePayment, writePendingSetupFeePayment } = require('./lib/sub-setup-fee');
+const recurringEmail = require('./lib/recurring-billing-email');
 
 // Validate and normalize one item being added (catalog or custom)
 async function buildItem(rawItem, billingCycle, subaccountId, addedAt) {
@@ -432,6 +433,34 @@ async function handler(req, res) {
     });
 
     const verify = await db.query('SELECT * FROM subscriptions WHERE id = $1', [id]);
+
+    // Fire patient notification (non-fatal) for status-change actions.
+    // Map subscriptions-update eventType to recurring-billing email event.
+    try {
+      const RB_EVENT_MAP = {
+        paused: 'paused',
+        resumed: 'resumed',
+        resumed_from_suspension: 'resumed',
+        cancelled: 'cancelled'
+      };
+      const rbEvent = RB_EVENT_MAP[eventType];
+      const freshSub = verify.rows[0];
+      if (rbEvent && freshSub && freshSub.contact_id) {
+        const ctx = await recurringEmail._loadContext(subaccountId, freshSub.contact_id);
+        if (ctx) {
+          await recurringEmail.sendRecurringBillingEmail(rbEvent, Object.assign({}, ctx, {
+            planName: freshSub.plan_name_snapshot || 'your subscription',
+            amount: parseFloat(freshSub.cycle_price) || 0,
+            billingCycle: freshSub.billing_cycle || '',
+            nextDate: freshSub.next_due_date || null,
+            reason: (eventMeta && eventMeta.reason) || ''
+          }));
+        }
+      }
+    } catch (rbErr) {
+      console.warn('recurring-billing email send failed (non-fatal):', rbErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       subscription: verify.rows[0],
