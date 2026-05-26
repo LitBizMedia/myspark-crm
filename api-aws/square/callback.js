@@ -122,10 +122,46 @@ async function handler(req, res) {
       return redirectWithError(res, slug, msg);
     }
 
+    // Fetch the merchant's locations using the new access token. Square OAuth
+    // does not return a default location in the token exchange response, so
+    // we have to call /v2/locations and pick one. Prefer the first ACTIVE
+    // PHYSICAL location; fall back to first ACTIVE; fall back to first.
+    // Non-fatal if it fails: charges work without location_id (Square defaults
+    // to merchant primary), but persistent storage of location_id keeps
+    // downstream code paths consistent.
+    let locationId = null;
+    try {
+      const SQUARE_API_HOST = squareEnv === 'production'
+        ? 'https://connect.squareup.com'
+        : 'https://connect.squareupsandbox.com';
+
+      const locRes = await fetch(SQUARE_API_HOST + '/v2/locations', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer ' + tokenData.access_token,
+          'Square-Version': '2025-01-23',
+          'Accept': 'application/json'
+        }
+      });
+      const locData = await locRes.json();
+      if (locRes.ok && Array.isArray(locData.locations) && locData.locations.length > 0) {
+        const active = locData.locations.filter(function (l) { return l && l.status === 'ACTIVE'; });
+        const activePhysical = active.filter(function (l) { return l.type === 'PHYSICAL'; });
+        const picked = activePhysical[0] || active[0] || locData.locations[0];
+        locationId = picked && picked.id ? picked.id : null;
+        console.log('callback.js: resolved location_id=' + locationId + ' from ' + locData.locations.length + ' location(s)');
+      } else {
+        console.warn('callback.js: locations fetch returned no usable result', locData);
+      }
+    } catch (locErr) {
+      console.warn('callback.js: locations fetch failed (non-fatal):', locErr.message);
+    }
+
     await upsertSquareCreds(slug, {
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token || null,
       merchantId: tokenData.merchant_id || null,
+      locationId: locationId,
       sandbox: squareEnv !== 'production',
       expiresAt: tokenData.expires_at || null
     });
