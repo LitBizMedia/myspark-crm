@@ -15,7 +15,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const recurringEmail = require('./lib/recurring-billing-email');
 const { wrap } = require('./lib/lambda-adapter');
-const { processSub } = require('./lib/sub-charge');
+const { processSub, computeCharge } = require('./lib/sub-charge');
 const { chargeSetupFees, writeSetupFeePayment, writePendingSetupFeePayment } = require('./lib/sub-setup-fee');
 const { todayInTz, DEFAULT_TZ } = require('./lib/timezone');
 
@@ -381,9 +381,18 @@ async function handler(req, res) {
       if (contactId) {
         const ctx = await recurringEmail._loadContext(subaccountId, contactId);
         if (ctx) {
+          // Build a sub-shape for computeCharge so the email shows the
+          // discounted total, not the raw cycle_price. Mirrors the same data
+          // we just wrote to the DB.
+          const enrollmentSubShape = {
+            items: items,
+            last_charged_at: null,  // first cycle
+            billing_cycle: billingCycle
+          };
+          const enrollmentBreakdown = computeCharge(enrollmentSubShape, blob.data.paySettings || {}, tz);
           await recurringEmail.sendRecurringBillingEmail('enrollment', Object.assign({}, ctx, {
             planName: planNameSnapshot || 'your subscription',
-            amount: parseFloat(cyclePrice) || 0,
+            amount: enrollmentBreakdown.total,
             billingCycle: billingCycle || '',
             // next_due_date not held in a JS var here. Email composer skips
             // the 'Next charge' row when nextDate is null.

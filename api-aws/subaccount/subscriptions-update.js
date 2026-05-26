@@ -23,7 +23,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const { chargeSetupFees, writeSetupFeePayment, writePendingSetupFeePayment } = require('./lib/sub-setup-fee');
-const { processSub } = require('./lib/sub-charge');
+const { processSub, computeCharge } = require('./lib/sub-charge');
 const recurringEmail = require('./lib/recurring-billing-email');
 const { todayInTz, DEFAULT_TZ } = require('./lib/timezone');
 
@@ -528,9 +528,20 @@ async function handler(req, res) {
       if (rbEvent && freshSub && freshSub.contact_id) {
         const ctx = await recurringEmail._loadContext(subaccountId, freshSub.contact_id);
         if (ctx) {
+          // Load paySettings + tz for accurate amount math
+          let lifecycleBlob = { paySettings: {}, settings: {} };
+          try {
+            const blobRes = await db.query(
+              'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
+              [auth.subaccount_id]
+            );
+            lifecycleBlob = blobRes.rows[0]?.data || lifecycleBlob;
+          } catch (_) { /* defaults safe */ }
+          const lifecycleTz = (lifecycleBlob.settings && lifecycleBlob.settings.timezone) || DEFAULT_TZ;
+          const lifecycleBreakdown = computeCharge(freshSub, lifecycleBlob.paySettings || {}, lifecycleTz);
           await recurringEmail.sendRecurringBillingEmail(rbEvent, Object.assign({}, ctx, {
             planName: freshSub.plan_name_snapshot || 'your subscription',
-            amount: parseFloat(freshSub.cycle_price) || 0,
+            amount: lifecycleBreakdown.total,
             billingCycle: freshSub.billing_cycle || '',
             nextDate: freshSub.next_due_date || null,
             reason: (eventMeta && eventMeta.reason) || ''

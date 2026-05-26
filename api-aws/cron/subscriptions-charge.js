@@ -21,7 +21,7 @@
 const db = require('./lib/db');
 const { isLineTaxable } = require('./lib/tax');
 const contactsLib = require('./lib/contacts');
-const { processSub } = require('./lib/sub-charge');
+const { processSub, computeCharge } = require('./lib/sub-charge');
 const { sendEmail } = require('./lib/mailgun');
 const recurringEmail = require('./lib/recurring-billing-email');
 const { shouldSend } = require('./lib/notifications');
@@ -213,9 +213,14 @@ async function runUpcomingChargeScan(summary, dryRun) {
         continue;
       }
 
+      // Compute discounted total via computeCharge so the email and the
+      // event log both reflect what the customer will actually be charged.
+      const upcomingBlob = row.blob_data || {};
+      const upcomingTz = (upcomingBlob.settings && upcomingBlob.settings.timezone) || DEFAULT_TZ;
+      const upcomingBreakdown = computeCharge(row, upcomingBlob.paySettings || {}, upcomingTz);
       const result = await recurringEmail.sendRecurringBillingEmail('upcoming_charge', Object.assign({}, ctx, {
         planName: row.plan_name_snapshot || 'your subscription',
-        amount: parseFloat(row.cycle_price) || 0,
+        amount: upcomingBreakdown.total,
         billingCycle: row.billing_cycle || '',
         nextDate: row.next_due_date
       }));
@@ -230,7 +235,7 @@ async function runUpcomingChargeScan(summary, dryRun) {
             row.id, row.subaccount_id,
             JSON.stringify({
               next_due_date: row.next_due_date,
-              amount: parseFloat(row.cycle_price) || 0,
+              amount: upcomingBreakdown.total,
               email: ctx.recipientEmail
             })
           ]
