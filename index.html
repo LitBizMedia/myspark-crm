@@ -7216,18 +7216,6 @@ async function processCharge(){  // ── Gift Card payment path ──
 // =====================================================
 // SETTINGS
 // =====================================================
-function renderSettings(){
-  renderUserList();renderTagMgr();renderBH();renderBlackoutList();
-  const s=db.settings;
-  if(s.square){
-    const sq=s.square;
-    const ai=document.getElementById('sq-app-id');if(ai&&sq.appId)ai.value=sq.appId;
-    const at=document.getElementById('sq-token');if(at&&sq.accessToken)at.value=sq.accessToken;
-    const li=document.getElementById('sq-loc');if(li&&sq.locationId)li.value=sq.locationId;
-    const se=document.getElementById('sq-env');if(se)se.value=String(sq.sandbox);
-  }
-}
-
 function renderBH(){
   const bh=db.settings.businessHours||DEF_BH,el=document.getElementById('bh-grid');if(!el)return;
   const order=['mon','tue','wed','thu','fri','sat','sun'];
@@ -28944,9 +28932,9 @@ function _updateSquareUnlinkedStatus(){
   if(!sqIsConnected()){ el.textContent=''; return; }
   const n=_unlinkedSquareContactCount();
   if(n===0){
-    el.innerHTML='<span style="color:var(--success-light)">\u2713 All contacts with email are linked to Square</span>';
+    el.innerHTML='<span style="color:var(--success-text)">\u2713 All contacts with email are linked to Square</span>';
   } else {
-    el.innerHTML='<span style="color:var(--warning-light)">'+n+' contact'+(n===1?'':'s')+' with email not yet linked to Square. Click \'Sync Contacts to Square\' to link.</span>';
+    el.innerHTML='<span style="color:var(--warning-text)">'+n+' contact'+(n===1?'':'s')+' with email not yet linked to Square. Click \'Sync Contacts to Square\' to link.</span>';
   }
 }
 
