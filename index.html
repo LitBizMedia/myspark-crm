@@ -7225,10 +7225,44 @@ function _calMovePickerApply(apptId) {
   var conflict = _calDragHasConflict(apptId, a.assignedTo, newDate, newTime, a.duration || 60);
   var box = document.getElementById('cal-move-picker');
   if (box) box.remove();
-  // Use the center of viewport for the confirm dialog since there's no drop point
-  var x = window.innerWidth / 2 - 150;
-  var y = window.innerHeight / 2 - 80;
-  _calShowConfirm(apptId, a.date, a.time, newDate, newTime, conflict, x, y);
+  if (conflict) {
+    // Conflict path: show a slim conflict warning before submitting. Keeps the
+    // safety net without re-asking for date/time the user already specified.
+    _calMovePickerConflictWarn(apptId, a.date, a.time, newDate, newTime);
+    return;
+  }
+  // No conflict: submit directly. The user already provided both date and time
+  // in the picker; a second confirm would be redundant friction.
+  _calDragConfirm(apptId, newDate, newTime, false);
+}
+
+// Slim conflict-only warning shown when right-click move-to-date lands on a
+// conflicting slot. Single Override / Cancel choice, no time/date editing
+// (user already specified those in the picker).
+function _calMovePickerConflictWarn(apptId, oldDate, oldTime, newDate, newTime) {
+  var existing = document.getElementById('cal-drop-confirm');
+  if (existing) existing.remove();
+  var allAppts = _expandedAppointmentsForCalendar();
+  var a = allAppts.find(function(z){return z.id===apptId;});
+  if (!a) return;
+  var c = a.contactId ? getContact(a.contactId) : null;
+  var box = document.createElement('div');
+  box.id = 'cal-drop-confirm';
+  box.className = 'cal-drop-confirm';
+  box.style.left = (window.innerWidth / 2 - 150) + 'px';
+  box.style.top = (window.innerHeight / 2 - 100) + 'px';
+  box.innerHTML =
+    '<div class="cal-drop-confirm-title">Conflict on '+fmtDate(newDate)+' at '+fmtTime(newTime)+'</div>'
+    + '<div class="cal-drop-confirm-row" style="color:var(--danger-light)"><strong>This slot overlaps another appointment.</strong></div>'
+    + '<div class="cal-drop-confirm-row"><span>Patient</span><strong>'+(c?esc(c.name):esc(a.title))+'</strong></div>'
+    + '<div class="cal-drop-confirm-actions">'
+    +   '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'cal-drop-confirm\').remove()">Cancel</button>'
+    +   '<button class="btn btn-danger btn-sm" onclick="document.getElementById(\'cal-drop-confirm\').remove();_calDragConfirm(\''+apptId+'\',\''+newDate+'\',\''+newTime+'\',true)">Override and move</button>'
+    + '</div>';
+  document.body.appendChild(box);
+  setTimeout(function(){
+    document.addEventListener('click', _calConfirmOutsideClick, { once:true, capture:true });
+  }, 0);
 }
 
 function _calConfirmOutsideClick(e){
