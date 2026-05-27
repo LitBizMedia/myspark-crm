@@ -3022,17 +3022,38 @@ function getContactDisplay(id){
 
 // TIER 3: async full record. Uses /api/subaccount/contact-open.
 // Returns null on error.
+// Cache layer for getContactFull. Single-flight per ID (multiple parallel
+// callers share one fetch), 60s TTL so repeat reads in the same modal don't
+// hammer the backend. Call _invalidateContactFull(id) after mutations.
+var _contactFullCache = {};
+var _contactFullInFlight = {};
+function _invalidateContactFull(id){
+  if(!id)return;
+  delete _contactFullCache[id];
+  delete _contactFullInFlight[id];
+}
 async function getContactFull(id){
   if(!id)return null;
-  try{
-    var r=await fetch(apiUrl('/api/subaccount/contact-open?id='+encodeURIComponent(id)),{credentials:'include'});
-    if(!r.ok)return null;
-    var data=await r.json();
-    return data&&data.contact?data.contact:null;
-  }catch(e){
-    console.warn('getContactFull failed for', id, e);
-    return null;
-  }
+  var now=Date.now();
+  var cached=_contactFullCache[id];
+  if(cached && (now - cached.t) < 60000) return cached.c;
+  if(_contactFullInFlight[id]) return _contactFullInFlight[id];
+  _contactFullInFlight[id]=(async function(){
+    try{
+      var r=await fetch(apiUrl('/api/subaccount/contact-open?id='+encodeURIComponent(id)),{credentials:'include'});
+      if(!r.ok)return null;
+      var data=await r.json();
+      var c=data&&data.contact?data.contact:null;
+      if(c) _contactFullCache[id]={c:c,t:Date.now()};
+      return c;
+    }catch(e){
+      console.warn('getContactFull failed for', id, e);
+      return null;
+    }finally{
+      delete _contactFullInFlight[id];
+    }
+  })();
+  return _contactFullInFlight[id];
 }
 
 // =====================================================
@@ -16539,10 +16560,25 @@ function _stopContactWatcher(){
   if(_subContactWatcher){clearInterval(_subContactWatcher);_subContactWatcher=null;}
 }
 
-function _refreshCardPickerSection(){
+async function _refreshCardPickerSection(){
   const wrap=document.getElementById('sf-card-wrap');
   if(!wrap)return;
-  const c=_subEditContactId?getContact(_subEditContactId):null;
+  if(!_subEditContactId){
+    wrap.innerHTML=_renderCardPickerInner(null);
+    return;
+  }
+  // Try the cheap path first: slim contact from current page or name map.
+  var c=getContact(_subEditContactId);
+  // If squareCards is missing the slim shape doesn't carry heavy fields.
+  // Pull the full record so cards render correctly for off-page contacts.
+  if(c && c.squareCards===undefined){
+    wrap.innerHTML='<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Loading cards...</div>';
+    var pickedAt=_subEditContactId;
+    var full=await getContactFull(_subEditContactId);
+    // If the user changed contacts mid-fetch, abandon this render.
+    if(pickedAt!==_subEditContactId)return;
+    if(full)c=full;
+  }
   wrap.innerHTML=_renderCardPickerInner(c);
 }
 
