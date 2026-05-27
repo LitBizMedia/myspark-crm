@@ -1478,6 +1478,19 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
 /* MULTI-COLUMN DAY VIEW */
 .cal-mc-col{flex:1;min-width:180px;border-left:1px solid var(--main-border);display:flex;flex-direction:column}
+/* === CALENDAR DRAG === */
+.timed-ev[draggable="true"]{cursor:grab}
+.timed-ev[draggable="true"]:active{cursor:grabbing}
+.timed-ev.cal-dragging{opacity:.4}
+.cal-drop-target{position:absolute;left:3px;right:3px;border-radius:6px;pointer-events:none;z-index:5;transition:top .05s ease}
+.cal-drop-target.ok{background:rgba(52,211,153,.20);border:2px dashed var(--success);box-shadow:0 0 0 2px rgba(52,211,153,.15)}
+.cal-drop-target.bad{background:rgba(248,113,113,.20);border:2px dashed var(--danger);box-shadow:0 0 0 2px rgba(248,113,113,.15)}
+.cal-drop-target-label{position:absolute;top:4px;left:8px;font-size:11px;font-weight:700;color:var(--main-text);background:var(--main-card);padding:2px 6px;border-radius:4px;box-shadow:var(--shadow-sm)}
+.cal-drop-confirm{position:fixed;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:14px;z-index:10000;min-width:280px;max-width:340px}
+.cal-drop-confirm-title{font-size:13px;font-weight:700;color:var(--main-text);margin:0 0 8px}
+.cal-drop-confirm-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--main-text-muted);margin-bottom:4px}
+.cal-drop-confirm-row strong{color:var(--main-text)}
+.cal-drop-confirm-actions{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
 .cal-mc-head{height:56px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid rgba(255,255,255,.08);background:var(--bg-panel);position:sticky;top:0;z-index:2;flex-shrink:0}
 .cal-mc-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:Exo 2,sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
 .cal-mc-name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ffffff}
@@ -6813,6 +6826,205 @@ function openRescheduledInfoModal(originalId){
   openModal('Rescheduled Appointment', body, footer);
 }
 
+// =====================================================
+// CALENDAR DRAG AND DROP (Slice 1: day view, vertical, same staff)
+// =====================================================
+var _calDrag = {
+  apptId: null,
+  origDate: null,
+  origTime: null,
+  origDuration: 60,
+  origStaff: null,
+  targetEl: null
+};
+
+function _apptIsDraggable(a){
+  if(!a) return false;
+  if(a._isClassSession) return false;
+  var term = ['cancelled','completed','rescheduled','no_show','no-show'];
+  if(term.indexOf((a.status||'').toLowerCase()) >= 0) return false;
+  var apptDt = new Date(a.date + 'T' + (a.time||'09:00') + ':00');
+  if(apptDt.getTime() < Date.now() - 5*60*1000) return false;
+  return true;
+}
+
+function _calDragStart(e, apptId){
+  var allAppts = _expandedAppointmentsForCalendar();
+  var a = allAppts.find(function(x){return x.id===apptId;});
+  if(!a){ e.preventDefault(); return false; }
+  if(!_apptIsDraggable(a)){ e.preventDefault(); return false; }
+  _calDrag.apptId = apptId;
+  _calDrag.origDate = a.date;
+  _calDrag.origTime = a.time || '09:00';
+  _calDrag.origDuration = a.duration || 60;
+  _calDrag.origStaff = a.assignedTo;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', apptId);
+  setTimeout(function(){
+    var el = document.querySelector('[data-appt-id="'+apptId+'"]');
+    if(el) el.classList.add('cal-dragging');
+  }, 0);
+  return true;
+}
+
+function _calDragEnd(e){
+  if(_calDrag.apptId){
+    var el = document.querySelector('[data-appt-id="'+_calDrag.apptId+'"]');
+    if(el) el.classList.remove('cal-dragging');
+  }
+  if(_calDrag.targetEl){ _calDrag.targetEl.remove(); _calDrag.targetEl = null; }
+  _calDrag.apptId = null;
+}
+
+function _calColDragOver(e, dateStr, uid){
+  if(!_calDrag.apptId) return;
+  if(uid !== _calDrag.origStaff) return;
+  if(dateStr !== _calDrag.origDate) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var col = e.currentTarget;
+  var rect = col.getBoundingClientRect();
+  var y = e.clientY - rect.top;
+  var minH = parseInt(col.getAttribute('data-minh'),10) || 8;
+  var rawMin = Math.round(y / 68 * 60);
+  var snapMin = Math.round(rawMin / 15) * 15;
+  if(snapMin < 0) snapMin = 0;
+  var newTotalMin = minH * 60 + snapMin;
+  var newH = Math.floor(newTotalMin / 60);
+  var newM = newTotalMin % 60;
+  var newTime = String(newH).padStart(2,'0') + ':' + String(newM).padStart(2,'0');
+  if(newTime === _calDrag.origTime){
+    if(_calDrag.targetEl){ _calDrag.targetEl.remove(); _calDrag.targetEl = null; }
+    return;
+  }
+  var conflict = _calDragHasConflict(_calDrag.apptId, _calDrag.origStaff, _calDrag.origDate, newTime, _calDrag.origDuration);
+  if(!_calDrag.targetEl){
+    _calDrag.targetEl = document.createElement('div');
+    _calDrag.targetEl.className = 'cal-drop-target';
+    col.appendChild(_calDrag.targetEl);
+  } else if(_calDrag.targetEl.parentNode !== col){
+    col.appendChild(_calDrag.targetEl);
+  }
+  _calDrag.targetEl.className = 'cal-drop-target ' + (conflict ? 'bad' : 'ok');
+  _calDrag.targetEl.style.top = (snapMin / 60 * 68) + 'px';
+  _calDrag.targetEl.style.height = (_calDrag.origDuration / 60 * 68) + 'px';
+  _calDrag.targetEl.innerHTML = '<div class="cal-drop-target-label">' + fmtTime(newTime) + (conflict ? ' (conflict)' : '') + '</div>';
+  _calDrag.targetEl.setAttribute('data-newtime', newTime);
+}
+
+function _calColDrop(e, dateStr, uid){
+  if(!_calDrag.apptId) return;
+  if(uid !== _calDrag.origStaff) return;
+  if(dateStr !== _calDrag.origDate) return;
+  e.preventDefault();
+  var newTime = _calDrag.targetEl && _calDrag.targetEl.getAttribute('data-newtime');
+  if(!newTime || newTime === _calDrag.origTime){
+    _calDragEnd(e);
+    return;
+  }
+  var apptId = _calDrag.apptId;
+  var origDate = _calDrag.origDate;
+  var origTime = _calDrag.origTime;
+  var origStaff = _calDrag.origStaff;
+  var origDuration = _calDrag.origDuration;
+  var conflict = _calDragHasConflict(apptId, origStaff, origDate, newTime, origDuration);
+  var clientX = e.clientX, clientY = e.clientY;
+  _calDragEnd(e);
+  _calShowConfirm(apptId, origDate, origTime, origDate, newTime, conflict, clientX, clientY);
+}
+
+function _calDragHasConflict(skipApptId, staffId, dateStr, newTime, duration){
+  var newStart = t2m(newTime);
+  var newEnd = newStart + (duration || 60);
+  var rivals = _expandedAppointmentsForCalendar().filter(function(a){
+    if(a.id === skipApptId) return false;
+    if(a.assignedTo !== staffId) return false;
+    if(a.date !== dateStr) return false;
+    if(['cancelled','rescheduled','no_show','no-show'].indexOf((a.status||'').toLowerCase()) >= 0) return false;
+    return true;
+  });
+  return rivals.some(function(a){
+    var s = t2m(a.time||'09:00');
+    var ee = s + (a.duration || 60);
+    return newStart < ee && newEnd > s;
+  });
+}
+
+function _calShowConfirm(apptId, oldDate, oldTime, newDate, newTime, conflict, x, y){
+  var existing = document.getElementById('cal-drop-confirm');
+  if(existing) existing.remove();
+  var allAppts = _expandedAppointmentsForCalendar();
+  var a = allAppts.find(function(z){return z.id===apptId;});
+  if(!a) return;
+  var c = a.contactId ? getContact(a.contactId) : null;
+  var box = document.createElement('div');
+  box.id = 'cal-drop-confirm';
+  box.className = 'cal-drop-confirm';
+  var left = Math.min(x + 10, window.innerWidth - 360);
+  var top = Math.min(y + 10, window.innerHeight - 200);
+  box.style.left = left + 'px';
+  box.style.top = top + 'px';
+  var conflictRow = conflict
+    ? '<div class="cal-drop-confirm-row" style="color:var(--danger-light)"><strong>Conflict:</strong> overlaps another appointment. Confirm will override.</div>'
+    : '';
+  box.innerHTML =
+    '<div class="cal-drop-confirm-title">Reschedule '+esc(a.title)+(c?' \u00b7 '+esc(c.name):'')+'?</div>'
+    + '<div class="cal-drop-confirm-row"><span>From</span><strong>'+fmtTime(oldTime)+'</strong></div>'
+    + '<div class="cal-drop-confirm-row"><span>To</span><strong>'+fmtTime(newTime)+'</strong></div>'
+    + conflictRow
+    + '<div class="cal-drop-confirm-actions">'
+    +   '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'cal-drop-confirm\').remove()">Cancel</button>'
+    +   '<button class="btn btn-primary btn-sm" id="cal-drop-confirm-btn" onclick="_calDragConfirm(\''+apptId+'\',\''+newDate+'\',\''+newTime+'\','+(conflict?'true':'false')+')">Confirm</button>'
+    + '</div>';
+  document.body.appendChild(box);
+  setTimeout(function(){
+    document.addEventListener('click', _calConfirmOutsideClick, { once:true, capture:true });
+  }, 0);
+}
+
+function _calConfirmOutsideClick(e){
+  var box = document.getElementById('cal-drop-confirm');
+  if(!box) return;
+  if(box.contains(e.target)) return;
+  box.remove();
+}
+
+async function _calDragConfirm(apptId, newDate, newTime, override){
+  var btn = document.getElementById('cal-drop-confirm-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Rescheduling...'; }
+  try {
+    var res = await fetch(apiUrl('/api/subaccount/appointments-reschedule'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        original_appointment_id: apptId,
+        new_date: newDate,
+        new_time: newTime,
+        override: !!override
+      })
+    });
+    var data = await res.json().catch(function(){return {};});
+    if(!res.ok){
+      if(res.status === 409){
+        toast('That slot is already booked. Pick a different time.','error');
+      } else {
+        toast(data.error || 'Could not reschedule. Try again.','error');
+      }
+      if(btn){ btn.disabled = false; btn.textContent = 'Confirm'; }
+      return;
+    }
+    var box = document.getElementById('cal-drop-confirm');
+    if(box) box.remove();
+    toast('Rescheduled to '+fmtTime(newTime),'success');
+    await fetchFromServer();
+    if(typeof renderCalendar === 'function') renderCalendar();
+  } catch(err){
+    toast('Network error. Try again.','error');
+    if(btn){ btn.disabled = false; btn.textContent = 'Confirm'; }
+  }
+}
+
 function renderMonthCal(){
   const d=state.calDate,y=d.getFullYear(),m=d.getMonth(),td=todayStr();
   document.getElementById('cal-period').textContent=MONTHS[m]+' '+y;
@@ -6982,14 +7194,15 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var isRescheduledU=a.status==='rescheduled';
-    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
+    var draggableAttr = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)"' : '';
+    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+'" data-appt-id="'+a.id+'"'+draggableAttr+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+_apptWarningBadgeHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&c?'<div class="timed-ev-client">'+esc(c.name)+'</div>':'')
       +'</div>';
   }).join('');
   var nowLineU='';if(dateStr===todayStr()){var nMU=nowHM().totalMinutes;var nTopU=Math.round((nMU-(allHours[0]||8)*60)/60*68);nowLineU='<div class="cal-now-line" style="top:'+nTopU+'px"><div class="cal-now-dot"></div></div>';}
-  return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'">'+allHours.map(function(h){
+  return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'" ondragover="_calColDragOver(event,\''+dateStr+'\',\''+uid+'\')" ondrop="_calColDrop(event,\''+dateStr+'\',\''+uid+'\')">'+allHours.map(function(h){
     return'<div class="tgrid-row'+(hours.includes(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\',\''+uid+'\')"></div>';
   }).join('')+offHTML+eventsHTML+nowLineU+'</div>';
 }
