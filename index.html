@@ -718,6 +718,11 @@ input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)
 .date-clk-btn{background:transparent;border:none;border-left:1px solid var(--border);color:var(--text-muted);padding:0 7px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;width:28px}
 .date-clk-btn:hover:not(:disabled){color:var(--text);background:rgba(255,255,255,.04)}
 .date-clk-btn:disabled{cursor:not-allowed;opacity:.5}
+/* Modal form-group context: date picker fills its grid cell and matches
+   input height. Mirrors the time picker's modal sizing pattern. */
+.form-group .date-pair{width:100%;height:38px}
+.form-group .date-text{font-size:13px;padding:9px 12px}
+.form-group .date-clk-btn{width:34px}
 
 .date-pop{position:fixed;z-index:99999;background:var(--main-card);border:1px solid var(--main-border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:10px;width:260px;font-family:Lato,sans-serif;color:var(--main-text)}
 .dp-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -2769,7 +2774,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Block bookings on holidays or other closed days. Applies to all booking widgets.</div>
               <div id="blackout-list"></div>
               <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
-                <div class="form-group" style="margin:0"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Date</label>'+_dateInputHTML('blackout-date','',false,'')+'</div>
+                <div class="form-group" style="margin:0"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Date</label><span class="date-pair"><input type="text" class="date-text" id="blackout-date" value="" data-iso="" placeholder="M/D/YYYY" autocomplete="off" spellcheck="false" onblur="_normalizeDateText(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><button type="button" class="date-clk-btn" tabindex="-1" onclick="_openDatePickerFor('blackout-date')" title="Pick date"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></span></div>
                 <div class="form-group" style="margin:0;flex:1;min-width:180px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Reason (optional)</label><input type="text" id="blackout-reason" placeholder="Christmas Day" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box"></div>
                 <button class="btn btn-ghost btn-sm" onclick="addBlackoutDate()">Add</button>
               </div>
