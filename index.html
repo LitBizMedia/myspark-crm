@@ -6911,10 +6911,20 @@ var _calDrag = {
 function _apptIsDraggable(a){
   if(!a) return false;
   if(a._isClassSession) return false;
-  var term = ['cancelled','completed','rescheduled','no_show','no-show'];
+  // Block dragging of appointments that don't make sense to move:
+  //   completed: already happened. Dragging would create a future ghost.
+  //   rescheduled: this is the original that was already replaced (hidden from
+  //                grid anyway, but defense in depth).
+  // Cancelled and no-show appointments REMAIN draggable so staff can reschedule
+  // missed/cancelled patients directly without a separate Rebook flow.
+  // (Matches Healthie/Jane/Juvonno pattern; Pabau uses a separate Rebook action.)
+  var term = ['completed','rescheduled'];
   if(term.indexOf((a.status||'').toLowerCase()) >= 0) return false;
+  // 24-hour grace window for late discovery of no-shows, after-hours review,
+  // and reschedules across overnight gaps. Older appointments still editable
+  // via the manual reschedule modal.
   var apptDt = new Date(a.date + 'T' + (a.time||'09:00') + ':00');
-  if(apptDt.getTime() < Date.now() - 5*60*1000) return false;
+  if(apptDt.getTime() < Date.now() - 24*60*60*1000) return false;
   return true;
 }
 
