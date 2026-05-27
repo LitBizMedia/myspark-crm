@@ -3927,7 +3927,7 @@ function _calHoursExtended(dateStrs, baseHours){
   var max = baseHours[baseHours.length - 1] + 1;
   (dateStrs || []).forEach(function(ds){
     if(!ds) return;
-    var appts = getCalAppts('all', ds);
+    var appts = getCalAppts('all', ds, 'week');
     appts.forEach(function(a){
       if(!a.time || a.status === 'cancelled') return;
       var parts = a.time.split(':');
@@ -6741,11 +6741,37 @@ function renderCalLegend(){
   el.innerHTML=users.map(function(u){return'<div class="legend-item"><div class="legend-dot" style="background:'+(u.color||'#6b21ea')+'"></div>'+esc(u.name||u.username)+'</div>';}).join('');
 }
 
-function getCalAppts(uid,dateStr){
+// =====================================================
+// Calendar grid visibility rules. Single source of truth for which
+// appointment statuses appear on the calendar in each view.
+//   Day + Week views: show all active statuses + cancelled + no-show.
+//                     Hide rescheduled originals (audit shown via banner on new).
+//   Month view:       show only scheduled, waiting_room, completed, no-show.
+//                     Hide rescheduled and cancelled (cleaner long-range view).
+//   Class sessions:   filtered separately in getCalAppts; cancelled hidden.
+// =====================================================
+function _isApptVisibleOnCal(a, viewMode) {
+  if (!a) return false;
+  var status = a.status || 'scheduled';
+  // Rescheduled originals never appear on the calendar grid in any view.
+  if (status === 'rescheduled') return false;
+  // Month view limits to the "looking ahead" subset.
+  if (viewMode === 'month') {
+    return status === 'scheduled'
+        || status === 'waiting_room'
+        || status === 'completed'
+        || status === 'no-show';
+  }
+  // Day and week views show everything else (including cancelled + no-show).
+  return true;
+}
+
+function getCalAppts(uid,dateStr,viewMode){
+  // viewMode: 'day' | 'week' | 'month'. Falls back to 'week' if omitted
+  // (matches the most common caller behavior pre-Slice 3).
+  var _viewMode = viewMode || 'week';
   var appts=db.appointments.filter(function(a){
-    // Hide rescheduled originals from the calendar grid. The history is
-    // preserved via the "Rescheduled from" banner shown on the new appointment.
-    if(a.status==='rescheduled')return false;
+    if(!_isApptVisibleOnCal(a, _viewMode))return false;
     if(dateStr&&a.date!==dateStr)return false;
     if(uid&&uid!=='all'&&a.assignedTo!==uid)return false;
     // When viewing all staff, respect the calDayStaff visibility filter
@@ -7392,7 +7418,7 @@ function renderMonthCal(){
   let html='<div class="cal-month"><div class="cal-dow-row">'+DSHORT.map(x=>'<div>'+x+'</div>').join('')+'</div><div class="cal-grid">';
   cells.forEach(({day,cur,str})=>{
     const isToday=str===td;
-    const appts=str?getCalAppts(state.calUser,str):[];
+    const appts=str?getCalAppts(state.calUser,str,'month'):[];
     const shown=appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);var addonPill=_apptAddonsPillHTML(a);var groupPill=_apptGroupBadgeHTML(a);var warnPill=_apptWarningBadgeHTML(a);var draggableAttr3 = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)" oncontextmenu="_calApptContextMenu(event,\''+a.id+'\')"' : '';return'<div class="cal-ev" data-appt-id="'+a.id+'"'+draggableAttr3+' style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+addonPill+groupPill+warnPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'});
     const more=appts.length-shown.length;
     let schedHTML='';
@@ -7573,7 +7599,7 @@ function renderWeekCal(){
   const td=todayStr(),allH=_calHoursExtended(cols.map(function(c){return c.str;}), globalCalHours());
   let html='<div class="cal-timed"><div class="time-col"><div class="time-col-head"></div><div class="time-col-allday">All-day</div>'+allH.map(h=>'<div class="time-slot">'+(h===12?'12 PM':h<12?h+' AM':(h-12)+' PM')+'</div>').join('')+'</div>';
   cols.forEach(({day,str})=>{
-    var appts=getCalAppts(state.calUser,str);
+    var appts=getCalAppts(state.calUser,str,'week');
     var offBW=getOffBlocksForCol(str);
     var banW='';
     var staffDots2Inner='';
@@ -7647,7 +7673,7 @@ function renderDayCal(){
   // Staff columns
   staffCols.forEach(function(u){
     var col=u.color||'#6b21ea';
-    var uAppts=_expandedAppointmentsForCalendar().filter(function(a){return a.date===str&&a.assignedTo===u.id&&a.status!=='cancelled';});
+    var uAppts=_expandedAppointmentsForCalendar().filter(function(a){return a.date===str&&a.assignedTo===u.id&&_isApptVisibleOnCal(a,'day');});
     // Merge in class sessions where this user is the instructor.
     var uSessions=(db.classSessions||[]).filter(function(s){
       return s.date===str&&s.instructor_id===u.id&&s.status!=='cancelled';
