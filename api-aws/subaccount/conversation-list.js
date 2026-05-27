@@ -55,6 +55,14 @@ async function handler(req, res) {
     // ORDER: unread first (unread_count > 0), then by last activity desc.
     // The inbox should surface what needs attention.
     const statusClause = includeArchived ? '' : "AND c.status != 'archived'";
+    // Inbox is for two-way communication. Hide conversations that only contain
+    // automated outbound messages (confirmations, reminders, receipts, etc.).
+    // A conversation surfaces in the inbox only if it has received an inbound
+    // message OR if a staff member manually composed an outbound message.
+    // Existing rows still hold the auto-emails for audit/history (contact drawer
+    // comms tab in the future). When a patient eventually replies on an
+    // auto-only conversation, last_inbound_message_at gets set and it appears.
+    const twoWayClause = "AND (c.last_inbound_message_at IS NOT NULL OR c.last_manual_message_at IS NOT NULL)";
     const result = await db.query(
       `SELECT
          c.id, c.contact_id, c.channel, c.status, c.assigned_to,
@@ -69,6 +77,7 @@ async function handler(req, res) {
        LEFT JOIN contacts ct ON ct.id = c.contact_id
        WHERE c.subaccount_id = $1
          ${statusClause}
+         ${twoWayClause}
        ORDER BY
          (CASE WHEN c.unread_count > 0 THEN 0 ELSE 1 END),
          c.last_message_at DESC NULLS LAST,
