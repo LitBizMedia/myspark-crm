@@ -19816,7 +19816,7 @@ function convFetchList(){
   var s = _convState();
   if(s.loading) return;
   s.loading = true;
-  fetch(_convAPI('/api/subaccount/conversation-list'), { credentials:'include' })
+  fetch(_convAPI('/api/subaccount/conversation-list?include_archived=1'), { credentials:'include' })
     .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, body:j }; }); })
     .then(function(res){
       s.loading = false;
