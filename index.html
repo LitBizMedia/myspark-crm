@@ -1188,6 +1188,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .conv-msg-status{font-weight:600}
 .conv-msg-status.failed{color:var(--danger-text)}
 .conv-composer-wrap{flex-shrink:0;padding:0 28px 16px;max-width:880px;width:calc(100% - 32px);margin:0 auto;box-sizing:border-box}
+.conv-phi-reminder{display:flex;align-items:center;gap:6px;margin-top:8px;padding:6px 10px;font-size:11px;color:var(--main-text-muted);background:var(--warning-dim);border:1px solid var(--warning-border,var(--warning));border-radius:var(--radius-sm);line-height:1.4}
+.conv-phi-reminder svg{flex-shrink:0;color:var(--warning-text)}
 .conv-composer{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .conv-composer textarea{width:100%;min-height:60px;max-height:160px;border:none;outline:none;resize:none;background:transparent;font-family:inherit;font-size:14px;line-height:1.55;color:var(--main-text);padding:0;box-sizing:border-box}
 .conv-composer textarea::placeholder{color:var(--main-text-muted)}
@@ -20526,7 +20528,12 @@ function convRenderThread(opts){
           'Send' +
         '</button>' +
       '</div>' +
-    '</div></div>';
+    '</div>' +
+    '<div class="conv-phi-reminder">' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+      'Friendly reminder: avoid sharing PHI in SMS or email. Use a secured channel for clinical details.' +
+    '</div>' +
+    '</div>';
   } else {
     var statusLabel = c.status === 'closed' ? 'closed' : 'archived';
     composerHtml = '<div class="conv-composer-wrap"><div class="conv-composer-disabled">' +
