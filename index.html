@@ -20348,8 +20348,14 @@ function convOpenThread(conversationId){
   _convUpdateSidebarBadge();
   // Silent backend mark_read if there was anything unread
   if(wasUnread) _convMarkReadSilent(conversationId);
+  // Render from cache immediately (snappy feel), then refetch fresh
+  // to catch any server-side changes (status updates, new inbound messages,
+  // edits from other tabs/devices).
   if(db.conversationMessages[conversationId]){
     convRenderThread();
+    convFetchThread(conversationId, function(err, data){
+      if(!err) convRenderThread();
+    });
   } else {
     convRenderThread({ loading:true });
     convFetchThread(conversationId, function(err, data){
