@@ -87,13 +87,35 @@ async function handler(req, res) {
     const newDuration = body.new_duration != null ? parseInt(body.new_duration) : (orig.duration || 60);
     const newNotes = body.new_notes != null ? body.new_notes : orig.notes;
 
+    // SLICE 4: optional staff reassignment.
+    // body.new_staff_id, when present and valid, becomes the new appointment's
+    // assigned_to. Falls back to orig.assigned_to when missing or invalid.
+    // Group bookings (multi-staff) intentionally ignore new_staff_id; staff
+    // reassignment on group appointments is out of scope.
+    let effectiveStaffId = orig.assigned_to;
+    if (body.new_staff_id && !isGroupBooking) {
+      try {
+        const staffRes = await db.query(
+          'SELECT id FROM subaccount_users WHERE id = $1::uuid AND subaccount_id = $2 AND active = true',
+          [body.new_staff_id, subaccountId]
+        );
+        if (staffRes.rows.length) {
+          effectiveStaffId = body.new_staff_id;
+        } else {
+          console.warn('appointments-reschedule: new_staff_id not found or inactive, ignoring:', body.new_staff_id);
+        }
+      } catch (staffErr) {
+        console.warn('appointments-reschedule: new_staff_id validation failed:', staffErr.message);
+      }
+    }
+
     // Conflict check on new slot (skip if override=true). Uses the same isActive
     // filter as appointments-upsert; cancelled/no-show/completed/rescheduled
     // appointments do NOT block.
-    if (orig.assigned_to && !body.override) {
+    if (effectiveStaffId && !body.override) {
       try {
         const result = await checkStaffConflict({
-          staffId: orig.assigned_to,
+          staffId: effectiveStaffId,
           subaccountId,
           date: newDate,
           time: newTime,
@@ -150,7 +172,7 @@ async function handler(req, res) {
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'scheduled', $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, NOW(), NOW())
     `, [
-      newApptId, subaccountId, orig.title, orig.contact_id, orig.assigned_to,
+      newApptId, subaccountId, orig.title, orig.contact_id, effectiveStaffId,
       newDate, newTime, newDuration,
       orig.location, newNotes, orig.service_id, orig.service_variation_id,
       JSON.stringify(orig.addons || []),
@@ -253,10 +275,10 @@ async function handler(req, res) {
         }
 
         let staffName = '';
-        if (!isGroupBooking && orig.assigned_to) {
+        if (!isGroupBooking && effectiveStaffId) {
           const stRes = await db.query(
             `SELECT display_name, username FROM subaccount_users WHERE id = $1::uuid`,
-            [orig.assigned_to]
+            [effectiveStaffId]
           );
           if (stRes.rows.length) {
             staffName = stRes.rows[0].display_name || stRes.rows[0].username || '';
