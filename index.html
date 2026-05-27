@@ -188,60 +188,6 @@ body:not(.subaccount-litbiz) #sb-agency-tools{display:none!important}
 /* Date/time pickers: render custom white icons so the picker is always
    visible regardless of how the browser handles color-scheme. The native
    indicator is made transparent but stays clickable on top. */
-input[type="date"],
-input[type="datetime-local"],
-input[type="month"]{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ede8ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>")!important;
-  background-repeat:no-repeat!important;
-  background-position:right 10px center!important;
-  background-size:16px 16px!important;
-  padding-right:34px!important;
-}
-input[type="time"]{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ede8ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>")!important;
-  background-repeat:no-repeat!important;
-  background-position:right 10px center!important;
-  background-size:16px 16px!important;
-  padding-right:34px!important;
-}
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="time"]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-input[type="month"]::-webkit-calendar-picker-indicator{
-  opacity:0!important;
-  cursor:pointer!important;
-  width:24px;
-}
-
-/* Globally fix native time/date input contrast in dark theme. The internal
-   ::-webkit-datetime-edit shadow elements don't inherit color: from the
-   input itself, so we have to target each part. Applies to all inputs in
-   the app, not just .form-group ones. */
-input[type="time"], input[type="date"], input[type="datetime-local"], input[type="month"]{
-  color-scheme: dark;
-  color: var(--text);
-}
-input[type="time"]::-webkit-datetime-edit,
-input[type="date"]::-webkit-datetime-edit,
-input[type="datetime-local"]::-webkit-datetime-edit,
-input[type="month"]::-webkit-datetime-edit{color:var(--text)}
-input[type="time"]::-webkit-datetime-edit-fields-wrapper,
-input[type="date"]::-webkit-datetime-edit-fields-wrapper,
-input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper,
-input[type="month"]::-webkit-datetime-edit-fields-wrapper{color:var(--text)}
-input[type="time"]::-webkit-datetime-edit-text,
-input[type="date"]::-webkit-datetime-edit-text,
-input[type="datetime-local"]::-webkit-datetime-edit-text,
-input[type="month"]::-webkit-datetime-edit-text{color:var(--text-muted)}
-input[type="time"]::-webkit-datetime-edit-hour-field,
-input[type="time"]::-webkit-datetime-edit-minute-field,
-input[type="time"]::-webkit-datetime-edit-second-field,
-input[type="time"]::-webkit-datetime-edit-ampm-field,
-input[type="date"]::-webkit-datetime-edit-month-field,
-input[type="date"]::-webkit-datetime-edit-day-field,
-input[type="date"]::-webkit-datetime-edit-year-field{color:var(--text)}
-input[type="time"]:disabled, input[type="date"]:disabled{color:var(--text-muted)}
-
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 
@@ -26866,20 +26812,6 @@ function hideAuthLoading(){
 
 // Boot check for embed mode
 document.addEventListener('DOMContentLoaded',async function(){
-  // Global click handler for native date inputs: opens the OS picker via
-  // showPicker() when the click lands in the calendar-icon zone on the
-  // right side of the field. Leaves the text portion clickable for normal
-  // focus/typing. No-op on browsers that lack showPicker.
-  document.addEventListener('click',function(e){
-    var t=e.target;
-    if(!t||!t.matches)return;
-    if(t.matches('input[type="date"]:not([disabled])')&&typeof t.showPicker==='function'){
-      var rect=t.getBoundingClientRect();
-      if(e.clientX>rect.right-32){
-        try{t.showPicker();}catch(err){}
-      }
-    }
-  });
   // Detect path-based routing
   var pathSlug=getPathSlug();
   state.subaccountSlug=pathSlug;
