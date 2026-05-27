@@ -3022,38 +3022,11 @@ function getContactDisplay(id){
 
 // TIER 3: async full record. Uses /api/subaccount/contact-open.
 // Returns null on error.
-// Cache layer for getContactFull. Single-flight per ID (multiple parallel
-// callers share one fetch), 60s TTL so repeat reads in the same modal don't
-// hammer the backend. Call _invalidateContactFull(id) after mutations.
-var _contactFullCache = {};
-var _contactFullInFlight = {};
-function _invalidateContactFull(id){
-  if(!id)return;
-  delete _contactFullCache[id];
-  delete _contactFullInFlight[id];
-}
+// getContactFull: thin wrapper over ensureContactFull for backward compat
+// with the subscription picker patch and any other callers expecting the
+// old name. ensureContactFull is the canonical helper going forward.
 async function getContactFull(id){
-  if(!id)return null;
-  var now=Date.now();
-  var cached=_contactFullCache[id];
-  if(cached && (now - cached.t) < 60000) return cached.c;
-  if(_contactFullInFlight[id]) return _contactFullInFlight[id];
-  _contactFullInFlight[id]=(async function(){
-    try{
-      var r=await fetch(apiUrl('/api/subaccount/contact-open?id='+encodeURIComponent(id)),{credentials:'include'});
-      if(!r.ok)return null;
-      var data=await r.json();
-      var c=data&&data.contact?data.contact:null;
-      if(c) _contactFullCache[id]={c:c,t:Date.now()};
-      return c;
-    }catch(e){
-      console.warn('getContactFull failed for', id, e);
-      return null;
-    }finally{
-      delete _contactFullInFlight[id];
-    }
-  })();
-  return _contactFullInFlight[id];
+  return ensureContactFull(id);
 }
 
 // =====================================================
@@ -5188,32 +5161,71 @@ function openDrawer(id){
   });
 }
 
-// Fetches a single contact's PHI (notes, allergies, warnings, credit history)
-// and merges into db.contacts[i] in place. Used by openDrawer and after any
-// allergy/warning mutation so the drawer doesn't lose PHI when fetchFromServer
-// repopulates db.contacts from the slim contact-list shape.
-async function refreshContactPHI(id){
+// Fetches a single contact's full record (heavy fields: squareCards,
+// squareCustomerId, allergies, warnings, notes, creditHistory) and merges
+// into db.contacts in place. Pushes the contact in if not present (off-page
+// contacts under pagination), so synchronous getContact returns the full
+// shape afterward. Cached for 60s to avoid re-fetching during a single modal
+// session. Modal/drawer openers should await this before rendering.
+var _contactFullFetchCache = {};
+var _contactFullFetchInFlight = {};
+function _invalidateContactFull(id){
+  if(!id)return;
+  delete _contactFullFetchCache[id];
+  delete _contactFullFetchInFlight[id];
+}
+async function ensureContactFull(id){
   if(!id)return null;
-  try{
-    const r = await fetch(apiUrl('/api/subaccount/contact-open?id=' + encodeURIComponent(id)), {
-      credentials: 'include'
-    });
-    if(!r.ok)throw new Error('contact-open returned '+r.status);
-    const data = await r.json();
-    if(!data || !data.contact)return null;
-    const idx = (db.contacts||[]).findIndex(function(x){return x.id===id;});
-    if(idx >= 0){
-      const existing = db.contacts[idx];
-      existing.notes = data.contact.notes || [];
-      existing.allergies = data.contact.allergies || [];
-      existing.warnings = data.contact.warnings || [];
-      existing.creditHistory = data.contact.creditHistory || [];
-    }
-    return data.contact;
-  }catch(e){
-    console.warn('refreshContactPHI failed:', e.message);
-    return null;
+  var now=Date.now();
+  var cached=_contactFullFetchCache[id];
+  if(cached && (now - cached.t) < 60000){
+    return cached.c;
   }
+  if(_contactFullFetchInFlight[id]) return _contactFullFetchInFlight[id];
+  _contactFullFetchInFlight[id]=(async function(){
+    try{
+      const r = await fetch(apiUrl('/api/subaccount/contact-open?id=' + encodeURIComponent(id)), {
+        credentials: 'include'
+      });
+      if(!r.ok)throw new Error('contact-open returned '+r.status);
+      const data = await r.json();
+      if(!data || !data.contact)return null;
+      const full = data.contact;
+      if(!db.contacts)db.contacts=[];
+      const idx = db.contacts.findIndex(function(x){return x.id===id;});
+      if(idx >= 0){
+        // Merge heavy fields into existing record; preserve any in-flight UI state.
+        const existing = db.contacts[idx];
+        existing.squareCards = full.squareCards || [];
+        existing.squareCustomerId = full.squareCustomerId || existing.squareCustomerId || null;
+        existing.notes = full.notes || [];
+        existing.allergies = full.allergies || [];
+        existing.warnings = full.warnings || [];
+        existing.creditHistory = full.creditHistory || [];
+        existing.creditBalance = full.creditBalance != null ? full.creditBalance : existing.creditBalance;
+        existing.customFieldValues = full.customFieldValues || existing.customFieldValues || {};
+      } else {
+        // Off-page contact: push the full record so synchronous getContact finds it.
+        db.contacts.push(full);
+      }
+      _contactFullFetchCache[id]={c:full,t:Date.now()};
+      return full;
+    }catch(e){
+      console.warn('ensureContactFull failed:', e.message);
+      return null;
+    }finally{
+      delete _contactFullFetchInFlight[id];
+    }
+  })();
+  return _contactFullFetchInFlight[id];
+}
+// Backward-compat shim: openDrawer and existing mutation callers still
+// invoke refreshContactPHI. Route them through ensureContactFull so they
+// benefit from the cache + full-field merge.
+async function refreshContactPHI(id){
+  // Force a fresh fetch on explicit PHI refresh calls (mutations).
+  _invalidateContactFull(id);
+  return ensureContactFull(id);
 }
 function closeDrawer(){document.getElementById('drawer-overlay').classList.remove('open');document.getElementById('contact-drawer').classList.remove('open');state.drawer=null}
 function switchDTab(t){
@@ -16456,7 +16468,7 @@ let _subEditCycle='monthly';
 let _subEditCardId='';
 let _subContactWatcher=null;
 
-function openSubModal(id,preContactId){
+async function openSubModal(id,preContactId){
   if(!canManageSubscriptions()){toast('You do not have permission to manage subscriptions.','error');return;}
   const s=id?getSub(id):null;
   if(s){
@@ -16475,6 +16487,9 @@ function openSubModal(id,preContactId){
     _subEditCardId='';
   }
   state.modal={type:'sub',id:id||null,extra:preContactId||null};
+  // Prefetch full contact so cards render correctly on first paint for
+  // off-page contacts (pagination drops heavy fields from slim shape).
+  if(_subEditContactId) await ensureContactFull(_subEditContactId);
   _renderSubModalBody(s);
   _startContactWatcher();
 }
@@ -29449,7 +29464,7 @@ async function importFromSquare(){
     if(data.error){toast('Sync failed: '+data.error,'error');return}
     const customers=data.customers||[];
     let updated=0;
-    customers.forEach(function(sqC){
+    for(const sqC of customers){
       const cards=(sqC.cards||[]).map(function(card){return{
         id:card.id,
         brand:card.brand||card.card_brand||'Card',
@@ -29459,19 +29474,27 @@ async function importFromSquare(){
       }});
       // Find matching MySpark contact by squareCustomerId or email
       let contact=db.contacts.find(function(c){return c.squareCustomerId===sqC.id});
+      let needCustomerIdBackfill=false;
       if(!contact&&sqC.email_address){
         contact=db.contacts.find(function(c){return c.email&&c.email.toLowerCase()===sqC.email_address.toLowerCase()});
-        if(contact){contact.squareCustomerId=sqC.id;}
+        if(contact){
+          contact.squareCustomerId=sqC.id;
+          needCustomerIdBackfill=true;
+        }
       }
       if(contact&&cards.length){
         contact.squareCards=cards;
-        updated++;
+        try{
+          const updateFields={square_cards: cards};
+          if(needCustomerIdBackfill) updateFields.square_customer_id=sqC.id;
+          await contactUpdate(contact.id, updateFields);
+          _invalidateContactFull(contact.id);
+          updated++;
+        }catch(persistErr){
+          console.error('Sync persist failed for contact', contact.id, persistErr);
+        }
       }
-    });
-    // Save directly to localStorage first, then sync to server
-    localStorage.setItem(SK, JSON.stringify(db));
-    // Push to server immediately with correct data
-    await doSync();
+    }
     toast('Cards synced for '+updated+' contact'+(updated===1?'':'s')+'.','success');
     if(state.panel==='contacts')renderContacts();
   }catch(e){
@@ -29624,6 +29647,18 @@ async function submitAddCard(){
     if(saveData2.error){if(errEl)errEl.textContent=saveData2.error;if(btn){btn.disabled=false;btn.textContent='Save Card'}return}
     if(!contact.squareCards)contact.squareCards=[];
     contact.squareCards.push(saveData2.card);
+    // Persist to RDS. Contacts are no longer in the blob since TIER 1
+    // migration, so saveData() does not cover this; explicit contactUpdate
+    // is required for the card to survive a page reload.
+    try{
+      await contactUpdate(contact.id, {square_cards: contact.squareCards});
+      _invalidateContactFull(contact.id);
+    }catch(persistErr){
+      console.error('Card persist failed:', persistErr);
+      if(errEl)errEl.textContent='Card saved at Square but failed to persist locally. Click Square Sync to recover.';
+      if(btn){btn.disabled=false;btn.textContent='Save Card'}
+      return;
+    }
     saveData();
     closeModal();
     sqCard=null;
