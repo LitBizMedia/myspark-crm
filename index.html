@@ -1491,6 +1491,23 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-drop-confirm-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--main-text-muted);margin-bottom:4px}
 .cal-drop-confirm-row strong{color:var(--main-text)}
 .cal-drop-confirm-actions{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
+.cal-ev[draggable="true"]{cursor:grab}
+.cal-ev[draggable="true"]:active{cursor:grabbing}
+.cal-ev.cal-dragging{opacity:.4}
+.cal-cell.cal-drop-cell-ok{background:rgba(52,211,153,.18) !important;box-shadow:inset 0 0 0 2px var(--success)}
+.cal-cell.cal-drop-cell-bad{background:rgba(248,113,113,.18) !important;box-shadow:inset 0 0 0 2px var(--danger)}
+.cal-drop-confirm-time-input{padding:4px 8px;border:1px solid var(--main-border);border-radius:var(--radius-sm);background:var(--main-input);color:var(--main-text);font-size:12px;font-weight:700;width:90px;text-align:right;font-family:inherit}
+.cal-drop-confirm-time-input:focus{outline:none;border-color:var(--purple);box-shadow:var(--focus-ring)}
+.cal-ctx-menu{position:fixed;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);padding:4px;z-index:10000;min-width:160px}
+.cal-ctx-menu-item{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--main-text);cursor:pointer;border-radius:var(--radius-sm)}
+.cal-ctx-menu-item:hover{background:var(--main-card-hover)}
+.cal-move-picker{position:fixed;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:14px;z-index:10001;min-width:260px}
+.cal-move-picker-title{font-size:13px;font-weight:700;color:var(--main-text);margin:0 0 10px}
+.cal-move-picker-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.cal-move-picker-row label{font-size:11px;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.cal-move-picker-row input{padding:8px 10px;border:1px solid var(--main-border);border-radius:var(--radius-sm);background:var(--main-input);color:var(--main-text);font-size:13px;font-family:inherit}
+.cal-move-picker-row input:focus{outline:none;border-color:var(--purple);box-shadow:var(--focus-ring)}
+.cal-move-picker-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
 .cal-mc-head{height:56px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid rgba(255,255,255,.08);background:var(--bg-panel);position:sticky;top:0;z-index:2;flex-shrink:0}
 .cal-mc-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:Exo 2,sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
 .cal-mc-name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ffffff}
@@ -6988,25 +7005,230 @@ function _calShowConfirm(apptId, oldDate, oldTime, newDate, newTime, conflict, x
   box.id = 'cal-drop-confirm';
   box.className = 'cal-drop-confirm';
   var left = Math.min(x + 10, window.innerWidth - 360);
-  var top = Math.min(y + 10, window.innerHeight - 200);
+  var top = Math.min(y + 10, window.innerHeight - 240);
   box.style.left = left + 'px';
   box.style.top = top + 'px';
-  var conflictRow = conflict
-    ? '<div class="cal-drop-confirm-row" style="color:var(--danger-light)"><strong>Conflict:</strong> overlaps another appointment. Confirm will override.</div>'
+  // Date change row only when date actually changed (most relevant for month view + right-click)
+  var dateChangedRow = newDate !== oldDate
+    ? '<div class="cal-drop-confirm-row"><span>Date</span><strong>'+fmtDate(newDate)+'</strong></div>'
     : '';
+  var conflictId = 'cal-drop-confirm-conflict';
+  var conflictRow = conflict
+    ? '<div class="cal-drop-confirm-row" id="'+conflictId+'" style="color:var(--danger-light)"><strong>Conflict:</strong> overlaps another appointment. Confirm will override.</div>'
+    : '<div class="cal-drop-confirm-row" id="'+conflictId+'" style="display:none"></div>';
   box.innerHTML =
     '<div class="cal-drop-confirm-title">Reschedule '+esc(a.title)+(c?' \u00b7 '+esc(c.name):'')+'?</div>'
-    + '<div class="cal-drop-confirm-row"><span>From</span><strong>'+fmtTime(oldTime)+'</strong></div>'
-    + '<div class="cal-drop-confirm-row"><span>To</span><strong>'+fmtTime(newTime)+'</strong></div>'
+    + '<div class="cal-drop-confirm-row"><span>From</span><strong>'+(newDate!==oldDate?fmtDate(oldDate)+' at ':'')+fmtTime(oldTime)+'</strong></div>'
+    + dateChangedRow
+    + '<div class="cal-drop-confirm-row"><span>New time</span>'
+    + '<input type="text" class="cal-drop-confirm-time-input" id="cal-drop-confirm-time" value="'+esc(fmtTime(newTime))+'" placeholder="e.g. 2:30 PM" oninput="_calConfirmTimeChanged(\''+apptId+'\',\''+newDate+'\')">'
+    + '</div>'
     + conflictRow
     + '<div class="cal-drop-confirm-actions">'
     +   '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'cal-drop-confirm\').remove()">Cancel</button>'
-    +   '<button class="btn btn-primary btn-sm" id="cal-drop-confirm-btn" onclick="_calDragConfirm(\''+apptId+'\',\''+newDate+'\',\''+newTime+'\','+(conflict?'true':'false')+')">Confirm</button>'
+    +   '<button class="btn btn-primary btn-sm" id="cal-drop-confirm-btn" data-appt-id="'+apptId+'" data-new-date="'+newDate+'" data-orig-conflict="'+(conflict?'1':'0')+'" onclick="_calConfirmBtnClick()">Confirm</button>'
     + '</div>';
   document.body.appendChild(box);
   setTimeout(function(){
     document.addEventListener('click', _calConfirmOutsideClick, { once:true, capture:true });
   }, 0);
+}
+
+// Live conflict re-check as the user types in the time field of the confirm dialog.
+function _calConfirmTimeChanged(apptId, newDate) {
+  var timeEl = document.getElementById('cal-drop-confirm-time');
+  if (!timeEl) return;
+  var parsed = _parseTimeText(timeEl.value);
+  var conflictRow = document.getElementById('cal-drop-confirm-conflict');
+  if (!parsed || !conflictRow) return;
+  var allAppts = _expandedAppointmentsForCalendar();
+  var a = allAppts.find(function(z){return z.id===apptId;});
+  if (!a) return;
+  var conflict = _calDragHasConflict(apptId, a.assignedTo, newDate, parsed, a.duration || 60);
+  if (conflict) {
+    conflictRow.innerHTML = '<strong>Conflict:</strong> overlaps another appointment. Confirm will override.';
+    conflictRow.style.display = '';
+    conflictRow.style.color = 'var(--danger-light)';
+  } else {
+    conflictRow.style.display = 'none';
+  }
+}
+
+// Click handler for the confirm button. Reads the live time-field value and
+// recomputes conflict at submit time (in case the user edited the time after
+// the dialog was opened). Calls _calDragConfirm with the final values.
+function _calConfirmBtnClick() {
+  var btn = document.getElementById('cal-drop-confirm-btn');
+  if (!btn) return;
+  var apptId = btn.getAttribute('data-appt-id');
+  var newDate = btn.getAttribute('data-new-date');
+  var timeEl = document.getElementById('cal-drop-confirm-time');
+  if (!timeEl) return;
+  var newTime = _parseTimeText(timeEl.value);
+  if (!newTime) {
+    toast('Could not read the time. Try HH:MM or "2:30 PM".', 'error');
+    return;
+  }
+  var allAppts = _expandedAppointmentsForCalendar();
+  var a = allAppts.find(function(z){return z.id===apptId;});
+  if (!a) return;
+  var conflict = _calDragHasConflict(apptId, a.assignedTo, newDate, newTime, a.duration || 60);
+  _calDragConfirm(apptId, newDate, newTime, conflict);
+}
+
+// =====================================================
+// CALENDAR DRAG (MONTH VIEW + RIGHT-CLICK MOVE - Slice 3)
+// =====================================================
+// Month view uses .cal-ev chips (not .timed-ev positioned blocks). Drop targets
+// are .cal-cell day cells. Time of day is preserved from the original
+// appointment; user can edit it in the confirm dialog if desired.
+function _calCellDragOverMonth(e, dateStr) {
+  if (!_calDrag.apptId) return;
+  // Other-month cells (filler from prev/next month) have empty dateStr; skip.
+  if (!dateStr) return;
+  // Skip the original date (no-op).
+  if (dateStr === _calDrag.origDate) {
+    var prev = document.querySelector('.cal-cell.cal-drop-cell-ok, .cal-cell.cal-drop-cell-bad');
+    if (prev) prev.classList.remove('cal-drop-cell-ok', 'cal-drop-cell-bad');
+    return;
+  }
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var cell = e.currentTarget;
+  // Remove highlight from any other cell first
+  var prev = document.querySelectorAll('.cal-cell.cal-drop-cell-ok, .cal-cell.cal-drop-cell-bad');
+  prev.forEach(function(p){ if (p !== cell) p.classList.remove('cal-drop-cell-ok', 'cal-drop-cell-bad'); });
+  // Conflict check uses the original time (preserved across the move)
+  var conflict = _calDragHasConflict(_calDrag.apptId, _calDrag.origStaff, dateStr, _calDrag.origTime, _calDrag.origDuration);
+  cell.classList.remove('cal-drop-cell-ok', 'cal-drop-cell-bad');
+  cell.classList.add(conflict ? 'cal-drop-cell-bad' : 'cal-drop-cell-ok');
+  cell.setAttribute('data-newdate', dateStr);
+}
+
+function _calCellDropMonth(e, dateStr) {
+  if (!_calDrag.apptId) return;
+  if (!dateStr || dateStr === _calDrag.origDate) {
+    _calDragEnd(e);
+    return;
+  }
+  e.preventDefault();
+  var apptId = _calDrag.apptId;
+  var origDate = _calDrag.origDate;
+  var origTime = _calDrag.origTime;
+  var origStaff = _calDrag.origStaff;
+  var origDuration = _calDrag.origDuration;
+  // Time preserved from original
+  var newTime = origTime;
+  var conflict = _calDragHasConflict(apptId, origStaff, dateStr, newTime, origDuration);
+  var clientX = e.clientX, clientY = e.clientY;
+  // Clean up cell highlights
+  document.querySelectorAll('.cal-cell.cal-drop-cell-ok, .cal-cell.cal-drop-cell-bad').forEach(function(p){
+    p.classList.remove('cal-drop-cell-ok', 'cal-drop-cell-bad');
+  });
+  _calDragEnd(e);
+  _calShowConfirm(apptId, origDate, origTime, dateStr, newTime, conflict, clientX, clientY);
+}
+
+// Right-click context menu on any draggable appointment block in any view.
+function _calApptContextMenu(e, apptId) {
+  var allAppts = _expandedAppointmentsForCalendar();
+  var a = allAppts.find(function(x){return x.id === apptId;});
+  if (!a || !_apptIsDraggable(a)) return; // silent rejection for past/cancelled/etc.
+  e.preventDefault();
+  e.stopPropagation();
+  // Remove any existing context menu
+  var existing = document.getElementById('cal-ctx-menu');
+  if (existing) existing.remove();
+  var menu = document.createElement('div');
+  menu.id = 'cal-ctx-menu';
+  menu.className = 'cal-ctx-menu';
+  var x = e.clientX, y = e.clientY;
+  menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - 100) + 'px';
+  menu.innerHTML =
+    '<div class="cal-ctx-menu-item" onclick="_calOpenMovePicker(\''+apptId+'\','+x+','+y+')">'
+    + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'
+    + 'Move to date...'
+    + '</div>';
+  document.body.appendChild(menu);
+  setTimeout(function(){
+    document.addEventListener('click', _calCtxMenuOutsideClick, { once:true, capture:true });
+  }, 0);
+}
+
+function _calCtxMenuOutsideClick(e) {
+  var menu = document.getElementById('cal-ctx-menu');
+  if (!menu) return;
+  if (menu.contains(e.target)) return;
+  menu.remove();
+}
+
+// Compact picker shown after the context menu's "Move to date" action.
+function _calOpenMovePicker(apptId, x, y) {
+  var ctx = document.getElementById('cal-ctx-menu');
+  if (ctx) ctx.remove();
+  var allAppts = _expandedAppointmentsForCalendar();
+  var a = allAppts.find(function(z){return z.id===apptId;});
+  if (!a) return;
+  var c = a.contactId ? getContact(a.contactId) : null;
+  var box = document.createElement('div');
+  box.id = 'cal-move-picker';
+  box.className = 'cal-move-picker';
+  var left = Math.min(x + 10, window.innerWidth - 300);
+  var top = Math.min(y + 10, window.innerHeight - 280);
+  box.style.left = left + 'px';
+  box.style.top = top + 'px';
+  // Default the date picker to today (or original date + 1 if already today)
+  var todayD = new Date();
+  var todayStr2 = todayD.getFullYear() + '-' + String(todayD.getMonth()+1).padStart(2,'0') + '-' + String(todayD.getDate()).padStart(2,'0');
+  var defaultDate = a.date >= todayStr2 ? a.date : todayStr2;
+  var origTimeFmt = fmtTime(a.time || '09:00');
+  box.innerHTML =
+    '<div class="cal-move-picker-title">Move '+esc(a.title)+(c?' \u00b7 '+esc(c.name):'')+'</div>'
+    + '<div class="cal-move-picker-row"><label>New date</label>'
+    + '<input type="date" id="cal-mv-date" value="'+defaultDate+'" min="'+todayStr2+'"></div>'
+    + '<div class="cal-move-picker-row"><label>New time</label>'
+    + '<input type="text" id="cal-mv-time" value="'+esc(origTimeFmt)+'" placeholder="e.g. 2:30 PM"></div>'
+    + '<div class="cal-move-picker-actions">'
+    +   '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'cal-move-picker\').remove()">Cancel</button>'
+    +   '<button class="btn btn-primary btn-sm" onclick="_calMovePickerApply(\''+apptId+'\')">Continue</button>'
+    + '</div>';
+  document.body.appendChild(box);
+  setTimeout(function(){
+    var dateInput = document.getElementById('cal-mv-date');
+    if (dateInput) dateInput.focus();
+  }, 50);
+}
+
+function _calMovePickerApply(apptId) {
+  var dateEl = document.getElementById('cal-mv-date');
+  var timeEl = document.getElementById('cal-mv-time');
+  if (!dateEl || !timeEl) return;
+  var newDate = dateEl.value;
+  var newTime = _readTimeInput('cal-mv-time') || _parseTimeText(timeEl.value);
+  if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    toast('Pick a valid date.', 'error');
+    return;
+  }
+  if (!newTime || !/^\d{2}:\d{2}$/.test(newTime)) {
+    toast('Pick a valid time (e.g. 2:30 PM).', 'error');
+    return;
+  }
+  var allAppts = _expandedAppointmentsForCalendar();
+  var a = allAppts.find(function(z){return z.id===apptId;});
+  if (!a) return;
+  // No-op check
+  if (newDate === a.date && newTime === a.time) {
+    toast('Same date and time. No change.', 'info');
+    return;
+  }
+  var conflict = _calDragHasConflict(apptId, a.assignedTo, newDate, newTime, a.duration || 60);
+  var box = document.getElementById('cal-move-picker');
+  if (box) box.remove();
+  // Use the center of viewport for the confirm dialog since there's no drop point
+  var x = window.innerWidth / 2 - 150;
+  var y = window.innerHeight / 2 - 80;
+  _calShowConfirm(apptId, a.date, a.time, newDate, newTime, conflict, x, y);
 }
 
 function _calConfirmOutsideClick(e){
@@ -7137,7 +7359,7 @@ function renderMonthCal(){
   cells.forEach(({day,cur,str})=>{
     const isToday=str===td;
     const appts=str?getCalAppts(state.calUser,str):[];
-    const shown=appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);var addonPill=_apptAddonsPillHTML(a);var groupPill=_apptGroupBadgeHTML(a);var warnPill=_apptWarningBadgeHTML(a);return'<div class="cal-ev" style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+addonPill+groupPill+warnPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'});
+    const shown=appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);var addonPill=_apptAddonsPillHTML(a);var groupPill=_apptGroupBadgeHTML(a);var warnPill=_apptWarningBadgeHTML(a);var draggableAttr3 = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)" oncontextmenu="_calApptContextMenu(event,\''+a.id+'\')"' : '';return'<div class="cal-ev" data-appt-id="'+a.id+'"'+draggableAttr3+' style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+addonPill+groupPill+warnPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'});
     const more=appts.length-shown.length;
     let schedHTML='';
     if(str&&cur){
@@ -7180,7 +7402,7 @@ function renderMonthCal(){
         }
       }
     }
-    html+='<div class="cal-cell'+(cur?'':' other-month')+(isToday?' today':'')+(str&&isBlackoutDate(str)?' cal-blackout':'')+'" onclick="'+(str?'openDayInCal(\''+str+'\')':'')+'"'+(str&&isBlackoutDate(str)?' title="Blackout: '+esc(isBlackoutDate(str).reason||'closed')+'"':'')+'>'
+    html+='<div class="cal-cell'+(cur?'':' other-month')+(isToday?' today':'')+(str&&isBlackoutDate(str)?' cal-blackout':'')+'"'+(str?' ondragover="_calCellDragOverMonth(event,\''+str+'\')" ondrop="_calCellDropMonth(event,\''+str+'\')"':'')+' onclick="'+(str?'openDayInCal(\''+str+'\')':'')+'"'+(str&&isBlackoutDate(str)?' title="Blackout: '+esc(isBlackoutDate(str).reason||'closed')+'"':'')+'>'
       +'<div class="cal-day-num">'+day+'</div>'
       +(str&&isBlackoutDate(str)?'<div style="font-size:10px;font-weight:600;color:var(--danger-light);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Blackout</div>':'')
       +schedHTML
@@ -7252,7 +7474,7 @@ function buildTimedCol(dateStr,appts,allHours){
     var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var isRescheduled=a.status==='rescheduled';
-    var draggableAttr2 = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)"' : '';
+    var draggableAttr2 = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)" oncontextmenu="_calApptContextMenu(event,\''+a.id+'\')"' : '';
     return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+'" data-appt-id="'+a.id+'"'+draggableAttr2+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+_apptWarningBadgeHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
@@ -7294,7 +7516,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var bufBHTMLU=bufBpxU>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpxU)+'px;height:'+bufBpxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTMLU=bufApxU>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApxU+'px;left:3px;right:3px;background:'+evCol+'15;border-left:2px dashed '+evCol+'50;pointer-events:none;z-index:0"></div>':'';
     var isRescheduledU=a.status==='rescheduled';
-    var draggableAttr = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)"' : '';
+    var draggableAttr = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)" oncontextmenu="_calApptContextMenu(event,\''+a.id+'\')"' : '';
     return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+'" data-appt-id="'+a.id+'"'+draggableAttr+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+_apptWarningBadgeHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
