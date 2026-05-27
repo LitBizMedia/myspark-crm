@@ -2769,7 +2769,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">Block bookings on holidays or other closed days. Applies to all booking widgets.</div>
               <div id="blackout-list"></div>
               <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
-                <div class="form-group" style="margin:0"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Date</label><input type="date" id="blackout-date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none"></div>
+                <div class="form-group" style="margin:0"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Date</label>'+_dateInputHTML('blackout-date','',false,'')+'</div>
                 <div class="form-group" style="margin:0;flex:1;min-width:180px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Reason (optional)</label><input type="text" id="blackout-reason" placeholder="Christmas Day" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box"></div>
                 <button class="btn btn-ghost btn-sm" onclick="addBlackoutDate()">Add</button>
               </div>
@@ -3676,6 +3676,26 @@ function _openDatePickerFor(id){
     document.addEventListener('mousedown',outsideHandler,true);
     document.addEventListener('keydown',keyHandler,true);
   },10);
+}
+
+// Programmatically sets a date input's value from an ISO string (YYYY-MM-DD).
+// Use when restoring saved state or auto-populating from server data. Keeps
+// data-iso, visible text, and validity state in sync.
+function _setDateInputISO(id, iso){
+  var el=document.getElementById(id);
+  if(!el)return;
+  if(!iso){
+    el.value='';
+    el.dataset.iso='';
+    el.classList.remove('invalid');
+    return;
+  }
+  var parsed=_parseDateText(iso);
+  if(parsed){
+    el.dataset.iso=parsed;
+    el.value=_isoToDisplay(parsed);
+    el.classList.remove('invalid');
+  }
 }
 
 // Clears a date input's value and ISO data. Use instead of `el.value=''` so
@@ -5992,7 +6012,7 @@ function openSoapNoteModal(contactId,noteId){
   var body=''
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
     +'<div class="form-group" style="margin-bottom:0"><label>Visit Date</label>'
-    +'<input id="soap-visit-date" type="date" value="'+esc(visitDate)+'" style="'+inpS+'"></div>'
+    +_dateInputHTML('soap-visit-date',visitDate,false,'')+'</div>'
     +'<div class="form-group" style="margin-bottom:0"><label>Template</label>'
     +'<select id="soap-template" style="'+inpS+'" '+(noteId?'disabled':'onchange="_soapApplyTemplate()"')+'>'+tmplOptions+'</select></div>'
     +'</div>'
@@ -6149,7 +6169,7 @@ function saveSoapNote(sign){
   var objective=document.getElementById('soap-objective').value;
   var assessment=document.getElementById('soap-assessment').value;
   var plan=document.getElementById('soap-plan').value;
-  var visitDate=document.getElementById('soap-visit-date').value||null;
+  var visitDate=_readDateInput('soap-visit-date')||null;
   var appointmentId=document.getElementById('soap-appointment').value||null;
   var templateUsed=document.getElementById('soap-template').value||null;
   var vitals=_soapReadVitals();
@@ -7720,7 +7740,7 @@ function renderBlackoutList(){
 }
 
 function addBlackoutDate(){
-  var dEl=document.getElementById('blackout-date');
+  var dEl={value:_readDateInput('blackout-date')||''};
   var rEl=document.getElementById('blackout-reason');
   var date=dEl&&dEl.value;
   if(!date){toast('Pick a date.','error');return;}
@@ -7909,7 +7929,7 @@ function openContactModal(id){
     +'<div style="margin:-4px 0 12px 0"><a href="#" id="cf-display-link" onclick="cfToggleDisplay(event)" style="font-size:12px;color:var(--purple);text-decoration:none">'+_displayLinkText+'</a></div>'
     +'<div id="cf-display-wrap" style="display:'+_showDisplayOverride+';margin-top:-6px;margin-bottom:12px"><div class="form-group"><label>Display Name <span style="color:var(--text-muted);font-weight:400">(overrides auto-derived)</span></label><input id="cf-name" type="text" value="'+esc(c&&c.name||'')+'" placeholder="e.g. Dr. Smith, Acme Clinic"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Email</label><input id="cf-email" type="email" value="'+esc(c&&c.email||'')+'"></div><div class="form-group"><label>Phone</label><input id="cf-phone" type="tel" value="'+esc(c&&c.phone||'')+'"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Date of Birth</label><input id="cf-dob" type="date" value="'+esc(c&&c.date_of_birth||'')+'"></div><div class="form-group"><label>Preferred Language <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-lang" type="text" value="'+esc(c&&c.preferred_language||'')+'" placeholder="e.g. English, Spanish"></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Date of Birth</label>'+_dateInputHTML('cf-dob',c&&c.date_of_birth||'',false,'')+'</div><div class="form-group"><label>Preferred Language <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-lang" type="text" value="'+esc(c&&c.preferred_language||'')+'" placeholder="e.g. English, Spanish"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Gender <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-gender" type="text" value="'+esc(c&&c.gender||'')+'" placeholder="Self-identify"></div><div class="form-group"><label>Pronouns <span style="color:var(--text-muted);font-weight:400">(optional)</span></label><input id="cf-pronouns" type="text" value="'+esc(c&&c.pronouns||'')+'" placeholder="e.g. she/her, they/them"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Company</label><input id="cf-company" type="text" value="'+esc(c&&c.company||'')+'"></div><div class="form-group"><label>Title</label><input id="cf-title" type="text" value="'+esc(c&&c.title||'')+'"></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Website</label><input id="cf-web" type="url" value="'+esc(c&&c.website||'')+'"></div><div class="form-group"><label>Source</label><input id="cf-source" type="text" value="'+esc(c&&c.source||'')+'"></div></div>'
@@ -7967,7 +7987,7 @@ async function saveContact(){
     type:document.getElementById('cf-type').value,
     email:document.getElementById('cf-email').value.trim(),
     phone:document.getElementById('cf-phone').value.trim(),
-    date_of_birth:(document.getElementById('cf-dob')||{}).value||'',
+    date_of_birth:_readDateInput('cf-dob')||'',
     gender:((document.getElementById('cf-gender')||{}).value||'').trim(),
     pronouns:((document.getElementById('cf-pronouns')||{}).value||'').trim(),
     preferred_language:((document.getElementById('cf-lang')||{}).value||'').trim(),
@@ -11157,7 +11177,7 @@ function openRescheduleModal(originalApptId){
     + '</div>'
     + '<div id="rs-warn" class="warn-box hidden"></div>'
     + '<div class="form-row">'
-      + '<div class="form-group"><label>New Date</label><input id="rs-date" type="date" value="'+esc(a.date)+'" onchange="checkRescheduleConflict()"></div>'
+      + '<div class="form-group"><label>New Date</label>'+_dateInputHTML('rs-date',a.date,false,'checkRescheduleConflict()')+'</div>'
       + '<div class="form-group"><label>New Time</label>'+_timeInputHTML('rs-time', a.time||'9:00 AM', false, 'checkRescheduleConflict()')+'</div>'
     + '</div>'
     + '<div class="form-group"><label>Duration (min)</label><input id="rs-dur" type="number" value="'+(a.duration||60)+'" min="15" step="15" onchange="checkRescheduleConflict()"></div>'
@@ -11177,7 +11197,7 @@ function openRescheduleModal(originalApptId){
 function checkRescheduleConflict(){
   if(!_rsApptCtx)return;
   var a = _rsApptCtx;
-  var date = document.getElementById('rs-date') && document.getElementById('rs-date').value;
+  var date = _readDateInput('rs-date');
   var time = _readTimeInput('rs-time');
   var dur = document.getElementById('rs-dur') && document.getElementById('rs-dur').value;
   var userId = a.assignedTo;
@@ -11289,13 +11309,12 @@ var _rescheduling = false;
 
 async function submitReschedule(originalApptId){
   if(_rescheduling){return;}
-  var dateEl = document.getElementById('rs-date');
   var timeEl = document.getElementById('rs-time');
   var durEl = document.getElementById('rs-dur');
   var notesEl = document.getElementById('rs-notes');
-  if(!dateEl || !timeEl){toast('Form not ready.','error');return;}
+  if(!timeEl){toast('Form not ready.','error');return;}
 
-  var newDate = (dateEl.value||'').trim();
+  var newDate = (_readDateInput('rs-date')||'').trim();
   var newTimeRaw = (timeEl.value||'').trim();
   if(!newDate || !newTimeRaw){toast('New date and time are required.','error');return;}
 
@@ -11656,7 +11675,7 @@ function openTaskModal(contactId,taskId){
   const uOpts='<option value="">Unassigned</option>'+allUsers().map(u=>'<option value="'+u.id+'"'+(t&&t.assignedTo===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>').join('');
   const b='<div class="form-group"><label>Title *</label><input id="tf-title" type="text" value="'+esc(t&&t.title||'')+'" placeholder="Task title"></div>'
     +'<div class="form-group"><label>Description</label><textarea id="tf-desc" rows="5">'+esc(t&&t.description||'')+'</textarea></div>'
-    +'<div class="form-row"><div class="form-group"><label>Due Date</label><input id="tf-due" type="date" value="'+esc(t&&t.dueDate||'')+'"></div><div class="form-group"><label>Priority</label><select id="tf-pri">'+['high','medium','low'].map(x=>'<option value="'+x+'"'+(t&&t.priority===x?' selected':x==='medium'&&!t?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Due Date</label>'+_dateInputHTML('tf-due',t&&t.dueDate||'',false,'')+'</div><div class="form-group"><label>Priority</label><select id="tf-pri">'+['high','medium','low'].map(x=>'<option value="'+x+'"'+(t&&t.priority===x?' selected':x==='medium'&&!t?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div></div>'
     +'<div class="form-row"><div class="form-group"><label>Status</label><select id="tf-status">'+['open','in-progress','done'].map(x=>'<option value="'+x+'"'+(t&&t.status===x?' selected':x==='open'&&!t?' selected':'')+'>'+(x==='in-progress'?'In Progress':x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div><div class="form-group"><label>Assigned To</label><select id="tf-user">'+uOpts+'</select></div></div>'
     +'<div class="form-group"><label>Linked Contact</label>'+ssHTML('tf-cw','tf-ci','tf-cv','tf-cd','Search contact...',cid||'')+'</div>';
   openModal(t?'Edit Task':'Add Task',b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSave(saveTask,\'task\')">Save Task</button>','modal-lg');
@@ -11664,7 +11683,7 @@ function openTaskModal(contactId,taskId){
 
 function saveTask(){
   const title=document.getElementById('tf-title').value.trim();if(!title){toast('Title required.','error');return}
-  const data={title,description:document.getElementById('tf-desc').value.trim(),dueDate:document.getElementById('tf-due').value||null,priority:document.getElementById('tf-pri').value,status:document.getElementById('tf-status').value,assignedTo:document.getElementById('tf-user').value||null,contactId:document.getElementById('tf-cv').value||null};
+  const data={title,description:document.getElementById('tf-desc').value.trim(),dueDate:_readDateInput('tf-due')||null,priority:document.getElementById('tf-pri').value,status:document.getElementById('tf-status').value,assignedTo:document.getElementById('tf-user').value||null,contactId:document.getElementById('tf-cv').value||null};
   if(state.modal.id){const t=getTask(state.modal.id);if(t)Object.assign(t,data,{updatedAt:now_()})}
   else db.tasks.push({id:uid(),...data,createdAt:now_()});
   saveData();closeModal();if(state.panel==='tasks')renderTasks();if(state.drawer)renderDrawer();if(state.panel==='calendar')renderCal();updateNotifBadge();toast(state.modal.id?'Task updated.':'Task added.','success');
@@ -11831,7 +11850,7 @@ function buildSchedSection(standalone){
     +'<div style="display:flex;gap:7px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">'
     +'<div class="form-group" style="margin:0">'
       +'<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Date</label>'
-      +'<input type="date" id="ov-date" class="date-pick" onclick="if(this.showPicker)this.showPicker()">'
+      +_dateInputHTML('ov-date','',false,'')
     +'</div>'
     +'<div class="form-group" style="margin:0">'
       +'<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Type</label>'
@@ -11951,7 +11970,7 @@ function _readSchedFromDOM(sched){
 }
 
 function addOv(){
-  const date=document.getElementById('ov-date')&&document.getElementById('ov-date').value;
+  const date=_readDateInput('ov-date');
   if(!date){toast('Select a date.','error');return}
   const type=document.getElementById('ov-type')&&document.getElementById('ov-type').value;
   const ov={date,type,note:document.getElementById('ov-note')&&document.getElementById('ov-note').value||''};
@@ -16619,7 +16638,7 @@ function _renderSubModalBody(s){
 
   const headerSection='<div class="form-group"><label>Contact *</label>'+ssHTML('sf-cw','sf-ci','sf-cv','sf-cd','Search contact...',cid)+'</div>'
     +'<div class="form-row">'
-    +'<div class="form-group"><label>Start Date *</label><input id="sf-start" type="date" value="'+(s&&s.startDate||todayStr())+'"'+(isEdit?' disabled':'')+'></div>'
+    +'<div class="form-group"><label>Start Date *</label>'+_dateInputHTML('sf-start',s&&s.startDate||todayStr(),!!isEdit,'')+'</div>'
     +'<div class="form-group"><label>Billing Cycle *</label><select id="sf-cycle"'+cycleChange+(isEdit?' disabled':'')+'>'+cycleOpts+'</select></div>'
     +'<div class="form-group"><label>Owner</label><select id="sf-owner">'+ownerOpts+'</select></div>'
     +'</div>'
@@ -16767,7 +16786,7 @@ function _renderItemsSummary(){
   }
   if(trialDays>0){
     // Compute trial end date: today + trialDays (display only)
-    const startEl=document.getElementById('sf-start');
+    const startEl={value:_readDateInput('sf-start')||''};
     const startStr=(startEl&&startEl.value)||todayStr();
     const startDate=startStr>todayStr()?startStr:todayStr();
     const [ty,tm,tdy]=startDate.split('-').map(Number);
@@ -16933,7 +16952,7 @@ async function saveSub(){
 
   if(!isEdit){
     // CREATE: single API call
-    const startDate=document.getElementById('sf-start').value;
+    const startDate=_readDateInput('sf-start')||'';
     const billingCycle=document.getElementById('sf-cycle').value;
     if(!startDate){toast('Start date is required.','error');return;}
 
@@ -19013,7 +19032,7 @@ function renderRecurrenceFields(s){
   return '<div style="border-top:1px solid var(--main-border);padding-top:14px;margin-top:4px">'
     +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Schedule</div>'
     +'<div class="form-row">'
-    +'<div class="form-group"><label>Start Date *</label><input id="svc-rec-start" type="date" value="'+esc(startDate)+'"></div>'
+    +'<div class="form-group"><label>Start Date *</label>'+_dateInputHTML('svc-rec-start',startDate,false,'')+'</div>'
     +'<div class="form-group"><label>Start Time *</label>'+_timeInputHTML('svc-rec-time',startTime,false)+'</div>'
     +'</div>'
     +'<div class="form-group"><label>Repeats</label><select id="svc-rec-repeats" onchange="onRecurrenceRepeatsChange()">'
@@ -19031,7 +19050,7 @@ function renderRecurrenceFields(s){
     +'<option value="on_date"'+(endType==='on_date'?' selected':'')+'>On a specific date</option>'
     +'</select></div>'
     +'<div class="form-group" id="svc-rec-occ-wrap" style="display:'+(endType==='after'?'block':'none')+'"><label>Occurrences</label><input id="svc-rec-occ" type="number" min="1" max="52" value="'+occurrences+'"><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Capped at 52 per series.</div></div>'
-    +'<div class="form-group" id="svc-rec-end-wrap" style="display:'+(endType==='on_date'?'block':'none')+'"><label>End Date</label><input id="svc-rec-end" type="date" value="'+esc(endDate)+'"></div>'
+    +'<div class="form-group" id="svc-rec-end-wrap" style="display:'+(endType==='on_date'?'block':'none')+'"><label>End Date</label>'+_dateInputHTML('svc-rec-end',endDate,false,'')+'</div>'
     +'</div>'
     +'</div>';
 }
@@ -19103,7 +19122,7 @@ function onRecurrenceEndTypeChange(){
 
 // Reads form fields and constructs the recurrence_rule JSONB object. Returns null on validation failure.
 function buildRecurrenceRuleFromForm(){
-  var startDate=(document.getElementById('svc-rec-start')||{}).value;
+  var startDate=_readDateInput('svc-rec-start')||'';
   var startTime=_readTimeInput('svc-rec-time');
   var repeats=(document.getElementById('svc-rec-repeats')||{}).value;
 
@@ -19599,7 +19618,7 @@ function openClassSessionModal(id, svcId){
     +'<div class="form-group"><label>Service</label><select id="cs-svc">'+svcOpts+'</select></div>'
     +'</div>'
     +'<div class="form-row">'
-    +'<div class="form-group"><label>Date *</label><input id="cs-date" type="date" value="'+(s?s.date:'')+'"></div>'
+    +'<div class="form-group"><label>Date *</label>'+_dateInputHTML('cs-date',s?s.date:'',false,'')+'</div>'
     +'<div class="form-group"><label>Time</label>'+_timeInputHTML('cs-time',s&&s.time||'',false)+'</div>'
     +'</div>'
     +'<div class="form-row">'
@@ -19623,7 +19642,7 @@ function openClassSessionModal(id, svcId){
 
 function saveClassSession(id){
   var title=document.getElementById('cs-title').value.trim();
-  var date=document.getElementById('cs-date').value;
+  var date=_readDateInput('cs-date')||'';
   if(!title||!date){toast('Title and date are required.','error');return;}
   var existing=id?(db.classSessions||[]).find(function(x){return x.id===id;}):null;
   var newStatus=document.getElementById('cs-status').value;
@@ -22830,7 +22849,7 @@ function openCardModal(cardId, stageId){
 
     + '<div class="form-group">'
     + '<label>Expected Close Date</label>'
-    + '<input id="cm-close" type="date" value="' + esc(card && card.expected_close_date || '') + '">'
+    + _dateInputHTML('cm-close', card && card.expected_close_date || '', false, '')
     + '</div>'
 
     + '<div class="form-group" style="grid-column:1 / -1">'
@@ -22894,7 +22913,7 @@ function _cmOpenContactDrawer(){
       title: readVal('cm-title'),
       value: readVal('cm-value'),
       staff: readVal('cm-staff'),
-      close: readVal('cm-close'),
+      close: _readDateInput('cm-close'),
       source: readVal('cm-source'),
       notes: readVal('cm-notes'),
       leadName: readVal('cm-lead-name'),
@@ -22935,7 +22954,7 @@ function _cmOpenContactDrawer(){
       setVal('cm-title', stashed.fields.title);
       setVal('cm-value', stashed.fields.value);
       setVal('cm-staff', stashed.fields.staff);
-      setVal('cm-close', stashed.fields.close);
+      _setDateInputISO('cm-close', stashed.fields.close);
       setVal('cm-source', stashed.fields.source);
       setVal('cm-notes', stashed.fields.notes);
       setVal('cm-lead-name', stashed.fields.leadName);
@@ -23018,7 +23037,7 @@ async function _cmSaveCard(ev){
   if (!Number.isFinite(value) || value < 0) { toast('Value must be a non-negative number', 'error'); return; }
 
   var staffId = (document.getElementById('cm-staff')||{}).value || null;
-  var closeDate = (document.getElementById('cm-close')||{}).value || null;
+  var closeDate = _readDateInput('cm-close') || null;
   var source = ((document.getElementById('cm-source')||{}).value || '').trim();
   var notes = ((document.getElementById('cm-notes')||{}).value || '').trim();
   var stageEl = document.getElementById('cm-stage');
@@ -31502,7 +31521,7 @@ function openCouponModal(id){if(!canManageCoupons()){toast('Permission denied.',
     +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Usage Rules &amp; Restrictions</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
     +'<div class="form-group" style="margin:0"><label>Expiry Date <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
-    +'<input id="cpn-expiry" type="date" value="'+esc(cpn&&cpn.expiryDate||'')+'"></div>'
+    +_dateInputHTML('cpn-expiry',cpn&&cpn.expiryDate||'',false,'')+'</div>'
     +'<div class="form-group" style="margin:0"><label>Max Uses <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
     +'<input id="cpn-maxuses" type="number" min="1" step="1" value="'+esc(cpn&&cpn.maxUses||'')+'" placeholder="Unlimited"></div>'
     +'</div>'
@@ -31571,7 +31590,7 @@ function saveCoupon(){
     discountValue:val,
     status:document.getElementById('cpn-status')&&document.getElementById('cpn-status').value||'active',
     appliesTo:document.getElementById('cpn-applies')&&document.getElementById('cpn-applies').value||'pos',
-    expiryDate:document.getElementById('cpn-expiry')&&document.getElementById('cpn-expiry').value||null,
+    expiryDate:_readDateInput('cpn-expiry')||null,
     maxUses:parseInt(document.getElementById('cpn-maxuses')&&document.getElementById('cpn-maxuses').value)||null,
     oncePerCustomer:!!(document.getElementById('cpn-onceper')&&document.getElementById('cpn-onceper').checked),
     recurringFirstOnly:!!(document.getElementById('cpn-recurring')&&document.getElementById('cpn-recurring').checked),
@@ -34346,7 +34365,7 @@ async function openManagePlanModal(subId,subName){
     +'<span>Exempt from billing (test workspace, partner, internal)</span></label></div>'
     +'<div id="mp-billing-date-section" style="'+(isExempt?'':'display:none')+'">'
     +'<div class="form-group"><label>First Billing Date <span style="font-weight:400;color:var(--text-muted)">(when to start charging after removing exempt)</span></label>'
-    +'<input id="mp-billing-date" type="date" value="'+(plan&&plan.next_billing_date||'')+'">'
+    +_dateInputHTML('mp-billing-date',plan&&plan.next_billing_date||'',false,'')
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Set this to match their existing billing cycle. The cron will charge on this date.</div>'
     +'</div></div>'
     +'<div style="margin-top:14px;padding:14px 16px;background:var(--bg-card);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
@@ -34434,8 +34453,7 @@ async function saveManagePlan(subId){
   var exemptChecked=!!(document.getElementById('mp-exempt')&&document.getElementById('mp-exempt').checked);
   var discountPct=parseInt((document.getElementById('mp-discount')&&document.getElementById('mp-discount').value)||'0')||0;
   var discountNote=(document.getElementById('mp-discount-note')&&document.getElementById('mp-discount-note').value||'').trim();
-  var billingDateEl=document.getElementById('mp-billing-date');
-  var customBillingDate=billingDateEl&&billingDateEl.value?billingDateEl.value:null;
+  var customBillingDate=_readDateInput('mp-billing-date')||null;
   if(!tier||!period){toast('All fields required.','error');return;}
   var extra=state.modal&&state.modal.extra||{};
   var subName=extra.subName||subId;
