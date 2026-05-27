@@ -8956,7 +8956,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   if(a && a.rescheduled_from_id){
     var _origAppt = (db.appointments||[]).find(function(x){return x.id===a.rescheduled_from_id;});
     if(_origAppt){
-      rescheduledFromBanner = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:var(--info-text);border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
+      rescheduledFromBanner = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:#fff;border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
         + '<div style="font-weight:600;margin-bottom:3px">Rescheduled from</div>'
         + esc(_origAppt.date) + (_origAppt.time?' at '+esc(fmtTime(_origAppt.time)):'')
         + '</div>';
@@ -10793,7 +10793,7 @@ function openRescheduleModal(originalApptId){
   rsOverrides = {};
   _rsApptCtx = a;
 
-  var body = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:var(--info-text);border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
+  var body = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:#fff;border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
     + '<div style="font-weight:600;margin-bottom:3px">Current slot</div>'
     + esc(a.date) + (a.time?' at '+esc(fmtTime(a.time)):'')
     + '</div>'
@@ -21743,7 +21743,7 @@ function _renderJourneyBoard(journey, cards){
   var hasNormalStage = stages.some(function(s){ return s.stage_type === 'normal'; });
   var hint = '';
   if (!hasNormalStage) {
-    hint = '<div style="padding:12px 16px;margin-bottom:16px;background:var(--info-dim);color:var(--info-text);border:1px solid var(--info);border-radius:var(--radius);font-size:13px">Add stages between Won and Lost to start tracking. Use the gear icon next to the journey name.</div>';
+    hint = '<div style="padding:12px 16px;margin-bottom:16px;background:var(--info-dim);color:#fff;border:1px solid var(--info);border-radius:var(--radius);font-size:13px">Add stages between Won and Lost to start tracking. Use the gear icon next to the journey name.</div>';
   }
 
   var styleBlock = '<style>'
