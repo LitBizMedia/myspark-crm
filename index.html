@@ -7046,11 +7046,11 @@ async function _calDragConfirm(apptId, newDate, newTime, override){
     toast('Rescheduled to '+fmtTime(newTime),'success');
     if (data && data.new_appointment) {
       _applyOptimisticReschedule(apptId, data.new_appointment);
-      if(typeof renderCalendar === 'function') renderCalendar();
+      if(typeof renderCal === 'function') renderCal();
       fetchFromServer(); // background reconcile, not awaited
     } else {
       await fetchFromServer();
-      if(typeof renderCalendar === 'function') renderCalendar();
+      if(typeof renderCal === 'function') renderCal();
     }
   } catch(err){
     toast('Network error. Try again.','error');
@@ -11617,12 +11617,12 @@ async function submitReschedule(originalApptId){
     toast('Rescheduled to '+fmtDate(newDate)+' at '+fmtTime(newTime),'success');
     if (data && data.new_appointment) {
       _applyOptimisticReschedule(originalApptId, data.new_appointment);
-      if(typeof renderCalendar==='function') renderCalendar();
+      if(typeof renderCal==='function') renderCal();
       if(typeof renderApptList==='function') renderApptList();
       fetchFromServer(); // background reconcile, not awaited
     } else {
       await fetchFromServer();
-      if(typeof renderCalendar==='function') renderCalendar();
+      if(typeof renderCal==='function') renderCal();
       if(typeof renderApptList==='function') renderApptList();
     }
   } catch(e){
