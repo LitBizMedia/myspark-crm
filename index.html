@@ -20893,6 +20893,12 @@ function convSetStatus(conversationId, newStatus){
   }
   _convPostUpdate(conversationId, 'set_status', { status:newStatus }, function(err){
     if(err) return;
+    // Keep local caches in sync so the next render shows the new status.
+    var listRow = (db.conversations || []).find(function(x){ return x.id === conversationId; });
+    if(listRow) listRow.status = newStatus;
+    if(db.conversationMessages && db.conversationMessages[conversationId] && db.conversationMessages[conversationId].conversation){
+      db.conversationMessages[conversationId].conversation.status = newStatus;
+    }
     var label = newStatus === 'open' ? 'Reopened' :
                 newStatus === 'closed' ? 'Closed' :
                 newStatus === 'archived' ? 'Archived' : newStatus;
