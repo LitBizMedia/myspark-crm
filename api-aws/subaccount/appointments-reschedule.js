@@ -23,6 +23,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { isTerminalStatus } = require('./lib/appt-statuses');
 const { wrap } = require('./lib/lambda-adapter');
+const { appointmentToFrontend } = require('./lib/appointments');
 
 function newId() {
   return 'appt-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
@@ -293,11 +294,27 @@ async function handler(req, res) {
       console.warn('appointment reschedule email failed (non-fatal):', emailErr.message);
     }
 
+    // Fetch the newly created appointment so the frontend can render
+    // immediately without waiting on RDS Proxy read-replica catch-up.
+    let newAppointment = null;
+    try {
+      const newRes = await db.query(
+        'SELECT * FROM appointments WHERE id = $1 AND subaccount_id = $2',
+        [newApptId, subaccountId]
+      );
+      if (newRes.rows.length) {
+        newAppointment = appointmentToFrontend(newRes.rows[0]);
+      }
+    } catch (selErr) {
+      console.warn('appointments-reschedule: post-insert SELECT failed (non-fatal):', selErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       appointment_id: newApptId,
       original_id: originalId,
-      payments_migrated: paymentsMigrated
+      payments_migrated: paymentsMigrated,
+      new_appointment: newAppointment
     });
   } catch (e) {
     console.error('appointments-reschedule error:', e.message);

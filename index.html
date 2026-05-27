@@ -6830,6 +6830,30 @@ function openRescheduledInfoModal(originalId){
 }
 
 // =====================================================
+// Optimistic local apply for reschedule responses. Used by both the drag
+// confirm and the manual reschedule modal. Flips the original appointment to
+// 'rescheduled' (so the hide-rescheduled filter excludes it) and pushes the
+// new appointment object returned by the Lambda. Caller still fires
+// fetchFromServer() in the background to reconcile any server-side details.
+// Returns true on success, false if the input is unusable.
+// =====================================================
+function _applyOptimisticReschedule(originalApptId, newAppointment) {
+  if (!newAppointment || !newAppointment.id) return false;
+  var appts = db.appointments || [];
+  var origIdx = appts.findIndex(function(x){return x.id === originalApptId;});
+  if (origIdx >= 0) {
+    db.appointments[origIdx] = Object.assign({}, appts[origIdx], {
+      status: 'rescheduled',
+      rescheduled_to_id: newAppointment.id
+    });
+  }
+  if (!appts.find(function(x){return x.id === newAppointment.id;})) {
+    db.appointments.push(newAppointment);
+  }
+  return true;
+}
+
+// =====================================================
 // CALENDAR DRAG AND DROP (Slice 1: day view, vertical, same staff)
 // =====================================================
 var _calDrag = {
@@ -7020,8 +7044,14 @@ async function _calDragConfirm(apptId, newDate, newTime, override){
     var box = document.getElementById('cal-drop-confirm');
     if(box) box.remove();
     toast('Rescheduled to '+fmtTime(newTime),'success');
-    await fetchFromServer();
-    if(typeof renderCalendar === 'function') renderCalendar();
+    if (data && data.new_appointment) {
+      _applyOptimisticReschedule(apptId, data.new_appointment);
+      if(typeof renderCalendar === 'function') renderCalendar();
+      fetchFromServer(); // background reconcile, not awaited
+    } else {
+      await fetchFromServer();
+      if(typeof renderCalendar === 'function') renderCalendar();
+    }
   } catch(err){
     toast('Network error. Try again.','error');
     if(btn){ btn.disabled = false; btn.textContent = 'Confirm'; }
@@ -11585,9 +11615,16 @@ async function submitReschedule(originalApptId){
     }
     closeModal();
     toast('Rescheduled to '+fmtDate(newDate)+' at '+fmtTime(newTime),'success');
-    await fetchFromServer();
-    if(typeof renderCalendar==='function') renderCalendar();
-    if(typeof renderApptList==='function') renderApptList();
+    if (data && data.new_appointment) {
+      _applyOptimisticReschedule(originalApptId, data.new_appointment);
+      if(typeof renderCalendar==='function') renderCalendar();
+      if(typeof renderApptList==='function') renderApptList();
+      fetchFromServer(); // background reconcile, not awaited
+    } else {
+      await fetchFromServer();
+      if(typeof renderCalendar==='function') renderCalendar();
+      if(typeof renderApptList==='function') renderApptList();
+    }
   } catch(e){
     toast('Network error. Try again.','error');
     if(btn){btn.disabled=false; btn.textContent='Confirm Reschedule';}
