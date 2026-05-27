@@ -11374,17 +11374,23 @@ async function saveNote(){
   const c=getContact(state.modal.extra);
   if(!c){ toast('Contact not found.','error'); return; }
   const isNewNote=!state.modal.id;
+  // Disable Save button to prevent double-submit
+  const btn=document.querySelector('#modal-foot .btn-primary');
+  if(btn){ btn.disabled=true; btn.textContent='Saving...'; }
   try{
     if(isNewNote){
       await contactNoteCreate(c.id, text);
     } else {
       await contactNoteUpdate(state.modal.id, text);
     }
-    await fetchFromServer();
+    // refreshContactPHI pulls notes/allergies/warnings/credit for THIS contact.
+    // fetchFromServer does not include notes (contact-list drops them for size).
+    await refreshContactPHI(c.id);
     closeModal();
     renderDrawer();
     toast(isNewNote?'Note added.':'Note updated.','success');
   }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='Save'; }
     toast('Save failed: '+(e.message||'unknown'),'error');
   }
 }
@@ -11399,13 +11405,17 @@ function delNote(cid,nid){
 async function confirmDelNote(){
   const d=state.modal&&state.modal.data;
   if(!d) return;
+  // Disable Delete button to prevent double-click
+  const btn=document.querySelector('#modal-foot .btn-danger');
+  if(btn){ btn.disabled=true; btn.textContent='Deleting...'; }
   try{
     await contactNoteDelete(d.nid);
-    await fetchFromServer();
+    await refreshContactPHI(d.cid);
     closeModal();
     renderDrawer();
     toast('Note removed.','success');
   }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='Delete'; }
     toast('Delete failed: '+(e.message||'unknown'),'error');
   }
 }
