@@ -6905,6 +6905,7 @@ var _calDrag = {
   origTime: null,
   origDuration: 60,
   origStaff: null,
+  targetStaff: null, // SLICE 4: target staff if drag crosses columns; null = same as origStaff
   targetEl: null
 };
 
@@ -6958,8 +6959,11 @@ function _calDragEnd(e){
 
 function _calColDragOver(e, dateStr, uid){
   if(!_calDrag.apptId) return;
-  if(uid !== _calDrag.origStaff) return;
+  // SLICE 4: cross-staff drag allowed. Same-day still required for day view
+  // (week view uses _calColDragOverWeek which spans days). Practitioner role
+  // restriction enforced at drag-start, not here.
   if(dateStr !== _calDrag.origDate) return;
+  _calDrag.targetStaff = uid; // record where we'd land if dropped now
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   var col = e.currentTarget;
@@ -6994,23 +6998,29 @@ function _calColDragOver(e, dateStr, uid){
 
 function _calColDrop(e, dateStr, uid){
   if(!_calDrag.apptId) return;
-  if(uid !== _calDrag.origStaff) return;
+  // SLICE 4: cross-staff drop allowed. Same-day still required.
   if(dateStr !== _calDrag.origDate) return;
   e.preventDefault();
   var newTime = _calDrag.targetEl && _calDrag.targetEl.getAttribute('data-newtime');
-  if(!newTime || newTime === _calDrag.origTime){
-    _calDragEnd(e);
-    return;
-  }
   var apptId = _calDrag.apptId;
   var origDate = _calDrag.origDate;
   var origTime = _calDrag.origTime;
   var origStaff = _calDrag.origStaff;
   var origDuration = _calDrag.origDuration;
-  var conflict = _calDragHasConflict(apptId, origStaff, origDate, newTime, origDuration);
+  var newStaff = uid; // target column's staff id
+  var staffChanged = (newStaff !== origStaff);
+  // Bail early when nothing actually changed (same staff AND same time)
+  if(!staffChanged && (!newTime || newTime === origTime)){
+    _calDragEnd(e);
+    return;
+  }
+  // Use new time if specified, otherwise keep original time (staff-only change)
+  var finalTime = newTime || origTime;
+  // Conflict check uses the TARGET staff calendar, not the original.
+  var conflict = _calDragHasConflict(apptId, newStaff, origDate, finalTime, origDuration);
   var clientX = e.clientX, clientY = e.clientY;
   _calDragEnd(e);
-  _calShowConfirm(apptId, origDate, origTime, origDate, newTime, conflict, clientX, clientY);
+  _calShowConfirm(apptId, origDate, origTime, origDate, finalTime, conflict, clientX, clientY, newStaff);
 }
 
 function _calDragHasConflict(skipApptId, staffId, dateStr, newTime, duration){
@@ -7030,7 +7040,7 @@ function _calDragHasConflict(skipApptId, staffId, dateStr, newTime, duration){
   });
 }
 
-function _calShowConfirm(apptId, oldDate, oldTime, newDate, newTime, conflict, x, y){
+function _calShowConfirm(apptId, oldDate, oldTime, newDate, newTime, conflict, x, y, newStaffId){
   var existing = document.getElementById('cal-drop-confirm');
   if(existing) existing.remove();
   var allAppts = _expandedAppointmentsForCalendar();
@@ -7048,21 +7058,33 @@ function _calShowConfirm(apptId, oldDate, oldTime, newDate, newTime, conflict, x
   var dateChangedRow = newDate !== oldDate
     ? '<div class="cal-drop-confirm-row"><span>Date</span><strong>'+fmtDate(newDate)+'</strong></div>'
     : '';
+  // SLICE 4: staff change row when target staff differs from original
+  var staffChangedRow = '';
+  if (newStaffId && newStaffId !== a.assignedTo) {
+    var origU = db.users.find(function(x){return x.id===a.assignedTo;});
+    var newU = db.users.find(function(x){return x.id===newStaffId;});
+    var origName = origU ? (origU.name || origU.username || 'Unknown') : 'Unknown';
+    var newName = newU ? (newU.name || newU.username || 'Unknown') : 'Unknown';
+    staffChangedRow = '<div class="cal-drop-confirm-row"><span>Staff</span><strong>'+esc(origName)+' \u2192 '+esc(newName)+'</strong></div>';
+  }
   var conflictId = 'cal-drop-confirm-conflict';
   var conflictRow = conflict
     ? '<div class="cal-drop-confirm-row" id="'+conflictId+'" style="color:var(--danger-light)"><strong>Conflict:</strong> overlaps another appointment. Confirm will override.</div>'
     : '<div class="cal-drop-confirm-row" id="'+conflictId+'" style="display:none"></div>';
+  // SLICE 4: stash newStaffId on the confirm button as data attribute for _calConfirmBtnClick
+  var staffAttr = newStaffId && newStaffId !== a.assignedTo ? ' data-new-staff-id="'+esc(newStaffId)+'"' : '';
   box.innerHTML =
     '<div class="cal-drop-confirm-title">Reschedule '+esc(a.title)+(c?' \u00b7 '+esc(c.name):'')+'?</div>'
     + '<div class="cal-drop-confirm-row"><span>From</span><strong>'+(newDate!==oldDate?fmtDate(oldDate)+' at ':'')+fmtTime(oldTime)+'</strong></div>'
     + dateChangedRow
+    + staffChangedRow
     + '<div class="cal-drop-confirm-row"><span>New time</span>'
     + '<input type="text" class="cal-drop-confirm-time-input" id="cal-drop-confirm-time" value="'+esc(fmtTime(newTime))+'" placeholder="e.g. 2:30 PM" oninput="_calConfirmTimeChanged(\''+apptId+'\',\''+newDate+'\')">'
     + '</div>'
     + conflictRow
     + '<div class="cal-drop-confirm-actions">'
     +   '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'cal-drop-confirm\').remove()">Cancel</button>'
-    +   '<button class="btn btn-primary btn-sm" id="cal-drop-confirm-btn" data-appt-id="'+apptId+'" data-new-date="'+newDate+'" data-orig-conflict="'+(conflict?'1':'0')+'" onclick="_calConfirmBtnClick()">Confirm</button>'
+    +   '<button class="btn btn-primary btn-sm" id="cal-drop-confirm-btn" data-appt-id="'+apptId+'" data-new-date="'+newDate+'" data-orig-conflict="'+(conflict?'1':'0')+'"'+staffAttr+' onclick="_calConfirmBtnClick()">Confirm</button>'
     + '</div>';
   document.body.appendChild(box);
   setTimeout(function(){
@@ -7098,6 +7120,9 @@ function _calConfirmBtnClick() {
   if (!btn) return;
   var apptId = btn.getAttribute('data-appt-id');
   var newDate = btn.getAttribute('data-new-date');
+  // SLICE 4: cross-staff drag passes target staff via button data attribute.
+  // null when drag stayed within same staff (most common case).
+  var newStaffIdFromBtn = btn.getAttribute('data-new-staff-id') || null;
   var timeEl = document.getElementById('cal-drop-confirm-time');
   if (!timeEl) return;
   var newTime = _parseTimeText(timeEl.value);
@@ -7108,8 +7133,11 @@ function _calConfirmBtnClick() {
   var allAppts = _expandedAppointmentsForCalendar();
   var a = allAppts.find(function(z){return z.id===apptId;});
   if (!a) return;
-  var conflict = _calDragHasConflict(apptId, a.assignedTo, newDate, newTime, a.duration || 60);
-  _calDragConfirm(apptId, newDate, newTime, conflict);
+  // SLICE 4: conflict check uses the TARGET staff calendar (newStaffIdFromBtn
+  // when set, otherwise the appointment's current assignedTo).
+  var effectiveStaff = newStaffIdFromBtn || a.assignedTo;
+  var conflict = _calDragHasConflict(apptId, effectiveStaff, newDate, newTime, a.duration || 60);
+  _calDragConfirm(apptId, newDate, newTime, conflict, newStaffIdFromBtn);
 }
 
 // =====================================================
@@ -7374,20 +7402,24 @@ function _calColDropWeek(e, dateStr) {
   _calShowConfirm(apptId, origDate, origTime, newDate, newTime, conflict, clientX, clientY);
 }
 
-async function _calDragConfirm(apptId, newDate, newTime, override){
+async function _calDragConfirm(apptId, newDate, newTime, override, newStaffId){
   var btn = document.getElementById('cal-drop-confirm-btn');
   if(btn){ btn.disabled = true; btn.textContent = 'Rescheduling...'; }
   try {
+    var reqBody = {
+      original_appointment_id: apptId,
+      new_date: newDate,
+      new_time: newTime,
+      override: !!override
+    };
+    // SLICE 4: include new_staff_id only when a staff change is intended.
+    // Omitting it on same-staff reschedules keeps Lambda behavior identical.
+    if (newStaffId) reqBody.new_staff_id = newStaffId;
     var res = await fetch(apiUrl('/api/subaccount/appointments-reschedule'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        original_appointment_id: apptId,
-        new_date: newDate,
-        new_time: newTime,
-        override: !!override
-      })
+      body: JSON.stringify(reqBody)
     });
     var data = await res.json().catch(function(){return {};});
     if(!res.ok){
