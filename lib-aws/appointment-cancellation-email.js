@@ -51,7 +51,7 @@ function buildSubject(opts) {
 
 function buildHtml(opts) {
   const patientName = escHtml(opts.patientName || 'there');
-  const title = escHtml(opts.appointmentTitle || 'your appointment');
+  const title = escHtml(opts.appointmentTitle || 'Appointment');
   const dateStr = escHtml(opts.dateStr || fmtDate(opts.appointmentDate));
   const timeStr = escHtml(opts.timeStr || fmtTime(opts.appointmentTime));
   const staffName = escHtml(opts.staffName || '');
@@ -66,8 +66,8 @@ function buildHtml(opts) {
     + '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
     + '<h2 style="color:#6b21ea;margin:0 0 8px">Appointment Cancelled</h2>'
     + '<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">Hi ' + patientName + ', your appointment with ' + bizName + ' has been cancelled.</p>'
+    + '<div style="text-align:center;font-size:20px;font-weight:700;color:#1a1030;margin:0 0 20px;padding:16px;background:#f7f5fc;border-radius:8px">' + title + '</div>'
     + '<table style="width:100%;border-collapse:collapse;margin:0 0 24px">'
-    + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Service</td><td style="padding:8px 0;font-weight:600">' + title + '</td></tr>'
     + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Date</td><td style="padding:8px 0;font-weight:600">' + dateStr + '</td></tr>'
     + (timeStr ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Time</td><td style="padding:8px 0;font-weight:600">' + timeStr + '</td></tr>' : '')
     + (staffName ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">With</td><td style="padding:8px 0;font-weight:600">' + staffName + '</td></tr>' : '')

@@ -278,7 +278,7 @@ async function runReminders() {
       contact_phone: contact.phone || '',
       appointment_date: dateStr,
       appointment_time: timeStr,
-      appointment_service: appt.title,
+      appointment_title: appt.title || 'Appointment',
       staff_name: staffName,
       business_name: bizName
     };

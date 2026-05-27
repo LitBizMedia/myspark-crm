@@ -64,8 +64,8 @@ function buildHtml({ clientName, serviceName, dateStr, timeStr, staffName, locat
   return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
     + '<h2 style="color:#6b21ea;margin:0 0 8px">' + heading + '</h2>'
     + '<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">' + intro + '</p>'
+    + '<div style="text-align:center;font-size:20px;font-weight:700;color:#1a1030;margin:0 0 20px;padding:16px;background:#f7f5fc;border-radius:8px">' + escHtml(serviceName || 'Appointment') + '</div>'
     + '<table style="width:100%;border-collapse:collapse;margin:0 0 24px">'
-    + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Service</td><td style="padding:8px 0;font-weight:600">' + escHtml(serviceName) + '</td></tr>'
     + fromRow
     + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">' + (isReschedule ? 'Now' : 'Date') + '</td><td style="padding:8px 0;font-weight:600">' + escHtml(dateStr) + '</td></tr>'
     + (timeStr ? '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Time</td><td style="padding:8px 0;font-weight:600">' + escHtml(timeStr) + '</td></tr>' : '')
