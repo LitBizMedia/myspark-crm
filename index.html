@@ -7016,6 +7016,72 @@ function _calConfirmOutsideClick(e){
   box.remove();
 }
 
+// =====================================================
+// CALENDAR DRAG (WEEK VIEW EXTENSIONS - Slice 2)
+// =====================================================
+// Week view has day columns, not staff columns. Cross-day drag is allowed;
+// cross-staff drag is blocked (Slice 4 will lift that). Time of day comes
+// from cursor Y position (snap to 15 min).
+function _calColDragOverWeek(e, dateStr) {
+  if (!_calDrag.apptId) return;
+  // Slice 2 blocks cross-staff drag. The drop target is the day column;
+  // the dragged appointment's assignedTo must match itself (always true).
+  // Cross-staff handling happens in Slice 4.
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var col = e.currentTarget;
+  var rect = col.getBoundingClientRect();
+  var y = e.clientY - rect.top;
+  var minH = parseInt(col.getAttribute('data-minh'), 10) || 8;
+  var rawMin = Math.round(y / 68 * 60);
+  var snapMin = Math.round(rawMin / 15) * 15;
+  if (snapMin < 0) snapMin = 0;
+  var newTotalMin = minH * 60 + snapMin;
+  var newH = Math.floor(newTotalMin / 60);
+  var newM = newTotalMin % 60;
+  var newTime = String(newH).padStart(2, '0') + ':' + String(newM).padStart(2, '0');
+  // Skip if no change (same date AND same time)
+  if (dateStr === _calDrag.origDate && newTime === _calDrag.origTime) {
+    if (_calDrag.targetEl) { _calDrag.targetEl.remove(); _calDrag.targetEl = null; }
+    return;
+  }
+  var conflict = _calDragHasConflict(_calDrag.apptId, _calDrag.origStaff, dateStr, newTime, _calDrag.origDuration);
+  if (!_calDrag.targetEl) {
+    _calDrag.targetEl = document.createElement('div');
+    _calDrag.targetEl.className = 'cal-drop-target';
+    col.appendChild(_calDrag.targetEl);
+  } else if (_calDrag.targetEl.parentNode !== col) {
+    col.appendChild(_calDrag.targetEl);
+  }
+  _calDrag.targetEl.className = 'cal-drop-target ' + (conflict ? 'bad' : 'ok');
+  _calDrag.targetEl.style.top = (snapMin / 60 * 68) + 'px';
+  _calDrag.targetEl.style.height = (_calDrag.origDuration / 60 * 68) + 'px';
+  var dateLbl = dateStr === _calDrag.origDate ? '' : fmtDate(dateStr) + ' ';
+  _calDrag.targetEl.innerHTML = '<div class="cal-drop-target-label">' + dateLbl + fmtTime(newTime) + (conflict ? ' (conflict)' : '') + '</div>';
+  _calDrag.targetEl.setAttribute('data-newtime', newTime);
+  _calDrag.targetEl.setAttribute('data-newdate', dateStr);
+}
+
+function _calColDropWeek(e, dateStr) {
+  if (!_calDrag.apptId) return;
+  e.preventDefault();
+  var newTime = _calDrag.targetEl && _calDrag.targetEl.getAttribute('data-newtime');
+  var newDate = _calDrag.targetEl && _calDrag.targetEl.getAttribute('data-newdate');
+  if (!newTime || (newDate === _calDrag.origDate && newTime === _calDrag.origTime)) {
+    _calDragEnd(e);
+    return;
+  }
+  var apptId = _calDrag.apptId;
+  var origDate = _calDrag.origDate;
+  var origTime = _calDrag.origTime;
+  var origStaff = _calDrag.origStaff;
+  var origDuration = _calDrag.origDuration;
+  var conflict = _calDragHasConflict(apptId, origStaff, newDate, newTime, origDuration);
+  var clientX = e.clientX, clientY = e.clientY;
+  _calDragEnd(e);
+  _calShowConfirm(apptId, origDate, origTime, newDate, newTime, conflict, clientX, clientY);
+}
+
 async function _calDragConfirm(apptId, newDate, newTime, override){
   var btn = document.getElementById('cal-drop-confirm-btn');
   if(btn){ btn.disabled = true; btn.textContent = 'Rescheduling...'; }
@@ -7186,14 +7252,15 @@ function buildTimedCol(dateStr,appts,allHours){
     var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var isRescheduled=a.status==='rescheduled';
-    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+'" style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
+    var draggableAttr2 = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)"' : '';
+    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+'" data-appt-id="'+a.id+'"'+draggableAttr2+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
       +'<div class="timed-ev-time">'+apptStatusDot(a.status||'scheduled')+(a.time?fmtTime(a.time):'')+_paymentPillHTML(_eventPaymentStatus(a), true)+_apptAddonsPillHTML(a)+_apptGroupBadgeHTML(a)+_apptWarningBadgeHTML(a)+'</div>'
       +'<div class="timed-ev-title">'+esc(a.title)+'</div>'
       +(heightPx>36&&cA?'<div class="timed-ev-client">'+esc(cA.name)+'</div>':'')
       +'</div>';
   }).join('');
   var nowLine2='';if(dateStr===todayStr()){var nM=nowHM().totalMinutes;var nTop=Math.round((nM-(allHours[0]||8)*60)/60*68);nowLine2='<div class="cal-now-line" style="top:'+nTop+'px"><div class="cal-now-dot"></div></div>';}
-  return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'">'+allHours.map(function(h){return'<div class="tgrid-row'+(hoursSet.has(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';}).join('')+offHTML+eventsHTML+nowLine2+'</div>';
+  return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'" ondragover="_calColDragOverWeek(event,\''+dateStr+'\')" ondrop="_calColDropWeek(event,\''+dateStr+'\')">'+allHours.map(function(h){return'<div class="tgrid-row'+(hoursSet.has(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';}).join('')+offHTML+eventsHTML+nowLine2+'</div>';
 }
 
 function buildTimedColForUser(dateStr,appts,allHours,uid){
