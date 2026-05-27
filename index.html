@@ -2231,9 +2231,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               <option value="custom">Custom Range</option>
             </select>
             <div id="rpt-custom-dates" class="hidden" style="display:flex;gap:6px;align-items:center">
-              <input type="date" id="rpt-from" class="filter-sel" onchange="renderStaffReporting()">
+              <span class="date-pair"><input type="text" class="date-text" id="rpt-from" value="" data-iso="" placeholder="M/D/YYYY" autocomplete="off" spellcheck="false" onchange="renderStaffReporting()" onblur="_normalizeDateText(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><button type="button" class="date-clk-btn" tabindex="-1" onclick="_openDatePickerFor('rpt-from')" title="Pick date"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></span>
               <span style="color:var(--text-muted);font-size:12px">to</span>
-              <input type="date" id="rpt-to" class="filter-sel" onchange="renderStaffReporting()">
+              <span class="date-pair"><input type="text" class="date-text" id="rpt-to" value="" data-iso="" placeholder="M/D/YYYY" autocomplete="off" spellcheck="false" onchange="renderStaffReporting()" onblur="_normalizeDateText(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><button type="button" class="date-clk-btn" tabindex="-1" onclick="_openDatePickerFor('rpt-to')" title="Pick date"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></span>
             </div>
           </div>
           <div id="staff-rpt-body"></div>
@@ -3676,6 +3676,16 @@ function _openDatePickerFor(id){
     document.addEventListener('mousedown',outsideHandler,true);
     document.addEventListener('keydown',keyHandler,true);
   },10);
+}
+
+// Clears a date input's value and ISO data. Use instead of `el.value=''` so
+// the canonical data-iso stays in sync with the visible text.
+function _clearDateInput(id){
+  var el=document.getElementById(id);
+  if(!el)return;
+  el.value='';
+  el.dataset.iso='';
+  el.classList.remove('invalid');
 }
 
 // Toggles disabled state on a date-text input plus its wrapper and clock icon.
@@ -13903,8 +13913,8 @@ function renderActivityLog(){
       +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Action</label><br><input id="al-fil-action" type="text" placeholder="e.g. contact" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-size:13px;width:160px" onkeydown="if(event.key===\'Enter\')_alApplyFilters()"></div>'
       +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Actor</label><br><select id="al-fil-actor" class="filter-sel" style="height:35px;width:160px" onchange="_alApplyFilters()"><option value="">All users</option>'+_alUserOptions()+'</select></div>'
       +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Outcome</label><br><select id="al-fil-outcome" class="filter-sel" style="height:35px;width:130px" onchange="_alApplyFilters()"><option value="">All</option><option value="success">Success</option><option value="failure">Failure</option><option value="denied">Denied</option></select></div>'
-      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">From</label><br><input id="al-fil-from" type="date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-size:13px" onchange="_alApplyFilters()"></div>'
-      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">To</label><br><input id="al-fil-to" type="date" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 11px;font-size:13px" onchange="_alApplyFilters()"></div>'
+      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">From</label><br>'+_dateInputHTML('al-fil-from','',false,'_alApplyFilters()')+'</div>'
+      +'<div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">To</label><br>'+_dateInputHTML('al-fil-to','',false,'_alApplyFilters()')+'</div>'
       +'<button class="btn btn-purple btn-sm" onclick="_alApplyFilters()">Apply</button>'
       +'<button class="btn btn-ghost btn-sm" onclick="_alResetFilters()">Reset</button>'
       +'<button class="btn btn-ghost btn-sm" onclick="_alExportCsv()">Export CSV</button>'
@@ -13923,8 +13933,8 @@ function _alApplyFilters(){
   _activityLog.filters.action=(document.getElementById('al-fil-action').value||'').trim();
   _activityLog.filters.actor=document.getElementById('al-fil-actor').value||'';
   _activityLog.filters.outcome=document.getElementById('al-fil-outcome').value||'';
-  _activityLog.filters.from=document.getElementById('al-fil-from').value||'';
-  _activityLog.filters.to=document.getElementById('al-fil-to').value||'';
+  _activityLog.filters.from=_readDateInput('al-fil-from')||'';
+  _activityLog.filters.to=_readDateInput('al-fil-to')||'';
   _activityLog.offset=0;
   _alLoad();
 }
@@ -13935,8 +13945,8 @@ function _alResetFilters(){
   document.getElementById('al-fil-action').value='';
   document.getElementById('al-fil-actor').value='';
   document.getElementById('al-fil-outcome').value='';
-  document.getElementById('al-fil-from').value='';
-  document.getElementById('al-fil-to').value='';
+  _clearDateInput('al-fil-from');
+  _clearDateInput('al-fil-to');
   _alLoad();
 }
 
@@ -27036,7 +27046,7 @@ function getRptDateRange(){
   }else if(range==='last_month'){
     from=new Date(now.getFullYear(),now.getMonth()-1,1);to=new Date(now.getFullYear(),now.getMonth(),0);
   }else{
-    const fi=document.getElementById('rpt-from');const ti=document.getElementById('rpt-to');
+    const fi={value:_readDateInput('rpt-from')||''};const ti={value:_readDateInput('rpt-to')||''};
     from=fi&&fi.value?new Date(fi.value+'T00:00:00'):new Date(now.getFullYear(),now.getMonth(),1);
     to=ti&&ti.value?new Date(ti.value+'T23:59:59'):new Date(now.getFullYear(),now.getMonth()+1,0);
   }
@@ -30653,9 +30663,9 @@ function txnBuildShell(){
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
     +'<select class="filter-sel" id="txn-range-sel" onchange="txnSetRange(this.value)" style="height:36px">'+rangeOpts+'</select>'
     +'<div id="txn-custom-wrap"'+(isCustom?'':' class="hidden"')+' style="display:'+(isCustom?'flex':'none')+';gap:6px;align-items:center">'
-    +'<input type="date" id="txn-from-inp" class="filter-sel" style="height:36px" value="'+(state.txnFrom||'')+'" onchange="state.txnFrom=this.value;txnRenderSummary();txnRenderTable()">'
+    +_dateInputHTML('txn-from-inp',state.txnFrom||'',false,"state.txnFrom=_readDateInput('txn-from-inp')||'';txnRenderSummary();txnRenderTable()")
     +'<span style="color:var(--main-text-muted);font-size:12px">to</span>'
-    +'<input type="date" id="txn-to-inp" class="filter-sel" style="height:36px" value="'+(state.txnTo||'')+'" onchange="state.txnTo=this.value;txnRenderSummary();txnRenderTable()">'
+    +_dateInputHTML('txn-to-inp',state.txnTo||'',false,"state.txnTo=_readDateInput('txn-to-inp')||'';txnRenderSummary();txnRenderTable()")
     +'</div>'
     +'<select class="filter-sel" id="txn-staff-sel" onchange="state.txnStaff=this.value;state.txnPage=1;txnRenderSummary();txnRenderTable()" style="height:36px"><option value="">All Staff</option>'+uOpts+'</select>'
     +'<select class="filter-sel" id="txn-method-sel" onchange="state.txnMethod=this.value;state.txnPage=1;txnRenderSummary();txnRenderTable()" style="height:36px">'
@@ -34004,8 +34014,8 @@ function renderAgencyBillingTab(){
     +'<option value="refunded">Refunded</option>'
     +'<option value="pending">Pending</option>'
     +'</select>'
-    +'<input type="date" id="inv-filter-from" onchange="onInvoiceFilterChange()" style="color-scheme:dark">'
-    +'<input type="date" id="inv-filter-to" onchange="onInvoiceFilterChange()" style="color-scheme:dark">'
+    +_dateInputHTML('inv-filter-from','',false,'onInvoiceFilterChange()')
+    +_dateInputHTML('inv-filter-to','',false,'onInvoiceFilterChange()')
     +'<button class="btn btn-ghost btn-sm" onclick="resetInvoiceFilters()">Reset</button>'
     +'</div>'
     +'<div id="agency-invoices-table" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">'
@@ -34124,8 +34134,8 @@ function renderBillingSummaryCards(s){
 
 function onInvoiceFilterChange(){
   var st=document.getElementById('inv-filter-status');
-  var f=document.getElementById('inv-filter-from');
-  var t=document.getElementById('inv-filter-to');
+  var f={value:_readDateInput('inv-filter-from')||''};
+  var t={value:_readDateInput('inv-filter-to')||''};
   billingState.invoiceFilter.status=st?st.value:'';
   billingState.invoiceFilter.from=f?f.value:'';
   billingState.invoiceFilter.to=t?t.value:'';
@@ -34136,7 +34146,7 @@ function onInvoiceFilterChange(){
 function resetInvoiceFilters(){
   billingState.invoiceFilter={status:'',from:'',to:''};
   billingState.invoicesOffset=0;
-  ['inv-filter-status','inv-filter-from','inv-filter-to'].forEach(function(id){var x=document.getElementById(id);if(x)x.value='';});
+  var _inv_x=document.getElementById('inv-filter-status');if(_inv_x)_inv_x.value='';_clearDateInput('inv-filter-from');_clearDateInput('inv-filter-to');
   loadAgencyInvoices();
 }
 
@@ -35712,9 +35722,9 @@ async function renderAgencyAuditLog(){
     +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Outcome</label>'
     +'<select id="audit-filter-outcome" class="filter-sel" style="width:100%;height:34px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 10px;font-size:13px"><option value="">All</option><option value="success">Success</option><option value="failure">Failure</option><option value="denied">Denied</option></select></div>'
     +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">From date</label>'
-    +'<input id="audit-filter-from" type="date" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;color-scheme:dark"></div>'
+    +_dateInputHTML('audit-filter-from','',false,'')+'</div>'
     +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">To date</label>'
-    +'<input id="audit-filter-to" type="date" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;color-scheme:dark"></div>'
+    +_dateInputHTML('audit-filter-to','',false,'')+'</div>'
     +'<div style="display:flex;align-items:flex-end;gap:6px"><button class="btn btn-primary btn-sm" style="flex:1" onclick="applyAuditFilters()">Apply</button><button class="btn btn-ghost btn-sm" onclick="resetAuditFilters()">Reset</button></div>'
     +'</div>'
     // Table container
@@ -35733,15 +35743,15 @@ function applyAuditFilters(){
     actorType:  (document.getElementById('audit-filter-actor-type')||{}).value || '',
     action:     (document.getElementById('audit-filter-action')||{}).value || '',
     outcome:    (document.getElementById('audit-filter-outcome')||{}).value || '',
-    from:       (document.getElementById('audit-filter-from')||{}).value || '',
-    to:         (document.getElementById('audit-filter-to')||{}).value || ''
+    from:       _readDateInput('audit-filter-from') || '',
+    to:         _readDateInput('audit-filter-to') || ''
   };
   auditLogState.offset = 0;
   loadAuditLog();
 }
 
 function resetAuditFilters(){
-  ['audit-filter-subaccount','audit-filter-action','audit-filter-from','audit-filter-to'].forEach(function(id){var x=document.getElementById(id);if(x)x.value='';});
+  ['audit-filter-subaccount','audit-filter-action'].forEach(function(id){var x=document.getElementById(id);if(x)x.value='';});_clearDateInput('audit-filter-from');_clearDateInput('audit-filter-to');
   ['audit-filter-actor-type','audit-filter-outcome'].forEach(function(id){var x=document.getElementById(id);if(x)x.value='';});
   auditLogState.filters = {};
   auditLogState.offset = 0;
