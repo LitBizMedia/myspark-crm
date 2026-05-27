@@ -3815,10 +3815,17 @@ function saveData(){localStorage.setItem(SK,JSON.stringify(db));schedSync()}
 // Smart refresh from the top bar. Always pulls main data via fetchFromServer,
 // plus targeted refresh for panels that have their own data source (Contacts,
 // Conversations). Re-renders the current panel. Brief spinner on the icon.
+// Module-level lock survives DOM re-renders. The disabled attribute on the
+// button can lose effect when the top bar gets re-rendered, but this boolean
+// always wins. Plus a cooldown window after success keeps impatient users
+// from hammering it.
+var _topRefreshLocked = false;
+var TOP_REFRESH_COOLDOWN_MS = 2000;
 async function topRefresh(){
+  if(_topRefreshLocked) return;
+  _topRefreshLocked = true;
   var btn = document.getElementById('top-refresh-btn');
   var svg = document.getElementById('top-refresh-svg');
-  if(btn && btn.disabled) return;
   if(btn) btn.disabled = true;
   if(svg) svg.style.animation = 'spin 0.8s linear infinite';
   try{
@@ -3844,8 +3851,14 @@ async function topRefresh(){
     console.warn('topRefresh failed:', e);
     toast('Refresh failed.', 'error');
   }finally{
-    if(btn) btn.disabled = false;
     if(svg) svg.style.animation = '';
+    // Cooldown: keep the button disabled for a couple seconds after the
+    // refresh completes so impatient clicks do nothing.
+    setTimeout(function(){
+      _topRefreshLocked = false;
+      var b = document.getElementById('top-refresh-btn');
+      if(b) b.disabled = false;
+    }, TOP_REFRESH_COOLDOWN_MS);
   }
 }
 
