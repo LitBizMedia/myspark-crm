@@ -19861,6 +19861,7 @@ function convFilterChannel(channel){
     b.classList.toggle('active', b.dataset.convChannel === channel);
   });
   convRenderList();
+  _convClearThreadIfFiltered();
 }
 function convFilterStatus(status){
   _convState().filterStatus = status;
@@ -19868,6 +19869,18 @@ function convFilterStatus(status){
     b.classList.toggle('active', b.dataset.convStatus === status);
   });
   convRenderList();
+  _convClearThreadIfFiltered();
+}
+// If the currently open thread is no longer in the filtered list, clear it.
+// Keeps the right-pane state honest about what the left list shows.
+function _convClearThreadIfFiltered(){
+  var s = _convState();
+  if(!s.activeId) return;
+  var stillVisible = _convFiltered().some(function(c){ return c.id === s.activeId; });
+  if(!stillVisible){
+    s.activeId = null;
+    convRenderThread();
+  }
 }
 function convRefresh(){
   convFetchList();
