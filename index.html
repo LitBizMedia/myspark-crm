@@ -9318,7 +9318,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     // email notification, payment migration, and rescheduled_from_id link all happen.
     + (a ? '<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:8px">Date and time are locked. Use the <strong>Reschedule</strong> button below to change them.</div>' : '')
     + '<div id="apt-datetime-row" class="'+(initialMode==='custom'?'form-row-3':'form-row')+'">'
-      + '<div class="form-group"><label>Date *</label><input id="af-date" type="date" value="'+esc(a&&a.date||prefDate||todayStr())+'"'+(a?' disabled':'')+' onchange="checkApptConflict()"></div>'
+      + '<div class="form-group"><label>Date *</label>'+_dateInputHTML('af-date',a&&a.date||prefDate||todayStr(),!!a,'checkApptConflict()')+'</div>'
       + '<div class="form-group"><label>Time</label>'+_timeInputHTML('af-time',a&&a.time||prefTime||'9:00 AM',!!a,'onApptStartTimeChange()')+'</div>'
       + '<div class="form-group" id="apt-end-wrap" style="display:'+(initialMode==='custom'?'block':'none')+'">'
         + '<label>End Time</label>'
@@ -10768,7 +10768,7 @@ function checkApptConflict(){
   // Collect ALL conflicts up front. No early-returns. Each conflict gets its
   // own checkbox in the warning panel. Save stays disabled until either there
   // are zero conflicts OR every conflict has been individually acknowledged.
-  const date=document.getElementById('af-date')&&document.getElementById('af-date').value;
+  const date=_readDateInput('af-date');
   const time=_readTimeInput('af-time');
   const dur=document.getElementById('af-dur')&&document.getElementById('af-dur').value;
   const userId=document.getElementById('af-user')&&document.getElementById('af-user').value;
@@ -11362,7 +11362,7 @@ async function submitReschedule(originalApptId){
 }
 
 function saveAppt(){
-  const title=document.getElementById('af-title').value.trim(),date=document.getElementById('af-date').value;
+  const title=document.getElementById('af-title').value.trim(),date=_readDateInput('af-date');
   if(!title||!date){toast('Title and date required.','error');return}
   // Past-date validation. Edits of already-past appointments stay allowed so staff
   // can fix notes/status on historical records.
