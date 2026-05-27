@@ -6977,11 +6977,16 @@ function _calColDragOver(e, dateStr, uid){
   var newH = Math.floor(newTotalMin / 60);
   var newM = newTotalMin % 60;
   var newTime = String(newH).padStart(2,'0') + ':' + String(newM).padStart(2,'0');
-  if(newTime === _calDrag.origTime){
+  // SLICE 4 fix: only suppress indicator when NEITHER time NOR staff is changing.
+  // Cross-staff drag at the same time is a real change and deserves a visible drop target.
+  var staffChanging = (uid !== _calDrag.origStaff);
+  if(newTime === _calDrag.origTime && !staffChanging){
     if(_calDrag.targetEl){ _calDrag.targetEl.remove(); _calDrag.targetEl = null; }
     return;
   }
-  var conflict = _calDragHasConflict(_calDrag.apptId, _calDrag.origStaff, _calDrag.origDate, newTime, _calDrag.origDuration);
+  // SLICE 4 fix: conflict check must use the TARGET staff calendar (uid), not the
+  // original. Otherwise cross-staff drops show green when they actually collide.
+  var conflict = _calDragHasConflict(_calDrag.apptId, uid, _calDrag.origDate, newTime, _calDrag.origDuration);
   if(!_calDrag.targetEl){
     _calDrag.targetEl = document.createElement('div');
     _calDrag.targetEl.className = 'cal-drop-target';
