@@ -6726,6 +6726,9 @@ function renderCalLegend(){
 
 function getCalAppts(uid,dateStr){
   var appts=db.appointments.filter(function(a){
+    // Hide rescheduled originals from the calendar grid. The history is
+    // preserved via the "Rescheduled from" banner shown on the new appointment.
+    if(a.status==='rescheduled')return false;
     if(dateStr&&a.date!==dateStr)return false;
     if(uid&&uid!=='all'&&a.assignedTo!==uid)return false;
     // When viewing all staff, respect the calDayStaff visibility filter
@@ -9239,6 +9242,9 @@ function _expandedAppointmentsForCalendar(){
   var out = [];
   for(var i = 0; i < src.length; i++){
     var a = src[i];
+    // Hide rescheduled originals from the calendar grid. The history is
+    // preserved via the "Rescheduled from" banner shown on the new appointment.
+    if(a && a.status === 'rescheduled') continue;
     if(Array.isArray(a.staff) && a.staff.length > 1){
       // Group booking: emit one virtual appt per assigned staff
       for(var j = 0; j < a.staff.length; j++){
