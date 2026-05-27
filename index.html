@@ -29557,7 +29557,14 @@ async function confirmRemoveCard(){
   const newCards=(c.squareCards||[]).filter(function(x){return x.id!==d.cardId});
   try{
     await contactUpdate(d.contactId, {square_cards: newCards});
-    await fetchFromServer();
+    // Sync ALL local state to the new card list. Without this the drawer
+    // and any subscription/POS modal will render stale data until the
+    // ensureContactFull cache expires or a network round trip completes.
+    c.squareCards = newCards;
+    if(typeof _contactFullFetchCache !== 'undefined' && _contactFullFetchCache[d.contactId]){
+      _contactFullFetchCache[d.contactId].c.squareCards = newCards;
+      _contactFullFetchCache[d.contactId].t = Date.now();
+    }
     closeModal();
     if(state.drawer===d.contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
       renderDrawer();
