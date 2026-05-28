@@ -20,6 +20,7 @@ const contactsLib = require('./lib/contacts');
 const { sendAppointmentConfirmations } = require('./lib/appointment-emails');
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { checkResourceIdsFree } = require('./lib/resource-allocation');
+const { isTimeAvailable } = require('./lib/schedule');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { isTerminalStatus } = require('./lib/appt-statuses');
@@ -113,6 +114,90 @@ async function handler(req, res) {
     // Conflict check on new slot (skip if override=true). Uses the same isActive
     // filter as appointments-upsert; cancelled/no-show/completed/rescheduled
     // appointments do NOT block.
+    // === rescheduleParityChecks: bring the reschedule path to full parity with
+    // the create path (appointments-upsert). All checks target effectiveStaffId
+    // (the FINAL assigned staff, accounting for Slice 4 reassignment) at the NEW
+    // date/time, and all are bypassed when body.override is set (staff-side
+    // override model: patient widget = hard block, staff = warn + override).
+    // Checks: blackout date, staff off-hours/lunch, daily cap, and effective
+    // buffer resolution (MAX of stamped buffer and the final staff's default,
+    // important when reassigning to a staff member with a larger default buffer).
+    var rsEffBufBefore = parseInt(orig.buffer_before) || 0;
+    var rsEffBufAfter  = parseInt(orig.buffer_after)  || 0;
+    if (effectiveStaffId && !body.override) {
+      try {
+        // Load the final staff member's schedule once; reused for off-hours,
+        // buffer resolution, and the daily cap.
+        const _staffRow = await db.query(
+          'SELECT schedule, date_overrides FROM subaccount_users WHERE id=$1 AND subaccount_id=$2',
+          [effectiveStaffId, subaccountId]
+        );
+        const _sched = _staffRow.rows.length && _staffRow.rows[0].schedule ? _staffRow.rows[0].schedule : {};
+        const _ovr = _staffRow.rows.length && _staffRow.rows[0].date_overrides ? _staffRow.rows[0].date_overrides : [];
+
+        // Effective buffer = MAX(stamped, final staff default).
+        const _sb = parseInt(_sched.defaultBufferBefore) || 0;
+        const _sa = parseInt(_sched.defaultBufferAfter)  || 0;
+        if (_sb > rsEffBufBefore) rsEffBufBefore = _sb;
+        if (_sa > rsEffBufAfter)  rsEffBufAfter  = _sa;
+
+        // Blackout (workspace-level), same source as create path.
+        const _boRow = await db.query('SELECT settings FROM subaccounts WHERE id=$1', [subaccountId]);
+        const _boSettings = _boRow.rows[0] && _boRow.rows[0].settings
+          ? (typeof _boRow.rows[0].settings === 'string' ? JSON.parse(_boRow.rows[0].settings) : _boRow.rows[0].settings)
+          : {};
+        const _blackoutDates = Array.isArray(_boSettings.blackoutDates) ? _boSettings.blackoutDates : [];
+        const _blackoutHit = _blackoutDates.find(b => b && b.date === newDate);
+        if (_blackoutHit) {
+          return res.status(409).json({
+            error: 'blackout',
+            message: _blackoutHit.reason
+              ? 'Bookings are disabled on ' + newDate + ' (' + _blackoutHit.reason + ').'
+              : 'Bookings are disabled on ' + newDate + '.'
+          });
+        }
+
+        // Off-hours / lunch / date overrides at the new time, for the final staff.
+        const _staffSched = { schedule: _sched, dateOverrides: _ovr };
+        if (!isTimeAvailable(_staffSched, newDate, newTime, newDuration)) {
+          return res.status(409).json({
+            error: 'staff_unavailable',
+            message: 'The assigned staff member is not scheduled to work at that time (off-hours, lunch, or day off).'
+          });
+        }
+
+        // Daily cap: count OTHER active appointments for this staff on the new
+        // day, excluding the original (it is being moved, not added). Matches
+        // booking-submit's count (status != cancelled) plus an explicit
+        // exclusion of the original and any already-rescheduled rows.
+        const _cap = (_sched.maxBookingsPerDay != null && parseInt(_sched.maxBookingsPerDay) > 0)
+          ? parseInt(_sched.maxBookingsPerDay) : null;
+        if (_cap != null) {
+          const _capRes = await db.query(
+            `SELECT COUNT(*)::int AS n
+               FROM appointments
+              WHERE subaccount_id = $1
+                AND date = $2
+                AND assigned_to = $3
+                AND id != $4
+                AND status NOT IN ('cancelled','rescheduled')`,
+            [subaccountId, newDate, effectiveStaffId, originalId]
+          );
+          const _dayCount = _capRes.rows[0] ? _capRes.rows[0].n : 0;
+          if (_dayCount >= _cap) {
+            return res.status(409).json({
+              error: 'daily_cap',
+              message: 'The assigned staff member has reached their daily booking limit (' + _cap + ') on ' + newDate + '.'
+            });
+          }
+        }
+      } catch (parityErr) {
+        // Soft-fail: don't block a legitimate reschedule on an unexpected error.
+        // Overlap + resource checks below still apply.
+        console.warn('appointments-reschedule: parity checks skipped:', parityErr.message);
+      }
+    }
+
     if (effectiveStaffId && !body.override) {
       try {
         const result = await checkStaffConflict({
@@ -123,8 +208,8 @@ async function handler(req, res) {
           duration: newDuration,
           ignoreAppointmentId: originalId,
           statusFilter: "status NOT IN ('completed','cancelled','no-show','rescheduled')",
-          bufferBefore: orig.buffer_before,
-          bufferAfter: orig.buffer_after,
+          bufferBefore: rsEffBufBefore,
+          bufferAfter: rsEffBufAfter,
           dbClient: db
         });
         if (!result.ok) {
