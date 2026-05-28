@@ -21,6 +21,8 @@ async function checkStaffConflict(opts) {
     duration,
     ignoreAppointmentId,        // null for new bookings; appt id for edits/reschedules
     statusFilter,                // default: "!= 'cancelled'"; pass "= 'scheduled'" for stricter
+    bufferBefore,                // optional: buffer (minutes) before the incoming appt
+    bufferAfter,                 // optional: buffer (minutes) after the incoming appt
     dbClient
   } = opts;
 
@@ -31,8 +33,19 @@ async function checkStaffConflict(opts) {
   const dur = parseInt(duration) || 60;
   const statusClause = statusFilter || "status != 'cancelled'";
   const ignoreId = ignoreAppointmentId || '';
+  // Buffer-aware overlap: pad BOTH the incoming appointment and each existing
+  // appointment by their before/after buffers. Two appointments conflict when
+  // their buffer-padded windows intersect, even if raw service times don't.
+  // Buffers default to 0 when not provided (backward compatible: behaves like
+  // the old raw-overlap check when no buffers exist).
+  const newBufBefore = parseInt(bufferBefore) || 0;
+  const newBufAfter = parseInt(bufferAfter) || 0;
 
   try {
+    // Window math (minutes-from-midnight via ::time + interval):
+    //   incoming:  [ $5 - newBufBefore , $5 + dur + newBufAfter )
+    //   existing:  [ time - buffer_before , time + duration + buffer_after )
+    // Conflict when incoming.start < existing.end AND incoming.end > existing.start.
     const r = await dbClient.query(`
       SELECT id, title, time, duration
       FROM appointments
@@ -43,14 +56,14 @@ async function checkStaffConflict(opts) {
         AND ($4::text = '' OR id != $4)
         AND time IS NOT NULL
         AND (
-          ($5::time >= time::time AND $5::time < (time::time + (duration || ' minutes')::interval))
-          OR
-          (($5::time + ($6 || ' minutes')::interval) > time::time AND $5::time < time::time)
-          OR
-          ($5::time <= time::time AND ($5::time + ($6 || ' minutes')::interval) >= (time::time + (duration || ' minutes')::interval))
+          ($5::time - ($7 || ' minutes')::interval)
+            < (time::time + ((COALESCE(duration,60) + COALESCE(buffer_after,0)) || ' minutes')::interval)
+          AND
+          ($5::time + (($6::int + $8::int) || ' minutes')::interval)
+            > (time::time - (COALESCE(buffer_before,0) || ' minutes')::interval)
         )
       LIMIT 1
-    `, [subaccountId, staffId, date, ignoreId, time, String(dur)]);
+    `, [subaccountId, staffId, date, ignoreId, time, String(dur), String(newBufBefore), String(newBufAfter)]);
 
     if (r.rows.length === 0) return { ok: true };
 

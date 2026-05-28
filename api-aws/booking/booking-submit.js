@@ -596,6 +596,8 @@ async function handler(req, res) {
           time: bookingTime,
           duration: (service && service.duration) || 60,
           ignoreAppointmentId: null,
+          bufferBefore: bufBefore,
+          bufferAfter: bufAfter,
           dbClient: db
         });
         if (!result.ok) {

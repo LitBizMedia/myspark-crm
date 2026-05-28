@@ -122,6 +122,8 @@ async function handler(req, res) {
           duration: newDuration,
           ignoreAppointmentId: originalId,
           statusFilter: "status NOT IN ('completed','cancelled','no-show','rescheduled')",
+          bufferBefore: orig.buffer_before,
+          bufferAfter: orig.buffer_after,
           dbClient: db
         });
         if (!result.ok) {
@@ -144,6 +146,8 @@ async function handler(req, res) {
             duration: newDuration,
             ignoreAppointmentId: originalId,
             statusFilter: "status NOT IN ('completed','cancelled','no-show','rescheduled')",
+            bufferBefore: orig.buffer_before,
+            bufferAfter: orig.buffer_after,
             dbClient: db
           });
           if (!r.ok) {

@@ -64,7 +64,8 @@ async function loadToken(token) {
 async function loadAppt(tok) {
   const apptRes = await db.query(
     `SELECT id, title, date, time, status, contact_id, assigned_to,
-            duration, service_id, service_variation_id, appointment_type_id, widget_id
+            duration, service_id, service_variation_id, appointment_type_id, widget_id,
+            buffer_before, buffer_after
        FROM appointments WHERE id = $1 AND subaccount_id = $2`,
     [tok.appointment_id, tok.subaccount_id]
   );
@@ -153,6 +154,8 @@ async function handler(req, res) {
           time: newTime,
           duration: appt.duration,
           ignoreAppointmentId: appt.id,
+          bufferBefore: appt.buffer_before,
+          bufferAfter: appt.buffer_after,
           dbClient: db
         });
         if (!result.ok) {
