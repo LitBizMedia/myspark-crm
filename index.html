@@ -6997,7 +6997,7 @@ function _calColDragOver(e, dateStr, uid){
   _calDrag.targetEl.className = 'cal-drop-target ' + (conflict ? 'bad' : 'ok');
   _calDrag.targetEl.style.top = (snapMin / 60 * 68) + 'px';
   _calDrag.targetEl.style.height = (_calDrag.origDuration / 60 * 68) + 'px';
-  _calDrag.targetEl.innerHTML = '<div class="cal-drop-target-label">' + fmtTime(newTime) + (conflict ? ' (conflict)' : '') + '</div>';
+  _calDrag.targetEl.innerHTML = '<div class="cal-drop-target-label">' + fmtTime(newTime) + (conflict ? ' (' + ((conflict.reason==='overlap'?'conflict':(conflict.label||'conflict')).toLowerCase()) + ')' : '') + '</div>';
   _calDrag.targetEl.setAttribute('data-newtime', newTime);
 }
 
@@ -7028,21 +7028,101 @@ function _calColDrop(e, dateStr, uid){
   _calShowConfirm(apptId, origDate, origTime, origDate, finalTime, conflict, clientX, clientY, newStaff);
 }
 
+// Comprehensive drag conflict check. Returns null when the slot is clear, or
+// a conflict object { reason, label, detail } describing the FIRST problem
+// found. Mirrors the full rule set the backend now enforces (Fix A + Fix B):
+//   blackout date, staff off-hours/lunch/override, daily cap, buffer-aware
+//   overlap. Returns truthy-on-conflict so existing (cond ? 'bad' : 'ok')
+//   callers keep working without change; _calShowConfirm reads .label/.detail
+//   for a specific reason.
+function _calConflictReason(skipApptId, staffId, dateStr, newTime, duration){
+  if(!staffId || !dateStr || !newTime) return null;
+  var dur = parseInt(duration) || 60;
+
+  // 1. Blackout date (workspace-level).
+  var bo = (typeof isBlackoutDate === 'function') ? isBlackoutDate(dateStr) : null;
+  if(bo){
+    return { reason:'blackout', label:'Blackout date',
+      detail: bo.reason ? ('Bookings disabled ('+bo.reason+').') : 'Bookings disabled on this date.' };
+  }
+
+  // 2. Staff schedule: off-hours, lunch, day-off/override. Walk the appointment
+  //    span in 5-min steps; if any hour falls outside available hours, flag it.
+  if(typeof getStaffAvailableHours === 'function'){
+    var hSet = getStaffAvailableHours(staffId, dateStr);
+    var u = (typeof getUserById === 'function') ? getUserById(staffId) : null;
+    var uname = (u && (u.name||u.username)) || 'Staff member';
+    if(!hSet || !hSet.size){
+      var ov = u && u.dateOverrides && u.dateOverrides.find(function(o){return o.date===dateStr;});
+      var why = (ov && ov.type==='off') ? (ov.note||'Day off') : 'not scheduled this day';
+      return { reason:'off_hours', label:'Staff not available',
+        detail: uname+' is '+why+'.' };
+    }
+    var start = t2m(newTime), end = start + dur;
+    var badHour = null;
+    for(var tt=start; tt<end; tt+=5){
+      var hh = Math.floor(tt/60);
+      if(!hSet.has(hh)){ badHour = hh; break; }
+    }
+    if(badHour !== null){
+      var sortedH = Array.from(hSet).sort(function(x,y){return x-y;});
+      var firstH = sortedH[0], lastH = sortedH[sortedH.length-1];
+      var detail;
+      if(badHour < firstH || badHour > lastH){
+        detail = uname+' works '+fmtTime(String(firstH).padStart(2,'0')+':00')+' to '+fmtTime(String(lastH+1).padStart(2,'0')+':00')+' this day.';
+      } else {
+        detail = 'That time hits a lunch break or scheduling gap.';
+      }
+      return { reason:'off_hours', label:'Outside staff hours', detail: detail };
+    }
+  }
+
+  // 3. Daily booking cap for the assigned staff.
+  if(typeof getUserById === 'function'){
+    var uCap = getUserById(staffId);
+    var cap = uCap && uCap.schedule && parseInt(uCap.schedule.maxBookingsPerDay);
+    if(cap && cap>0){
+      var sameDay = (db.appointments||[]).filter(function(a){
+        return a && a.assignedTo===staffId && a.date===dateStr && a.id!==skipApptId && isActiveAppt(a);
+      });
+      if(sameDay.length >= cap){
+        return { reason:'daily_cap', label:'Daily limit reached',
+          detail: (uCap.name||uCap.username)+' is at the daily cap of '+cap+' booking'+(cap!==1?'s':'')+'.' };
+      }
+    }
+  }
+
+  // 4. Buffer-aware overlap. Prefer the shared checkDoubleBook helper (it pads
+  //    by both appointments' buffers). Fall back to raw overlap if absent.
+  if(typeof checkDoubleBook === 'function'){
+    var hit = checkDoubleBook(skipApptId, dateStr, newTime, dur, staffId);
+    if(hit){
+      return { reason:'overlap', label:'Overlaps another appointment',
+        detail: 'Conflicts with '+(hit.title||'another appointment')+' at '+fmtTime(hit.time||'')+'.' };
+    }
+  } else {
+    var newStart = t2m(newTime), newEnd = newStart + dur;
+    var rivals = _expandedAppointmentsForCalendar().filter(function(a){
+      if(a.id === skipApptId) return false;
+      if(a.assignedTo !== staffId) return false;
+      if(a.date !== dateStr) return false;
+      if(['cancelled','rescheduled','no_show','no-show'].indexOf((a.status||'').toLowerCase()) >= 0) return false;
+      return true;
+    });
+    var clash = rivals.some(function(a){
+      var s = t2m(a.time||'09:00'); var ee = s + (a.duration || 60);
+      return newStart < ee && newEnd > s;
+    });
+    if(clash) return { reason:'overlap', label:'Overlaps another appointment', detail:'Conflicts with another appointment.' };
+  }
+
+  return null;
+}
+
+// Backward-compatible wrapper. Existing callers do (cond ? 'bad' : 'ok') and
+// if(cond); a returned object is truthy, null is falsy, so they keep working.
 function _calDragHasConflict(skipApptId, staffId, dateStr, newTime, duration){
-  var newStart = t2m(newTime);
-  var newEnd = newStart + (duration || 60);
-  var rivals = _expandedAppointmentsForCalendar().filter(function(a){
-    if(a.id === skipApptId) return false;
-    if(a.assignedTo !== staffId) return false;
-    if(a.date !== dateStr) return false;
-    if(['cancelled','rescheduled','no_show','no-show'].indexOf((a.status||'').toLowerCase()) >= 0) return false;
-    return true;
-  });
-  return rivals.some(function(a){
-    var s = t2m(a.time||'09:00');
-    var ee = s + (a.duration || 60);
-    return newStart < ee && newEnd > s;
-  });
+  return _calConflictReason(skipApptId, staffId, dateStr, newTime, duration);
 }
 
 function _calShowConfirm(apptId, oldDate, oldTime, newDate, newTime, conflict, x, y, newStaffId){
@@ -7073,8 +7153,13 @@ function _calShowConfirm(apptId, oldDate, oldTime, newDate, newTime, conflict, x
     staffChangedRow = '<div class="cal-drop-confirm-row"><span>Staff</span><strong>'+esc(origName)+' \u2192 '+esc(newName)+'</strong></div>';
   }
   var conflictId = 'cal-drop-confirm-conflict';
+  // Fix C: conflict may be an object { label, detail } or legacy truthy. Show
+  // the specific reason when available so staff know WHY (off-hours vs overlap
+  // vs blackout vs daily cap). All are overridable via Confirm.
+  var conflictLabel = (conflict && conflict.label) ? conflict.label : 'Conflict';
+  var conflictDetail = (conflict && conflict.detail) ? conflict.detail : 'Overlaps another appointment.';
   var conflictRow = conflict
-    ? '<div class="cal-drop-confirm-row" id="'+conflictId+'" style="color:var(--danger-light)"><strong>Conflict:</strong> overlaps another appointment. Confirm will override.</div>'
+    ? '<div class="cal-drop-confirm-row" id="'+conflictId+'" style="color:var(--danger-light)"><strong>'+esc(conflictLabel)+':</strong> '+esc(conflictDetail)+' Confirm will override.</div>'
     : '<div class="cal-drop-confirm-row" id="'+conflictId+'" style="display:none"></div>';
   // SLICE 4: stash newStaffId on the confirm button as data attribute for _calConfirmBtnClick
   var staffAttr = newStaffId && newStaffId !== a.assignedTo ? ' data-new-staff-id="'+esc(newStaffId)+'"' : '';
@@ -7382,7 +7467,7 @@ function _calColDragOverWeek(e, dateStr) {
   _calDrag.targetEl.style.top = (snapMin / 60 * 68) + 'px';
   _calDrag.targetEl.style.height = (_calDrag.origDuration / 60 * 68) + 'px';
   var dateLbl = dateStr === _calDrag.origDate ? '' : fmtDate(dateStr) + ' ';
-  _calDrag.targetEl.innerHTML = '<div class="cal-drop-target-label">' + dateLbl + fmtTime(newTime) + (conflict ? ' (conflict)' : '') + '</div>';
+  _calDrag.targetEl.innerHTML = '<div class="cal-drop-target-label">' + dateLbl + fmtTime(newTime) + (conflict ? ' (' + ((conflict.reason==='overlap'?'conflict':(conflict.label||'conflict')).toLowerCase()) + ')' : '') + '</div>';
   _calDrag.targetEl.setAttribute('data-newtime', newTime);
   _calDrag.targetEl.setAttribute('data-newdate', dateStr);
 }
