@@ -13327,6 +13327,16 @@ async function fetchFromServer(opts){
       // Users from subaccount_users table (UUIDs), not from blob.
       if(result.users){
         db.users=result.users.map(function(u){
+          // Type-correct normalization of JSONB shapes. The old '||' guards
+          // only caught null/undefined, NOT a wrong-typed value: an empty
+          // OBJECT {} is truthy, so 'u.date_overrides || []' let {} pass
+          // through, and {}.find(...) later blanked the entire calendar.
+          // dateOverrides MUST be an array (.find/.forEach/.some used widely);
+          // schedule MUST be a non-array object (indexed by day key).
+          var _sched = (u.schedule && typeof u.schedule === 'object' && !Array.isArray(u.schedule))
+            ? u.schedule
+            : JSON.parse(JSON.stringify(DEF_SCHED));
+          var _ovr = Array.isArray(u.date_overrides) ? u.date_overrides : [];
           return {
             id:u.id,
             username:u.username,
@@ -13335,8 +13345,8 @@ async function fetchFromServer(opts){
             role:u.role,
             color:u.color||'#6b21ea',
             active:u.active,
-            schedule:u.schedule||JSON.parse(JSON.stringify(DEF_SCHED)),
-            dateOverrides:u.date_overrides||[],
+            schedule:_sched,
+            dateOverrides:_ovr,
             mustChangePassword:u.must_change_password,
             createdAt:u.created_at,
             updatedAt:u.updated_at
