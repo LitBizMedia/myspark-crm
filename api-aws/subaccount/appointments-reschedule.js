@@ -19,6 +19,7 @@ const db = require('./lib/db');
 const contactsLib = require('./lib/contacts');
 const { sendAppointmentConfirmations } = require('./lib/appointment-emails');
 const { checkStaffConflict } = require('./lib/staff-conflict');
+const { checkResourceIdsFree } = require('./lib/resource-allocation');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { isTerminalStatus } = require('./lib/appt-statuses');
@@ -160,6 +161,37 @@ async function handler(req, res) {
         } catch (cErr) {
           console.warn('group reschedule conflict skipped:', cErr.message);
         }
+      }
+    }
+
+    // FOLLOW-UP 2: resource availability at the new time. The original's
+    // claimed resources (rooms/devices) are copied to the new appointment
+    // below, but copying does not verify they are FREE at the new slot. Check
+    // the exact resource_ids here so a reschedule cannot double-book a room.
+    // Respects override, consistent with the staff/time conflict checks above.
+    if (groupResourcesRes.rows.length && !body.override) {
+      try {
+        const resourceIds = groupResourcesRes.rows.map(function(r){ return r.resource_id; });
+        const rfree = await checkResourceIdsFree({
+          resourceIds: resourceIds,
+          subaccountId,
+          date: newDate,
+          time: newTime,
+          duration: newDuration,
+          ignoreAppointmentId: originalId,
+          dbClient: db
+        });
+        if (!rfree.ok) {
+          const names = rfree.busy.map(function(b){ return b.name; }).filter(Boolean);
+          return res.status(409).json({
+            error: 'resource_unavailable',
+            message: 'A required resource is unavailable at the new time'
+              + (names.length ? ': ' + names.join(', ') : '') + '. Choose another time or override.',
+            busy: rfree.busy
+          });
+        }
+      } catch (resErr) {
+        console.warn('appointments-reschedule: resource availability check skipped:', resErr.message);
       }
     }
 

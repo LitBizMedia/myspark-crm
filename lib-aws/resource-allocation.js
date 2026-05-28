@@ -327,4 +327,73 @@ async function replaceClaims(opts) {
 }
 
 
-module.exports = { resolveResourceClaims, resolveMultipleResourceClaims, persistClaims, replaceClaims };
+// Check whether a specific set of resource_ids are ALL free at a given
+// date/time/duration window, excluding one appointment. Unlike
+// resolveResourceClaims (which picks free resources for a SERVICE), this
+// validates that EXACT resource_ids (already chosen/copied) remain available.
+// Used by appointments-reschedule: when a staff member moves an appointment,
+// its claimed rooms/devices must still be free at the new time.
+//
+// Returns { ok: true } when all free, or
+// { ok: false, busy: [{ resource_id, name, conflicting_appointment }] }.
+async function checkResourceIdsFree(opts) {
+  const {
+    resourceIds,           // array of resource_id strings
+    subaccountId,
+    date,
+    time,
+    duration,
+    ignoreAppointmentId,   // exclude this appointment's own claims
+    dbClient
+  } = opts;
+
+  if (!Array.isArray(resourceIds) || !resourceIds.length || !subaccountId || !date || !time || !duration) {
+    return { ok: true, busy: [] };
+  }
+
+  const busy = [];
+  for (const resourceId of resourceIds) {
+    // Resource capacity + buffer (same fields resolveResourceClaims uses).
+    const rRes = await dbClient.query(
+      'SELECT name, capacity, buffer_after FROM resources WHERE id = $1 AND subaccount_id = $2',
+      [resourceId, subaccountId]
+    );
+    if (!rRes.rows.length) continue; // unknown resource id; skip (defensive)
+    const cap = parseInt(rRes.rows[0].capacity) || 1;
+    const rBufAfter = parseInt(rRes.rows[0].buffer_after) || 0;
+    const rName = rRes.rows[0].name;
+
+    // Same time-overlap pattern as resolveResourceClaims' busy query.
+    const busyRes = await dbClient.query(
+      `SELECT ar.appointment_id, a.title, a.time, a.duration
+       FROM appointment_resources ar
+       JOIN appointments a ON a.id = ar.appointment_id
+       WHERE ar.resource_id = $1
+         AND a.subaccount_id = $2
+         AND a.date = $3
+         AND a.status != 'cancelled'
+         AND ($4::text IS NULL OR a.id != $4)
+         AND a.time IS NOT NULL
+         AND (
+           ($5::time >= a.time::time AND $5::time < (a.time::time + ((a.duration::int + $7::int) || ' minutes')::interval))
+           OR
+           (($5::time + ($6 || ' minutes')::interval) > a.time::time AND $5::time < a.time::time)
+           OR
+           ($5::time <= a.time::time AND ($5::time + ($6 || ' minutes')::interval) >= (a.time::time + (a.duration::int || ' minutes')::interval))
+         )`,
+      [resourceId, subaccountId, date, ignoreAppointmentId || null, time, String(duration), rBufAfter]
+    );
+
+    if (busyRes.rows.length >= cap) {
+      busy.push({
+        resource_id: resourceId,
+        name: rName,
+        conflicting_appointment: busyRes.rows[0] ? busyRes.rows[0].title : null
+      });
+    }
+  }
+
+  return busy.length ? { ok: false, busy } : { ok: true, busy: [] };
+}
+
+module.exports = { resolveResourceClaims, resolveMultipleResourceClaims, persistClaims, replaceClaims, checkResourceIdsFree };
