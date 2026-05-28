@@ -12,6 +12,7 @@ const contactsLib = require('./lib/contacts');
 const { resolveResourceClaims, resolveMultipleResourceClaims, replaceClaims, persistClaims } = require('./lib/resource-allocation');
 const { sendAppointmentConfirmations } = require('./lib/appointment-emails');
 const { checkStaffConflict } = require('./lib/staff-conflict');
+const { isTimeAvailable } = require('./lib/schedule');
 const { isValidStatus } = require('./lib/appt-statuses');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
@@ -209,6 +210,59 @@ async function handler(req, res) {
     // Defaults to 'scheduled' when not provided (matches DB column default).
     if (a.status && !isValidStatus(a.status)) {
       return res.status(400).json({ error: 'Invalid appointment status: ' + a.status });
+    }
+
+    // FIX B: server-side enforcement of staff schedule + blackout dates.
+    // The frontend modal warns about these, but a stale browser or a direct
+    // API call could otherwise create an appointment during a staff member's
+    // off-hours, lunch, or day-off, or on a workspace blackout date. These
+    // checks close that hole. All respect the override flag, so a trusted
+    // staff member can still deliberately book an exception.
+    //
+    // Unlike the service-availability check above (which only runs when a
+    // service_id is present), these run for free-form appointments too.
+    if (a.assignedTo && a.date && a.time && !req.body.override) {
+      try {
+        // Blackout dates (workspace-level). Source: settings.blackoutDates.
+        const boRow = await db.query('SELECT settings FROM subaccounts WHERE id=$1', [subaccountId]);
+        const boSettings = boRow.rows[0] && boRow.rows[0].settings
+          ? (typeof boRow.rows[0].settings === 'string' ? JSON.parse(boRow.rows[0].settings) : boRow.rows[0].settings)
+          : {};
+        const blackoutDates = Array.isArray(boSettings.blackoutDates) ? boSettings.blackoutDates : [];
+        const blackoutHit = blackoutDates.find(b => b && b.date === a.date);
+        if (blackoutHit) {
+          return res.status(409).json({
+            error: 'blackout',
+            message: blackoutHit.reason
+              ? 'Bookings are disabled on ' + a.date + ' (' + blackoutHit.reason + ').'
+              : 'Bookings are disabled on ' + a.date + '.'
+          });
+        }
+
+        // Staff personal schedule: work hours, lunch, and date overrides.
+        const schRes = await db.query(
+          'SELECT schedule, date_overrides FROM subaccount_users WHERE id=$1 AND subaccount_id=$2',
+          [a.assignedTo, subaccountId]
+        );
+        if (schRes.rows.length) {
+          const staffSched = {
+            schedule: schRes.rows[0].schedule || {},
+            dateOverrides: schRes.rows[0].date_overrides || []
+          };
+          const dur = parseInt(a.duration, 10) || 60;
+          if (!isTimeAvailable(staffSched, a.date, a.time, dur)) {
+            return res.status(409).json({
+              error: 'staff_unavailable',
+              message: 'The assigned staff member is not scheduled to work at that time (off-hours, lunch, or day off).'
+            });
+          }
+        }
+      } catch (schErr) {
+        // Soft-fail: degrade to skipping these checks rather than blocking a
+        // legitimate save if something unexpected happens. Overlap + service
+        // checks still apply.
+        console.warn('appointments-upsert: staff-schedule/blackout check skipped:', schErr.message);
+      }
     }
 
     if (a.assignedTo && a.date && a.time && !req.body.override) {
