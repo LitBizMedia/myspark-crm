@@ -283,6 +283,35 @@ async function handler(req, res) {
               message: 'The assigned staff member is not scheduled to work at that time (off-hours, lunch, or day off).'
             });
           }
+
+          // upsertDailyCap (GAP 1): enforce the staff member's daily booking
+          // limit server-side, matching the reschedule + widget paths. Counts
+          // active appointments for this staff on this date, excluding this
+          // appointment (a.id excludes self on edits; on a new appointment the
+          // fresh id matches nothing). Override bypasses (this whole block is
+          // already !override-guarded).
+          var _capVal = (schRes.rows[0].schedule && schRes.rows[0].schedule.maxBookingsPerDay != null
+            && parseInt(schRes.rows[0].schedule.maxBookingsPerDay) > 0)
+            ? parseInt(schRes.rows[0].schedule.maxBookingsPerDay) : null;
+          if (_capVal != null) {
+            const _capRes = await db.query(
+              `SELECT COUNT(*)::int AS n
+                 FROM appointments
+                WHERE subaccount_id = $1
+                  AND date = $2
+                  AND assigned_to = $3
+                  AND id != $4
+                  AND status NOT IN ('cancelled','rescheduled')`,
+              [subaccountId, a.date, a.assignedTo, a.id]
+            );
+            const _dayN = _capRes.rows[0] ? _capRes.rows[0].n : 0;
+            if (_dayN >= _capVal) {
+              return res.status(409).json({
+                error: 'daily_cap',
+                message: 'The assigned staff member has reached their daily booking limit (' + _capVal + ') on ' + a.date + '.'
+              });
+            }
+          }
         }
       } catch (schErr) {
         // Soft-fail: degrade to skipping these checks rather than blocking a
