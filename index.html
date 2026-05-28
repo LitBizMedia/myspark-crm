@@ -7513,11 +7513,7 @@ async function _calDragConfirm(apptId, newDate, newTime, override, newStaffId){
     });
     var data = await res.json().catch(function(){return {};});
     if(!res.ok){
-      if(res.status === 409){
-        toast('That slot is already booked. Pick a different time.','error');
-      } else {
-        toast(data.error || 'Could not reschedule. Try again.','error');
-      }
+      toast(apptServerErrorMessage(data, res.status),'error');
       if(btn){ btn.disabled = false; btn.textContent = 'Confirm'; }
       return;
     }
@@ -11872,7 +11868,7 @@ function syncAppointment(appt, deleted, override){
       return r.json().then(function(j){
         // Resource hard-block has its own shape (error: 'resource_unavailable')
         if(j && j.error==='resource_unavailable'){
-          return {ok:false, resource_blocked:{message:j.message, blocked_resources:j.blocked_resources||[]}};
+          return {ok:false, resource_blocked:{message:j.message, blocked_resources:j.busy||[]}};
         }
         return {ok:false,conflict:j.conflict||null};
       }).catch(function(){return {ok:false};});
@@ -11882,6 +11878,36 @@ function syncAppointment(appt, deleted, override){
 }
 
 // Backward-compat alias for renamed function. Drop in future cleanup.
+// Maps a server 409 conflict response to a clear, specific, human message.
+// Single source of truth for conflict wording across every reschedule/upsert
+// call site. The server is authoritative for ALL conflict logic (overlap,
+// resources, off-hours, daily cap, blackout); this surfaces its verdict
+// accurately instead of flattening every 409 into one generic line. Add a new
+// server reason later by adding one case here.
+function apptServerErrorMessage(j, status){
+  if(status !== 409){
+    return (j && j.error) ? ('Could not save: ' + j.error) : 'Could not save. Try again in a moment.';
+  }
+  var reason = j && j.error;
+  if(reason === 'resource_unavailable'){
+    return (j && j.message) || 'A required room or resource is already booked at that time.';
+  }
+  if(reason === 'staff_unavailable'){
+    return (j && j.message) || 'The provider is not scheduled to work at that time (off-hours, lunch, or day off).';
+  }
+  if(reason === 'daily_cap'){
+    return (j && j.message) || 'The provider has reached their daily booking limit for that day.';
+  }
+  if(reason === 'blackout'){
+    return (j && j.message) || 'Bookings are disabled on that date.';
+  }
+  if(reason === 'group_staff_conflict'){
+    return (j && j.message) || 'One of the assigned providers is double-booked at that time.';
+  }
+  // 'conflict' or anything else: generic overlap.
+  return 'That time conflicts with another appointment. Pick a different time.';
+}
+
 // Centralized appointment date validation. Used by saveAppt (create/edit) and
 // submitReschedule. Adding future rules (no Sundays, no more than 6 months out, etc.)
 // only requires editing this one function.
@@ -12118,11 +12144,7 @@ async function submitReschedule(originalApptId){
     });
     var data = await res.json().catch(function(){return {};});
     if(!res.ok){
-      if(res.status===409){
-        toast('That slot is already booked. Pick a different time.','error');
-      } else {
-        toast(data.error || 'Could not reschedule. Try again.','error');
-      }
+      toast(apptServerErrorMessage(data, res.status),'error');
       if(btn){btn.disabled=false; btn.textContent='Confirm Reschedule';}
       _rescheduling = false;
       return;
