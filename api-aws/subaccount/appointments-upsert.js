@@ -212,6 +212,33 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid appointment status: ' + a.status });
     }
 
+    // FOLLOW-UP 1: resolve EFFECTIVE buffers = MAX(payload buffer, assigned
+    // staff's schedule default). Mirrors booking-submit (lines ~477-484) so the
+    // staff modal stamps the same true buffer the public widget does. Used for
+    // the conflict checks below AND stamped onto the row, so the backend
+    // checkStaffConflict (which pads by stamped columns) stays correct for all
+    // future checks against this appointment. Runs regardless of override so
+    // the stamped value is always right.
+    var effBufBefore = parseInt(a.buffer_before) || 0;
+    var effBufAfter  = parseInt(a.buffer_after)  || 0;
+    if (a.assignedTo) {
+      try {
+        const _bufRes = await db.query(
+          'SELECT schedule FROM subaccount_users WHERE id=$1 AND subaccount_id=$2',
+          [a.assignedTo, subaccountId]
+        );
+        if (_bufRes.rows.length && _bufRes.rows[0].schedule) {
+          const _sch = _bufRes.rows[0].schedule;
+          const _sb = parseInt(_sch.defaultBufferBefore) || 0;
+          const _sa = parseInt(_sch.defaultBufferAfter)  || 0;
+          if (_sb > effBufBefore) effBufBefore = _sb;
+          if (_sa > effBufAfter)  effBufAfter  = _sa;
+        }
+      } catch (_bufErr) {
+        console.warn('appointments-upsert: staff default buffer lookup skipped:', _bufErr.message);
+      }
+    }
+
     // FIX B: server-side enforcement of staff schedule + blackout dates.
     // The frontend modal warns about these, but a stale browser or a direct
     // API call could otherwise create an appointment during a staff member's
@@ -275,8 +302,8 @@ async function handler(req, res) {
           duration: a.duration,
           ignoreAppointmentId: a.id,
           statusFilter: "status NOT IN ('completed','cancelled','no-show','rescheduled')",
-          bufferBefore: a.buffer_before,
-          bufferAfter: a.buffer_after,
+          bufferBefore: effBufBefore,
+          bufferAfter: effBufAfter,
           dbClient: db
         });
         if (!result.ok) {
@@ -304,8 +331,8 @@ async function handler(req, res) {
             duration: dur,
             ignoreAppointmentId: a.id,
             statusFilter: "status NOT IN ('completed','cancelled','no-show','rescheduled')",
-            bufferBefore: a.buffer_before,
-            bufferAfter: a.buffer_after,
+            bufferBefore: effBufBefore,
+            bufferAfter: effBufAfter,
             dbClient: db
           });
           if (!r.ok) {
@@ -414,7 +441,7 @@ async function handler(req, res) {
       a.date, a.time || null, parseInt(a.duration) || 60,
       a.status || 'scheduled', a.location || null, a.notes || null,
       a.service_id || null, a.service_variation_id || null, JSON.stringify(resolvedAddons),
-      parseInt(a.buffer_before) || 0, parseInt(a.buffer_after) || 0
+      effBufBefore, effBufAfter
     ]);
 
     // Persist resource claims for this appointment (replaces any existing claims).
@@ -505,8 +532,8 @@ async function handler(req, res) {
             a.notes || null,
             a.status || 'scheduled',
             a.location || null,
-            parseInt(a.buffer_before) || 0,
-            parseInt(a.buffer_after) || 0,
+            effBufBefore,
+            effBufAfter,
             a.service_id || null, a.service_variation_id || null,
             a.addons ? JSON.stringify(a.addons) : null,
             a.price != null ? parseFloat(a.price) : null
