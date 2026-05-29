@@ -58,9 +58,24 @@ async function handler(req, res) {
   };
 
   try {
-    // Step 1: Resolve agency user
+    // Step 1: Resolve calling user. Three possible sources:
+    //   1. LitBiz workspace agency admin (subaccount_users with is_agency_admin=true).
+    //      requireAgencyAdmin sets auth.is_agency_admin and returns the subaccount
+    //      session. These users are already vetted by the 3-layer gate; no
+    //      secondary agency_users lookup needed. Treated as super_admin equivalent.
+    //   2. Legacy break-glass agency super_admin (auth.id === 'agency-admin-primary').
+    //   3. Regular agency_users row from /agency portal login.
     let user = null;
-    if (actor.id === 'agency-admin-primary' && ALLOWED_ROLES.includes(actor.role)) {
+    if (auth.is_agency_admin === true && auth.user_type === 'subaccount') {
+      // Source 1: LitBiz workspace agency admin
+      user = {
+        id:       actor.id,
+        username: actor.username,
+        name:     actor.name,
+        role:     'super_admin'
+      };
+    } else if (actor.id === 'agency-admin-primary' && ALLOWED_ROLES.includes(actor.role)) {
+      // Source 2: legacy break-glass agency primary
       user = {
         id:       actor.id,
         username: actor.username || 'admin',
@@ -68,6 +83,7 @@ async function handler(req, res) {
         role:     actor.role || 'super_admin'
       };
     } else {
+      // Source 3: regular agency_users row (from /agency portal session)
       const u = await db.findOne('agency_users',
         { id: actor.id, active: true },
         { select: 'id, username, name, role' }

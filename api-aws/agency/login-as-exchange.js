@@ -151,9 +151,16 @@ async function handler(req, res) {
       userAgent:    getUserAgent(req)
     });
 
-    // Step 5: Set HttpOnly session cookie. This OVERWRITES whatever
-    // subaccount session cookie was previously on the browser.
-    res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token));
+    // Step 5: Deliver the session to the new tab. Two flows:
+    //   - cookie (default): Set-Cookie overwrites the browser's existing
+    //     subaccount session. Used by the legacy /agency portal flow.
+    //   - bearer: return token in body, no cookie set. Used by the new
+    //     agency-impersonation tab flow so the original tab's cookie
+    //     session stays intact.
+    const flow = (req.body && req.body.flow === 'bearer') ? 'bearer' : 'cookie';
+    if (flow === 'cookie') {
+      res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token));
+    }
 
     // Step 6: Audit log success
     await logAudit({
@@ -170,11 +177,12 @@ async function handler(req, res) {
         target_name: sub.name,
         target_user_id: targetUser.id,
         target_username: targetUser.username,
-        session_expires_at: sessionInfo.expiresAt
+        session_expires_at: sessionInfo.expiresAt,
+        flow: flow
       }
     });
 
-    return res.status(200).json({
+    const responseBody = {
       success: true,
       user: {
         id: targetUser.id,
@@ -189,7 +197,11 @@ async function handler(req, res) {
         slug: slug
       },
       expires_at: sessionInfo.expiresAt
-    });
+    };
+    if (flow === 'bearer') {
+      responseBody.session_token = sessionInfo.token;
+    }
+    return res.status(200).json(responseBody);
 
   } catch (e) {
     console.error('login-as-exchange error:', e);

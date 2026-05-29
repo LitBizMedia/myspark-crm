@@ -272,7 +272,20 @@ function buildClearCookie() {
   return buildClearString(SESSION_COOKIE_NAME);
 }
 function parseSessionCookie(req) {
-  return parseCookieByName(req, SESSION_COOKIE_NAME);
+  // Cookie-based session (default path for normal subaccount logins)
+  const fromCookie = parseCookieByName(req, SESSION_COOKIE_NAME);
+  if (fromCookie) return fromCookie;
+  // Bearer-based session (used by agency-impersonation tabs to keep the
+  // original tab's cookie session intact). Tab opens a new window with
+  // a fresh sessionStorage; that storage holds the token; every fetch
+  // adds 'Authorization: Bearer <token>'. The token is the same shape
+  // as a cookie-stored session token, so validateSession() handles both.
+  const authHeader = req.headers && (req.headers.authorization || req.headers.Authorization);
+  if (authHeader && typeof authHeader === 'string') {
+    const m = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (m) return m[1].trim();
+  }
+  return null;
 }
 
 // Agency cookie
