@@ -69,6 +69,14 @@ body:not(.subaccount-litbiz) #sb-agency-tools,
 body:not(.agency-admin) #sb-agency-tools{display:none!important}
 /* ── AGENCY TOOLS PANEL ─────────────────────────────────── */
 #panel-agency-tools{padding:24px 28px 60px}
+.at-tabs{display:flex;background:var(--bg-panel);border-bottom:1px solid var(--border);margin:-24px -28px 24px;flex-shrink:0;padding:0}
+.at-tab{padding:13px 18px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;background:none;border-top:none;border-left:none;border-right:none;font-family:Lato,sans-serif;white-space:nowrap}
+.at-tab:hover{color:#ffffff}
+.at-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
+.at-tab-content{display:block}
+.at-tab-content.hidden{display:none}
+.at-placeholder{padding:60px 20px;text-align:center;color:var(--main-text-muted);font-size:15px;background:var(--main-card);border:1px dashed var(--main-border);border-radius:var(--radius-lg)}
+.at-placeholder a{margin-top:16px;display:inline-block}
 .at-sec-label{display:flex;align-items:center;gap:10px;margin:28px 0 14px}
 .at-sec-label:first-child{margin-top:0}
 .at-sec-label-text{font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.12em}
@@ -38039,12 +38047,47 @@ function renderAgencyTools(){
 
 function _agencyToolsHTML(){
   return ''
-    + _agencySopStatsHTML()
-    + _agencyToolGridHTML()
-    + _agencyQuickToolsCardHTML()
-    + _agencyServicesHTML()
-    + _agencyOnboardingHTML()
-    + _agencyPlaybookHTML();
+    + '<div class="at-tabs">'
+    +   '<button class="at-tab active" id="at-tab-dashboard-btn" onclick="switchAgencyTab(\'dashboard\')">Dashboard</button>'
+    +   '<button class="at-tab" id="at-tab-subaccounts-btn" onclick="switchAgencyTab(\'subaccounts\')">Sub-Accounts</button>'
+    +   '<button class="at-tab" id="at-tab-phone-btn" onclick="switchAgencyTab(\'phone\')">Phone</button>'
+    +   '<button class="at-tab" id="at-tab-billing-btn" onclick="switchAgencyTab(\'billing\')">Billing</button>'
+    +   '<button class="at-tab" id="at-tab-audit-btn" onclick="switchAgencyTab(\'audit\')">Agency Audit</button>'
+    + '</div>'
+    + '<div class="at-tab-content" id="at-tab-dashboard">'
+    +   _agencySopStatsHTML()
+    +   _agencyToolGridHTML()
+    +   _agencyQuickToolsCardHTML()
+    +   _agencyServicesHTML()
+    +   _agencyOnboardingHTML()
+    +   _agencyPlaybookHTML()
+    + '</div>'
+    + '<div class="at-tab-content hidden" id="at-tab-subaccounts">'
+    +   '<div class="at-placeholder">Sub-Accounts coming next</div>'
+    + '</div>'
+    + '<div class="at-tab-content hidden" id="at-tab-phone">'
+    +   '<div class="at-placeholder">Phone coming next</div>'
+    + '</div>'
+    + '<div class="at-tab-content hidden" id="at-tab-billing">'
+    +   '<div class="at-placeholder">'
+    +     '<p>SaaS billing management is handled in the legacy agency portal.</p>'
+    +     '<a href="/agency" target="_blank" rel="noopener" class="btn btn-primary">Open Billing in /agency</a>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="at-tab-content hidden" id="at-tab-audit">'
+    +   '<div class="at-placeholder">Agency Audit coming next</div>'
+    + '</div>';
+}
+
+function switchAgencyTab(name){
+  var tabs = ['dashboard','subaccounts','phone','billing','audit'];
+  if(tabs.indexOf(name)<0)return;
+  tabs.forEach(function(t){
+    var btn = document.getElementById('at-tab-'+t+'-btn');
+    var pane = document.getElementById('at-tab-'+t);
+    if(btn) btn.classList.toggle('active', t===name);
+    if(pane) pane.classList.toggle('hidden', t!==name);
+  });
 }
 
 function _agencyToolGridHTML(){
