@@ -65,7 +65,8 @@ html,body{height:100%;font-family:Lato,sans-serif;background:var(--main-bg);colo
    Belt-and-suspenders: even if JS gating misses, the CSS hides them. */
 body:not(.role-admin) #sb-admin-label,
 body:not(.role-admin) #sb-settings{display:none!important}
-body:not(.subaccount-litbiz) #sb-agency-tools{display:none!important}
+body:not(.subaccount-litbiz) #sb-agency-tools,
+body:not(.agency-admin) #sb-agency-tools{display:none!important}
 /* ── AGENCY TOOLS PANEL ─────────────────────────────────── */
 #panel-agency-tools{padding:24px 28px 60px}
 .at-sec-label{display:flex;align-items:center;gap:10px;margin:28px 0 14px}
@@ -4654,7 +4655,7 @@ function switchPanel(name){
     // Users can access payments but not transactions tab - handled via tab hide
   }
   if(name==='contacts'&&_r==='practitioner'){toast('Access denied.','error');return;}
-  if(name==='agency-tools'&&state.subaccountSlug!=='litbiz'){toast('Access denied.','error');return;}
+  if(name==='agency-tools'&&(state.subaccountSlug!=='litbiz'||!state.user||!state.user.isAgencyAdmin)){toast('Access denied.','error');return;}
   state.panel=name;
   document.querySelectorAll('.sb-item').forEach(i=>i.classList.toggle('active',i.dataset.panel===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('hidden',p.id!=='panel-'+name));
@@ -38551,6 +38552,7 @@ function applyRolePermissions(){
   // Body class drives the admin-only CSS rules at the top of the file.
   document.body.classList.toggle('role-admin',adm);
   document.body.classList.toggle('subaccount-litbiz',state.subaccountSlug==='litbiz');
+  document.body.classList.toggle('agency-admin',!!(state.user&&state.user.isAgencyAdmin));
   function hide(id,hidden){var el=document.getElementById(id);if(el)el.classList.toggle('hidden',hidden);}
   hide('sb-contacts',   prac);
   hide('sb-tasks',      prac);
