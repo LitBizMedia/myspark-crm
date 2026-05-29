@@ -3,13 +3,13 @@
 // Returns pending registration requests + all provisioned SMS settings.
 
 const db = require('./lib/db');
-const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireAgencyAuth(req, res);
+  const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
 
   try {

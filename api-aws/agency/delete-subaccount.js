@@ -8,7 +8,7 @@
 // MIGRATED: Supabase REST → lib/db.js for slug verification.
 
 const db = require('./lib/db');
-const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { deleteSubaccount } = require('./lib/subaccount-lifecycle');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
@@ -16,7 +16,7 @@ const { wrap } = require('./lib/lambda-adapter');
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireAgencyAuth(req, res, { requireRole: 'super_admin' });
+  const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
 
   const { subaccountId, slugConfirmation } = req.body || {};
@@ -45,7 +45,7 @@ async function handler(req, res) {
   if (slugConfirmation !== actualSlug) {
     await logAudit({
       req,
-      actorType: 'agency',
+      actorType: 'agency_admin',
       actorId: auth.user_id,
       actorUsername: auth.username,
       actorRole: auth.role,
@@ -64,7 +64,7 @@ async function handler(req, res) {
   const result = await deleteSubaccount(subaccountId, {
     req: req,
     actor: {
-      actorType: 'agency',
+      actorType: 'agency_admin',
       actorId: auth.user_id,
       actorUsername: auth.username,
       actorRole: auth.role

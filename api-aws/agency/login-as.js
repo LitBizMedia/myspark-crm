@@ -17,7 +17,7 @@
 const crypto = require('crypto');
 const db = require('./lib/db');
 const { logAudit } = require('./lib/audit');
-const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 const ALLOWED_ROLES = ['super_admin', 'admin', 'support'];
@@ -44,7 +44,7 @@ async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const auth = await requireAgencyAuth(req, res);
+  const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
 
   const { slug } = req.body || {};
@@ -74,7 +74,7 @@ async function handler(req, res) {
       );
       if (!u) {
         await logAudit({
-          req, actorType: 'agency', actorId: actor.id, actorUsername: actor.username,
+          req, actorType: 'agency_admin', actorId: actor.id, actorUsername: actor.username,
           action: 'agency.login_as.start', targetType: 'subaccount',
           outcome: 'denied', errorMessage: 'Agency user not found or inactive',
           metadata: { target_slug: slug }
@@ -86,7 +86,7 @@ async function handler(req, res) {
 
     if (!ALLOWED_ROLES.includes(user.role)) {
       await logAudit({
-        req, actorType: 'agency', actorId: user.id, actorUsername: user.username,
+        req, actorType: 'agency_admin', actorId: user.id, actorUsername: user.username,
         actorRole: user.role, action: 'agency.login_as.start', targetType: 'subaccount',
         outcome: 'denied', errorMessage: 'Role does not permit login-as',
         metadata: { target_slug: slug }
@@ -103,7 +103,7 @@ async function handler(req, res) {
 
     if (!sub) {
       await logAudit({
-        req, actorType: 'agency', actorId: user.id, actorUsername: user.username,
+        req, actorType: 'agency_admin', actorId: user.id, actorUsername: user.username,
         actorRole: user.role, action: 'agency.login_as.start',
         targetType: 'subaccount', targetId: subId, targetSubaccountId: subId,
         outcome: 'failure', errorMessage: 'Subaccount not found',
@@ -114,7 +114,7 @@ async function handler(req, res) {
 
     if (sub.active === false) {
       await logAudit({
-        req, actorType: 'agency', actorId: user.id, actorUsername: user.username,
+        req, actorType: 'agency_admin', actorId: user.id, actorUsername: user.username,
         actorRole: user.role, action: 'agency.login_as.start',
         targetType: 'subaccount', targetId: subId, targetSubaccountId: subId,
         outcome: 'denied', errorMessage: 'Subaccount is inactive',
@@ -137,7 +137,7 @@ async function handler(req, res) {
 
     if (!targetUserRes.rows.length) {
       await logAudit({
-        req, actorType: 'agency', actorId: user.id, actorUsername: user.username,
+        req, actorType: 'agency_admin', actorId: user.id, actorUsername: user.username,
         actorRole: user.role, action: 'agency.login_as.start',
         targetType: 'subaccount', targetId: subId, targetSubaccountId: subId,
         outcome: 'failure',
@@ -168,7 +168,7 @@ async function handler(req, res) {
     // Step 5: Audit log success
     await logAudit({
       req,
-      actorType: 'agency',
+      actorType: 'agency_admin',
       actorId: user.id,
       actorUsername: user.username,
       actorRole: user.role,
@@ -200,7 +200,7 @@ async function handler(req, res) {
   } catch (e) {
     console.error('login-as error:', e);
     await logAudit({
-      req, actorType: 'agency', actorId: actor.id, actorUsername: actor.username,
+      req, actorType: 'agency_admin', actorId: actor.id, actorUsername: actor.username,
       action: 'agency.login_as.start', targetType: 'subaccount',
       outcome: 'failure', errorMessage: e.message,
       metadata: { target_slug: slug }
