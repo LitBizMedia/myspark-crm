@@ -22076,8 +22076,14 @@ function convSend(){
         convRenderThread();
       }
     }
-    // Clear draft + refresh list to update preview/timestamp
+    // Clear draft + textarea + refresh list to update preview/timestamp
     if(s.drafts) s.drafts[convId] = '';
+    var ta = document.getElementById('conv-composer-text');
+    if(ta) ta.value = '';
+    var cc = document.getElementById('conv-char-count');
+    if(cc){ cc.textContent = _convCharCountLabel(channel, ''); cc.classList.remove('over'); }
+    var sendBtn = document.getElementById('conv-send-btn');
+    if(sendBtn) sendBtn.disabled = true;
     convFetchList();
     toast('Reply sent', 'success');
   }).catch(function(e){
