@@ -22,6 +22,7 @@
 
 const { parseSessionCookie, parseAgencySessionCookie, validateSession } = require('./subaccount-auth');
 const { logAudit } = require('./audit');
+const db = require('./db');
 
 async function requireSubaccountAuth(req, res, opts) {
   opts = opts || {};
@@ -104,7 +105,98 @@ async function requireAgencyAuth(req, res, opts) {
   return session;
 }
 
+// Validates that a subaccount session belongs to an agency admin within
+// an agency workspace. Performs live DB checks on EVERY request so that
+// revoking is_agency_admin or is_agency_workspace takes effect immediately,
+// without waiting for session expiry.
+//
+// Three gates, all must pass:
+//   1. Valid subaccount session
+//   2. subaccount_users.is_agency_admin = TRUE for the calling user
+//   3. subaccount_plans.is_agency_workspace = TRUE for the calling subaccount
+//
+// Returns the session object (same shape as requireSubaccountAuth) on success.
+// Sends 401/403 and returns null on failure.
+//
+// Every failure path is audit-logged with actorType = 'agency_admin' so that
+// attempted privilege escalation is visible in the Agency Audit view.
+//
+// Usage:
+//   const { requireAgencyAdmin } = require('../../lib/require-subaccount-auth');
+//
+//   module.exports = async function handler(req, res) {
+//     const auth = await requireAgencyAdmin(req, res);
+//     if (!auth) return; // 401/403 already sent
+//     // auth.user_id, auth.subaccount_id, auth.role available
+//   };
+async function requireAgencyAdmin(req, res, opts) {
+  opts = opts || {};
+
+  // Gate 1: valid subaccount session
+  const session = await requireSubaccountAuth(req, res, {});
+  if (!session) return null; // 401 already sent
+
+  // Gate 2: user must have is_agency_admin = TRUE
+  // Live DB check, not cached, so revocation is immediate.
+  let userRow;
+  try {
+    userRow = await db.findOne('subaccount_users', { id: session.user_id });
+  } catch (err) {
+    res.status(500).json({ error: 'Auth check failed', code: 'AUTH_CHECK_FAILED' });
+    return null;
+  }
+
+  if (!userRow || userRow.is_agency_admin !== true) {
+    await logAudit({
+      req,
+      actorType: 'agency_admin',
+      actorId: session.user_id,
+      actorUsername: session.username,
+      actorRole: session.role,
+      action: 'agency.access.denied',
+      targetSubaccountId: session.subaccount_id,
+      outcome: 'denied',
+      errorMessage: 'User is not an agency admin',
+      metadata: { endpoint: req.url || null, reason: 'not_agency_admin' }
+    });
+    res.status(403).json({ error: 'Agency admin access required', code: 'NOT_AGENCY_ADMIN' });
+    return null;
+  }
+
+  // Gate 3: subaccount must be the agency workspace
+  let planRow;
+  try {
+    planRow = await db.findOne('subaccount_plans', { subaccount_id: session.subaccount_id });
+  } catch (err) {
+    res.status(500).json({ error: 'Auth check failed', code: 'AUTH_CHECK_FAILED' });
+    return null;
+  }
+
+  if (!planRow || planRow.is_agency_workspace !== true) {
+    await logAudit({
+      req,
+      actorType: 'agency_admin',
+      actorId: session.user_id,
+      actorUsername: session.username,
+      actorRole: session.role,
+      action: 'agency.access.denied',
+      targetSubaccountId: session.subaccount_id,
+      outcome: 'denied',
+      errorMessage: 'Subaccount is not an agency workspace',
+      metadata: { endpoint: req.url || null, reason: 'not_agency_workspace' }
+    });
+    res.status(403).json({ error: 'Agency workspace required', code: 'NOT_AGENCY_WORKSPACE' });
+    return null;
+  }
+
+  // All three gates passed. Return session with agency_admin marker for
+  // downstream audit logging convenience.
+  session.is_agency_admin = true;
+  return session;
+}
+
 module.exports = {
   requireSubaccountAuth,
-  requireAgencyAuth
+  requireAgencyAuth,
+  requireAgencyAdmin
 };
