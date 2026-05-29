@@ -36,20 +36,36 @@ async function logAudit(entry) {
   }
 
   try {
+    // Auto-detect impersonation context from session. When a session is an
+    // impersonation (agency admin logged in as subaccount admin), every audit
+    // row gets BOTH the impersonated identity (actor_*) AND the impersonating
+    // identity (impersonated_by_*). This satisfies HIPAA Right of Access
+    // requirements: the real human accountable for every PHI touch is visible.
+    // Sessions are attached to req as req._session by requireSubaccountAuth.
+    // Explicit override via entry.session takes precedence for endpoints that
+    // don't use the auth middleware (e.g. login-as-exchange before middleware runs).
+    const sess = entry.session || (entry.req && entry.req._session) || null;
+    const impUserId   = sess && sess.impersonated_by_user_id   || null;
+    const impUsername = sess && sess.impersonated_by_username  || null;
+    const impUserType = sess && sess.impersonated_by_user_type || null;
+
     const row = {
-      actor_type:           entry.actorType || 'system',
-      actor_id:             entry.actorId || null,
-      actor_username:       entry.actorUsername || null,
-      actor_role:           entry.actorRole || null,
-      action:               entry.action,
-      target_type:          entry.targetType || null,
-      target_id:            entry.targetId || null,
-      target_subaccount_id: entry.targetSubaccountId || null,
-      ip_address:           getIpFromReq(entry.req),
-      user_agent:           getUserAgent(entry.req),
-      metadata:             entry.metadata || null,
-      outcome:              entry.outcome || 'success',
-      error_message:        entry.errorMessage || null
+      actor_type:                entry.actorType || 'system',
+      actor_id:                  entry.actorId || null,
+      actor_username:            entry.actorUsername || null,
+      actor_role:                entry.actorRole || null,
+      action:                    entry.action,
+      target_type:               entry.targetType || null,
+      target_id:                 entry.targetId || null,
+      target_subaccount_id:      entry.targetSubaccountId || null,
+      ip_address:                getIpFromReq(entry.req),
+      user_agent:                getUserAgent(entry.req),
+      metadata:                  entry.metadata || null,
+      outcome:                   entry.outcome || 'success',
+      error_message:             entry.errorMessage || null,
+      impersonated_by_user_id:   impUserId,
+      impersonated_by_username:  impUsername,
+      impersonated_by_user_type: impUserType
     };
 
     await db.insertOne('audit_log', row, { returning: 'id' });

@@ -69,7 +69,14 @@ async function createSession(opts) {
     role: opts.role || null,
     ip_address: opts.ipAddress || null,
     user_agent: opts.userAgent ? String(opts.userAgent).slice(0, 500) : null,
-    expires_at: expiresAt
+    expires_at: expiresAt,
+    // Impersonation context (Phase 3 of agency consolidation, HIPAA audit).
+    // When patrick (agency admin) logs in AS melissa (subaccount admin), the
+    // session belongs to melissa but these columns capture patrick's identity
+    // so every subsequent audit_log row attributes the action to BOTH users.
+    impersonated_by_user_id:   opts.impersonatedByUserId   || null,
+    impersonated_by_username:  opts.impersonatedByUsername || null,
+    impersonated_by_user_type: opts.impersonatedByUserType || null
   };
 
   let created;

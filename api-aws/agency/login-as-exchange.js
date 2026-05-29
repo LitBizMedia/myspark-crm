@@ -139,7 +139,11 @@ async function handler(req, res) {
 
     const targetUser = targetUserRes.rows[0];
 
-    // Step 4: Mint real subaccount session
+    // Step 4: Mint real subaccount session.
+    // Impersonation columns capture the agency admin who initiated the
+    // login-as, so every subsequent audit_log row attributes the action to
+    // BOTH the target user (actor_*) and the agency admin (impersonated_by_*).
+    // HIPAA Right of Access: the real human accountable for every PHI touch.
     const sessionInfo = await createSession({
       userId:       targetUser.id,
       userType:     'subaccount',
@@ -148,7 +152,10 @@ async function handler(req, res) {
       displayName:  targetUser.display_name || targetUser.username,
       role:         targetUser.role,
       ipAddress:    getIpFromReq(req),
-      userAgent:    getUserAgent(req)
+      userAgent:    getUserAgent(req),
+      impersonatedByUserId:   tok.agency_user_id,
+      impersonatedByUsername: tok.agency_username,
+      impersonatedByUserType: 'subaccount'  // Phase 3: LitBiz agency admin is a subaccount user
     });
 
     // Step 5: Deliver the session to the new tab. Two flows:

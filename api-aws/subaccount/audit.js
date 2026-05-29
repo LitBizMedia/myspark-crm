@@ -84,6 +84,7 @@ async function handler(req, res) {
             'user-agent': userAgent || ''
           }
         },
+        session:              session,
         actorType:           'subaccount',
         actorId:              session.user_id,
         actorUsername:        session.username,

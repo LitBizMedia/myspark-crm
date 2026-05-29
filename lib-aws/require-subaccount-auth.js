@@ -76,6 +76,11 @@ async function requireSubaccountAuth(req, res, opts) {
     return null;
   }
 
+  // Attach session to req so logAudit (and any other downstream code) can
+  // detect impersonation context without each handler having to pass it.
+  // Underscore prefix avoids collision with anything else on req.
+  if (req) req._session = session;
+
   return session;
 }
 
