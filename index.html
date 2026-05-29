@@ -2753,7 +2753,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <div style="margin-bottom:24px">
               <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Weekly Hours</div>
               <div id="bh-grid"></div>
-              <button class="btn btn-purple btn-sm" style="margin-top:10px" onclick="saveBH()">Save Hours</button>
+              <div id="bh-save-status" class="biz-save-status" style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:12px;min-height:18px"></div>
             </div>
 
             <div>
@@ -8401,9 +8401,9 @@ function renderBH(){
     const d=bh[dk]||{open:false,start:'08:00',end:'17:00'};
     return'<div class="bh-row"><span class="bh-label">'+labels[i]+'</span>'
       +'<div class="bh-toggle'+(d.open?' on':'')+'" id="bht-'+dk+'" data-dirty="" onclick="toggleBH(\''+dk+'\')"></div>'
-      +_timeInputHTML('bhs-'+dk,d.start,!d.open,null,true)
+      +_timeInputHTML('bhs-'+dk,d.start,!d.open,"this.dataset.dirty='';saveBH()",true)
       +'<span class="bh-sep">to</span>'
-      +_timeInputHTML('bhe-'+dk,d.end,!d.open,null,true)
+      +_timeInputHTML('bhe-'+dk,d.end,!d.open,"this.dataset.dirty='';saveBH()",true)
       +'</div>';
   }).join('');
 }
@@ -8411,9 +8411,10 @@ function renderBH(){
 function toggleBH(dk){
   const bh=db.settings.businessHours;
   bh[dk].open=!bh[dk].open;
-  const t=document.getElementById('bht-'+dk);if(t){t.classList.toggle('on',bh[dk].open);t.dataset.dirty='1';}
+  const t=document.getElementById('bht-'+dk);if(t){t.classList.toggle('on',bh[dk].open);t.dataset.dirty='';}
   _setTimeInputDisabled('bhs-'+dk,!bh[dk].open);
   _setTimeInputDisabled('bhe-'+dk,!bh[dk].open);
+  saveBH();
 }
 
 async function saveBH(){
@@ -8429,6 +8430,7 @@ async function saveBH(){
   });
   try{localStorage.setItem(SK,JSON.stringify(db));}catch(e){}
   setSyncSt('syncing');
+  _showBHStatus('saving');
   try{
     var r=await fetch(apiUrl('/api/subaccount/data-save'),{
       method:'POST',
@@ -8440,24 +8442,39 @@ async function saveBH(){
       db.settings.businessHours=snapshot;
       try{localStorage.setItem(SK,JSON.stringify(db));}catch(e){}
       setSyncSt('error');
-      var msg='Status '+r.status;
-      try{var j=await r.json();if(j&&j.error)msg=j.error;}catch(e){}
-      toast('Could not save business hours: '+msg,'error');
-      renderBH();
+      _showBHStatus('failed');
       return;
     }
     setSyncSt('synced');
     // Clear dirty flags so subsequent poll re-renders are allowed.
     var grid=document.getElementById('bh-grid');
     if(grid){grid.querySelectorAll('[data-dirty]').forEach(function(n){n.dataset.dirty='';});}
-    toast('Business hours saved.','success');
+    _showBHStatus('saved');
     if(typeof renderCal==='function')renderCal();
   }catch(e){
     db.settings.businessHours=snapshot;
     try{localStorage.setItem(SK,JSON.stringify(db));}catch(e){}
     setSyncSt('error');
-    toast('Network error saving business hours.','error');
-    renderBH();
+    _showBHStatus('failed');
+  }
+}
+
+// Inline status feedback for business hours auto-save. Mirrors _showBizStatus.
+function _showBHStatus(state){
+  var s=document.getElementById('bh-save-status');
+  if(!s)return;
+  clearTimeout(window._bhStatusTimer);
+  if(state==='saving'){
+    s.innerHTML='<span style="color:var(--text-muted)">Saving...</span>';
+  }else if(state==='saved'){
+    s.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg><span>Saved</span>';
+    s.style.color='var(--success-text)';
+    window._bhStatusTimer=setTimeout(function(){s.textContent='';},2000);
+  }else if(state==='failed'){
+    s.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>Save failed. Try again.</span>';
+    s.style.color='var(--danger-text)';
+  }else{
+    s.textContent='';
   }
 }
 
