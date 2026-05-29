@@ -3711,12 +3711,13 @@ function _setDateInputDisabled(id,disabled){
 // the value back via _readTimeInput(id) which handles parsing. The optional
 // onchangeAttr is a JS string injected into the field's onchange attribute;
 // fires on blur after _normalizeTimeText runs and after the picker commits.
-function _timeInputHTML(id,value,disabled,onchangeAttr){
+function _timeInputHTML(id,value,disabled,onchangeAttr,markDirty){
   var hhmm=_parseTimeText(value)||value||'';
   var disp=_hhmmTo12(hhmm);
   var oc=onchangeAttr?' onchange="'+onchangeAttr.replace(/"/g,'&quot;')+'"':'';
+  var dirtyAttr=markDirty?' data-dirty="" oninput="this.dataset.dirty=\'1\'"':'';
   return'<span class="time-pair'+(disabled?' is-disabled':'')+'">'
-    +'<input type="text" class="time-text" id="'+id+'" value="'+esc(disp)+'" data-hhmm="'+esc(hhmm)+'" placeholder="9:00 AM" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+oc+' onblur="_normalizeTimeText(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}">'
+    +'<input type="text" class="time-text" id="'+id+'" value="'+esc(disp)+'" data-hhmm="'+esc(hhmm)+'" placeholder="9:00 AM" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+oc+dirtyAttr+' onblur="_normalizeTimeText(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}">'
     +'<button type="button" class="time-clk-btn" tabindex="-1" onclick="_openTimePickerFor(\''+id+'\')" '+(disabled?'disabled ':'')+'title="Pick time"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>'
     +'</span>';
 }
@@ -4264,8 +4265,22 @@ function _pollTick(){
     // right render function based on state.panel, so this single call covers
     // dashboard, contacts, calendar, tasks, payments, products, forms, etc.
     // Drawer is rendered independently of the panel so we call it separately.
+    // Skip the panel redraw if the user has unsaved edits or is focused on an
+    // input in the active panel. db is fresh either way; paint resumes on save.
     try{
-      if(typeof renderPanel==='function')renderPanel();
+      var skipPanel=false;
+      try{
+        var panelEl=document.getElementById('panel-'+state.panel);
+        if(panelEl){
+          if(panelEl.contains(document.activeElement)){
+            var ae=document.activeElement;
+            var tag=ae&&ae.tagName;
+            if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA')skipPanel=true;
+          }
+          if(!skipPanel&&panelEl.querySelector('[data-dirty="1"]'))skipPanel=true;
+        }
+      }catch(e){}
+      if(!skipPanel&&typeof renderPanel==='function')renderPanel();
       if(state.drawer&&typeof renderDrawer==='function')renderDrawer();
       if(typeof updateNotifBadge==='function')updateNotifBadge();
     }catch(e){console.warn('poll redraw error',e);}
@@ -8377,15 +8392,18 @@ async function processCharge(){  // ── Gift Card payment path ──
 // =====================================================
 function renderBH(){
   const bh=db.settings.businessHours||DEF_BH,el=document.getElementById('bh-grid');if(!el)return;
+  // Skip redraw if user is actively editing or has unsaved edits in this grid.
+  if(el.contains(document.activeElement))return;
+  if(el.querySelector('[data-dirty="1"]'))return;
   const order=['mon','tue','wed','thu','fri','sat','sun'];
   const labels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   el.innerHTML=order.map((dk,i)=>{
     const d=bh[dk]||{open:false,start:'08:00',end:'17:00'};
     return'<div class="bh-row"><span class="bh-label">'+labels[i]+'</span>'
-      +'<div class="bh-toggle'+(d.open?' on':'')+'" id="bht-'+dk+'" onclick="toggleBH(\''+dk+'\')"></div>'
-      +_timeInputHTML('bhs-'+dk,d.start,!d.open)
+      +'<div class="bh-toggle'+(d.open?' on':'')+'" id="bht-'+dk+'" data-dirty="" onclick="toggleBH(\''+dk+'\')"></div>'
+      +_timeInputHTML('bhs-'+dk,d.start,!d.open,null,true)
       +'<span class="bh-sep">to</span>'
-      +_timeInputHTML('bhe-'+dk,d.end,!d.open)
+      +_timeInputHTML('bhe-'+dk,d.end,!d.open,null,true)
       +'</div>';
   }).join('');
 }
@@ -8393,7 +8411,7 @@ function renderBH(){
 function toggleBH(dk){
   const bh=db.settings.businessHours;
   bh[dk].open=!bh[dk].open;
-  const t=document.getElementById('bht-'+dk);if(t)t.classList.toggle('on',bh[dk].open);
+  const t=document.getElementById('bht-'+dk);if(t){t.classList.toggle('on',bh[dk].open);t.dataset.dirty='1';}
   _setTimeInputDisabled('bhs-'+dk,!bh[dk].open);
   _setTimeInputDisabled('bhe-'+dk,!bh[dk].open);
 }
@@ -8429,6 +8447,9 @@ async function saveBH(){
       return;
     }
     setSyncSt('synced');
+    // Clear dirty flags so subsequent poll re-renders are allowed.
+    var grid=document.getElementById('bh-grid');
+    if(grid){grid.querySelectorAll('[data-dirty]').forEach(function(n){n.dataset.dirty='';});}
     toast('Business hours saved.','success');
     if(typeof renderCal==='function')renderCal();
   }catch(e){
