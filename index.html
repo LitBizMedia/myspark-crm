@@ -2833,6 +2833,32 @@ function apiUrl(path) {
   return AWS_API_BASE + path;
 }
 
+// Phase 3 of agency consolidation: when this tab is an agency-impersonation
+// tab (sessionStorage has msp_impersonation_token), wrap every fetch() so
+// that requests to our API include the bearer token and DO NOT send cookies.
+// This keeps the original LitBiz tab's cookie session intact.
+//
+// Non-impersonation tabs (normal logins) pass through to the native fetch
+// unchanged. Per-tab semantics work because sessionStorage is per-tab.
+(function installImpersonationFetchWrapper(){
+  if(window._origFetch)return; // idempotent
+  var orig=window.fetch.bind(window);
+  window._origFetch=orig;
+  window.fetch=function(input, init){
+    var token=null;
+    try{ token=sessionStorage.getItem('msp_impersonation_token'); }catch(e){}
+    if(!token) return orig(input, init);
+    var url=(typeof input==='string')?input:(input&&input.url)||'';
+    // Only inject bearer header for requests to our API. External fetches
+    // (Square SDK, third-party scripts) are untouched.
+    if(url.indexOf(AWS_API_BASE)!==0) return orig(input, init);
+    init=init||{};
+    init.credentials='omit';
+    init.headers=Object.assign({}, init.headers||{}, { Authorization: 'Bearer ' + token });
+    return orig(input, init);
+  };
+})();
+
 // =====================================================
 // CONTACT API helpers (RDS-backed, May 2026 migration)
 // All contact mutations go through these. They handle auth, errors,
@@ -14868,6 +14894,10 @@ function _alRenderTable(){
     var whenStr=when?(when.toLocaleDateString()+' '+when.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})):'';
     var actor=e.actor_username||e.actor_id||'system';
     var role=e.actor_role?'<span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-left:6px">'+esc(e.actor_role)+'</span>':'';
+    // Dual-attribution badge (HIPAA). When an agency admin is acting on behalf
+    // of the subaccount user, surface the impersonator alongside the actor so
+    // the real human accountable is visible without opening row metadata.
+    var impBadge=e.impersonated_by_username?'<span style="display:inline-block;background:rgba(255,64,0,.14);color:#ffb199;border:1px solid rgba(255,64,0,.3);font-size:10px;padding:2px 6px;border-radius:6px;margin-left:6px;text-transform:uppercase;font-weight:700;letter-spacing:.04em" title="Acting on behalf of agency admin">via '+esc(e.impersonated_by_username)+'</span>':'';
     var outcomeColor='#34d399';
     if(e.outcome==='failure')outcomeColor='#f87171';
     else if(e.outcome==='denied')outcomeColor='#fbbf24';
@@ -14882,7 +14912,7 @@ function _alRenderTable(){
     }
     return '<tr style="border-bottom:1px solid var(--border)">'
       +'<td style="padding:10px 12px;font-size:12px;color:var(--text-muted);white-space:nowrap">'+esc(whenStr)+'</td>'
-      +'<td style="padding:10px 12px;font-size:13px"><strong>'+esc(actor)+'</strong>'+role+'</td>'
+      +'<td style="padding:10px 12px;font-size:13px"><strong>'+esc(actor)+'</strong>'+role+impBadge+'</td>'
       +'<td style="padding:10px 12px;font-size:12px;font-family:monospace">'+esc(e.action)+'</td>'
       +'<td style="padding:10px 12px">'+outcomePill+'</td>'
       +'<td style="padding:10px 12px;font-size:12px">'+details+meta+'</td>'
@@ -27855,27 +27885,28 @@ document.addEventListener('DOMContentLoaded',async function(){
   if(agencyToken){
     history.replaceState(null,'',window.location.pathname);
     try{
+      // Bearer flow: token returned in response body, stored in sessionStorage
+      // (per-tab, not persisted). Every subsequent fetch adds Authorization:
+      // Bearer header via the wrapper at apiFetch. The cookie session of the
+      // original LitBiz tab is NEVER touched.
       var exRes=await fetch(apiUrl('/api/agency/login-as-exchange'),{
         method:'POST',
-        credentials:'include',
+        credentials:'omit',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({token:agencyToken,slug:pathSlug})
+        body:JSON.stringify({token:agencyToken,slug:pathSlug,flow:'bearer'})
       });
       if(exRes.ok){
         var exData=await exRes.json();
-        // Strip any stale state from prior subaccounts in this browser.
-        // The new session cookie is set, but localStorage may contain data
-        // from a different subaccount that this tab previously displayed.
+        if(!exData.session_token){
+          toast('Agency session error: no session token returned','error');
+          return;
+        }
+        // Store the impersonation bearer token in sessionStorage (per-tab,
+        // auto-cleared when tab closes). Wrapper apiFetch reads this.
         try{
-          Object.keys(localStorage).forEach(function(k){
-            if(k.indexOf('myspark_crm_v2_')===0 && k !== SK) localStorage.removeItem(k);
-            if(k.indexOf('myspark_session_v1_')===0 && k !== SSK) localStorage.removeItem(k);
-          });
-        }catch(e){}
-        // Wipe the current namespace too; fetchFromServer will repopulate it
-        // with the correct subaccount data via the new session cookie.
-        try{ localStorage.removeItem(SK); }catch(e){}
-        try{ localStorage.removeItem(SSK); }catch(e){}
+          sessionStorage.setItem('msp_impersonation_token', exData.session_token);
+          sessionStorage.setItem('msp_impersonation_slug', exData.subaccount&&exData.subaccount.slug||pathSlug);
+        }catch(e){console.warn('sessionStorage write failed:',e);}
         // Hydrate state.user from the exchange response. agencyView flag
         // marks this UI as an agency-assist session (badge, audit trail).
         state.user={
@@ -27890,7 +27921,8 @@ document.addEventListener('DOMContentLoaded',async function(){
           state.subaccountName=exData.subaccount.name||null;
           state.subaccountSlug=exData.subaccount.slug||state.subaccountSlug;
         }
-        localStorage.setItem(SSK,JSON.stringify({...state.user,ts:Date.now()}));
+        // Do NOT write the impersonation session to localStorage. Sessions
+        // are per-tab via sessionStorage; closing the tab clears them.
         hideAuthLoading();
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
@@ -27916,12 +27948,19 @@ document.addEventListener('DOMContentLoaded',async function(){
     if(sessRes.ok){
       const sessData=await sessRes.json();
       if(sessData.authenticated&&sessData.user){
+        // Detect agency impersonation context. If sessionStorage has the
+        // impersonation token, this tab is an agency-assist session and the
+        // pill should show 'Agency View'. Survives hard refresh because the
+        // bearer token is what authenticated us in the first place.
+        var isImpersonationTab=false;
+        try{ isImpersonationTab = !!sessionStorage.getItem('msp_impersonation_token'); }catch(e){}
         state.user={
           id:sessData.user.id,
           username:sessData.user.username,
           role:sessData.user.role,
           name:sessData.user.name||sessData.user.username,
-          isAgencyAdmin:!!sessData.user.is_agency_admin
+          isAgencyAdmin:!!sessData.user.is_agency_admin,
+          agencyView:isImpersonationTab
         };
         // Capture canonical workspace name from server. Survives stale cache.
         if(sessData.subaccount){
@@ -36787,6 +36826,10 @@ function renderAuditLogTable(){
     else if(e.actor_type === 'system')   actor = 'system';
     else if(e.actor_type === 'subaccount') actor = (e.actor_username || e.actor_id || 'sub user') + ' (subaccount)';
     else                                 actor = e.actor_type || 'unknown';
+    // Dual-attribution badge (HIPAA). Surface the impersonating agency admin
+    // alongside the actor when present, so the real human accountable for the
+    // action is visible without opening row metadata.
+    var impBadge = e.impersonated_by_username ? '<span style="display:inline-block;background:rgba(255,64,0,.14);color:#c2410c;border:1px solid rgba(255,64,0,.3);font-size:10px;padding:2px 6px;border-radius:6px;margin-left:6px;text-transform:uppercase;font-weight:700;letter-spacing:.04em" title="Acting on behalf of agency admin">via ' + esc(e.impersonated_by_username) + '</span>' : '';
     var outcomeColor = e.outcome === 'success' ? '#16a34a' : (e.outcome === 'denied' ? '#b45309' : '#dc2626');
     var meta = '';
     if(e.metadata){
@@ -36798,7 +36841,7 @@ function renderAuditLogTable(){
     var errorRow = e.error_message ? '<div style="font-size:11px;color:#fca5a5;margin-top:4px">Error: ' + esc(e.error_message) + '</div>' : '';
     return '<tr style="border-bottom:1px solid var(--border)">'
       +'<td style="padding:9px 12px;font-size:12px;color:var(--text-muted);white-space:nowrap;vertical-align:top">' + esc(when) + '</td>'
-      +'<td style="padding:9px 12px;font-size:12px;vertical-align:top">' + esc(actor) + '</td>'
+      +'<td style="padding:9px 12px;font-size:12px;vertical-align:top">' + esc(actor) + impBadge + '</td>'
       +'<td style="padding:9px 12px;font-size:12px;font-family:monospace;vertical-align:top">' + esc(e.action) + '</td>'
       +'<td style="padding:9px 12px;font-size:12px;vertical-align:top">' + esc(e.target_subaccount_id || e.target_id || '') + '</td>'
       +'<td style="padding:9px 12px;font-size:12px;vertical-align:top"><span style="display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700;background:' + outcomeColor + '22;color:' + outcomeColor + ';border:1px solid ' + outcomeColor + '44">' + esc(e.outcome) + '</span></td>'
