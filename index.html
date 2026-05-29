@@ -34816,7 +34816,7 @@ async function renderAgencyDashboard(){
     +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
     +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">MySpark<span style="color:var(--orange)">+</span> <span style="font-size:13px;font-weight:500;color:var(--text-muted)">Agency Dashboard</span></div>'
     +'<div style="font-size:12px;color:var(--text-muted);text-align:right;line-height:1.3"><div style="font-weight:600;color:var(--text)">'+esc(sess.name||sess.username||'')+'</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em">'+esc(roleLbl)+'</div></div>'
-    +(agencyHasRole('super_admin','admin')?'<button class="btn btn-ghost btn-sm" onclick="renderAgencyAuditLog()" title="Audit Log"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>Audit Log</button>':'')
+    +(agencyCanViewAuditLog()?'<button class="btn btn-ghost btn-sm" onclick="renderAgencyAuditLog()" title="Audit Log"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>Audit Log</button>':'')
     +'<button class="btn btn-ghost btn-sm" onclick="renderAgencySettings()" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
     +'</div>'
@@ -35673,6 +35673,7 @@ function _isLitBizAgencyAdmin(){return !!(state&&state.user&&state.user.isAgency
 function agencyCanManageSubaccounts(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin','admin');}
 function agencyCanManageUsers(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin');}
 function agencyCanLoginAs(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin','admin','support');}
+function agencyCanViewAuditLog(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin','admin');}
 function agencyCurrentUserId(){var s=loadAgencySession();return (s&&s.id)||(state&&state.user&&state.user.id)||'';}
 
 
@@ -36707,47 +36708,41 @@ async function savePlanPricing(){
 var auditLogState = { entries: [], total: 0, limit: 50, offset: 0, filters: {} };
 
 async function renderAgencyAuditLog(){
-  if(!agencyHasRole('super_admin','admin')){toast('You do not have permission to view the audit log.','error');return;}
-  var el=document.getElementById('agency-content');
+  if(!agencyCanViewAuditLog()){toast('You do not have permission to view the audit log.','error');return;}
+  // Target either container: 'agency-tab-content' when mounted inside the
+  // LitBiz workspace Agency Tools tab, or 'agency-content' for legacy callers.
+  // The shim renames the pane appropriately; we just need to find it.
+  var el = document.getElementById('agency-tab-content') || document.getElementById('agency-content');
   if(!el)return;
-  var sess=loadAgencySession()||{};
-  var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[sess.role]||(sess.role||'');
-  el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
-    +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
-    +'<button class="btn btn-ghost btn-sm" onclick="renderAgencyDashboard()" title="Back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back</button>'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">MySpark<span style="color:var(--orange)">+</span> <span style="font-size:13px;font-weight:500;color:var(--text-muted)">Audit Log</span></div>'
-    +'<div style="font-size:12px;color:var(--text-muted);text-align:right;line-height:1.3"><div style="font-weight:600;color:var(--text)">'+esc(sess.name||sess.username||'')+'</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em">'+esc(roleLbl)+'</div></div>'
-    +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
-    +'</div>'
-    +'<div style="padding:24px 32px">'
+  el.innerHTML='<div style="padding:0">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Activity Log</div>'
-    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Append-only record of agency and system actions for HIPAA compliance.</div></div>'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800;color:var(--main-text)">Activity Log</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-top:3px">Append-only record of agency and system actions for HIPAA compliance.</div></div>'
     +'<button class="btn btn-ghost btn-sm" onclick="exportAuditLogCsv()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export CSV</button>'
     +'</div>'
     // Filters
-    +'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">'
-    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Subaccount ID</label>'
-    +'<input id="audit-filter-subaccount" type="text" placeholder="sub-..." style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px"></div>'
-    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Actor Type</label>'
-    +'<select id="audit-filter-actor-type" class="filter-sel" style="width:100%;height:34px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 10px;font-size:13px"><option value="">All</option><option value="agency">Agency</option><option value="subaccount">Subaccount</option><option value="system">System</option><option value="cron">Cron</option></select></div>'
-    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Action contains</label>'
-    +'<input id="audit-filter-action" type="text" placeholder="e.g. plan.cancel" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px"></div>'
-    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">Outcome</label>'
-    +'<select id="audit-filter-outcome" class="filter-sel" style="width:100%;height:34px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 10px;font-size:13px"><option value="">All</option><option value="success">Success</option><option value="failure">Failure</option><option value="denied">Denied</option></select></div>'
-    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">From date</label>'
+    +'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;box-shadow:var(--shadow-sm)">'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);display:block;margin-bottom:4px">Subaccount ID</label>'
+    +'<input id="audit-filter-subaccount" type="text" placeholder="sub-..." style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:6px;color:var(--main-text);padding:7px 10px;font-size:13px"></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);display:block;margin-bottom:4px">Actor Type</label>'
+    +'<select id="audit-filter-actor-type" class="filter-sel" style="width:100%;height:34px;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:6px;padding:0 10px;font-size:13px"><option value="">All</option><option value="agency">Agency</option><option value="subaccount">Subaccount</option><option value="system">System</option><option value="cron">Cron</option></select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);display:block;margin-bottom:4px">Action contains</label>'
+    +'<input id="audit-filter-action" type="text" placeholder="e.g. plan.cancel" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:6px;color:var(--main-text);padding:7px 10px;font-size:13px"></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);display:block;margin-bottom:4px">Outcome</label>'
+    +'<select id="audit-filter-outcome" class="filter-sel" style="width:100%;height:34px;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:6px;padding:0 10px;font-size:13px"><option value="">All</option><option value="success">Success</option><option value="failure">Failure</option><option value="denied">Denied</option></select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);display:block;margin-bottom:4px">From date</label>'
     +_dateInputHTML('audit-filter-from','',false,'')+'</div>'
-    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:4px">To date</label>'
+    +'<div><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);display:block;margin-bottom:4px">To date</label>'
     +_dateInputHTML('audit-filter-to','',false,'')+'</div>'
-    +'<div style="display:flex;align-items:flex-end;gap:6px"><button class="btn btn-primary btn-sm" style="flex:1" onclick="applyAuditFilters()">Apply</button><button class="btn btn-ghost btn-sm" onclick="resetAuditFilters()">Reset</button></div>'
+    +'<div style="display:flex;align-items:flex-end;gap:6px"><button class="btn btn-action btn-sm" style="flex:1" onclick="applyAuditFilters()">Apply</button><button class="btn btn-ghost btn-sm" onclick="resetAuditFilters()">Reset</button></div>'
     +'</div>'
     // Table container
-    +'<div id="audit-log-table" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">'
-    +'<div style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center">Loading audit log...</div>'
+    +'<div id="audit-log-table" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-md)">'
+    +'<div style="padding:24px;color:var(--main-text-muted);font-size:13px;text-align:center">Loading audit log...</div>'
     +'</div>'
     // Pagination footer
-    +'<div id="audit-log-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--text-muted)"></div>'
-    +'</div></div>';
+    +'<div id="audit-log-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--main-text-muted)"></div>'
+    +'</div>';
   loadAuditLog();
 }
 
@@ -38156,23 +38151,51 @@ function switchAgencyTab(name){
 // functions write to #agency-tab-content (the /agency portal mount). We
 // temporarily give our tab pane that ID, call the function, then restore.
 function _atMountShim(targetId, fn){
+  // Render functions migrated from the /agency portal target different
+  // div IDs depending on whether they were 'tab' content or 'page' content.
+  // Sub-accounts and Phone target 'agency-tab-content'. Audit Log targets
+  // 'agency-content' (the whole-page mount). To reuse both from inside the
+  // LitBiz Agency Tools tab strip, we temporarily rename our pane to each
+  // of those IDs around the call, then restore. Idempotent and safe to call.
   var realTarget = document.getElementById(targetId);
   if(!realTarget) return;
-  var existing = document.getElementById('agency-tab-content');
-  var hadId = false;
-  if(existing && existing !== realTarget){
-    // /agency portal is present too. Park its ID and swap.
-    existing.id = 'agency-tab-content-parked';
-    hadId = true;
-  }
+  var aliases = ['agency-tab-content','agency-content'];
+  var parked = [];
+  aliases.forEach(function(alias){
+    var existing = document.getElementById(alias);
+    if(existing && existing !== realTarget){
+      existing.id = alias + '-parked';
+      parked.push({alias:alias, node:existing});
+    }
+  });
   var prevId = realTarget.id;
+  // Set our pane to BOTH alias IDs in turn during the call. The render fn
+  // looks up only one of them and writes there. Doing both ensures whichever
+  // it asks for finds our pane. We set the canonical 'agency-tab-content'
+  // first (most common), then swap to 'agency-content' immediately so a
+  // function that asks for either gets our pane. Order does not matter
+  // because getElementById on a missing id returns null and the render
+  // returns silently in that case.
+  // Strip any placeholder content before calling. Render functions that
+  // return early without writing leave the placeholder visible, which makes
+  // it impossible to detect render failure.
+  realTarget.innerHTML = '';
+  // Try both alias IDs. Render functions written for the /agency portal
+  // target either 'agency-tab-content' (Sub-Accounts, Phone) or
+  // 'agency-content' (Audit Log, Settings, full-page panels). Each pass
+  // skips silently if the function looks for a different alias.
   realTarget.id = 'agency-tab-content';
-  try{ fn(); }catch(e){ console.error('agency tab render error:',e); }
-  realTarget.id = prevId;
-  if(hadId){
-    var parked = document.getElementById('agency-tab-content-parked');
-    if(parked) parked.id = 'agency-tab-content';
+  try{ fn(); }catch(e){ console.error('agency tab render error (first):',e); }
+  if(!realTarget.innerHTML || realTarget.innerHTML.trim()===''){
+    realTarget.id = 'agency-content';
+    try{ fn(); }catch(e){ console.error('agency tab render error (second):',e); }
   }
+  realTarget.id = prevId;
+  // Restore any parked nodes
+  parked.forEach(function(p){
+    var node = document.getElementById(p.alias + '-parked');
+    if(node) node.id = p.alias;
+  });
 }
 
 function _atRenderSubaccounts(){_atMountShim('at-tab-subaccounts', renderAgencyAccountsTab);}
