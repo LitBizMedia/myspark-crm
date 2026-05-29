@@ -2,15 +2,17 @@
 //
 // POST /api/subaccount/update-user
 //
-// Updates a subaccount user's mutable fields (role, email, display_name, active)
-// in the subaccount_users table. Keeps subaccount_users in sync with the
-// db.users JSON blob so login gets the current role.
+// Updates a subaccount user's mutable fields (role, email, display_name, active,
+// is_agency_admin) in the subaccount_users table. Keeps subaccount_users in sync
+// with the db.users JSON blob so login gets the current role.
 //
 // Security:
 //   - Auth: subaccount session, admin or manager role
 //   - Slug isolation: target user must belong to caller's subaccount
 //   - Cannot escalate to admin role unless caller is admin
-//   - Audited
+//   - Cannot write is_agency_admin unless caller is is_agency_admin
+//   - Cannot grant is_agency_admin in a non-agency-workspace subaccount
+//   - Audited (escalation attempts logged with actorType='agency_admin')
 //
 // MIGRATED: Supabase REST → lib/db.js for all user/session queries.
 
@@ -41,7 +43,7 @@ async function handler(req, res) {
   }
 
   const subaccountId = session.subaccount_id;
-  const { username, role, email, displayName, active, newPassword, color, schedule, dateOverrides } = req.body || {};
+  const { username, role, email, displayName, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin } = req.body || {};
 
   if (!username || typeof username !== 'string') {
     return res.status(400).json({ error: 'username required' });
@@ -57,6 +59,61 @@ async function handler(req, res) {
     }
     if (role === 'admin' && session.role !== 'admin') {
       return res.status(403).json({ error: 'Only admins can grant admin role' });
+    }
+  }
+
+  // is_agency_admin gate. Only callers who are themselves agency admins can
+  // grant or revoke the flag. Target subaccount must be flagged as agency
+  // workspace. Live DB checks, no session caching.
+  if (isAgencyAdmin !== undefined && isAgencyAdmin !== null) {
+    let callerRow;
+    try {
+      callerRow = await db.findOne('subaccount_users', { id: session.user_id });
+    } catch (e) {
+      console.error('update-user: caller agency check failed:', e.message);
+      return res.status(500).json({ error: 'Permission check failed' });
+    }
+    if (!callerRow || callerRow.is_agency_admin !== true) {
+      await logAudit({
+        req,
+        actorType: 'agency_admin',
+        actorId: session.user_id,
+        actorUsername: session.username,
+        actorRole: session.role,
+        action: 'agency.privilege.escalation_attempt',
+        targetType: 'subaccount_user',
+        targetSubaccountId: subaccountId,
+        outcome: 'denied',
+        errorMessage: 'Non-agency-admin attempted to write is_agency_admin',
+        metadata: { target_username: normUsername, attempted_value: !!isAgencyAdmin }
+      });
+      return res.status(403).json({ error: 'Only agency admins can modify is_agency_admin' });
+    }
+
+    if (isAgencyAdmin === true) {
+      let plan;
+      try {
+        plan = await db.findOne('subaccount_plans', { subaccount_id: subaccountId });
+      } catch (e) {
+        console.error('update-user: workspace check failed:', e.message);
+        return res.status(500).json({ error: 'Permission check failed' });
+      }
+      if (!plan || plan.is_agency_workspace !== true) {
+        await logAudit({
+          req,
+          actorType: 'agency_admin',
+          actorId: session.user_id,
+          actorUsername: session.username,
+          actorRole: session.role,
+          action: 'agency.privilege.escalation_attempt',
+          targetType: 'subaccount_user',
+          targetSubaccountId: subaccountId,
+          outcome: 'denied',
+          errorMessage: 'Cannot grant is_agency_admin in non-agency-workspace subaccount',
+          metadata: { target_username: normUsername }
+        });
+        return res.status(403).json({ error: 'Subaccount is not an agency workspace' });
+      }
     }
   }
 
@@ -82,7 +139,7 @@ async function handler(req, res) {
         code: 'USER_NEEDS_MIGRATION'
       });
     }
-    
+
     // Create new row
     const newId = crypto.randomUUID();
     const newHash = await hashPassword(newPassword);
@@ -100,7 +157,8 @@ async function handler(req, res) {
     if (color) createBody.color = color;
     if (schedule) createBody.schedule = JSON.stringify(schedule);
     if (dateOverrides) createBody.date_overrides = JSON.stringify(dateOverrides);
-    
+    if (isAgencyAdmin === true) createBody.is_agency_admin = true;
+
     try {
       await db.insertOne('subaccount_users', createBody);
     } catch (e) {
@@ -117,7 +175,11 @@ async function handler(req, res) {
       targetType: 'subaccount_user',
       targetId: newId,
       targetSubaccountId: subaccountId,
-      metadata: { username: normUsername, role: role || 'user' }
+      metadata: {
+        username: normUsername,
+        role: role || 'user',
+        is_agency_admin: !!createBody.is_agency_admin
+      }
     });
 
     return res.status(200).json({ success: true, created: true, userId: newId });
@@ -161,6 +223,13 @@ async function handler(req, res) {
     patch.date_overrides = dateOverrides ? JSON.stringify(dateOverrides) : null;
     changedFields.push('date_overrides');
   }
+  if (isAgencyAdmin !== undefined && isAgencyAdmin !== null) {
+    const newVal = !!isAgencyAdmin;
+    if (newVal !== !!targetUser.is_agency_admin) {
+      patch.is_agency_admin = newVal;
+      changedFields.push('is_agency_admin');
+    }
+  }
 
   if (!changedFields.length) {
     return res.status(200).json({ success: true, noChange: true });
@@ -173,9 +242,9 @@ async function handler(req, res) {
     return res.status(500).json({ error: 'Update failed: ' + e.message });
   }
 
-  // Revoke active sessions if role/active/password changed
+  // Revoke active sessions if role/active/password/is_agency_admin changed
   let sessionsRevoked = 0;
-  if (changedFields.indexOf('role') >= 0 || changedFields.indexOf('active') >= 0 || changedFields.indexOf('password') >= 0) {
+  if (changedFields.indexOf('role') >= 0 || changedFields.indexOf('active') >= 0 || changedFields.indexOf('password') >= 0 || changedFields.indexOf('is_agency_admin') >= 0) {
     try {
       const revoked = await db.update('sessions',
         { revoked_at: new Date().toISOString() },
@@ -202,6 +271,8 @@ async function handler(req, res) {
       changed_fields:  changedFields,
       old_role: targetUser.role,
       new_role: patch.role || targetUser.role,
+      old_is_agency_admin: !!targetUser.is_agency_admin,
+      new_is_agency_admin: patch.is_agency_admin !== undefined ? !!patch.is_agency_admin : !!targetUser.is_agency_admin,
       sessions_revoked: sessionsRevoked
     }
   });
