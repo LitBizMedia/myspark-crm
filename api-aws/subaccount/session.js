@@ -38,6 +38,7 @@ async function handler(req, res) {
   let hipaaAddon = false;
   let subaccountName = null;
   let subaccountSlug = null;
+  let isAgencyAdmin = false;
   try {
     const subResult = await db.query(
       'SELECT name, slug, active FROM subaccounts WHERE id = $1 LIMIT 1',
@@ -56,6 +57,18 @@ async function handler(req, res) {
     if (planResult.rows.length > 0) {
       hipaaAddon = !!planResult.rows[0].hipaa_addon;
     }
+
+    // Look up is_agency_admin for the calling user. Live DB read so revocation
+    // takes effect on next session check, no waiting for session expiry.
+    if (session.user_type === 'subaccount' && session.user_id) {
+      const userResult = await db.query(
+        'SELECT is_agency_admin FROM subaccount_users WHERE id = $1 LIMIT 1',
+        [session.user_id]
+      );
+      if (userResult.rows.length > 0) {
+        isAgencyAdmin = !!userResult.rows[0].is_agency_admin;
+      }
+    }
   } catch (e) {
     console.error('session: status lookup failed:', e.message);
     // Don't fail the session on status lookup error - just leave fields null
@@ -69,7 +82,8 @@ async function handler(req, res) {
       role: session.role,
       name: session.display_name || session.username,
       type: session.user_type,
-      subaccount_id: session.subaccount_id
+      subaccount_id: session.subaccount_id,
+      is_agency_admin: isAgencyAdmin
     },
     subaccount: {
       id: session.subaccount_id,

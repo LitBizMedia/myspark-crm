@@ -330,7 +330,8 @@ async function handler(req, res) {
       name: user.display_name || user.username,
       color: user.color,
       email: user.email,
-      must_change_password: !!user.must_change_password
+      must_change_password: !!user.must_change_password,
+      is_agency_admin: !!user.is_agency_admin
     },
     expires_at: sessionInfo.expiresAt
   });

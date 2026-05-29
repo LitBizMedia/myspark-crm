@@ -4500,6 +4500,7 @@ document.getElementById('login-form').addEventListener('submit',async function(e
       color:data.user.color,
       email:data.user.email,
       breakglass:!!data.user.breakglass,
+      isAgencyAdmin:!!data.user.is_agency_admin,
       mustChangePassword:!!data.user.must_change_password
     };
     // Audit successful login (server already logs this server-side, this adds
@@ -13153,7 +13154,8 @@ function refreshStateUser(){
     role:rec.role||state.user.role,
     color:rec.color,
     schedule:rec.schedule,
-    dateOverrides:rec.dateOverrides
+    dateOverrides:rec.dateOverrides,
+    isAgencyAdmin:!!rec.isAgencyAdmin
   };
   // Repaint sidebar avatar with the fresh color
   var av=document.getElementById('sb-avatar');
@@ -13456,6 +13458,7 @@ async function fetchFromServer(opts){
             schedule:_sched,
             dateOverrides:_ovr,
             mustChangePassword:u.must_change_password,
+            isAgencyAdmin:!!u.is_agency_admin,
             createdAt:u.created_at,
             updatedAt:u.updated_at
           };
@@ -27871,7 +27874,8 @@ document.addEventListener('DOMContentLoaded',async function(){
           username:exData.user.username,
           role:exData.user.role,
           name:exData.user.name,
-          agencyView:true
+          agencyView:true,
+          isAgencyAdmin:false
         };
         if(exData.subaccount){
           state.subaccountName=exData.subaccount.name||null;
@@ -27907,7 +27911,8 @@ document.addEventListener('DOMContentLoaded',async function(){
           id:sessData.user.id,
           username:sessData.user.username,
           role:sessData.user.role,
-          name:sessData.user.name||sessData.user.username
+          name:sessData.user.name||sessData.user.username,
+          isAgencyAdmin:!!sessData.user.is_agency_admin
         };
         // Capture canonical workspace name from server. Survives stale cache.
         if(sessData.subaccount){
