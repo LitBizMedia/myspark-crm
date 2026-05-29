@@ -20919,6 +20919,10 @@ function renderConversations(){
   var s = _convState();
   if(!db.conversations) db.conversations = [];
   if(!db.conversationMessages) db.conversationMessages = {};
+  // Always start at the empty state. User must click to open a conversation.
+  // Cancels any in-flight auto-read timer from a prior session.
+  _convCancelReadTimer();
+  s.activeId = null;
   convRenderList();
   convRenderThread();
   if(!s._loadedOnce){
@@ -21000,6 +21004,7 @@ function _convStartPoll(){
 }
 
 function _convStopPoll(){
+  _convCancelReadTimer();
   if(_CONV_POLL.timer){
     clearTimeout(_CONV_POLL.timer);
     _CONV_POLL.timer = null;
@@ -21593,18 +21598,39 @@ function convRenderList(){
   listEl.innerHTML = html;
 }
 
+// Pending auto-mark-as-read timer. Fires 5s after opening an unread conv.
+// Cancelled on: opening another conv, leaving panel, manual mark-unread.
+var _convReadTimer = null;
+function _convCancelReadTimer(){
+  if(_convReadTimer){clearTimeout(_convReadTimer);_convReadTimer=null;}
+}
 function convOpenThread(conversationId){
   var s = _convState();
+  // Cancel any pending auto-read from the previously open conversation.
+  _convCancelReadTimer();
   s.activeId = conversationId;
   s._justOpened = true;
   s._forceScroll = true;
   var conv = (db.conversations || []).find(function(c){ return c.id === conversationId; });
   var wasUnread = conv && (conv.unreadCount || 0) > 0;
-  if(conv) conv.unreadCount = 0;
   convRenderList();
-  _convUpdateSidebarBadge();
-  // Silent backend mark_read if there was anything unread
-  if(wasUnread) _convMarkReadSilent(conversationId);
+  // Schedule the unread-to-read flip after 5s of viewing.
+  // Both visual and backend update fire together, so if the user clicks away
+  // before 5s the conversation honestly stays unread.
+  if(wasUnread){
+    _convReadTimer = setTimeout(function(){
+      _convReadTimer = null;
+      var stillActive = _convState().activeId === conversationId;
+      if(!stillActive) return;
+      var cNow = (db.conversations || []).find(function(x){ return x.id === conversationId; });
+      if(!cNow || (cNow.unreadCount || 0) === 0) return;
+      cNow.unreadCount = 0;
+      convRenderList();
+      _convUpdateSidebarBadge();
+      convRenderThread();
+      _convMarkReadSilent(conversationId);
+    }, 5000);
+  }
   // Render from cache immediately (snappy feel), then refetch fresh
   // to catch any server-side changes (status updates, new inbound messages,
   // edits from other tabs/devices).
@@ -21670,10 +21696,15 @@ function convRenderThread(opts){
       '</div>' +
     '</div>' +
     '<div class="conv-thread-head-actions">' +
-      '<button class="conv-thread-action" onclick="convMarkUnread(\'' + c.id + '\')" title="Mark as unread">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' +
-        'Unread' +
-      '</button>' +
+      ((c.unreadCount || 0) > 0
+        ? '<button class="conv-thread-action" onclick="convMarkReadExplicit(\'' + c.id + '\')" title="Mark as read">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/><polyline points="9 12 11 14 15 10"/></svg>' +
+          'Read' +
+        '</button>'
+        : '<button class="conv-thread-action" onclick="convMarkUnread(\'' + c.id + '\')" title="Mark as unread">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' +
+          'Unread' +
+        '</button>') +
       (c.status === 'open'
         ? '<button class="conv-thread-action" onclick="convSetStatus(\'' + c.id + '\',\'closed\')" title="Close conversation">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>' +
@@ -22140,8 +22171,31 @@ function _convPostUpdate(conversationId, action, extra, onDone){
 }
 
 function convMarkUnread(conversationId){
+  // User explicitly marking unread cancels any pending auto-read.
+  _convCancelReadTimer();
   _convPostUpdate(conversationId, 'mark_unread', null, function(err){
-    if(!err) toast('Marked as unread', 'success');
+    if(err) return;
+    // Update local cache so list and header re-render with unread state.
+    var conv = (db.conversations || []).find(function(c){ return c.id === conversationId; });
+    if(conv) conv.unreadCount = Math.max(1, conv.unreadCount || 0) || 1;
+    convRenderList();
+    convRenderThread();
+    _convUpdateSidebarBadge();
+    toast('Marked as unread', 'success');
+  });
+}
+
+function convMarkReadExplicit(conversationId){
+  // Explicit read via header button. Cancels any pending auto-read timer
+  // (the explicit click satisfies the "user has actually seen this" intent).
+  _convCancelReadTimer();
+  var conv = (db.conversations || []).find(function(c){ return c.id === conversationId; });
+  if(conv) conv.unreadCount = 0;
+  convRenderList();
+  convRenderThread();
+  _convUpdateSidebarBadge();
+  _convPostUpdate(conversationId, 'mark_read', null, function(err){
+    if(!err) toast('Marked as read', 'success');
   });
 }
 
