@@ -3,13 +3,13 @@
 // Returns all subaccount_plans, or one if subaccount_id query param given.
 
 const db = require('./lib/db');
-const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireAgencyAuth(req, res);
+  const auth = await requireAgencyAdminOrAgencyAuth(req, res);
   if (!auth) return;
 
   const { subaccount_id } = req.query || {};

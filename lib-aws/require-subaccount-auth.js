@@ -195,8 +195,57 @@ async function requireAgencyAdmin(req, res, opts) {
   return session;
 }
 
+// Dual-auth helper for read endpoints that need to serve BOTH the /agency
+// portal AND the LitBiz workspace Agency Tools tabs.
+//
+// Tries requireAgencyAdmin first (subaccount session with is_agency_admin=true
+// in an agency workspace). If that fails with a non-401 error path, we don't
+// fall through (the helper already sent a response). If it failed because
+// there's no subaccount session cookie at all, we then try requireAgencyAuth.
+//
+// Use for READ-ONLY endpoints only. Write endpoints should pick one auth
+// path explicitly to keep audit trails clean.
+async function requireAgencyAdminOrAgencyAuth(req, res, opts) {
+  opts = opts || {};
+
+  // Probe for subaccount session cookie. If present, route through agency_admin.
+  const subToken = parseSessionCookie(req);
+  if (subToken) {
+    // Use a buffered response shim so failed agency_admin auth doesn't
+    // permanently consume the response. If it fails, try agency auth next.
+    let intercepted = null;
+    const shim = {
+      status: function(code) {
+        return {
+          json: function(body) { intercepted = { code: code, body: body }; return this; }
+        };
+      },
+      setHeader: function() {}
+    };
+    const adminAuth = await requireAgencyAdmin(req, shim, opts);
+    if (adminAuth) return adminAuth;
+    // requireAgencyAdmin failed. If the failure was NO_SESSION or INVALID_SESSION,
+    // try the agency cookie path. If it was NOT_AGENCY_ADMIN or NOT_AGENCY_WORKSPACE,
+    // the user has a subaccount session but isn't authorized; deny outright.
+    const failCode = intercepted && intercepted.body && intercepted.body.code;
+    if (failCode === 'NOT_AGENCY_ADMIN' || failCode === 'NOT_AGENCY_WORKSPACE') {
+      res.status(403).json(intercepted.body);
+      return null;
+    }
+    // Otherwise fall through to agency auth probe below.
+  }
+
+  // No subaccount session OR subaccount session was invalid. Try agency cookie.
+  const agencyAuth = await requireAgencyAuth(req, res, opts);
+  if (agencyAuth) return agencyAuth;
+
+  // Both failed. requireAgencyAuth already sent the response. Return null.
+  return null;
+}
+
 module.exports = {
   requireSubaccountAuth,
   requireAgencyAuth,
-  requireAgencyAdmin
+  requireAgencyAdmin,
+  requireAgencyAdminOrAgencyAuth
 };

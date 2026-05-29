@@ -35626,10 +35626,15 @@ async function reactivateSubscription(subId){
 // =====================================================
 function agencyCurrentRole(){var s=loadAgencySession();return s&&s.role||'';}
 function agencyHasRole(){var r=agencyCurrentRole();for(var i=0;i<arguments.length;i++){if(arguments[i]===r)return true;}return false;}
-function agencyCanManageSubaccounts(){return agencyHasRole('super_admin','admin');}
-function agencyCanManageUsers(){return agencyHasRole('super_admin');}
-function agencyCanLoginAs(){return agencyHasRole('super_admin','admin','support');}
-function agencyCurrentUserId(){var s=loadAgencySession();return s&&s.id||'';}
+// LitBiz workspace agency admins (subaccount session with is_agency_admin=true)
+// have super_admin equivalent privileges for all agency capability checks.
+// This lets the render functions reused from /agency portal work seamlessly
+// inside the LitBiz workspace Agency Tools tabs.
+function _isLitBizAgencyAdmin(){return !!(state&&state.user&&state.user.isAgencyAdmin&&state.subaccountSlug==='litbiz');}
+function agencyCanManageSubaccounts(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin','admin');}
+function agencyCanManageUsers(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin');}
+function agencyCanLoginAs(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin','admin','support');}
+function agencyCurrentUserId(){var s=loadAgencySession();return (s&&s.id)||(state&&state.user&&state.user.id)||'';}
 
 
 // ── Agency Reset Subaccount Admin Password ──
@@ -35964,6 +35969,14 @@ async function agencyLoadSubaccounts(){
     });
     // Load plan records for all subaccounts
     var plansMap=await loadAllPlans();
+
+    // Filter out the agency workspace(s). LitBiz Media is the platform owner,
+    // not a client subaccount. It has its own management UI via Agency Tools.
+    // Future-proof: filters ANY workspace flagged is_agency_workspace=true.
+    subs=subs.filter(function(sub){
+      var pr=plansMap[sub.id];
+      return !(pr&&pr.is_agency_workspace);
+    });
 
     // Count past-due and suspended accounts and render the alert banner above the grid
     var pastDueAccounts=[];
@@ -38088,7 +38101,40 @@ function switchAgencyTab(name){
     if(btn) btn.classList.toggle('active', t===name);
     if(pane) pane.classList.toggle('hidden', t!==name);
   });
+  // Lazy-render the heavy tabs only when opened, with a temporary
+  // mount-point shim so the existing render functions (which target
+  // 'agency-tab-content' in the /agency portal) write into our tab pane.
+  if(name==='subaccounts')_atRenderSubaccounts();
+  else if(name==='phone')_atRenderPhone();
+  else if(name==='audit')_atRenderAudit();
 }
+
+// Mount-point shim. The existing renderAgencyAccountsTab/PhoneTab/AuditLog
+// functions write to #agency-tab-content (the /agency portal mount). We
+// temporarily give our tab pane that ID, call the function, then restore.
+function _atMountShim(targetId, fn){
+  var realTarget = document.getElementById(targetId);
+  if(!realTarget) return;
+  var existing = document.getElementById('agency-tab-content');
+  var hadId = false;
+  if(existing && existing !== realTarget){
+    // /agency portal is present too. Park its ID and swap.
+    existing.id = 'agency-tab-content-parked';
+    hadId = true;
+  }
+  var prevId = realTarget.id;
+  realTarget.id = 'agency-tab-content';
+  try{ fn(); }catch(e){ console.error('agency tab render error:',e); }
+  realTarget.id = prevId;
+  if(hadId){
+    var parked = document.getElementById('agency-tab-content-parked');
+    if(parked) parked.id = 'agency-tab-content';
+  }
+}
+
+function _atRenderSubaccounts(){_atMountShim('at-tab-subaccounts', renderAgencyAccountsTab);}
+function _atRenderPhone(){_atMountShim('at-tab-phone', renderAgencyPhoneTab);}
+function _atRenderAudit(){_atMountShim('at-tab-audit', renderAgencyAuditLog);}
 
 function _agencyToolGridHTML(){
   var tools = [
