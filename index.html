@@ -35228,10 +35228,11 @@ async function openManagePlanModal(subId,subName){
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="mp-exempt" '+(isExempt?'checked':'')+' onchange="toggleMpBillingDate();updatePlanSummary()" style="width:auto;margin:0">'
     +'<span>Exempt from billing (test workspace, partner, internal)</span></label></div>'
-    +'<div id="mp-billing-date-section" style="'+(isExempt?'':'display:none')+'">'
-    +'<div class="form-group"><label>First Billing Date <span style="font-weight:400;color:var(--text-muted)">(when to start charging after removing exempt)</span></label>'
-    +_dateInputHTML('mp-billing-date',plan&&plan.next_billing_date||'',false,'')
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Set this to match their existing billing cycle. The cron will charge on this date.</div>'
+    +'<div id="mp-billing-date-section" style="display:none">'
+    +'<div class="form-group" style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:12px 14px;margin-top:8px">'
+    +'<label style="color:var(--purple)">First Billing Date <span style="font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0">(optional)</span></label>'
+    +_dateInputHTML('mp-billing-date','',false,'')
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px">If set, billing starts on this date. If blank, billing starts today. No trial period applies when removing exempt status. A card on file is required.</div>'
     +'</div></div>'
     +'<div style="margin-top:14px;padding:14px 16px;background:var(--bg-card);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
     +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Effective Charge</div>'
