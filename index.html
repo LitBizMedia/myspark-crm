@@ -35000,16 +35000,19 @@ function renderAgencyBillingTab(){
   var el=document.getElementById('agency-tab-content');
   if(!el)return;
   el.innerHTML='<div style="margin-bottom:18px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Billing</div>'
-    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Recurring revenue and transaction history</div>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800;color:var(--main-text)">Subaccount Billing</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-top:3px">SaaS revenue, recent charges, and plan management for your subaccounts.</div>'
     +'</div>'
-    +'<div id="agency-billing-summary"><div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading summary...</div></div>'
+    +'<div id="agency-billing-summary"><div style="color:var(--main-text-muted);font-size:13px;padding:20px 0">Loading summary...</div></div>'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin:28px 0 14px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800">Transactions</div>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;color:var(--main-text)">Transactions</div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="openPlanPricingModal()">Manage Plan Pricing</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="loadAgencyInvoices()">Refresh</button>'
     +'</div>'
-    +'<div class="agency-toolbar">'
-    +'<select id="inv-filter-status" onchange="onInvoiceFilterChange()">'
+    +'</div>'
+    +'<div class="agency-toolbar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'
+    +'<select id="inv-filter-status" onchange="onInvoiceFilterChange()" style="background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 12px;font-size:13px">'
     +'<option value="">All statuses</option>'
     +'<option value="succeeded">Succeeded</option>'
     +'<option value="failed">Failed</option>'
@@ -35020,28 +35023,26 @@ function renderAgencyBillingTab(){
     +_dateInputHTML('inv-filter-to','',false,'onInvoiceFilterChange()')
     +'<button class="btn btn-ghost btn-sm" onclick="resetInvoiceFilters()">Reset</button>'
     +'</div>'
-    +'<div id="agency-invoices-table" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">'
-    +'<div style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center">Loading transactions...</div>'
+    +'<div id="agency-invoices-table" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-md)">'
+    +'<div style="padding:24px;color:var(--main-text-muted);font-size:13px;text-align:center">Loading transactions...</div>'
     +'</div>'
-    +'<div id="agency-invoices-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--text-muted)"></div>';
+    +'<div id="agency-invoices-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--main-text-muted)"></div>';
   loadBillingSummary();
   loadAgencyInvoices();
 }
-
 async function loadBillingSummary(){
   var el=document.getElementById('agency-billing-summary');
   if(!el)return;
-  // Pull all plans (we already have similar data via agencyLoadSubaccounts but fetch fresh here)
   try{
     var r=await fetch(apiUrl('/api/agency/plans-list'),{credentials:'include'});
-    if(!r.ok){el.innerHTML='<div style="color:var(--danger-light);font-size:13px">Failed to load summary.</div>';return;}
+    if(!r.ok){el.innerHTML='<div style="color:var(--danger);font-size:13px">Failed to load summary.</div>';return;}
     var data=await r.json();
     var plans=data.plans||[];
     var summary=computeBillingSummary(plans||[]);
     billingState.summary=summary;
     el.innerHTML=renderBillingSummaryCards(summary);
   }catch(e){
-    el.innerHTML='<div style="color:var(--danger-light);font-size:13px">Error: '+esc(e.message)+'</div>';
+    el.innerHTML='<div style="color:var(--danger);font-size:13px">Error: '+esc(e.message)+'</div>';
   }
 }
 
@@ -35097,13 +35098,19 @@ function computeBillingSummary(plans){
 
 function renderBillingSummaryCards(s){
   function fmt(n){return '$'+Math.round(n).toLocaleString();}
+  function card(label, value, sub, accent, valueSize){
+    var vs = valueSize || '22px';
+    return '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:14px 16px;border-top:3px solid '+accent+';box-shadow:0 2px 12px rgba(107,33,234,.07)">'
+      +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;margin-bottom:4px">'+label+'</div>'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:'+vs+';font-weight:800;color:'+accent+'">'+value+'</div>'
+      +(sub?'<div style="font-size:11px;color:var(--main-text-muted);margin-top:4px">'+sub+'</div>':'')
+      +'</div>';
+  }
   var tierLines='';
   Object.keys(s.byTier).forEach(function(t){
     if(s.byTier[t]>0)tierLines+=PLAN_TIER_LABELS[t]+': '+s.byTier[t]+' &middot; ';
   });
   if(tierLines)tierLines=tierLines.replace(/ &middot; $/,'');
-
-  // Trial subtext combines monthly and annual trial counts
   var trialTotal=s.trialMonthlyCount+s.trialAnnualCount;
   var trialSub='';
   if(trialTotal===0)trialSub='no accounts trialing';
@@ -35113,27 +35120,17 @@ function renderBillingSummaryCards(s){
     if(s.trialAnnualCount>0)parts.push(s.trialAnnualCount+' annual');
     trialSub=parts.join(' &middot; ');
   }
-
-  return '<div class="agency-stat-grid">'
-    // MRR: only monthly plans
-    +'<div class="agency-stat-card"><div class="agency-stat-label">Monthly Recurring (MRR)</div>'
-    +'<div class="agency-stat-value">'+fmt(s.monthlyMrr)+'</div>'
-    +'<div class="agency-stat-sub">'+s.monthlyCount+' monthly subscription'+(s.monthlyCount===1?'':'s')+(s.pastDueCount?' &middot; '+s.pastDueCount+' past due':'')+'</div></div>'
-    // ARR: only annual plans
-    +'<div class="agency-stat-card"><div class="agency-stat-label">Annual Recurring (ARR)</div>'
-    +'<div class="agency-stat-value">'+fmt(s.annualArr)+'</div>'
-    +'<div class="agency-stat-sub">'+s.annualCount+' annual subscription'+(s.annualCount===1?'':'s')+'</div></div>'
-    // Trial: potential revenue if all converted, separated by period
-    +'<div class="agency-stat-card"><div class="agency-stat-label">Trialing (potential)</div>'
-    +'<div class="agency-stat-value" style="font-size:18px">'+fmt(s.trialMonthlyMrr)+'/mo &middot; '+fmt(s.trialAnnualArr)+'/yr</div>'
-    +'<div class="agency-stat-sub">'+trialSub+'</div></div>'
-    // Other: exempt, suspended, cancelled, plus tier breakdown
-    +'<div class="agency-stat-card"><div class="agency-stat-label">Other accounts</div>'
-    +'<div class="agency-stat-value" style="font-size:18px">'+s.exemptCount+' exempt &middot; '+s.cancelledCount+' cancelled &middot; '+s.suspendedCount+' suspended</div>'
-    +'<div class="agency-stat-sub">'+(tierLines||'no tier breakdown')+'</div></div>'
+  var mrrSub=s.monthlyCount+' monthly subscription'+(s.monthlyCount===1?'':'s')+(s.pastDueCount?' &middot; '+s.pastDueCount+' past due':'');
+  var arrSub=s.annualCount+' annual subscription'+(s.annualCount===1?'':'s');
+  var otherVal=s.exemptCount+' exempt &middot; '+s.cancelledCount+' cancelled &middot; '+s.suspendedCount+' suspended';
+  var pastDueColor=s.pastDueCount>0?'var(--danger)':'var(--main-text)';
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'
+    +card('Monthly Recurring (MRR)',fmt(s.monthlyMrr),mrrSub,'var(--orange)')
+    +card('Annual Recurring (ARR)',fmt(s.annualArr),arrSub,'var(--purple)')
+    +card('Trialing (potential)',fmt(s.trialMonthlyMrr)+'/mo &middot; '+fmt(s.trialAnnualArr)+'/yr',trialSub,'#34d399','17px')
+    +card('Other accounts',otherVal,(tierLines||'no tier breakdown'),pastDueColor,'15px')
     +'</div>';
 }
-
 function onInvoiceFilterChange(){
   var st=document.getElementById('inv-filter-status');
   var f={value:_readDateInput('inv-filter-from')||''};
@@ -35181,18 +35178,27 @@ function renderInvoicesTable(){
   if(!tbl)return;
   var rows=billingState.entries||[];
   if(!rows.length){
-    tbl.innerHTML='<div style="padding:32px;color:var(--text-muted);font-size:13px;text-align:center">No transactions match these filters.</div>';
+    tbl.innerHTML='<div style="padding:32px;color:var(--main-text-muted);font-size:13px;text-align:center">No transactions match these filters.</div>';
     return;
   }
   var statusColor={succeeded:'#16a34a',failed:'#dc2626',refunded:'#9b8ec4',pending:'#b45309'};
+  var totalAmount=rows.reduce(function(s,r){return s+(r.amount_cents||0);},0);
+  var totalsRowStyle='background:rgba(107,33,234,.06);font-weight:700;border-bottom:2px solid var(--purple-border)';
+  var thStyle='padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);border-bottom:1px solid var(--main-border)';
+  var thStyleR=thStyle+';text-align:right';
   var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
-    +'<thead><tr style="background:var(--bg-card);border-bottom:1px solid var(--border)">'
-    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">When</th>'
-    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Subaccount</th>'
-    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Description</th>'
-    +'<th style="padding:11px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Amount</th>'
-    +'<th style="padding:11px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Status</th>'
-    +'<th style="padding:11px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Action</th>'
+    +'<thead><tr style="background:var(--main-bg)">'
+    +'<th style="'+thStyle+'">When</th>'
+    +'<th style="'+thStyle+'">Subaccount</th>'
+    +'<th style="'+thStyle+'">Description</th>'
+    +'<th style="'+thStyleR+'">Amount</th>'
+    +'<th style="'+thStyle+'">Status</th>'
+    +'<th style="'+thStyleR+'">Action</th>'
+    +'</tr>'
+    +'<tr style="'+totalsRowStyle+'">'
+    +'<td style="padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted)" colspan="3">Period Totals ('+rows.length+' txn'+(rows.length!==1?'s':'')+')</td>'
+    +'<td style="padding:8px 12px;font-size:13px;text-align:right;color:var(--main-text);font-weight:700;font-family:Exo 2,sans-serif">$'+(totalAmount/100).toFixed(2)+'</td>'
+    +'<td colspan="2"></td>'
     +'</tr></thead><tbody>';
   rows.forEach(function(r){
     var when=fmtDateTime(r.created_at);
@@ -35204,15 +35210,15 @@ function renderInvoicesTable(){
     if(r.status==='succeeded'){
       actionCell='<button class="btn btn-ghost btn-sm" onclick="openRefundModal(\''+r.id+'\')">Refund</button>';
     }else if(r.status==='refunded'){
-      actionCell='<span style="font-size:11px;color:var(--text-muted)">Refunded</span>';
+      actionCell='<span style="font-size:11px;color:var(--main-text-muted)">Refunded</span>';
     }else if(r.status==='failed'&&r.failure_reason){
-      actionCell='<span style="font-size:11px;color:#fca5a5" title="'+esc(r.failure_reason)+'">Failed</span>';
+      actionCell='<span style="font-size:11px;color:var(--danger)" title="'+esc(r.failure_reason)+'">Failed</span>';
     }
-    html+='<tr style="border-bottom:1px solid var(--border)">'
-      +'<td style="padding:9px 12px;font-size:12px;color:var(--text-muted);white-space:nowrap">'+esc(when)+'</td>'
-      +'<td style="padding:9px 12px;font-size:12px">'+esc(subName)+'</td>'
-      +'<td style="padding:9px 12px;font-size:12px;color:var(--text-muted)">'+esc(r.description||'')+'</td>'
-      +'<td style="padding:9px 12px;font-size:13px;font-weight:700;text-align:right;font-family:monospace">'+amt+'</td>'
+    html+='<tr style="border-bottom:1px solid var(--main-border)">'
+      +'<td style="padding:9px 12px;font-size:12px;color:var(--main-text-muted);white-space:nowrap">'+esc(when)+'</td>'
+      +'<td style="padding:9px 12px;font-size:13px;color:var(--main-text);font-weight:600">'+esc(subName)+'</td>'
+      +'<td style="padding:9px 12px;font-size:12px;color:var(--main-text-muted)">'+esc(r.description||'')+'</td>'
+      +'<td style="padding:9px 12px;font-size:13px;font-weight:700;text-align:right;font-family:monospace;color:var(--main-text)">'+amt+'</td>'
       +'<td style="padding:9px 12px"><span style="display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700;background:'+color+'22;color:'+color+';border:1px solid '+color+'44">'+esc(r.status)+'</span></td>'
       +'<td style="padding:9px 12px;text-align:right">'+actionCell+'</td>'
       +'</tr>';
@@ -35220,7 +35226,6 @@ function renderInvoicesTable(){
   html+='</tbody></table></div>';
   tbl.innerHTML=html;
 }
-
 function renderInvoicesPagination(){
   var pag=document.getElementById('agency-invoices-pagination');
   if(!pag)return;
@@ -35240,6 +35245,10 @@ function renderInvoicesPagination(){
 
 function invoicesPrev(){billingState.invoicesOffset=Math.max(0,billingState.invoicesOffset-billingState.invoicesLimit);loadAgencyInvoices();}
 function invoicesNext(){billingState.invoicesOffset=billingState.invoicesOffset+billingState.invoicesLimit;loadAgencyInvoices();}
+
+function openPlanPricingModal(){
+  toast("Plan Pricing modal coming next step.","info");
+}
 
 function openRefundModal(invoiceId){
   if(!agencyCanManageSubaccounts()){toast('You do not have permission to issue refunds.','error');return;}
@@ -38144,6 +38153,7 @@ function switchAgencyTab(name){
   // 'agency-tab-content' in the /agency portal) write into our tab pane.
   if(name==='subaccounts')_atRenderSubaccounts();
   else if(name==='phone')_atRenderPhone();
+  else if(name==='billing')_atRenderBilling();
   else if(name==='audit')_atRenderAudit();
 }
 
@@ -38201,6 +38211,7 @@ function _atMountShim(targetId, fn){
 function _atRenderSubaccounts(){_atMountShim('at-tab-subaccounts', renderAgencyAccountsTab);}
 function _atRenderPhone(){_atMountShim('at-tab-phone', renderAgencyPhoneTab);}
 function _atRenderAudit(){_atMountShim('at-tab-audit', renderAgencyAuditLog);}
+function _atRenderBilling(){_atMountShim('at-tab-billing', renderAgencyBillingTab);}
 
 function _agencyToolGridHTML(){
   var tools = [
