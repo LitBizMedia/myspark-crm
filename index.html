@@ -1866,9 +1866,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 </div>
 
 <!-- AGENCY DASHBOARD -->
-<div id="agency-screen" class="hidden" style="min-height:100vh;background:var(--bg);color:var(--text);font-family:Lato,sans-serif">
-  <div id="agency-content"></div>
-</div>
 
 <!-- APP -->
 <div id="app" class="hidden">
@@ -2948,11 +2945,17 @@ function _updatePaymentRemote(id,fields){
 const PER_PAGE=20;
 const ADMIN_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
 const AGENCY_SLUG='agency';
+
+// ── Agency Tools state (Sub-Accounts tab + Billing tab) ──
+// These were originally declared alongside the legacy /agency portal
+// render functions. After /agency UI removal (May 30, 2026), they are
+// hoisted here so the renderAgency*Tab functions can still read/write
+// filter, sort, and pagination state from the LitBiz Agency Tools panes.
+var accountsFilters={status:'',tier:'',search:''};
+var accountsSort={col:'name',dir:'asc'};
+var billingState={summary:null,invoicesLoaded:false,invoiceFilter:{status:'',from:'',to:''},invoicesOffset:0,invoicesLimit:50,invoicesTotal:0,entries:[]};
 const DEFAULT_SLUG='litbiz';
-const AGENCY_SESSION_KEY='myspark_agency_v1';
 // Fallback agency credentials - used if agency_users table is unreachable
-const AGENCY_FALLBACK_USER='admin';
-const AGENCY_FALLBACK_HASH='356f5b50c34439d486629f07ec03345aedaff445d74a2309736a88d2a22ab56f';
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DSHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DKEYS=['sun','mon','tue','wed','thu','fri','sat'];
@@ -2979,7 +2982,7 @@ const DEF_BH={
 // =====================================================
 let state={
   user:null,panel:'dashboard',
-  subaccountSlug:'litbiz',subaccountId:'sub-litbiz',agencyMode:false,
+  subaccountSlug:'litbiz',subaccountId:'sub-litbiz',
   cPage:1,cPageSize:50,cTotal:0,cTotalPages:1,cLoading:false,cSearch:'',cType:'',cStatus:'',cTag:'',cSort:{col:'name',dir:'asc'},cSelected:new Set(),cSelectedAllMatching:false,cShowArchived:false,
   drawer:null,dTab:'info',
   calView:'month',calDate:new Date(),calUser:'all',
@@ -27824,7 +27827,6 @@ document.addEventListener('DOMContentLoaded',async function(){
   var pathSlug=getPathSlug();
   state.subaccountSlug=pathSlug;
   state.subaccountId='sub-'+pathSlug;
-  state.agencyMode=pathSlug===AGENCY_SLUG;
   // Handle password reset link
   var _resetParams=new URLSearchParams(window.location.search);
   var _resetToken=_resetParams.get('reset');
@@ -27833,45 +27835,11 @@ document.addEventListener('DOMContentLoaded',async function(){
     setTimeout(function(){openResetPasswordModal(_resetToken);},400);
   }
   // Scope localStorage key per subaccount
-  SK='myspark_crm_v2_'+(state.agencyMode?'agency':pathSlug);
-  SSK='myspark_session_v1_'+(state.agencyMode?'agency':pathSlug);
+  SK='myspark_crm_v2_'+pathSlug;
+  SSK='myspark_session_v1_'+pathSlug;
   loadData();
   applyFallbackCredentials();
   if(fbCheckEmbedMode()){hideAuthLoading();return;}
-  // Agency path
-  if(state.agencyMode){
-    hideAuthLoading();
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app').classList.add('hidden');
-    document.getElementById('agency-screen').classList.remove('hidden');
-    // Phase 2: Validate server-side session cookie first.
-    // Fall back to legacy localStorage during transition.
-    try{
-      var sessRes=await fetch(apiUrl('/api/agency/session'),{credentials:'include'});
-      if(sessRes.ok){
-        var sessData=await sessRes.json();
-        if(sessData.authenticated&&sessData.user){
-          // Cookie is the source of truth. Mirror to localStorage so
-          // existing code paths that call loadAgencySession() still work.
-          window._agencyUser=sessData.user;
-          saveAgencySession(sessData.user);
-          renderAgencyDashboard();
-          return;
-        }
-      }
-    }catch(e){
-      console.warn('Agency session check failed, trying localStorage fallback:',e.message);
-    }
-    // Cookie failed, fall back to legacy localStorage
-    var asess=loadAgencySession();
-    if(asess){
-      window._agencyUser=asess;
-      renderAgencyDashboard();
-    }else{
-      renderAgencyLogin();
-    }
-    return;
-  }
   // Pre-fetch server data in the background so db.users is populated
   // by the time the user submits the login form.
   fetchFromServer().then(function(){});
@@ -34548,224 +34516,6 @@ function getPathSlug(){
 // AGENCY SESSION
 // =====================================================
 
-function loadAgencySession(){
-  // Phase 2: Try localStorage first (legacy path), fall through to
-  // window._agencyUser if localStorage is empty but cookie is valid.
-  try{
-    var r=localStorage.getItem(AGENCY_SESSION_KEY);
-    if(r){
-      var s=JSON.parse(r);
-      if(Date.now()-s.ts>8*3600000){localStorage.removeItem(AGENCY_SESSION_KEY);}
-      else{return s;}
-    }
-  }catch(e){}
-  // Fall back to in-memory user populated from /api/agency/session response
-  if(window._agencyUser){
-    return Object.assign({},window._agencyUser,{ts:Date.now()});
-  }
-  return null;
-}
-
-function saveAgencySession(user){
-  // Phase 2: write to both localStorage (legacy) and window._agencyUser (new path).
-  localStorage.setItem(AGENCY_SESSION_KEY,JSON.stringify({...user,ts:Date.now()}));
-  window._agencyUser=user;
-}
-
-// =====================================================
-// AGENCY IDLE TIMEOUT (HIPAA: automatic logoff)
-// =====================================================
-// Same policy as subaccount-side: 30 minutes idle then 60 second warning.
-// Always active for the agency dashboard since agency super admins can
-// Login-As into HIPAA-enabled subaccounts and access PHI through that path.
-var agencyIdleState = { timer: null, warningTimer: null, warningOpen: false, _initialized: false, _countdownInterval: null };
-
-function initAgencyIdleTimeout(){
-  if(agencyIdleState._initialized)return;
-  agencyIdleState._initialized = true;
-  var events = ['mousemove','mousedown','keydown','touchstart','scroll'];
-  events.forEach(function(ev){
-    document.addEventListener(ev, resetAgencyIdleTimer, { passive: true });
-  });
-  resetAgencyIdleTimer();
-}
-
-function resetAgencyIdleTimer(){
-  if(agencyIdleState.warningOpen)return;
-  if(agencyIdleState.timer)clearTimeout(agencyIdleState.timer);
-  if(agencyIdleState.warningTimer)clearTimeout(agencyIdleState.warningTimer);
-  agencyIdleState.timer = setTimeout(showAgencyIdleWarning, IDLE_TIMEOUT_MS);
-}
-
-function showAgencyIdleWarning(){
-  if(!loadAgencySession())return; // already logged out
-  agencyIdleState.warningOpen = true;
-  var existing = document.getElementById('agency-idle-warn');
-  if(existing)existing.remove();
-  var div = document.createElement('div');
-  div.id = 'agency-idle-warn';
-  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
-  div.innerHTML = '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;max-width:440px;width:90%;text-align:center">'
-    +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:14px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;color:var(--text)">Are you still there?</div>'
-    +'<div style="font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">For your security, you will be signed out in <span id="agency-idle-countdown" style="color:#f59e0b;font-weight:700">60</span> seconds due to inactivity.</div>'
-    +'<button class="btn btn-primary" onclick="dismissAgencyIdleWarning()" style="width:100%">Stay signed in</button>'
-    +'</div>';
-  document.body.appendChild(div);
-  var remaining = IDLE_WARNING_MS / 1000;
-  var cd = document.getElementById('agency-idle-countdown');
-  agencyIdleState._countdownInterval = setInterval(function(){
-    remaining--;
-    if(cd)cd.textContent = remaining;
-    if(remaining<=0)clearInterval(agencyIdleState._countdownInterval);
-  }, 1000);
-  agencyIdleState.warningTimer = setTimeout(forceAgencyIdleLogout, IDLE_WARNING_MS);
-}
-
-function dismissAgencyIdleWarning(){
-  agencyIdleState.warningOpen = false;
-  var modal = document.getElementById('agency-idle-warn');
-  if(modal)modal.remove();
-  if(agencyIdleState._countdownInterval){clearInterval(agencyIdleState._countdownInterval);agencyIdleState._countdownInterval=null;}
-  if(agencyIdleState.warningTimer){clearTimeout(agencyIdleState.warningTimer);agencyIdleState.warningTimer=null;}
-  resetAgencyIdleTimer();
-}
-
-function forceAgencyIdleLogout(){
-  agencyIdleState.warningOpen = false;
-  var modal = document.getElementById('agency-idle-warn');
-  if(modal)modal.remove();
-  if(agencyIdleState._countdownInterval){clearInterval(agencyIdleState._countdownInterval);agencyIdleState._countdownInterval=null;}
-  if(agencyIdleState.timer){clearTimeout(agencyIdleState.timer);agencyIdleState.timer=null;}
-  if(agencyIdleState.warningTimer){clearTimeout(agencyIdleState.warningTimer);agencyIdleState.warningTimer=null;}
-  // Phase 2: revoke server-side session before clearing local state
-  fetch(apiUrl('/api/agency/logout'),{method:'POST',credentials:'include'}).catch(function(){});
-  try{localStorage.removeItem(AGENCY_SESSION_KEY);}catch(e){}
-  window._agencyUser=null;
-  try{
-    var flash = document.createElement('div');
-    flash.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1f1432;border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,.4)';
-    flash.textContent = 'Signed out due to inactivity.';
-    document.body.appendChild(flash);
-  }catch(e){}
-  setTimeout(function(){location.reload();}, 800);
-}
-
-function agencyLogout(){
-  // Phase 2: revoke server-side session, then clear localStorage and reload.
-  fetch(apiUrl('/api/agency/logout'),{method:'POST',credentials:'include'})
-    .catch(function(e){console.warn('Agency logout endpoint failed:',e.message);})
-    .finally(function(){
-      try{localStorage.removeItem(AGENCY_SESSION_KEY);}catch(e){}
-      window._agencyUser=null;
-      renderAgencyLogin();
-    });
-}
-
-// =====================================================
-// AGENCY LOGIN
-// =====================================================
-
-function renderAgencyLogin(){
-  var el=document.getElementById('agency-content');
-  if(!el)return;
-  el.innerHTML='<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;'
-    +'background:radial-gradient(ellipse at 25% 20%,rgba(107,33,234,.22) 0%,transparent 55%),'
-    +'radial-gradient(ellipse at 75% 80%,rgba(255,64,0,.12) 0%,transparent 50%),var(--bg)">'
-    +'<div style="background:var(--bg-panel);border:1px solid var(--purple-border);border-radius:var(--radius-lg);padding:44px 40px;width:380px;box-shadow:var(--shadow)">'
-    +'<div style="text-align:center;margin-bottom:28px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:26px;font-weight:800;color:#fff;margin-bottom:5px">MySpark<span style="color:var(--orange)">+</span></div>'
-    +'<div style="font-size:13px;color:var(--text-muted)">Agency Dashboard</div>'
-    +'<div style="font-size:11px;color:var(--text-dim);margin-top:3px">LitBiz Media</div>'
-    +'</div>'
-    +'<div id="agency-login-error" class="auth-error hidden"></div>'
-    +'<div class="form-group"><label>Username</label><input type="text" id="ag-user" autocomplete="username"></div>'
-    +'<div class="form-group"><label>Password</label><input type="password" id="ag-pass" autocomplete="current-password"></div>'
-    +'<button class="btn btn-primary btn-full" style="margin-top:4px" onclick="agencyLogin()">Sign In to Agency</button>'
-    +'<div style="text-align:center;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="openForgotPassword(\'agency\')" style="font-size:12px;color:var(--text-muted)">Forgot password?</button></div>'
-    +'</div></div>';
-  var passEl=document.getElementById('ag-pass');
-  if(passEl)passEl.addEventListener('keydown',function(e){if(e.key==='Enter')agencyLogin();});
-}
-
-async function agencyLogin(){
-  var username=(document.getElementById('ag-user')&&document.getElementById('ag-user').value||'').trim().toLowerCase();
-  var password=document.getElementById('ag-pass')&&document.getElementById('ag-pass').value||'';
-  var errEl=document.getElementById('agency-login-error');
-  if(!username||!password){
-    if(errEl){errEl.textContent='Username and password required.';errEl.classList.remove('hidden');}
-    return;
-  }
-  var hash=await sha256(password);
-  // Primary path: server-side validation and audit logging
-  try{
-    var r=await fetch(apiUrl('/api/agency/login'),{credentials:'include',
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username:username,hash:hash})
-    });
-    var data=await r.json().catch(function(){return null;});
-    if(r.ok&&data&&data.success&&data.user){
-      saveAgencySession(data.user);
-      renderAgencyDashboard();
-      return;
-    }
-    if(r.status===401){
-      if(errEl){errEl.textContent=(data&&data.error)||'Invalid credentials.';errEl.classList.remove('hidden');}
-      return;
-    }
-    // Server returned non-401 error. Try client-side fallback (disaster recovery).
-    console.warn('Login API returned status '+r.status+', trying client fallback');
-  }catch(e){
-    console.warn('Login API unreachable, trying client fallback:',e.message);
-  }
-  // Client-side fallback for the case where the API itself is down.
-  // Server-side fallback in /api/agency/login.js is the primary recovery path.
-  if(username===AGENCY_FALLBACK_USER&&hash===AGENCY_FALLBACK_HASH){
-    saveAgencySession({id:'agency-admin-primary',username:AGENCY_FALLBACK_USER,name:'Admin',role:'super_admin'});
-    renderAgencyDashboard();
-    return;
-  }
-  if(errEl){errEl.textContent='Invalid credentials.';errEl.classList.remove('hidden');}
-}
-
-// =====================================================
-// =====================================================
-// PLAN MANAGEMENT - CONSTANTS & HELPERS
-// =====================================================
-const PLAN_LIMITS = {
-  starter:      {staff:7,  contacts:10000, emails:2000,   sms:300},
-  professional: {staff:15, contacts:20000, emails:15000,  sms:1000},
-  business:     {staff:40, contacts:40000, emails:75000,  sms:4000},
-  enterprise:   {staff:-1, contacts:-1,    emails:100000, sms:8000}
-};
-const PLAN_PRICES = {
-  starter:      {monthly:29,  annual:290},
-  professional: {monthly:79,  annual:790},
-  business:     {monthly:149, annual:1490},
-  enterprise:   {monthly:349, annual:3490}
-};
-const HIPAA_ADDON_PRICES = {monthly:50, annual:500};
-const USAGE_PACKS = {
-  email_500:   {units:500,   priceCents:500,  type:'email', label:'500 emails'},
-  email_2000:  {units:2000,  priceCents:1500, type:'email', label:'2,000 emails'},
-  email_10000: {units:10000, priceCents:5000, type:'email', label:'10,000 emails'},
-  sms_100:     {units:100,   priceCents:700,  type:'sms',   label:'100 SMS'},
-  sms_500:     {units:500,   priceCents:2500, type:'sms',   label:'500 SMS'},
-  sms_2000:    {units:2000,  priceCents:8000, type:'sms',   label:'2,000 SMS'}
-};
-const PLAN_TIER_LABELS = {starter:'Starter',professional:'Professional',business:'Business',enterprise:'Enterprise'};
-const PLAN_STATUS_LABELS = {trialing:'Trial',active:'Active',past_due:'Past Due',cancelled:'Cancelled',exempt:'Exempt',suspended:'Suspended',inactive:'Inactive'};
-const PLAN_STATUS_COLORS = {
-  trialing:  {bg:'rgba(245,158,11,.12)', fg:'var(--warning-light)'},
-  active:    {bg:'rgba(52,211,153,.12)', fg:'var(--success-light)'},
-  past_due:  {bg:'rgba(239,68,68,.12)',  fg:'var(--danger-light)'},
-  cancelled: {bg:'rgba(122,133,153,.12)',fg:'#7a8599'},
-  exempt:    {bg:'rgba(107,33,234,.15)', fg:'var(--purple-soft)'},
-  suspended: {bg:'rgba(239,68,68,.12)',  fg:'var(--danger-light)'},
-  inactive:  {bg:'rgba(122,133,153,.12)',fg:'#7a8599'}
-};
-
 async function loadAllPlans(){
   // Returns {subaccountId: planRecord}
   try{
@@ -34778,6 +34528,30 @@ async function loadAllPlans(){
     return map;
   }catch(e){return{};}
 }
+
+// ── SaaS plan pricing and labels (single source of truth) ──
+// These were originally declared alongside the legacy /agency portal code.
+// After /agency UI removal (May 30, 2026), they are hoisted here so the
+// renderAgency*Tab functions, planTierLabel, planMonthlyPrice, etc. can
+// still resolve them.
+const PLAN_PRICES = {
+  starter:      {monthly:29,  annual:290},
+  professional: {monthly:79,  annual:790},
+  business:     {monthly:149, annual:1490},
+  enterprise:   {monthly:349, annual:3490}
+};
+const HIPAA_ADDON_PRICES = {monthly:50, annual:500};
+const PLAN_TIER_LABELS = {starter:'Starter',professional:'Professional',business:'Business',enterprise:'Enterprise'};
+const PLAN_STATUS_LABELS = {trialing:'Trial',active:'Active',past_due:'Past Due',cancelled:'Cancelled',exempt:'Exempt',suspended:'Suspended',inactive:'Inactive'};
+const PLAN_STATUS_COLORS = {
+  trialing:  {bg:'rgba(245,158,11,.12)', fg:'var(--warning-light)'},
+  active:    {bg:'rgba(52,211,153,.12)', fg:'var(--success-light)'},
+  past_due:  {bg:'rgba(239,68,68,.12)',  fg:'var(--danger-light)'},
+  cancelled: {bg:'rgba(122,133,153,.12)',fg:'#7a8599'},
+  exempt:    {bg:'rgba(107,33,234,.15)', fg:'var(--purple-soft)'},
+  suspended: {bg:'rgba(239,68,68,.12)',  fg:'var(--danger-light)'},
+  inactive:  {bg:'rgba(122,133,153,.12)',fg:'#7a8599'}
+};
 
 function planTierLabel(tier){return PLAN_TIER_LABELS[tier]||tier||'Starter';}
 function planStatusLabel(status){return PLAN_STATUS_LABELS[status]||status||'';}
@@ -34799,68 +34573,12 @@ function planTrialDaysRemaining(plan){
 // AGENCY DASHBOARD
 // =====================================================
 
-async function renderAgencyDashboard(){
-  var el=document.getElementById('agency-content');
-  if(!el)return;
-  // Wire HIPAA-grade idle timeout for agency dashboard. Always on for agency
-  // since super admins can Login-As into HIPAA workspaces (effective PHI access).
-  initAgencyIdleTimeout();
-  var sess=loadAgencySession()||{};
-  var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[sess.role]||(sess.role||'');
-  var activeTab=state.agencyTab||'accounts';
-  function tabBtn(name,label){
-    return '<button class="agency-tab'+(activeTab===name?' active':'')+'" onclick="switchAgencyTab(\''+name+'\')">'+label+'</button>';
-  }
-  el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
-    // Top bar
-    +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">MySpark<span style="color:var(--orange)">+</span> <span style="font-size:13px;font-weight:500;color:var(--text-muted)">Agency Dashboard</span></div>'
-    +'<div style="font-size:12px;color:var(--text-muted);text-align:right;line-height:1.3"><div style="font-weight:600;color:var(--text)">'+esc(sess.name||sess.username||'')+'</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em">'+esc(roleLbl)+'</div></div>'
-    +(agencyCanViewAuditLog()?'<button class="btn btn-ghost btn-sm" onclick="renderAgencyAuditLog()" title="Audit Log"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>Audit Log</button>':'')
-    +'<button class="btn btn-ghost btn-sm" onclick="renderAgencySettings()" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</button>'
-    +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
-    +'</div>'
-    // Tab bar
-    +'<div class="agency-tab-bar">'
-    +tabBtn('accounts','Accounts')
-    +tabBtn('phone','Phone')
-    +tabBtn('email','Email')
-    +tabBtn('billing','Billing')
-    +'</div>'
-    // Tab content
-    +'<div id="agency-tab-content" class="agency-tab-content"></div>'
-    +'</div>';
-  switchAgencyTab(activeTab);
-}
-
-function switchAgencyTab(name){
-  state.agencyTab=name||'accounts';
-  // Update tab button highlights without re-rendering the whole page
-  var tabs=document.querySelectorAll('.agency-tab');
-  tabs.forEach(function(b){
-    if(!b)return;
-    var match=(b.getAttribute('onclick')||'').indexOf("'"+state.agencyTab+"'")>=0;
-    if(match)b.classList.add('active');else b.classList.remove('active');
-  });
-  if(state.agencyTab==='accounts')renderAgencyAccountsTab();
-  else if(state.agencyTab==='phone')renderAgencyPhoneTab();
-  else if(state.agencyTab==='email')renderAgencyEmailTab();
-  else if(state.agencyTab==='billing')renderAgencyBillingTab();
-}
-
-// =====================================================
-// AGENCY: ACCOUNTS TAB
-// =====================================================
-
-var accountsFilters={status:'',tier:'',search:''};
-var accountsSort={col:'name',dir:'asc'};
-
 function renderAgencyAccountsTab(){
   var el=document.getElementById('agency-tab-content');
   if(!el)return;
   el.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Subaccounts</div>'
-    +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Manage your client CRM accounts</div></div>'
+    +'<div><div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800;color:var(--main-text)">Subaccounts</div>'
+    +'<div style="font-size:13px;color:var(--main-text-muted);margin-top:3px">Manage your client CRM accounts</div></div>'
     +(agencyCanManageSubaccounts()?'<button class="btn btn-primary" onclick="openCreateSubaccountModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Subaccount</button>':'')
     +'</div>'
     +'<div class="agency-toolbar">'
@@ -34893,7 +34611,7 @@ function renderAgencyAccountsTab(){
     +'</div>'
     +'<div id="agency-pastdue-banner"></div>'
     +'<div id="agency-subs-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">'
-    +'<div style="color:var(--text-muted);font-size:13px;padding:20px 0">Loading subaccounts...</div>'
+    +'<div style="color:var(--main-text-muted);font-size:13px;padding:20px 0">Loading subaccounts...</div>'
     +'</div>';
   agencyLoadSubaccounts();
 }
@@ -35276,7 +34994,7 @@ async function confirmRefund(invoiceId){
     var r=await fetch(apiUrl('/api/billing/refund'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({invoiceId:invoiceId,reason:reason||null,actor:loadAgencySession()})
+      body:JSON.stringify({invoiceId:invoiceId,reason:reason||null})
     });
     if(!r.ok){
       var errData=await r.json().catch(function(){return {error:'Server error'};});
@@ -35505,7 +35223,7 @@ async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discou
     var r=await fetch(apiUrl('/api/billing/swap-plan'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||'',customBillingDate:customBillingDate||null,actor:loadAgencySession()})
+      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||'',customBillingDate:customBillingDate||null})
     });
     if(!r.ok){var t=await r.text();toast('Plan change failed: '+t,'error');return;}
     var data=await r.json();
@@ -35640,7 +35358,7 @@ async function cancelSubscription(subId){
     var r=await fetch(apiUrl('/api/billing/cancel'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,actor:loadAgencySession()})
+      body:JSON.stringify({subaccountId:subId})
     });
     if(!r.ok){var t=await r.text();toast('Cancel failed: '+t,'error');return;}
     var data=await r.json();
@@ -35655,7 +35373,7 @@ async function reactivateSubscription(subId){
     var r=await fetch(apiUrl('/api/billing/reactivate'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,actor:loadAgencySession()})
+      body:JSON.stringify({subaccountId:subId})
     });
     if(!r.ok){var t=await r.text();toast('Reactivation failed: '+t,'error');return;}
     var data=await r.json();
@@ -35672,7 +35390,7 @@ async function reactivateSubscription(subId){
 // =====================================================
 // AGENCY PERMISSIONS
 // =====================================================
-function agencyCurrentRole(){var s=loadAgencySession();return s&&s.role||'';}
+function agencyCurrentRole(){if(_isLitBizAgencyAdmin())return 'super_admin';return '';}
 function agencyHasRole(){var r=agencyCurrentRole();for(var i=0;i<arguments.length;i++){if(arguments[i]===r)return true;}return false;}
 // LitBiz workspace agency admins (subaccount session with is_agency_admin=true)
 // have super_admin equivalent privileges for all agency capability checks.
@@ -35683,7 +35401,7 @@ function agencyCanManageSubaccounts(){return _isLitBizAgencyAdmin()||agencyHasRo
 function agencyCanManageUsers(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin');}
 function agencyCanLoginAs(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin','admin','support');}
 function agencyCanViewAuditLog(){return _isLitBizAgencyAdmin()||agencyHasRole('super_admin','admin');}
-function agencyCurrentUserId(){var s=loadAgencySession();return (s&&s.id)||(state&&state.user&&state.user.id)||'';}
+function agencyCurrentUserId(){return (state&&state.user&&state.user.id)||'';}
 
 
 // ── Agency Reset Subaccount Admin Password ──
@@ -35751,14 +35469,14 @@ async function agencyLoadSmsRequests(){
       var sLabel={requested:'New Request',in_progress:'In Progress'};
       out+='<div style="margin-bottom:28px">'
         +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800">SMS Requests</div>'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;color:var(--main-text)">SMS Requests</div>'
         +'<div style="background:#f59e0b;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:2px 8px">'+pending.length+'</div>'
         +'</div>'
         +'<div style="display:flex;flex-direction:column;gap:10px">'+pending.map(function(r){
-          return'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px">'
+          return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 12px rgba(107,33,234,.07)">'
             +'<div style="flex:1">'
-            +'<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+esc(r.subaccount_name||r.subaccount_id)+'</div>'
-            +'<div style="font-size:12px;color:var(--text-muted)">'+esc(r.legal_business_name)+' &middot; '+esc(r.contact_name)+' &middot; '+esc(r.contact_phone)+'</div>'
+            +'<div style="font-weight:700;font-size:14px;margin-bottom:3px;color:var(--main-text)">'+esc(r.subaccount_name||r.subaccount_id)+'</div>'
+            +'<div style="font-size:12px;color:var(--main-text-muted)">'+esc(r.legal_business_name)+' &middot; '+esc(r.contact_name)+' &middot; '+esc(r.contact_phone)+'</div>'
             +'</div>'
             +'<div style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:'+sColor[r.status]+'22;color:'+sColor[r.status]+';border:1px solid '+sColor[r.status]+'44">'
             +'<div style="width:6px;height:6px;border-radius:50%;background:'+sColor[r.status]+'"></div>'
@@ -35773,12 +35491,12 @@ async function agencyLoadSmsRequests(){
       var cColor={pending:'#f59e0b',live:'#059669',paused:'#a16207'};
       var cLabel={pending:'Pending',live:'Live',paused:'Paused'};
       out+='<div style="margin-bottom:28px">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;margin-bottom:14px">SMS Numbers</div>'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;margin-bottom:14px;color:var(--main-text)">SMS Numbers</div>'
         +'<div style="display:flex;flex-direction:column;gap:10px">'+provisioned.map(function(s){
-          return'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px">'
+          return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 12px rgba(107,33,234,.07)">'
             +'<div style="flex:1">'
-            +'<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+esc(s.subaccount_id)+'</div>'
-            +'<div style="font-size:12px;color:var(--text-muted);font-family:monospace">'+esc(s.twilio_number||'No number')+'</div>'
+            +'<div style="font-weight:700;font-size:14px;margin-bottom:3px;color:var(--main-text)">'+esc(s.subaccount_id)+'</div>'
+            +'<div style="font-size:12px;color:var(--main-text-muted);font-family:monospace">'+esc(s.twilio_number||'No number')+'</div>'
             +'</div>'
             +'<div style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:'+cColor[s.campaign_status]+'22;color:'+cColor[s.campaign_status]+';border:1px solid '+cColor[s.campaign_status]+'44">'
             +'<div style="width:6px;height:6px;border-radius:50%;background:'+cColor[s.campaign_status]+'"></div>'
@@ -36077,7 +35795,7 @@ async function agencyLoadSubaccounts(){
     });
 
     if(!subs.length){
-      el.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:20px 0">No subaccounts match these filters.</div>';
+      el.innerHTML='<div style="color:var(--main-text-muted);font-size:13px;padding:20px 0">No subaccounts match these filters.</div>';
       return;
     }
 
@@ -36096,30 +35814,30 @@ async function agencyLoadSubaccounts(){
       var trialDays=planTrialDaysRemaining(planRecord);
       var statusCol=planStatusColors(planStatus);
       var hasSquare=!!(data.settings&&data.settings.square&&(data.settings.square.connected===true||data.settings.square.accessToken));
-      return '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:12px">'
+      return '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 2px 12px rgba(107,33,234,.07)">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between">'
         +'<div>'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:#fff">'+esc(sub.name)+'</div>'
-        +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px;font-family:monospace">'+esc(sub.slug)+'</div>'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text)">'+esc(sub.name)+'</div>'
+        +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px;font-family:monospace">'+esc(sub.slug)+'</div>'
         +'</div>'
         +'<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">'
-        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(isActive?'background:rgba(52,211,153,.12);color:#34d399':'background:rgba(239,68,68,.1);color:#f87171')+'">'+(isActive?'Active':'Suspended')+'</span>'
+        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(isActive?'background:rgba(22,163,74,.15);color:#15803d':'background:rgba(239,68,68,.12);color:#b91c1c')+'">'+(isActive?'Active':'Suspended')+'</span>'
         +'<span title="Billing status" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;background:'+statusCol.bg+';color:'+statusCol.fg+'">'+esc(planStatusLabel(planStatus))+(trialDays>0?' '+trialDays+'d':'')+'</span>'
-        +'<span title="'+(hasSquare?'Square connected':'Square not connected')+'" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;'+(hasSquare?'background:rgba(107,33,234,.15);color:#c7b8ff':'background:rgba(122,133,153,.12);color:#7a8599')+'">'+(hasSquare?'◆ Square':'○ No Square')+'</span>'
+        +'<span title="'+(hasSquare?'Square connected':'Square not connected')+'" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;'+(hasSquare?'background:rgba(107,33,234,.12);color:var(--purple)':'background:rgba(122,133,153,.15);color:var(--main-text-muted)')+'">'+(hasSquare?'◆ Square':'○ No Square')+'</span>'
         +'</div>'
         +'</div>'
         +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
-        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
+        +'<div style="background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:10px;text-align:center">'
         +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--orange)">'+contactCount+'</div>'
-        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Contacts</div>'
+        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted)">Contacts</div>'
         +'</div>'
-        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--purple-light)">'+userCount+'</div>'
-        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Users</div>'
+        +'<div style="background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:10px;text-align:center">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--purple)">'+userCount+'</div>'
+        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted)">Users</div>'
         +'</div>'
-        +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:10px;text-align:center">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text)">'+esc(planTierLabel(planTier))+'</div>'
-        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">'+(billingPeriod==='annual'?'Annual':'Monthly')+(hipaaOn?' + HIPAA':'')+'</div>'
+        +'<div style="background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:10px;text-align:center">'
+        +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--main-text)">'+esc(planTierLabel(planTier))+'</div>'
+        +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted)">'+(billingPeriod==='annual'?'Annual':'Monthly')+(hipaaOn?' + HIPAA':'')+'</div>'
         +'</div>'
         +'</div>'
         +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
@@ -36131,7 +35849,7 @@ async function agencyLoadSubaccounts(){
           ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:var(--warning-light);border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false,\''+esc(sub.name)+'\')">Suspend</button>'
           :'<button class="btn btn-purple btn-sm" onclick="agencyToggleSub(\''+sub.id+'\',true,\''+esc(sub.name)+'\')">Activate</button>'):'')
         +(agencyCanManageSubaccounts()&&!isProtected?'<button class="btn btn-danger btn-sm" onclick="agencyDeleteSub(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug||'')+'\')">Delete</button>':'')
-        +(isProtected?'<span title="This workspace is protected and cannot be suspended or deleted." style="font-size:10px;color:var(--text-muted);padding:6px 0;display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected</span>':'')
+        +(isProtected?'<span title="This workspace is protected and cannot be suspended or deleted." style="font-size:10px;color:var(--main-text-muted);padding:6px 0;display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected</span>':'')
         +'</div>'
         +'</div>';
     }).join('');
@@ -36328,7 +36046,7 @@ async function createSubaccount(){
     if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
     // Handle billing setup
     if(!isExempt){
-      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote,actor:loadAgencySession()};
+      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote};
       if(state._cardMode==='existing'){
         // Use existing Square card on file
         var custSel=document.getElementById('new-sub-existing-customer');
@@ -36946,392 +36664,6 @@ async function exportAuditLogCsv(){
     toast('Export error: ' + e.message, 'error');
   }
 }
-
-function renderAgencySettings(){
-  var el=document.getElementById('agency-content');
-  if(!el)return;
-  var sess=loadAgencySession()||{};
-  var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[sess.role]||(sess.role||'');
-  var canManageUsers=agencyCanManageUsers();
-  el.innerHTML='<div style="min-height:100vh;background:var(--bg);color:var(--text)">'
-    // Top bar
-    +'<div style="height:56px;background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px">'
-    +'<button class="btn btn-ghost btn-sm" onclick="renderAgencyDashboard()" title="Back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Back</button>'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;flex:1">Agency Settings</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);text-align:right;line-height:1.3"><div style="font-weight:600;color:var(--text)">'+esc(sess.name||sess.username||'')+'</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em">'+esc(roleLbl)+'</div></div>'
-    +'<button class="btn btn-ghost btn-sm" onclick="agencyLogout()">Sign Out</button>'
-    +'</div>'
-    // Body
-    +'<div style="padding:28px 32px;max-width:920px">'
-    // My Profile section
-    +'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700;margin-bottom:4px">My Profile</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:18px">Your agency account details</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">'
-    +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">Username</div><div style="font-size:14px;font-weight:600">'+esc(sess.username||'')+'</div></div>'
-    +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">Role</div><div style="font-size:14px;font-weight:600">'+esc(roleLbl)+'</div></div>'
-    +'</div>'
-    +'<button class="btn btn-primary btn-sm" onclick="openAgencyChangePasswordModal()">Change Password</button>'
-    +'</div>'
-    // Agency Users section (super_admin only)
-    +'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px">'
-    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px">'
-    +'<div><div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700">Plan Pricing</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Edit plan tiers and pricing. Changes apply to new billing cycles.</div></div>'
-    +'<button class="btn btn-primary btn-sm" onclick="savePlanPricing()">Save Pricing</button>'
-    +'</div>'
-    +'<div style="overflow-x:auto">'
-    +'<table style="width:100%;border-collapse:collapse;font-size:13px">'
-    +'<thead><tr style="border-bottom:1px solid var(--border)">'
-    +'<th style="text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600">Tier</th>'
-    +'<th style="text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600">Monthly ($)</th>'
-    +'<th style="text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600">Annual ($)</th>'
-    +'</tr></thead>'
-    +'<tbody>'
-+['starter','professional','business','enterprise'].map(function(tier){
-      var p=PLAN_PRICES[tier];
-      return '<tr style="border-bottom:1px solid var(--border)">'
-        +'<td style="padding:10px 12px;font-weight:600;color:var(--text)">'+PLAN_TIER_LABELS[tier]+'</td>'
-        +'<td style="padding:10px 12px"><input id="price-'+tier+'-monthly" type="number" min="0" value="'+p.monthly+'" style="width:90px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></td>'
-        +'<td style="padding:10px 12px"><input id="price-'+tier+'-annual" type="number" min="0" value="'+p.annual+'" style="width:100px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px"></td>'
-        +'</tr>';
-    }).join('')
-    +'</tbody></table>'
-    +'<div style="margin-top:12px;display:flex;gap:12px;align-items:center">'
-    +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">HIPAA Add-on</div>'
-    +'<div style="font-size:13px;color:var(--text-muted)">Monthly:</div>'
-    +'<input id="price-hipaa-monthly" type="number" min="0" value="'+HIPAA_ADDON_PRICES.monthly+'" style="width:80px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px">'
-    +'<div style="font-size:13px;color:var(--text-muted)">Annual:</div>'
-    +'<input id="price-hipaa-annual" type="number" min="0" value="'+HIPAA_ADDON_PRICES.annual+'" style="width:80px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px">'
-    +'</div>'
-    +'</div>'
-    +'</div>'
-    +(canManageUsers
-      ?'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px">'
-        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px">'
-        +'<div><div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700">Agency Users</div>'
-        +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Manage who can access the agency dashboard</div></div>'
-        +'<button class="btn btn-primary btn-sm" onclick="openAgencyAddUserModal()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add User</button>'
-        +'</div>'
-        +'<div id="agency-users-list"><div style="color:var(--text-muted);font-size:13px;padding:12px 0">Loading agency users...</div></div>'
-        +'</div>'
-      :'<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:20px;opacity:.7">'
-        +'<div style="font-family:Exo 2,sans-serif;font-size:17px;font-weight:700;margin-bottom:4px">Agency Users</div>'
-        +'<div style="font-size:13px;color:var(--text-muted)">Only Super Admins can manage agency users.</div>'
-        +'</div>')
-    +'</div></div>';
-  if(canManageUsers)agencyLoadUsers();
-}
-
-async function agencyLoadUsers(){
-  var listEl=document.getElementById('agency-users-list');
-  if(!listEl)return;
-  try{
-    var r=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
-    if(!r.ok){
-      listEl.innerHTML='<div style="color:var(--danger-light);font-size:13px;padding:12px 0">Could not load users from the server.</div>';
-      return;
-    }
-    var users=await r.json();
-    if(!Array.isArray(users)||!users.length){
-      listEl.innerHTML='<div style="color:var(--text-muted);font-size:13px;padding:12px 0">No agency users yet.</div>';
-      return;
-    }
-    // Count super admins for guard logic
-    var superCount=users.filter(function(u){return u.role==='super_admin'&&u.active!==false;}).length;
-    var currentId=agencyCurrentUserId();
-    listEl.innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'
-      +users.map(function(u){
-        var roleLbl=({super_admin:'Super Admin',admin:'Admin',support:'Support'})[u.role]||u.role;
-        var roleColor=u.role==='super_admin'?'#ff4000':u.role==='admin'?'#6b21ea':'#7a8599';
-        var isLastSuper=u.role==='super_admin'&&superCount<=1&&u.active!==false;
-        var isSelf=u.id===currentId;
-        var canDelete=!isLastSuper&&!isSelf;
-        return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius)">'
-          +'<div style="width:32px;height:32px;border-radius:50%;background:'+roleColor+';display:flex;align-items:center;justify-content:center;font-family:Exo 2,sans-serif;font-weight:700;font-size:12px;color:#fff;flex-shrink:0">'+esc(initials(u.name||u.username))+'</div>'
-          +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+(isSelf?' <span style="font-size:10px;color:var(--text-muted);font-weight:400">(you)</span>':'')+'</div>'
-          +'<div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div>'
-          +'</div>'
-          +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;background:'+roleColor+'22;color:'+roleColor+';border:1px solid '+roleColor+'44">'+esc(roleLbl)+'</span>'
-          +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(u.active!==false?'background:rgba(52,211,153,.12);color:#34d399':'background:rgba(239,68,68,.1);color:#f87171')+'">'+(u.active!==false?'Active':'Inactive')+'</span>'
-          +'<button class="btn btn-ghost btn-sm" onclick="openAgencyEditUserModal(\''+esc(u.id)+'\')">Edit</button>'
-          +(canDelete
-            ?'<button class="btn btn-danger btn-sm" onclick="agencyDeleteUser(\''+esc(u.id)+'\',\''+esc(u.name||u.username)+'\')">Remove</button>'
-            :'<button class="btn btn-ghost btn-sm" disabled style="opacity:.4;cursor:not-allowed" title="'+(isSelf?'You cannot remove yourself.':'Cannot remove the last Super Admin.')+'">Remove</button>')
-          +'</div>';
-      }).join('')
-      +'</div>';
-  }catch(e){
-    listEl.innerHTML='<div style="color:var(--danger-light);font-size:13px;padding:12px 0">Error loading users: '+esc(e.message)+'</div>';
-  }
-}
-
-// ── Add Agency User ──
-function openAgencyAddUserModal(){
-  if(!agencyCanManageUsers()){toast('Only Super Admins can add agency users.','error');return;}
-  var body='<div class="form-group"><label>Full Name *</label>'
-    +'<input id="ag-new-name" type="text" placeholder="Jane Doe"></div>'
-    +'<div class="form-group"><label>Email * <span style="font-weight:400;color:var(--text-muted)">(used for password recovery)</span></label>'
-    +'<input id="ag-new-email" type="email" placeholder="jane@example.com"></div>'
-    +'<div class="form-group"><label>Username *</label>'
-    +'<input id="ag-new-user" type="text" placeholder="jane" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_-]/g,\'\')"></div>'
-    +'<div class="form-group"><label>Password *</label>'
-    +'<input id="ag-new-pass" type="password" placeholder="Strong password">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
-    +'<div class="form-group"><label>Confirm Password *</label>'
-    +'<input id="ag-new-pass2" type="password" placeholder="Confirm password"></div>'
-    +'<div class="form-group"><label>Role *</label>'
-    +'<select id="ag-new-role" class="filter-sel" style="width:100%;height:38px">'
-    +'<option value="support">Support (view + login as only)</option>'
-    +'<option value="admin" selected>Admin (manage subaccounts)</option>'
-    +'<option value="super_admin">Super Admin (full control)</option>'
-    +'</select></div>';
-  openModal('Add Agency User', body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="agencyCreateUser()">Create User</button>',
-    'modal-lg');
-}
-
-async function agencyCreateUser(){
-  if(!agencyCanManageUsers()){toast('Permission denied.','error');return;}
-  var name=(document.getElementById('ag-new-name')&&document.getElementById('ag-new-name').value||'').trim();
-  var email=(document.getElementById('ag-new-email')&&document.getElementById('ag-new-email').value||'').trim().toLowerCase();
-  var username=(document.getElementById('ag-new-user')&&document.getElementById('ag-new-user').value||'').trim().toLowerCase();
-  var pass=document.getElementById('ag-new-pass')&&document.getElementById('ag-new-pass').value||'';
-  var pass2=document.getElementById('ag-new-pass2')&&document.getElementById('ag-new-pass2').value||'';
-  var role=document.getElementById('ag-new-role')&&document.getElementById('ag-new-role').value||'admin';
-  if(!name||!email||!username||!pass){toast('All fields required.','error');return;}
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Enter a valid email address.','error');return;}
-  if(pass!==pass2){toast('Passwords do not match.','error');return;}
-  var passErr=checkPasswordStrength(pass);
-  if(passErr){toast(passErr,'error');return;}
-  var hash=await sha256(pass);
-  var newId='ag-'+uid();
-  try{
-    var r=await fetch(apiUrl('/api/agency/users-create'),{
-      method:'POST',
-      credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:newId,username:username,password:document.getElementById('ag-new-pass').value,name:name,email:email,role:role})
-    });
-    if(!r.ok){var err=await r.text();var errObj={};try{errObj=JSON.parse(err);}catch(e){}toast('Could not create user: '+(errObj.error||err),'error');return;}
-    closeModal();
-    toast('Agency user "'+name+'" created.','success');
-    agencyLoadUsers();
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-// ── Edit Agency User ──
-async function openAgencyEditUserModal(userId){
-  if(!agencyCanManageUsers()){toast('Only Super Admins can edit agency users.','error');return;}
-  try{
-    var r=await fetch(apiUrl('/api/agency/users-get?id=')+encodeURIComponent(userId),{credentials:'include'});
-    if(!r.ok){toast('Could not load user.','error');return;}
-    var ugData=await r.json();
-    var u=ugData.user;
-    if(!u){toast('User not found.','error');return;}
-    // Count super admins to determine if this user's role can be changed
-    var rAll=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
-    var allData=rAll.ok?await rAll.json():{users:[]};
-    var all=allData.users||[];
-    var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
-    var isLastSuper=u.role==='super_admin'&&superCount<=1&&u.active!==false;
-    var isSelf=u.id===agencyCurrentUserId();
-    state.modal={type:'agency-edit-user',id:userId};
-    var body='<div class="form-group"><label>Full Name</label>'
-      +'<input id="ag-edit-name" type="text" value="'+esc(u.name||'')+'"></div>'
-      +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(used for password recovery)</span></label>'
-      +'<input id="ag-edit-email" type="email" value="'+esc(u.email||'')+'" placeholder="email@example.com"></div>'
-      +'<div class="form-group"><label>Username</label>'
-      +'<input type="text" value="'+esc(u.username)+'" disabled style="opacity:.6">'
-      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Username cannot be changed.</div></div>'
-      +'<div class="form-group"><label>Role</label>'
-      +'<select id="ag-edit-role" class="filter-sel" style="width:100%;height:38px"'+(isLastSuper?' disabled':'')+'>'
-      +'<option value="support"'+(u.role==='support'?' selected':'')+'>Support</option>'
-      +'<option value="admin"'+(u.role==='admin'?' selected':'')+'>Admin</option>'
-      +'<option value="super_admin"'+(u.role==='super_admin'?' selected':'')+'>Super Admin</option>'
-      +'</select>'
-      +(isLastSuper?'<div style="font-size:11px;color:var(--warning-light);margin-top:4px">Cannot change role of the last Super Admin.</div>':'')+'</div>'
-      +'<div class="form-group"><label>Status</label>'
-      +'<select id="ag-edit-active" class="filter-sel" style="width:100%;height:38px"'+((isLastSuper||isSelf)?' disabled':'')+'>'
-      +'<option value="true"'+(u.active!==false?' selected':'')+'>Active</option>'
-      +'<option value="false"'+(u.active===false?' selected':'')+'>Inactive</option>'
-      +'</select>'
-      +(isSelf?'<div style="font-size:11px;color:var(--warning-light);margin-top:4px">You cannot deactivate yourself.</div>':isLastSuper?'<div style="font-size:11px;color:var(--warning-light);margin-top:4px">Cannot deactivate the last Super Admin.</div>':'')+'</div>'
-      +(isSelf
-        ?'<div class="form-group"><label>Current Password <span style="font-weight:400;color:var(--text-muted)">(required to change password)</span></label>'
-        +'<input id="ag-edit-old-pass" type="password" autocomplete="current-password" placeholder="Your current password"></div>'
-        :'')
-      +'<div class="form-group"><label>'+(!isSelf?'Reset ':'')+' New Password <span style="font-weight:400;color:var(--text-muted)">(leave blank to keep current)</span></label>'
-      +'<input id="ag-edit-pass" type="password" autocomplete="new-password" placeholder="New password (optional)">'
-      +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
-      +'<div class="form-group" id="ag-edit-pass2-group"><label>Confirm New Password</label>'
-      +'<input id="ag-edit-pass2" type="password" autocomplete="new-password" placeholder="Confirm new password"></div>';
-    openModal('Edit Agency User', body,
-      '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-      +'<button class="btn btn-primary" onclick="agencySaveEditUser(\''+esc(userId)+'\')">Save Changes</button>',
-      'modal-lg');
-  }catch(e){toast('Error loading user: '+e.message,'error');}
-}
-
-async function agencySaveEditUser(userId){
-  if(!agencyCanManageUsers()){toast('Permission denied.','error');return;}
-  var name=(document.getElementById('ag-edit-name')&&document.getElementById('ag-edit-name').value||'').trim();
-  var roleEl=document.getElementById('ag-edit-role');
-  var activeEl=document.getElementById('ag-edit-active');
-  var pass=document.getElementById('ag-edit-pass')&&document.getElementById('ag-edit-pass').value||'';
-  var editEmail=(document.getElementById('ag-edit-email')&&document.getElementById('ag-edit-email').value||'').trim().toLowerCase();
-  var updates={name:name,updated_at:new Date().toISOString()};
-  if(editEmail)updates.email=editEmail;
-  if(roleEl&&!roleEl.disabled)updates.role=roleEl.value;
-  if(activeEl&&!activeEl.disabled)updates.active=activeEl.value==='true';
-  // Re-validate last super admin guard server-side-ish
-  try{
-    if(updates.role&&updates.role!=='super_admin'){
-      var rAll=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
-      var allData=rAll.ok?await rAll.json():{users:[]};
-      var all=allData.users||[];
-      var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
-      var target=(all||[]).filter(function(x){return x.id===userId;})[0];
-      if(target&&target.role==='super_admin'&&superCount<=1){
-        toast('Cannot change role of the last active Super Admin.','error');return;
-      }
-    }
-    var pass2=document.getElementById('ag-edit-pass2')&&document.getElementById('ag-edit-pass2').value||'';
-    if(pass){
-      if(pass!==pass2){toast('Passwords do not match.','error');return;}
-      var passErr=checkPasswordStrength(pass);
-      if(passErr){toast(passErr,'error');return;}
-      // If editing self, verify old password first
-      var isSelfEdit=userId===agencyCurrentUserId();
-      if(isSelfEdit){
-        var oldPass=document.getElementById('ag-edit-old-pass')&&document.getElementById('ag-edit-old-pass').value||'';
-        if(!oldPass){toast('Enter your current password to set a new one.','error');return;}
-        // Old-pass verification done server-side in users-update
-        updates.currentPassword=oldPass;
-      }
-      updates.password=pass;
-    }
-    updates.id=userId;
-    var r=await fetch(apiUrl('/api/agency/users-update'),{
-      method:'POST',
-      credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(updates)
-    });
-    if(!r.ok){var err=await r.text();toast('Could not save: '+err,'error');return;}
-    closeModal();
-    toast('Agency user updated.','success');
-    agencyLoadUsers();
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-// ── Delete Agency User ──
-async function agencyDeleteUser(userId,userName){
-  if(!agencyCanManageUsers()){toast('Permission denied.','error');return;}
-  if(userId===agencyCurrentUserId()){toast('You cannot remove yourself.','error');return;}
-  // Server-side-ish check: is this user the last active super admin?
-  try{
-    var rAll=await fetch(apiUrl('/api/agency/users-list'),{credentials:'include'});
-    var allData=rAll.ok?await rAll.json():{users:[]};
-    var all=allData.users||[];
-    var target=(all||[]).filter(function(x){return x.id===userId;})[0];
-    if(target&&target.role==='super_admin'){
-      var superCount=(all||[]).filter(function(x){return x.role==='super_admin'&&x.active!==false;}).length;
-      if(superCount<=1){toast('Cannot remove the last Super Admin.','error');return;}
-    }
-  }catch(e){toast('Error verifying user: '+e.message,'error');return;}
-  state.modal={type:'agency-del-user',id:userId};
-  openModal('Remove Agency User?',
-    '<div class="warn-box">Permanently remove <strong>'+esc(userName)+'</strong> from agency access? This cannot be undone.</div>',
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-danger" onclick="agencyConfirmDeleteUser(\''+esc(userId)+'\')">Remove</button>');
-}
-
-async function agencyConfirmDeleteUser(userId){
-  try{
-    var r=await fetch(apiUrl('/api/agency/users-delete'),{
-      method:'POST',
-      credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:userId})
-    });
-    if(!r.ok){var err=await r.text();toast('Could not remove: '+err,'error');return;}
-    closeModal();
-    toast('Agency user removed.','success');
-    agencyLoadUsers();
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-// ── Change Own Password ──
-function openAgencyChangePasswordModal(){
-  var body='<div class="form-group"><label>Current Password *</label>'
-    +'<input id="ag-cp-old" type="password" autocomplete="current-password"></div>'
-    +'<div class="form-group"><label>New Password *</label>'
-    +'<input id="ag-cp-new" type="password" autocomplete="new-password">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
-    +'<div class="form-group"><label>Confirm New Password *</label>'
-    +'<input id="ag-cp-new2" type="password" autocomplete="new-password"></div>';
-  openModal('Change Password', body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="agencySaveOwnPassword()">Update Password</button>',
-    'modal-lg');
-}
-
-async function agencySaveOwnPassword(){
-  var oldPass=document.getElementById('ag-cp-old')&&document.getElementById('ag-cp-old').value||'';
-  var newPass=document.getElementById('ag-cp-new')&&document.getElementById('ag-cp-new').value||'';
-  var newPass2=document.getElementById('ag-cp-new2')&&document.getElementById('ag-cp-new2').value||'';
-  if(!oldPass||!newPass){toast('All fields required.','error');return;}
-  if(newPass!==newPass2){toast('New passwords do not match.','error');return;}
-  if(newPass===oldPass){toast('New password must be different from current password.','error');return;}
-  var passErr=checkPasswordStrength(newPass);
-  if(passErr){toast(passErr,'error');return;}
-  var sess=loadAgencySession();
-  if(!sess||!sess.id){toast('Session expired. Please sign in again.','error');return;}
-  try{
-    var r2=await fetch(apiUrl('/api/agency/users-change-own-password'),{
-      method:'POST',
-      credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({oldPassword:oldPass,newPassword:newPass})
-    });
-    if(!r2.ok){var err=await r2.text();var eo={};try{eo=JSON.parse(err);}catch(e){}toast('Could not update password: '+(eo.error||err),'error');return;}
-    closeModal();
-    toast('Password updated successfully.','success');
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-// ── Update auth subtitle based on subaccount ──
-
-
-// =====================================================
-// MEDIA LIBRARY
-// =====================================================
-//
-// Backed by AWS S3. The browser uploads directly to S3 via presigned PUT URLs
-// and reads via presigned GET URLs. Metadata lives in the media_files table.
-// All reads/writes go through /api/media/* which enforces auth + slug isolation.
-//
-// State on `state.media`:
-//   files:    list returned by /api/media/list
-//   folders:  distinct folder names
-//   view:     'grid' | 'list'
-//   filter:   { folder: '', q: '' }
-//   loaded:   true after first load completes
-
-state.media = state.media || { files: [], folders: ['Uncategorized'], view: 'grid', filter: { folder: '', q: '' }, loaded: false };
-
-const MEDIA_ICON_COLORS = {
-  pdf:  '#ef4444',
-  doc:  '#3b82f6', docx: '#3b82f6',
-  xls:  '#10b981', xlsx: '#10b981',
-  csv:  '#10b981',
-  txt:  '#9ca3af',
-  svg:  '#a855f7',
-  default: '#6b7280'
-};
 
 function mediaFileExt(name) {
   if (!name) return '';
@@ -38131,7 +37463,6 @@ function _agencyToolsHTML(){
     + '<div class="at-tab-content hidden" id="at-tab-billing">'
     +   '<div class="at-placeholder">'
     +     '<p>SaaS billing management is handled in the legacy agency portal.</p>'
-    +     '<a href="/agency" target="_blank" rel="noopener" class="btn btn-primary">Open Billing in /agency</a>'
     +   '</div>'
     + '</div>'
     + '<div class="at-tab-content hidden" id="at-tab-audit">'
