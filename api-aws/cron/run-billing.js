@@ -155,7 +155,8 @@ async function processBilling(req, sub, summary) {
       current_period_start: new Date().toISOString(),
       last_charge_attempt_at: new Date().toISOString(),
       last_charge_status: 'succeeded',
-      retry_count: 0
+      retry_count: 0,
+      first_failure_at: null
     });
     if (adminEmail) {
       await sendEmail(adminEmail, 'receipt', {
@@ -184,9 +185,19 @@ async function processBilling(req, sub, summary) {
   } else {
     summary.failed++;
     const newRetryCount = retryNum + 1;
-    const lastAttempt = sub.last_charge_attempt_at ? new Date(sub.last_charge_attempt_at).getTime() : null;
-    const daysSinceLastAttempt = lastAttempt ? (Date.now() - lastAttempt) / 86400000 : 0;
-    const shouldSuspend = newRetryCount >= MAX_RETRIES && daysSinceLastAttempt >= SUSPEND_AFTER_DAYS;
+
+    // GHL-style dunning anchored to first_failure_at:
+    //   Day 0: active/trialing -> past_due, first_failure_at = NOW
+    //   Day 1 retry fails: stay past_due
+    //   Day 2 retry fails: stay past_due
+    //   Day 4 retry fails: suspended
+    const isFirstFailure = sub.status !== 'past_due' || !sub.first_failure_at;
+    let daysSinceFirstFailure = 0;
+    if (!isFirstFailure && sub.first_failure_at) {
+      const ffDate = new Date(sub.first_failure_at);
+      daysSinceFirstFailure = Math.floor((Date.now() - ffDate.getTime()) / 86400000);
+    }
+    const shouldSuspend = !isFirstFailure && daysSinceFirstFailure >= 4;
 
     if (shouldSuspend) {
       summary.suspended++;
@@ -195,7 +206,8 @@ async function processBilling(req, sub, summary) {
         suspended_at: new Date().toISOString(),
         last_charge_attempt_at: new Date().toISOString(),
         last_charge_status: 'failed_suspended',
-        retry_count: newRetryCount
+        retry_count: newRetryCount,
+        first_failure_at: null
       });
       await db.update('subaccounts', { active: false }, { id: sub.subaccount_id });
       if (adminEmail) await sendEmail(adminEmail, 'suspended', { subName, dollars, subaccountId: sub.subaccount_id });
@@ -214,16 +226,23 @@ async function processBilling(req, sub, summary) {
         }
       });
 
-    } else if (newRetryCount >= MAX_RETRIES) {
+    } else if (isFirstFailure) {
       await updatePlan(sub.subaccount_id, {
         status: 'past_due',
+        first_failure_at: new Date().toISOString(),
         last_charge_attempt_at: new Date().toISOString(),
         last_charge_status: 'failed',
-        retry_count: newRetryCount,
-        next_billing_date: tomorrowLocal
+        retry_count: newRetryCount
       });
-      if (adminEmail) await sendEmail(adminEmail, 'past_due', { subName, dollars, retryCount: newRetryCount, subaccountId: sub.subaccount_id });
-
+      if (adminEmail) {
+        await sendEmail(adminEmail, 'payment_failed', {
+          subName, dollars,
+          retryCount: newRetryCount,
+          maxRetries: 4,
+          nextRetryDate: dateInTzPlusDays(1, tz),
+          subaccountId: sub.subaccount_id
+        });
+      }
       await logAudit({
         req, ...CRON_ACTOR,
         action: 'system.billing.past_due',
@@ -234,23 +253,27 @@ async function processBilling(req, sub, summary) {
         errorMessage: result.error,
         metadata: {
           retry_count: newRetryCount,
-          attempted_amount_cents: amountCents
+          attempted_amount_cents: amountCents,
+          first_failure_at: new Date().toISOString()
         }
       });
 
     } else {
+      // Retry within dunning window (day 1, 2, or 4) - stay past_due, no date bump
       await updatePlan(sub.subaccount_id, {
         last_charge_attempt_at: new Date().toISOString(),
         last_charge_status: 'failed',
-        retry_count: newRetryCount,
-        next_billing_date: tomorrowLocal
+        retry_count: newRetryCount
       });
+      const nextDunningDay = daysSinceFirstFailure < 1 ? 1 : daysSinceFirstFailure < 2 ? 2 : 4;
+      const ffDate = new Date(sub.first_failure_at);
+      const nextRetryDate = new Date(ffDate.getTime() + nextDunningDay * 86400000).toISOString().slice(0,10);
       if (adminEmail) {
         await sendEmail(adminEmail, 'payment_failed', {
           subName, dollars,
           retryCount: newRetryCount,
-          maxRetries: MAX_RETRIES,
-          nextRetryDate: tomorrowLocal,
+          maxRetries: 4,
+          nextRetryDate: nextRetryDate,
           subaccountId: sub.subaccount_id
         });
       }
@@ -398,9 +421,16 @@ async function runBilling(req) {
     const dueResult = await db.query(
       `SELECT sp.* FROM subaccount_plans sp
        LEFT JOIN subaccount_data sd ON sd.subaccount_id = sp.subaccount_id
-       WHERE sp.next_billing_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date)
-         AND sp.status IN ('trialing', 'active', 'past_due')
-         AND sp.exempt_from_billing = false`,
+       WHERE sp.exempt_from_billing = false
+         AND (
+           (sp.status IN ('trialing', 'active')
+             AND sp.next_billing_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date))
+           OR
+           (sp.status = 'past_due'
+             AND sp.first_failure_at IS NOT NULL
+             AND ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date
+                  - sp.first_failure_at::date) IN (1, 2, 4))
+         )`,
       [DEFAULT_TZ]
     );
     const dueSubaccounts = dueResult.rows;

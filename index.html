@@ -35199,7 +35199,7 @@ async function openManagePlanModal(subId,subName){
   var statusBadge='<span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:'+statusColors.bg+';color:'+statusColors.fg+'">'+planStatusLabel(curStatus)+'</span>';
   var summary=isExempt?'No charge':'$'+planMonthlyPrice(curTier,curPeriod,curHipaa)+(curPeriod==='annual'?'/yr':'/mo');
   var nextBilling=plan&&plan.next_billing_date?'<span style="font-size:11px;color:var(--text-muted)">Next charge: '+plan.next_billing_date+'</span>':'';
-  var isReactivatable=curStatus==='suspended'||curStatus==='cancelled'||curStatus==='past_due';
+  var isReactivatable=curStatus==='cancelled';
   var isCancellable=!isExempt&&(curStatus==='active'||curStatus==='trialing'||curStatus==='past_due');
 
   var body=exemptBanner+linkedContactBlock
@@ -35499,6 +35499,7 @@ async function saveMpCard(subId,subName){
     setTimeout(function(){openManagePlanModal(subId,subName);},400);
   }catch(e){toast('Error: '+e.message,'error');}
 }
+
 
 async function cancelSubscription(subId){
   try{
@@ -35948,8 +35949,8 @@ async function agencyLoadSubaccounts(){
 
     el.innerHTML=subs.map(function(sub){
       var data=statsMap[sub.id]||{};
-      var contactCount=(data.contacts||[]).length;
-      var userCount=(data.users||[]).length+1; // +1 for admin
+      var contactCount=(typeof sub.contact_count==='number')?sub.contact_count:((data.contacts||[]).length);
+      var userCount=(typeof sub.user_count==='number')?sub.user_count:((data.users||[]).length);
       var isActive=sub.active!==false;
       var planRecord=plansMap[sub.id]||null;
       var planTier=(planRecord&&planRecord.plan_tier)||sub.plan||'starter';
@@ -35968,8 +35969,7 @@ async function agencyLoadSubaccounts(){
         +'<div style="font-size:12px;color:var(--main-text-muted);margin-top:2px;font-family:monospace">'+esc(sub.slug)+'</div>'
         +'</div>'
         +'<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">'
-        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;'+(isActive?'background:rgba(22,163,74,.15);color:#15803d':'background:rgba(239,68,68,.12);color:#b91c1c')+'">'+(isActive?'Active':'Suspended')+'</span>'
-        +'<span title="Billing status" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;background:'+statusCol.bg+';color:'+statusCol.fg+'">'+esc(planStatusLabel(planStatus))+(trialDays>0?' '+trialDays+'d':'')+'</span>'
+        +'<span title="Status" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:4px;background:'+statusCol.bg+';color:'+statusCol.fg+'">'+esc(planStatusLabel(planStatus))+(trialDays>0?' '+trialDays+'d':'')+'</span>'
         +'<span title="'+(hasSquare?'Square connected':'Square not connected')+'" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;'+(hasSquare?'background:rgba(107,33,234,.12);color:var(--purple)':'background:rgba(122,133,153,.15);color:var(--main-text-muted)')+'">'+(hasSquare?'◆ Square':'○ No Square')+'</span>'
         +'</div>'
         +'</div>'
@@ -36936,26 +36936,89 @@ async function saveEditSubaccount(id){
 // ── Suspend / Activate ──
 async function agencyToggleSub(id,active,name){
   if(!agencyCanManageSubaccounts()){toast('You do not have permission to change subaccount status.','error');return;}
-  var warn=active
-    ?'Users in <strong>'+esc(name||'')+'</strong> will regain access to their workspace.'
-    :'Users in <strong>'+esc(name||'')+'</strong> will be unable to log in or use their workspace until reactivated.';
-  state.modal={type:'agency-toggle-sub',id:id,extra:{active:active}};
-  openModal((active?'Activate':'Suspend')+' Subaccount?',
-    '<div style="font-size:13px;line-height:1.5">'+warn+'</div>',
+
+  // SUSPEND path: simple confirm
+  if(!active){
+    state.modal={type:'agency-toggle-sub',id:id,extra:{active:false}};
+    openModal('Suspend Subaccount?',
+      '<div style="font-size:13px;line-height:1.5">Users in <strong>'+esc(name||'')+'</strong> will be unable to log in until reactivated. Billing pauses until you unsuspend.</div>',
+      '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+      +'<button class="btn btn-primary" onclick="agencyConfirmToggleSub(\''+id+'\',false,\'simple\')">Confirm Suspend</button>');
+    return;
+  }
+
+  // ACTIVATE path: check WHY they were suspended to show the right options
+  var plan=null;
+  try{
+    var r=await fetch(apiUrl('/api/agency/plans-list?subaccount_id=')+encodeURIComponent(id),{credentials:'include'});
+    if(r.ok){var data=await r.json();var rows=data.plans||[];if(rows&&rows.length)plan=rows[0];}
+  }catch(e){console.warn('Could not load plan for activate context:',e);}
+
+  var wasBillingFailure=!!(plan && plan.last_charge_status && plan.last_charge_status.indexOf('failed')>=0);
+  var isExempt=!!(plan && plan.exempt_from_billing);
+  var hasCard=!!(plan && plan.square_card_id);
+  var suspendedDate=plan && plan.suspended_at ? String(plan.suspended_at).slice(0,10) : 'unknown';
+
+  state.modal={type:'agency-toggle-sub',id:id,extra:{active:true}};
+
+  // Exempt accounts: simple toggle, no billing question
+  if(isExempt){
+    openModal('Activate Subaccount?',
+      '<div style="font-size:13px;line-height:1.5"><strong>'+esc(name||'')+'</strong> will regain access. This is an exempt workspace, no billing changes.</div>',
+      '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+      +'<button class="btn btn-purple" onclick="agencyConfirmToggleSub(\''+id+'\',true,\'simple\')">Confirm Activate</button>');
+    return;
+  }
+
+  // Non-exempt + suspended due to billing failure: offer charge-now vs resume-schedule
+  if(wasBillingFailure && hasCard){
+    var body='<div style="font-size:13px;line-height:1.6;color:var(--text)">'
+      +'<p><strong>'+esc(name||'')+'</strong> was suspended on '+suspendedDate+' due to a failed payment.</p>'
+      +'<p style="margin-top:14px;font-weight:700;color:var(--text)">How should billing resume?</p>'
+      +'<div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">'
+      +'<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--bg-card);border:2px solid var(--purple);border-radius:var(--radius);cursor:pointer">'
+      +'<input type="radio" name="activate-mode" value="charge_now" checked style="margin-top:2px;width:auto">'
+      +'<div><div style="font-weight:700;color:var(--text)">Charge card immediately</div>'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Attempts a charge today using the card on file. If it succeeds, billing resumes normally. If it fails, status returns to past_due.</div></div></label>'
+      +'<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--bg-card);border:2px solid var(--border);border-radius:var(--radius);cursor:pointer">'
+      +'<input type="radio" name="activate-mode" value="skip_charge" style="margin-top:2px;width:auto">'
+      +'<div><div style="font-weight:700;color:var(--text)">Skip immediate charge</div>'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Account is restored. Next charge runs on the original billing schedule. Use this if the customer paid through another channel or you want to give them time.</div></div></label>'
+      +'</div></div>';
+    openModal('Activate Subaccount?',body,
+      '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+      +'<button class="btn btn-purple" onclick="agencyConfirmToggleSub(\''+id+'\',true,document.querySelector(\'input[name=activate-mode]:checked\').value)">Confirm Activate</button>');
+    return;
+  }
+
+  // Default: simple activate (no billing failure history, or no card on file)
+  openModal('Activate Subaccount?',
+    '<div style="font-size:13px;line-height:1.5">Users in <strong>'+esc(name||'')+'</strong> will regain access to their workspace.</div>',
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn '+(active?'btn-purple':'btn-primary')+'" onclick="agencyConfirmToggleSub(\''+id+'\','+(active?'true':'false')+')">Confirm '+(active?'Activate':'Suspend')+'</button>');
+    +'<button class="btn btn-purple" onclick="agencyConfirmToggleSub(\''+id+'\',true,\'simple\')">Confirm Activate</button>');
 }
 
-async function agencyConfirmToggleSub(id,active){
+async function agencyConfirmToggleSub(id,active,mode){
+  mode = mode || 'simple';
   try{
-    await fetch(apiUrl('/api/agency/subaccount-update'),{
+    var r=await fetch(apiUrl('/api/billing/suspend'),{
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:id,active:active})
+      body:JSON.stringify({subaccountId:id, action: active?'unsuspend':'suspend', mode: mode})
     });
+    if(!r.ok){var t=await r.text();toast((active?'Activate':'Suspend')+' failed: '+t,'error');return;}
+    var data=await r.json();
     closeModal();
-    toast('Subaccount '+(active?'activated':'suspended')+'.','success');
+    if(data.charge_attempted){
+      if(data.charge_succeeded){
+        toast('Subaccount activated. Card charged successfully.','success');
+      } else {
+        toast('Subaccount activated, but charge failed. Status: past_due.','warning');
+      }
+    } else {
+      toast('Subaccount '+(active?'activated':'suspended')+'.','success');
+    }
     agencyLoadSubaccounts();
   }catch(e){toast('Error: '+e.message,'error');}
 }
