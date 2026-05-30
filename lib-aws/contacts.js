@@ -363,6 +363,42 @@ async function findOrCreateContact(subaccountId, opts) {
   return { contact: newContact, was_created: true, matched_by: null };
 }
 
+
+// Lightweight contact search for picker autocomplete.
+// Uses pg_trgm GIN index for fuzzy substring match.
+// Returns at most {limit} results, minimal fields only.
+async function searchContactsForPicker(subaccountId, query, limit) {
+  const q = (query || '').trim().toLowerCase();
+  if (q.length < 1) return { matches: [], truncated: false };
+  const max = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
+
+  const r = await db.query(
+    `SELECT id, first_name, last_name, display_name, email, phone, litbiz_square_customer_id
+     FROM contacts
+     WHERE subaccount_id = $1
+       AND (archived IS NULL OR archived = false)
+       AND LOWER(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') || ' ' || COALESCE(email, '') || ' ' || COALESCE(phone, '') || ' ' || COALESCE(display_name, '')) LIKE $2
+     ORDER BY
+       CASE WHEN LOWER(COALESCE(display_name, COALESCE(first_name || ' ' || last_name, email))) LIKE $3 THEN 0 ELSE 1 END,
+       COALESCE(display_name, first_name, email)
+     LIMIT $4`,
+    [subaccountId, '%' + q + '%', q + '%', max + 1]
+  );
+
+  const truncated = r.rows.length > max;
+  const matches = r.rows.slice(0, max).map(c => ({
+    id: c.id,
+    name: c.display_name || ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.email || '(no name)',
+    first_name: c.first_name || '',
+    last_name: c.last_name || '',
+    email: c.email || '',
+    phone: c.phone || '',
+    litbiz_square_customer_id: c.litbiz_square_customer_id || null
+  }));
+
+  return { matches, truncated };
+}
+
 module.exports = {
   getContactById,
   getContactByIdWithPHI,
@@ -371,5 +407,6 @@ module.exports = {
   getAllContacts,
   createContact,
   createStubContactFromSms,
+  searchContactsForPicker,
   findOrCreateContact
 };

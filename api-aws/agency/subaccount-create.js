@@ -90,9 +90,10 @@ async function handler(req, res) {
       await client.query(`
         INSERT INTO subaccount_plans (
           subaccount_id, plan_tier, billing_period, hipaa_addon, status,
-          exempt_from_billing, discount_percent, discount_note, created_at, updated_at
+          exempt_from_billing, discount_percent, discount_note, linked_contact_id,
+          created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
         ON CONFLICT (subaccount_id) DO UPDATE SET
           plan_tier = EXCLUDED.plan_tier,
           billing_period = EXCLUDED.billing_period,
@@ -101,13 +102,15 @@ async function handler(req, res) {
           exempt_from_billing = EXCLUDED.exempt_from_billing,
           discount_percent = EXCLUDED.discount_percent,
           discount_note = EXCLUDED.discount_note,
+          linked_contact_id = EXCLUDED.linked_contact_id,
           updated_at = NOW()
       `, [
         subId, b.tier, b.billingPeriod || 'monthly', !!b.hipaaAddon,
         b.status || 'exempt',
         b.exemptFromBilling !== false,
         parseInt(b.discountPercent) || 0,
-        b.discountNote || null
+        b.discountNote || null,
+        b.linkedContactId || null
       ]);
 
       // 4. Insert subaccount_users row for the admin.

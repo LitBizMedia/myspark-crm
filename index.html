@@ -35107,10 +35107,10 @@ function openRefundModal(invoiceId){
   var amt='$'+((inv.amount_cents||0)/100).toFixed(2);
   var subName=(inv.subaccounts&&inv.subaccounts.name)||inv.subaccount_id;
   state.modal={type:'refund-confirm',id:invoiceId};
-  var body='<div style="font-size:14px;line-height:1.7;color:var(--text)">'
+  var body='<div style="font-size:14px;line-height:1.7;color:var(--main-text)">'
     +'<p>Refund <strong>'+amt+'</strong> charged to <strong>'+esc(subName)+'</strong>?</p>'
-    +'<p style="margin-top:8px;color:var(--text-muted);font-size:13px">'+esc(inv.description||'')+'</p>'
-    +'<p style="margin-top:14px;font-size:12px;color:var(--text-muted)">This sends a full refund through Square. The customer\'s card is credited within a few business days.</p>'
+    +'<p style="margin-top:8px;color:var(--main-text-muted);font-size:13px">'+esc(inv.description||'')+'</p>'
+    +'<p style="margin-top:14px;font-size:12px;color:var(--main-text-muted)">This sends a full refund through Square. The customer\'s card is credited within a few business days.</p>'
     +'</div>'
     +'<div class="form-group" style="margin-top:14px"><label>Reason (optional)</label>'
     +'<input id="refund-reason" type="text" placeholder="Reason for refund" maxlength="180"></div>';
@@ -35236,8 +35236,13 @@ async function openManagePlanModal(subId,subName){
       +'<button type="button" id="mp-card-mode-existing" class="btn btn-ghost btn-sm" onclick="setMpCardMode(\'existing\')" style="flex:1">Card on File</button>'
       +'</div>'
       +'<div id="mp-existing-card-section" style="display:none;margin-top:8px">'
-      +'<select id="mp-existing-customer" class="filter-sel" style="width:100%;height:38px;margin-bottom:8px" onchange="loadMpExistingCards()"><option value="">Loading...</option></select>'
-      +'<select id="mp-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Select a card</option></select>'
+      +'<div style="position:relative;margin-bottom:8px">'
+      +'<input type="text" id="mp-customer-search" placeholder="Search customers by name or email..." autocomplete="off" oninput="filterSquareCustomers(\'mp\')" onfocus="filterSquareCustomers(\'mp\')" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 32px 8px 12px;font-size:13px;box-sizing:border-box">'
+      +'<button type="button" onclick="clearSquareCustomerPick(\'mp\')" id="mp-customer-clear" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--main-text-muted);cursor:pointer;font-size:16px;display:none">×</button>'
+      +'<div id="mp-customer-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);max-height:260px;overflow-y:auto;z-index:1100;margin-top:2px"></div>'
+      +'</div>'
+      +'<input type="hidden" id="mp-existing-customer">'
+      +'<select id="mp-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Select a customer first</option></select>'
       +'</div>'
       +'<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="saveMpCard(\''+subId+'\',\''+esc(subName||'')+'\')">Save Card</button>'
       +'</div>'
@@ -36038,7 +36043,26 @@ async function agencyConfirmLoginAs(slug){
 // ── Create Subaccount Modal ──
 function openCreateSubaccountModal(){
   if(!agencyCanManageSubaccounts()){toast('You do not have permission to create subaccounts.','error');return;}
-  var body='<div class="form-group"><label>Subaccount Name *</label>'
+  // Reset state for fresh modal open
+  state._newSubLinkedContact=null;
+  state._newSubCardMode='new'; // 'new' or 'existing'
+  var body=
+    // === STEP 1: LINKED CONTACT PICKER ===
+    '<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius-lg);padding:14px;margin-bottom:18px">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--purple);margin-bottom:8px">Step 1: Customer</div>'
+    +'<div id="new-sub-contact-picker">'
+    +'<div style="position:relative">'
+    +'<input type="text" id="new-sub-contact-search" placeholder="Search LitBiz contacts by name or email..." autocomplete="off" oninput="filterLinkedContacts()" onfocus="filterLinkedContacts()" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:9px 12px;font-size:13px;box-sizing:border-box">'
+    +'<div id="new-sub-contact-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);max-height:260px;overflow-y:auto;z-index:1100;margin-top:2px"></div>'
+    +'</div>'
+    +'<div id="new-sub-contact-empty" style="font-size:11px;color:var(--text-muted);margin-top:6px">Pick the LitBiz contact this subaccount belongs to. Type 2+ characters to search.</div>'
+    +'</div>'
+    +'<div id="new-sub-contact-picked" style="display:none">'
+    +'</div>'
+    +'</div>'
+    // === STEP 2: SUBACCOUNT IDENTITY ===
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Step 2: Subaccount Info</div>'
+    +'<div class="form-group"><label>Subaccount Name *</label>'
     +'<input id="new-sub-name" type="text" placeholder="e.g. Riverside Spa"></div>'
     +'<div class="form-group"><label>URL Slug * <span style="font-weight:400;color:var(--text-muted)">(lowercase, no spaces)</span></label>'
     +'<div style="display:flex;align-items:center;gap:0">'
@@ -36051,6 +36075,9 @@ function openCreateSubaccountModal(){
     +'<option value="business">Business</option>'
     +'<option value="enterprise">Enterprise</option>'
     +'</select></div>'
+    // === STEP 3: ADMIN LOGIN ===
+    +'<div style="border-top:1px solid var(--border);margin:18px 0 14px"></div>'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Step 3: Admin Login</div>'
     +'<div class="form-group"><label>Admin Full Name *</label>'
     +'<input id="new-sub-admin-name" type="text" placeholder="e.g. Davida Rose"></div>'
     +'<div class="form-group"><label>Admin Username * <span style="font-weight:400;color:var(--text-muted)">(lowercase, for login)</span></label>'
@@ -36060,8 +36087,9 @@ function openCreateSubaccountModal(){
     +'<div class="form-group"><label>Admin Password *</label>'
     +'<input id="new-sub-pass" type="password" placeholder="Strong password">'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
+    // === STEP 4: SUBSCRIPTION + BILLING ===
     +'<div style="border-top:1px solid var(--border);margin:18px 0 14px"></div>'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:12px">Subscription and Billing</div>'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Step 4: Subscription & Billing</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
     +'<div class="form-group" style="margin:0"><label>Billing Period</label>'
     +'<select id="new-sub-billing-period" class="filter-sel" style="width:100%;height:38px" onchange="updateSubBillingPreview()">'
@@ -36082,31 +36110,160 @@ function openCreateSubaccountModal(){
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="new-sub-exempt" onchange="toggleBillingFields()" style="width:auto;margin:0">'
     +'<span>Exempt from billing (test workspace, partner, internal use)</span></label></div>'
+    // === STEP 5: PAYMENT CARD ===
     +'<div id="new-sub-billing-fields">'
     +'<div class="form-group"><label>Payment Card *</label>'
-    +'<div style="display:flex;gap:8px;margin-bottom:10px">'
-    +'<button type="button" id="new-sub-card-mode-new" class="btn btn-primary btn-sm" onclick="setCardMode(\'new\')" style="flex:1">Enter New Card</button>'
-    +'<button type="button" id="new-sub-card-mode-existing" class="btn btn-ghost btn-sm" onclick="setCardMode(\'existing\')" style="flex:1">Use Card on File</button>'
+    +'<div id="new-sub-card-mode-strip" style="display:flex;gap:8px;margin-bottom:10px">'
+    +'<button type="button" id="new-sub-card-mode-new" class="btn btn-primary btn-sm" onclick="setCardMode(\'new\')" style="flex:1">Add New Card</button>'
+    +'<button type="button" id="new-sub-card-mode-existing" class="btn btn-ghost btn-sm" onclick="setCardMode(\'existing\')" style="flex:1;display:none">Use Saved Card</button>'
     +'</div>'
     +'<div id="new-sub-card-new-section">'
     +'<div id="new-sub-card-container" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:52px"></div>'
     +'</div>'
     +'<div id="new-sub-card-existing-section" style="display:none">'
-    +'<select id="new-sub-existing-customer" class="filter-sel" style="width:100%;height:38px;margin-bottom:8px" onchange="loadExistingCards()"><option value="">Loading customers...</option></select>'
-    +'<select id="new-sub-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Select a card</option></select>'
+    +'<select id="new-sub-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Loading saved cards...</option></select>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:5px">14-day free trial. Card auto-charges at trial end. Cancel anytime.</div></div>'
-    +'<div style="background:var(--bg-card);border-radius:var(--radius);padding:12px;display:flex;align-items:center;justify-content:space-between;margin-top:4px">'
+    +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;align-items:center;justify-content:space-between;margin-top:4px">'
     +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">After 14-day trial</div>'
     +'<div id="new-sub-charge-summary" style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;color:var(--orange);margin-top:2px">$29/mo</div></div>'
     +'</div>'
     +'</div>';
   openModal('New Subaccount',body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="createSubaccount()">Create Subaccount</button>',
+    +'<button class="btn btn-action" onclick="createSubaccount()">Create Subaccount</button>',
     'modal-lg');
   setTimeout(initSubaccountCardForm,300);
 }
+
+// ── Linked contact picker (LitBiz CRM contacts) ──
+var _newSubContactSearchAbort=null;
+async function filterLinkedContacts(){
+  var input=document.getElementById('new-sub-contact-search');
+  var results=document.getElementById('new-sub-contact-results');
+  if(!input||!results)return;
+  var q=(input.value||'').trim();
+  if(q.length<2){results.style.display='none';return;}
+  if(_newSubContactSearchAbort)_newSubContactSearchAbort.abort();
+  _newSubContactSearchAbort=new AbortController();
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/contact-search?q='+encodeURIComponent(q)+'&limit=20'),
+      {credentials:'include',signal:_newSubContactSearchAbort.signal});
+    if(!r.ok){return;}
+    var data=await r.json();
+    var matches=data.matches||[];
+    if(!matches.length){
+      results.innerHTML='<div style="padding:14px;font-size:12px;color:var(--main-text-muted);text-align:center">No contacts match. Create the contact in your CRM first.</div>';
+      results.style.display='block';
+      return;
+    }
+    results.innerHTML=matches.map(function(c){
+      var hasSquare=c.litbiz_square_customer_id?' <span style="font-size:10px;background:rgba(107,33,234,.12);color:var(--purple);padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700">SQUARE</span>':'';
+      return '<div onclick="selectLinkedContact(\''+esc(c.id)+'\')" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'">'
+        +'<div style="font-weight:600;color:var(--main-text)">'+esc(c.name)+hasSquare+'</div>'
+        +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(c.email||'no email')+(c.phone?' &middot; '+esc(c.phone):'')+'</div>'
+        +'</div>';
+    }).join('');
+    // Stash full results for select handler
+    state._newSubContactSearchResults=matches;
+    results.style.display='block';
+  }catch(e){
+    if(e.name!=='AbortError')console.warn('contact search err:',e);
+  }
+}
+
+function selectLinkedContact(contactId){
+  var contact=(state._newSubContactSearchResults||[]).find(function(c){return c.id===contactId;});
+  if(!contact)return;
+  state._newSubLinkedContact=contact;
+
+  // Hide picker, show selected card
+  var picker=document.getElementById('new-sub-contact-picker');
+  var picked=document.getElementById('new-sub-contact-picked');
+  if(picker)picker.style.display='none';
+  if(picked){
+    picked.style.display='block';
+    picked.innerHTML='<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">'
+      +'<div>'
+      +'<div style="font-weight:700;color:var(--main-text);font-size:13px">'+esc(contact.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(contact.email||'no email')+(contact.phone?' &middot; '+esc(contact.phone):'')+'</div>'
+      +'</div>'
+      +'<button class="btn btn-ghost btn-sm" onclick="clearLinkedContact()">Change</button>'
+      +'</div>';
+  }
+
+  // Pre-fill admin fields (editable)
+  var adminName=document.getElementById('new-sub-admin-name');
+  var adminEmail=document.getElementById('new-sub-email');
+  if(adminName && !adminName.value) adminName.value=contact.name||'';
+  if(adminEmail && !adminEmail.value) adminEmail.value=contact.email||'';
+
+  // If contact has a Square customer ID, surface saved cards option
+  configureCardOptionsForLinkedContact();
+}
+
+function clearLinkedContact(){
+  state._newSubLinkedContact=null;
+  var picker=document.getElementById('new-sub-contact-picker');
+  var picked=document.getElementById('new-sub-contact-picked');
+  if(picker)picker.style.display='block';
+  if(picked){picked.style.display='none';picked.innerHTML='';}
+  // Reset card section visibility
+  var btnExisting=document.getElementById('new-sub-card-mode-existing');
+  if(btnExisting)btnExisting.style.display='none';
+  setCardMode('new');
+}
+
+async function configureCardOptionsForLinkedContact(){
+  var contact=state._newSubLinkedContact;
+  var btnExisting=document.getElementById('new-sub-card-mode-existing');
+  if(!btnExisting)return;
+  if(!contact)return;
+  // Always probe Square for matching customer: by saved ID first, then by email fallback.
+  try{
+    var r=await fetch(apiUrl('/api/billing/list-cards'),{credentials:'include'});
+    if(!r.ok){btnExisting.style.display='none';setCardMode('new');return;}
+    var data=await r.json();
+    var customers=data.customers||[];
+    var ourCust=null;
+    // Priority 1: stored Square customer ID on the contact
+    if(contact.litbiz_square_customer_id){
+      ourCust=customers.find(function(c){return c.customerId===contact.litbiz_square_customer_id;});
+    }
+    // Priority 2: fallback by email match
+    if(!ourCust && contact.email){
+      var ce=(contact.email||'').toLowerCase();
+      ourCust=customers.find(function(c){return (c.email||'').toLowerCase()===ce;});
+    }
+    var cardSel=document.getElementById('new-sub-existing-card');
+    if(!ourCust || !ourCust.cards || !ourCust.cards.length){
+      btnExisting.style.display='none';
+      setCardMode('new');
+      return;
+    }
+    // Cards found
+    btnExisting.style.display='block';
+    btnExisting.disabled=false;
+    btnExisting.style.opacity='1';
+    if(cardSel){
+      cardSel.innerHTML=ourCust.cards.map(function(c){
+        return '<option value="'+c.cardId+'">'+esc(c.brand)+' ending '+esc(c.last4)+' (exp '+c.expMonth+'/'+c.expYear+')</option>';
+      }).join('');
+    }
+    state._newSubLinkedCustomerId=ourCust.customerId;
+    setCardMode('existing');
+  }catch(e){console.warn('configureCardOptions:',e);btnExisting.style.display='none';setCardMode('new');}
+}
+
+// Close contact picker dropdown when clicking outside
+document.addEventListener('click',function(e){
+  var input=document.getElementById('new-sub-contact-search');
+  var results=document.getElementById('new-sub-contact-results');
+  if(!input||!results)return;
+  if(e.target!==input && !results.contains(e.target)){
+    results.style.display='none';
+  }
+});
 
 async function createSubaccount(){
   var name=(document.getElementById('new-sub-name')&&document.getElementById('new-sub-name').value||'').trim();
@@ -36121,6 +36278,7 @@ async function createSubaccount(){
   var adminUser=(document.getElementById('new-sub-user')&&document.getElementById('new-sub-user').value||'').trim().toLowerCase();
   var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
   var adminEmail=(document.getElementById('new-sub-email')&&document.getElementById('new-sub-email').value||'').trim().toLowerCase();
+  if(!state._newSubLinkedContact||!state._newSubLinkedContact.id){toast('Pick a LitBiz contact first.','error');return;}
   if(!name||!slug||!adminName||!adminUser||!adminPass||!adminEmail){toast('All fields required.','error');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)){toast('Enter a valid admin email.','error');return;}
   if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
@@ -36172,20 +36330,20 @@ async function createSubaccount(){
         discountNote:discountNote||null,
         exemptFromBilling:isExempt!==false,
         status:isExempt?'exempt':'trialing',
+        linkedContactId:state._newSubLinkedContact&&state._newSubLinkedContact.id,
         initData:initData
       })
     });
     if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
     // Handle billing setup
     if(!isExempt){
-      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote};
+      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote,linkedContactId:state._newSubLinkedContact&&state._newSubLinkedContact.id};
       if(state._cardMode==='existing'){
-        // Use existing Square card on file
-        var custSel=document.getElementById('new-sub-existing-customer');
+        // Saved card from the linked contact's Square customer record
         var cardSel=document.getElementById('new-sub-existing-card');
-        var existingCustId=custSel&&custSel.value;
+        var existingCustId=state._newSubLinkedCustomerId;
         var existingCardId=cardSel&&cardSel.value;
-        if(!existingCustId||!existingCardId){toast('Select a customer and card.','error');return;}
+        if(!existingCustId||!existingCardId){toast('Select a saved card.','error');return;}
         billingPayload.existingCustomerId=existingCustId;
         billingPayload.existingCardId=existingCardId;
       }else{
@@ -36305,6 +36463,87 @@ async function loadSquareCustomers(){
     sel.innerHTML='<option value="">Error: '+esc(e.message)+'</option>';
   }
 }
+
+
+// ── Square Customer Search Picker (used by new-sub + mp modals) ──
+// Filters cached state._squareCustomers / state._mpSquareCustomers client-side.
+// Prefix is 'new-sub' or 'mp' depending on the modal.
+function _pickerStateKey(prefix){return prefix==='mp'?'_mpSquareCustomers':'_squareCustomers';}
+function _pickerLoadFn(prefix){return prefix==='mp'?'loadMpExistingCards':'loadExistingCards';}
+
+function filterSquareCustomers(prefix){
+  var input=document.getElementById(prefix+'-customer-search');
+  var results=document.getElementById(prefix+'-customer-results');
+  if(!input||!results)return;
+  var q=(input.value||'').trim().toLowerCase();
+  var customers=state[_pickerStateKey(prefix)]||[];
+  if(!customers.length){
+    results.innerHTML='<div style="padding:14px;font-size:12px;color:var(--main-text-muted);text-align:center">No customers loaded yet</div>';
+    results.style.display='block';
+    return;
+  }
+  var matches=q ? customers.filter(function(c){
+    var hay=((c.customerName||'')+' '+(c.email||'')).toLowerCase();
+    return hay.indexOf(q)>=0;
+  }) : customers;
+  matches=matches.slice(0,25);
+  if(!matches.length){
+    results.innerHTML='<div style="padding:14px;font-size:12px;color:var(--main-text-muted);text-align:center">No matches</div>';
+    results.style.display='block';
+    return;
+  }
+  results.innerHTML=matches.map(function(c){
+    var cardSummary=c.cards&&c.cards.length?(c.cards.length+' card'+(c.cards.length===1?'':'s')):'no cards';
+    return '<div onclick="selectSquareCustomer(\''+prefix+'\',\''+esc(c.customerId)+'\')" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--main-border);font-size:13px" onmouseover="this.style.background=\'var(--main-bg)\'" onmouseout="this.style.background=\'transparent\'">'
+      +'<div style="font-weight:600;color:var(--main-text)">'+esc(c.customerName||'(no name)')+'</div>'
+      +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(c.email||'no email')+' &middot; '+cardSummary+'</div>'
+      +'</div>';
+  }).join('');
+  results.style.display='block';
+}
+
+function selectSquareCustomer(prefix,customerId){
+  var customers=state[_pickerStateKey(prefix)]||[];
+  var cust=customers.find(function(c){return c.customerId===customerId;});
+  if(!cust)return;
+  var input=document.getElementById(prefix+'-customer-search');
+  var hidden=document.getElementById(prefix+'-existing-customer');
+  var clearBtn=document.getElementById(prefix+'-customer-clear');
+  var results=document.getElementById(prefix+'-customer-results');
+  if(input)input.value=(cust.customerName||'')+(cust.email?' ('+cust.email+')':'');
+  if(hidden)hidden.value=customerId;
+  if(clearBtn)clearBtn.style.display='block';
+  if(results)results.style.display='none';
+  // Trigger the existing card loader
+  var loadFnName=_pickerLoadFn(prefix);
+  if(typeof window[loadFnName]==='function')window[loadFnName]();
+}
+
+function clearSquareCustomerPick(prefix){
+  var input=document.getElementById(prefix+'-customer-search');
+  var hidden=document.getElementById(prefix+'-existing-customer');
+  var clearBtn=document.getElementById(prefix+'-customer-clear');
+  var results=document.getElementById(prefix+'-customer-results');
+  var cardSel=document.getElementById(prefix+'-existing-card');
+  if(input)input.value='';
+  if(hidden)hidden.value='';
+  if(clearBtn)clearBtn.style.display='none';
+  if(results)results.style.display='none';
+  if(cardSel)cardSel.innerHTML='<option value="">Select a customer first</option>';
+}
+
+// Close picker dropdown when clicking outside
+document.addEventListener('click',function(e){
+  ['new-sub','mp'].forEach(function(prefix){
+    var input=document.getElementById(prefix+'-customer-search');
+    var results=document.getElementById(prefix+'-customer-results');
+    if(!input||!results)return;
+    if(e.target!==input && !results.contains(e.target)){
+      results.style.display='none';
+    }
+  });
+});
+
 
 function loadExistingCards(){
   var custSel=document.getElementById('new-sub-existing-customer');

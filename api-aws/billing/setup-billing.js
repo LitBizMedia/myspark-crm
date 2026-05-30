@@ -28,6 +28,7 @@ async function handler(req, res) {
     adminEmail,
     adminName,
     sourceId,
+    linkedContactId,
     existingCustomerId,
     existingCardId,
     tier,
@@ -116,6 +117,30 @@ async function handler(req, res) {
 
     try {
       await db.insertOne('subaccount_plans', planPayload, { onConflict: 'subaccount_id' });
+
+      // If a LitBiz contact was linked, save the Square customer ID back to that contact
+      // so future onboarding can reuse it without creating a duplicate Square customer.
+      if (linkedContactId && customerId) {
+        try {
+          await db.query(
+            `UPDATE contacts
+                SET litbiz_square_customer_id = $1,
+                    updated_at = NOW()
+              WHERE id = $2 AND subaccount_id = 'sub-litbiz'`,
+            [customerId, linkedContactId]
+          );
+          // Also save the linked_contact_id on the plan for future lookups
+          await db.query(
+            `UPDATE subaccount_plans
+                SET linked_contact_id = $1, updated_at = NOW()
+              WHERE subaccount_id = $2`,
+            [linkedContactId, subaccountId]
+          );
+        } catch (linkErr) {
+          // Non-fatal. Audit and continue.
+          console.warn('setup-billing: contact link save failed:', linkErr.message);
+        }
+      }
     } catch (e) {
       console.error('setup-billing: DB upsert failed after card save. Customer:', customerId, 'Card:', cardId, e.message);
       await logAudit({
