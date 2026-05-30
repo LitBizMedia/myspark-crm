@@ -34964,8 +34964,140 @@ function renderInvoicesPagination(){
 function invoicesPrev(){billingState.invoicesOffset=Math.max(0,billingState.invoicesOffset-billingState.invoicesLimit);loadAgencyInvoices();}
 function invoicesNext(){billingState.invoicesOffset=billingState.invoicesOffset+billingState.invoicesLimit;loadAgencyInvoices();}
 
-function openPlanPricingModal(){
-  toast("Plan Pricing modal coming next step.","info");
+async function openPlanPricingModal(){
+  if(!agencyCanManageSubaccounts()){toast("You don't have permission to edit pricing.","error");return;}
+
+  // Fetch current pricing first
+  var rows;
+  try{
+    var r=await fetch(apiUrl('/api/agency/plan-pricing-get'),{credentials:'include'});
+    if(!r.ok){toast('Could not load plan pricing.','error');return;}
+    var data=await r.json();
+    rows=data.rows||[];
+  }catch(e){toast('Network error: '+e.message,'error');return;}
+
+  if(!rows.length){toast('No pricing tiers found.','error');return;}
+
+  // Tier accent colors matching the public marketing page
+  var tierAccent={starter:'var(--main-text-muted)',professional:'var(--purple)',business:'#34d399',enterprise:'var(--orange)'};
+
+  function dollarsFromCents(c){return ((c||0)/100).toFixed(c%100===0?0:2);}
+  function emptyIfNull(v){return (v===null||v===undefined)?'':String(v);}
+
+  // Get HIPAA addon from the first row (it's uniform across tiers per Patrick's decision)
+  var hipaaMo=dollarsFromCents(rows[0].hipaa_monthly_cents);
+  var hipaaYr=dollarsFromCents(rows[0].hipaa_annual_cents);
+
+  var tierCards=rows.map(function(t){
+    var label=PLAN_TIER_LABELS[t.tier]||t.tier;
+    var accent=tierAccent[t.tier]||'var(--main-text)';
+    return '<div data-tier="'+esc(t.tier)+'" style="background:var(--main-card);border:1px solid var(--main-border);border-top:3px solid '+accent+';border-radius:var(--radius-lg);padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm)">'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:'+accent+';margin-bottom:14px">'+esc(label)+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'
+      +'<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;display:block;margin-bottom:4px">Monthly Price ($)</label>'
+      +'<input type="number" min="0" step="1" class="pp-input" data-field="monthly_dollars" value="'+dollarsFromCents(t.monthly_cents)+'" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
+      +'<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;display:block;margin-bottom:4px">Annual Price ($)</label>'
+      +'<input type="number" min="0" step="1" class="pp-input" data-field="annual_dollars" value="'+dollarsFromCents(t.annual_cents)+'" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
+      +'</div>'
+      +'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;margin-bottom:8px">Limits (leave blank for unlimited)</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+      +'<div><label style="font-size:11px;color:var(--main-text-muted);display:block;margin-bottom:4px">Max Staff</label>'
+      +'<input type="number" min="0" step="1" class="pp-input" data-field="max_staff" value="'+emptyIfNull(t.max_staff)+'" placeholder="Unlimited" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
+      +'<div><label style="font-size:11px;color:var(--main-text-muted);display:block;margin-bottom:4px">Max Contacts</label>'
+      +'<input type="number" min="0" step="1" class="pp-input" data-field="max_contacts" value="'+emptyIfNull(t.max_contacts)+'" placeholder="Unlimited" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
+      +'<div><label style="font-size:11px;color:var(--main-text-muted);display:block;margin-bottom:4px">Max Emails / Month</label>'
+      +'<input type="number" min="0" step="1" class="pp-input" data-field="max_emails_per_month" value="'+emptyIfNull(t.max_emails_per_month)+'" placeholder="Unlimited" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
+      +'<div><label style="font-size:11px;color:var(--main-text-muted);display:block;margin-bottom:4px">Max SMS / Month</label>'
+      +'<input type="number" min="0" step="1" class="pp-input" data-field="max_sms_per_month" value="'+emptyIfNull(t.max_sms_per_month)+'" placeholder="Unlimited" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+
+  var hipaaBlock='<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius-lg);padding:16px;margin-bottom:14px">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--purple);margin-bottom:10px">HIPAA Add-On (uniform across tiers)</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;display:block;margin-bottom:4px">Monthly ($)</label>'
+    +'<input type="number" min="0" step="1" id="pp-hipaa-monthly" value="'+hipaaMo+'" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
+    +'<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;display:block;margin-bottom:4px">Annual ($)</label>'
+    +'<input type="number" min="0" step="1" id="pp-hipaa-annual" value="'+hipaaYr+'" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
+    +'</div>'
+    +'</div>';
+
+  var body=hipaaBlock+'<div id="pp-tiers">'+tierCards+'</div>'
+    +'<div style="font-size:12px;color:var(--main-text-muted);padding:8px 0;line-height:1.5">Changes apply to ALL subscriptions on next billing cycle. Existing subs are not grandfathered. Exempt accounts are unaffected.</div>';
+
+  openModal('Plan Pricing & Limits', body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-action" onclick="savePlanPricing()">Save Pricing</button>',
+    'modal-lg');
+}
+
+async function savePlanPricing(){
+  if(!agencyCanManageSubaccounts()){toast("Permission denied.","error");return;}
+  var modal=document.querySelector('.modal-content,.modal,.modal-body')||document;
+  var tierBlocks=document.querySelectorAll('#pp-tiers [data-tier]');
+  if(!tierBlocks.length){toast('Could not find tier inputs.','error');return;}
+
+  // Grab HIPAA values once (uniform across tiers)
+  function readDollarsToCents(id){
+    var v=document.getElementById(id);
+    if(!v)return 0;
+    var n=parseFloat(v.value||'0');
+    if(isNaN(n)||n<0)return 0;
+    return Math.round(n*100);
+  }
+  var hipaaMoCents=readDollarsToCents('pp-hipaa-monthly');
+  var hipaaYrCents=readDollarsToCents('pp-hipaa-annual');
+
+  function readDollars(blk,field){
+    var inp=blk.querySelector('input[data-field="'+field+'"]');
+    if(!inp)return 0;
+    var n=parseFloat(inp.value||'0');
+    if(isNaN(n)||n<0)return 0;
+    return Math.round(n*100);
+  }
+  function readIntOrNull(blk,field){
+    var inp=blk.querySelector('input[data-field="'+field+'"]');
+    if(!inp)return null;
+    var raw=(inp.value||'').trim();
+    if(raw==='')return null;
+    var n=parseInt(raw,10);
+    if(isNaN(n)||n<0)return null;
+    return n;
+  }
+
+  var rows=[];
+  for(var i=0;i<tierBlocks.length;i++){
+    var b=tierBlocks[i];
+    var tier=b.getAttribute('data-tier');
+    rows.push({
+      id:tier, tier:tier,
+      monthly_cents:readDollars(b,'monthly_dollars'),
+      annual_cents:readDollars(b,'annual_dollars'),
+      hipaa_monthly_cents:hipaaMoCents,
+      hipaa_annual_cents:hipaaYrCents,
+      max_staff:readIntOrNull(b,'max_staff'),
+      max_contacts:readIntOrNull(b,'max_contacts'),
+      max_emails_per_month:readIntOrNull(b,'max_emails_per_month'),
+      max_sms_per_month:readIntOrNull(b,'max_sms_per_month')
+    });
+  }
+
+  try{
+    var r=await fetch(apiUrl('/api/agency/plan-pricing-update'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({rows:rows})
+    });
+    if(!r.ok){var t=await r.text();toast('Save failed: '+t,'error');return;}
+    var resp=await r.json();
+    closeModal();
+    toast('Updated pricing for '+(resp.updated||0)+' tiers.','success');
+    // Refresh billing stats so MRR reflects new pricing
+    if(typeof loadBillingStats==='function')loadBillingStats();
+    if(typeof loadBillingSummary==='function')loadBillingSummary();
+  }catch(e){toast('Network error: '+e.message,'error');}
 }
 
 function openRefundModal(invoiceId){
