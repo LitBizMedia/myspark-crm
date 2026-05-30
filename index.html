@@ -35165,6 +35165,29 @@ async function openManagePlanModal(subId,subName){
     ?'<div style="padding:12px 14px;background:rgba(107,33,234,.1);border:1px solid rgba(107,33,234,.3);border-radius:var(--radius);margin-bottom:14px;font-size:13px;color:#c7b8ff"><strong>Exempt workspace.</strong> This workspace does not get billed. Plan tier sets feature limits only.</div>'
     :'';
 
+  var linkedContactInfo=plan&&plan.linked_contact_info;
+  var linkedContactBlock;
+  if(linkedContactInfo){
+    linkedContactBlock='<div style="background:var(--bg-card);border:1px solid var(--purple-border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'
+      +'<div>'
+      +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--purple);margin-bottom:4px">Linked Customer</div>'
+      +'<div style="font-weight:700;font-size:13px;color:var(--text)">'+esc(linkedContactInfo.name||'(no name)')+'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+esc(linkedContactInfo.email||'no email')+'</div>'
+      +'</div>'
+      +'<button class="btn btn-ghost btn-sm" onclick="changeMpLinkedContact(\''+subId+'\')">Change</button>'
+      +'</div></div>';
+  } else {
+    linkedContactBlock='<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px">'
+      +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--purple);margin-bottom:6px">Link a Contact</div>'
+      +'<div style="position:relative">'
+      +'<input type="text" id="mp-contact-search" placeholder="Search contacts by name or email..." autocomplete="off" oninput="filterMpLinkedContacts(\''+subId+'\')" onfocus="filterMpLinkedContacts(\''+subId+'\')" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:9px 12px;font-size:13px;box-sizing:border-box">'
+      +'<div id="mp-contact-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);max-height:260px;overflow-y:auto;z-index:1100;margin-top:2px"></div>'
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Link this subaccount to a contact in your CRM. Card on file then attaches to the contact for future billing receipts.</div>'
+      +'</div>';
+  }
+
   var tierOpts=Object.keys(PLAN_TIER_LABELS).map(function(tier){
     var p=PLAN_PRICES[tier];
     var price=curPeriod==='annual'?p.annual:p.monthly;
@@ -35179,7 +35202,7 @@ async function openManagePlanModal(subId,subName){
   var isReactivatable=curStatus==='suspended'||curStatus==='cancelled'||curStatus==='past_due';
   var isCancellable=!isExempt&&(curStatus==='active'||curStatus==='trialing'||curStatus==='past_due');
 
-  var body=exemptBanner
+  var body=exemptBanner+linkedContactBlock
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
     +'<div>'+statusBadge+'</div>'
     +'<div>'+nextBilling+'</div>'
@@ -35215,39 +35238,22 @@ async function openManagePlanModal(subId,subName){
     +'<div id="mp-summary" style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;color:var(--orange);margin-top:2px">'+summary+'</div></div>'
     +'<div style="font-size:11px;color:var(--text-muted);text-align:right;line-height:1.5">'+esc(subName)+'</div>'
     +'</div>'
-    +((!isExempt)?
-      '<div style="margin-top:14px;padding:14px 16px;background:var(--bg-card);border-radius:var(--radius)">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-      +'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700">Payment Method</div>'
-      +'<button class="btn btn-ghost btn-sm" onclick="toggleManagePlanCardForm(\''+subId+'\')">'
-      +(plan&&plan.square_card_id?'Update Card':'Add Card')
-      +'</button></div>'
+    +'<div style="margin-top:14px;padding:14px 16px;background:var(--bg-card);border-radius:var(--radius)">'
+      +'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;margin-bottom:10px">Payment Method</div>'
       +(plan&&plan.square_card_id
-        ?'<div style="font-size:13px;color:var(--success-light)">'
+        ?'<div style="font-size:13px;color:var(--success-light);margin-bottom:8px">Charging '
         +(plan.card_brand?esc(plan.card_brand)+' ':'')+'ending '
         +(plan.card_last4?esc(plan.card_last4):'on file')
         +'</div>'
-        :'<div style="font-size:13px;color:var(--warning-light)">No card on file. Add one to enable billing.</div>'
+        :'<div style="font-size:13px;color:var(--warning-light);margin-bottom:8px">No card on file. Add one to enable billing.</div>'
       )
-      +'<div id="mp-card-form-section" style="display:none;margin-top:12px">'
-      +'<div id="mp-card-container" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:52px"></div>'
-      +'<div style="display:flex;gap:8px;margin-top:8px">'
-      +'<button type="button" id="mp-card-mode-new" class="btn btn-primary btn-sm" onclick="setMpCardMode(\'new\')" style="flex:1">New Card</button>'
-      +'<button type="button" id="mp-card-mode-existing" class="btn btn-ghost btn-sm" onclick="setMpCardMode(\'existing\')" style="flex:1">Card on File</button>'
+      +(linkedContactInfo
+        ? '<div id="mp-card-pane" data-contact-id="'+esc(linkedContactInfo.id)+'" data-sub-id="'+esc(subId)+'" data-sub-name="'+esc(subName||'')+'">'
+          +'<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Loading saved cards...</div>'
+          +'</div>'
+        : '<div style="font-size:12px;color:var(--text-muted);padding:10px 12px;background:var(--bg-panel);border-radius:var(--radius)">Link a contact above to manage payment cards.</div>'
+      )
       +'</div>'
-      +'<div id="mp-existing-card-section" style="display:none;margin-top:8px">'
-      +'<div style="position:relative;margin-bottom:8px">'
-      +'<input type="text" id="mp-customer-search" placeholder="Search customers by name or email..." autocomplete="off" oninput="filterSquareCustomers(\'mp\')" onfocus="filterSquareCustomers(\'mp\')" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 32px 8px 12px;font-size:13px;box-sizing:border-box">'
-      +'<button type="button" onclick="clearSquareCustomerPick(\'mp\')" id="mp-customer-clear" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--main-text-muted);cursor:pointer;font-size:16px;display:none">×</button>'
-      +'<div id="mp-customer-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);max-height:260px;overflow-y:auto;z-index:1100;margin-top:2px"></div>'
-      +'</div>'
-      +'<input type="hidden" id="mp-existing-customer">'
-      +'<select id="mp-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Select a customer first</option></select>'
-      +'</div>'
-      +'<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="saveMpCard(\''+subId+'\',\''+esc(subName||'')+'\')">Save Card</button>'
-      +'</div>'
-      +'</div>'
-    :'')
     +(isCancellable?'<div style="margin-top:14px;padding:12px 14px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between">'
     +'<div style="font-size:13px;color:var(--text-muted)">Cancel subscription. Access continues until end of current period. Data deleted after 30 days.</div>'
     +'<button class="btn btn-ghost" style="color:var(--danger-light);border-color:rgba(239,68,68,.3);white-space:nowrap;margin-left:12px" onclick="withBtnLock(this,()=>cancelSubscription(\''+subId+'\'))">Cancel Plan</button>'
@@ -35261,6 +35267,7 @@ async function openManagePlanModal(subId,subName){
     '<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
     +'<button class="btn btn-primary" onclick="saveManagePlan(\''+subId+'\')">Save Plan</button>',
     'modal-lg');
+  setTimeout(renderMpCardPane,300);
 }
 
 function refreshTierPrices(){
@@ -35464,12 +35471,14 @@ function loadMpExistingCards(){
 async function saveMpCard(subId,subName){
   var extra=state.modal&&state.modal.extra||{};
   var adminEmail=(extra.plan&&extra.plan.admin_email)||'';
-  var payload={subaccountId:subId,adminEmail:adminEmail,adminName:subName};
+  var linkedContactId=(extra.plan&&extra.plan.linked_contact_id)||null;
+  var payload={subaccountId:subId,adminEmail:adminEmail,adminName:subName,linkedContactId:linkedContactId};
   if(state._mpCardMode==='existing'){
-    var custSel=document.getElementById('mp-existing-customer');
+    var custEl=document.getElementById('mp-existing-customer');
     var cardSel=document.getElementById('mp-existing-card');
-    if(!custSel||!custSel.value||!cardSel||!cardSel.value){toast('Select a customer and card.','error');return;}
-    payload.existingCustomerId=custSel.value;
+    var custId=custEl&&custEl.value;
+    if(!custId||!cardSel||!cardSel.value){toast('Select a customer and card.','error');return;}
+    payload.existingCustomerId=custId;
     payload.existingCardId=cardSel.value;
   }else{
     if(!_mpSqCard){toast('Card form not loaded.','error');return;}
@@ -35484,9 +35493,9 @@ async function saveMpCard(subId,subName){
     var r=await fetch(apiUrl('/api/billing/update-card'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!r.ok){var t=await r.text();toast('Card update failed: '+t,'error');return;}
     toast('Card updated successfully.','success');
-    var section=document.getElementById('mp-card-form-section');
-    if(section)section.style.display='none';
+    closeModal();
     agencyLoadSubaccounts();
+    setTimeout(function(){openManagePlanModal(subId,subName);},400);
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
@@ -36052,7 +36061,7 @@ function openCreateSubaccountModal(){
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--purple);margin-bottom:8px">Step 1: Customer</div>'
     +'<div id="new-sub-contact-picker">'
     +'<div style="position:relative">'
-    +'<input type="text" id="new-sub-contact-search" placeholder="Search LitBiz contacts by name or email..." autocomplete="off" oninput="filterLinkedContacts()" onfocus="filterLinkedContacts()" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:9px 12px;font-size:13px;box-sizing:border-box">'
+    +'<input type="text" id="new-sub-contact-search" placeholder="Search contacts by name or email..." autocomplete="off" oninput="filterLinkedContacts()" onfocus="filterLinkedContacts()" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:9px 12px;font-size:13px;box-sizing:border-box">'
     +'<div id="new-sub-contact-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);box-shadow:var(--shadow-md);max-height:260px;overflow-y:auto;z-index:1100;margin-top:2px"></div>'
     +'</div>'
     +'<div id="new-sub-contact-empty" style="font-size:11px;color:var(--text-muted);margin-top:6px">Pick the LitBiz contact this subaccount belongs to. Type 2+ characters to search.</div>'
@@ -36110,6 +36119,10 @@ function openCreateSubaccountModal(){
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="new-sub-exempt" onchange="toggleBillingFields()" style="width:auto;margin:0">'
     +'<span>Exempt from billing (test workspace, partner, internal use)</span></label></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
+    +'<input type="checkbox" id="new-sub-skip-trial" style="width:auto;margin:0">'
+    +'<span>Skip 14-day trial (bill on first billing date instead)</span></label>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:24px">Use this for customers migrating from another platform who are already paying.</div></div>'
     // === STEP 5: PAYMENT CARD ===
     +'<div id="new-sub-billing-fields">'
     +'<div class="form-group"><label>Payment Card *</label>'
@@ -36123,7 +36136,7 @@ function openCreateSubaccountModal(){
     +'<div id="new-sub-card-existing-section" style="display:none">'
     +'<select id="new-sub-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Loading saved cards...</option></select>'
     +'</div>'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:5px">14-day free trial. Card auto-charges at trial end. Cancel anytime.</div></div>'
+    +'<div id="new-sub-trial-notice" style="font-size:11px;color:var(--text-muted);margin-top:5px">14-day free trial. Card auto-charges at trial end. Cancel anytime.</div></div>'
     +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;align-items:center;justify-content:space-between;margin-top:4px">'
     +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">After 14-day trial</div>'
     +'<div id="new-sub-charge-summary" style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;color:var(--orange);margin-top:2px">$29/mo</div></div>'
@@ -36134,6 +36147,17 @@ function openCreateSubaccountModal(){
     +'<button class="btn btn-action" onclick="createSubaccount()">Create Subaccount</button>',
     'modal-lg');
   setTimeout(initSubaccountCardForm,300);
+  setTimeout(function(){
+    var t=document.getElementById('new-sub-skip-trial');
+    var n=document.getElementById('new-sub-trial-notice');
+    if(t && n){
+      t.addEventListener('change',function(){
+        n.textContent = t.checked
+          ? 'Card will be charged on the next billing date. No trial period.'
+          : '14-day free trial. Card auto-charges at trial end. Cancel anytime.';
+      });
+    }
+  },350);
 }
 
 // ── Linked contact picker (LitBiz CRM contacts) ──
@@ -36265,6 +36289,238 @@ document.addEventListener('click',function(e){
   }
 });
 
+// ── Manage Plan: Linked Contact Picker ──
+var _mpContactSearchAbort=null;
+async function filterMpLinkedContacts(subId){
+  var input=document.getElementById('mp-contact-search');
+  var results=document.getElementById('mp-contact-results');
+  if(!input||!results)return;
+  var q=(input.value||'').trim();
+  if(q.length<2){results.style.display='none';return;}
+  if(_mpContactSearchAbort)_mpContactSearchAbort.abort();
+  _mpContactSearchAbort=new AbortController();
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/contact-search?q='+encodeURIComponent(q)+'&limit=20'),
+      {credentials:'include',signal:_mpContactSearchAbort.signal});
+    if(!r.ok)return;
+    var data=await r.json();
+    var matches=data.matches||[];
+    if(!matches.length){
+      results.innerHTML='<div style="padding:14px;font-size:12px;color:var(--main-text-muted);text-align:center">No matches</div>';
+      results.style.display='block';
+      return;
+    }
+    state._mpContactSearchResults=matches;
+    results.innerHTML=matches.map(function(c){
+      var hasSquare=c.litbiz_square_customer_id?' <span style="font-size:10px;background:rgba(107,33,234,.12);color:var(--purple);padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700">SQUARE</span>':'';
+      return '<div onclick="selectMpLinkedContact(\''+esc(subId)+'\',\''+esc(c.id)+'\')" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--main-border);font-size:13px" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'">'
+        +'<div style="font-weight:600;color:var(--main-text)">'+esc(c.name)+hasSquare+'</div>'
+        +'<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(c.email||'no email')+(c.phone?' &middot; '+esc(c.phone):'')+'</div>'
+        +'</div>';
+    }).join('');
+    results.style.display='block';
+  }catch(e){if(e.name!=='AbortError')console.warn('mp contact search:',e);}
+}
+
+async function selectMpLinkedContact(subId,contactId){
+  try{
+    var r=await fetch(apiUrl('/api/agency/subaccount-link-contact'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subaccountId:subId,contactId:contactId})
+    });
+    if(!r.ok){var t=await r.text();toast('Link failed: '+t,'error');return;}
+    toast('Customer linked.','success');
+    var subName=(state.modal&&state.modal.extra&&state.modal.extra.subName)||subId;
+    closeModal();
+    setTimeout(function(){openManagePlanModal(subId,subName);},200);
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+
+// ── Manage Plan: Card Pane (radio cards + add new toggle) ──
+var _mpSqCardNew = null;
+
+async function renderMpCardPane(){
+  var pane = document.getElementById('mp-card-pane');
+  if (!pane) return;
+  var contactId = pane.getAttribute('data-contact-id');
+  var subId = pane.getAttribute('data-sub-id');
+  var subName = pane.getAttribute('data-sub-name');
+
+  // Find this contact's Square customer + cards
+  var customerId = null;
+  var cards = [];
+  try {
+    var r = await fetch(apiUrl('/api/billing/list-cards'),{credentials:'include'});
+    if (r.ok) {
+      var data = await r.json();
+      var customers = data.customers || [];
+      // Try by stored litbiz_square_customer_id from the plan's linked contact info
+      var plan = state.modal && state.modal.extra && state.modal.extra.plan;
+      var linked = plan && plan.linked_contact_info;
+      var savedId = linked && linked.litbiz_square_customer_id;
+      var matched = null;
+      if (savedId) matched = customers.find(function(c){return c.customerId===savedId;});
+      if (!matched && linked && linked.email) {
+        var ce = (linked.email||'').toLowerCase();
+        matched = customers.find(function(c){return (c.email||'').toLowerCase()===ce;});
+      }
+      if (matched) {
+        customerId = matched.customerId;
+        cards = matched.cards || [];
+      }
+    }
+  } catch (e) { console.warn('renderMpCardPane:',e); }
+
+  state._mpPaneCustomerId = customerId;
+  state._mpPaneCards = cards;
+
+  var plan = state.modal && state.modal.extra && state.modal.extra.plan;
+  var currentCardId = plan && plan.square_card_id;
+
+  var html = '';
+  if (cards.length){
+    html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px">Saved cards</div>';
+    html += cards.map(function(c){
+      var checked = c.cardId === currentCardId;
+      return '<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg-input);border:1px solid '
+        +(checked?'var(--purple)':'var(--border)')
+        +';border-radius:var(--radius);cursor:pointer;margin-bottom:6px">'
+        +'<input type="radio" name="mp-saved-card" value="'+esc(c.cardId)+'"'+(checked?' checked':'')+' style="width:auto;margin:0">'
+        +'<span style="font-size:13px;color:var(--text)">'+esc(c.brand)+' ending '+esc(c.last4)+' <span style="color:var(--text-muted);font-size:12px">(exp '+c.expMonth+'/'+c.expYear+')</span></span>'
+        +'</label>';
+    }).join('');
+    html += '<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="mpToggleAddNewCard()">+ Add a new card</button>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">No saved cards. Add the first one below.</div>';
+  }
+
+  // Hidden add-card section (Square Web SDK)
+  html += '<div id="mp-add-card-section" style="display:'+(cards.length?'none':'block')+';margin-top:8px">';
+  html += '<div id="mp-add-card-container" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:52px"></div>';
+  html += '</div>';
+
+  // Save button
+  html += '<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="saveMpCardSimple(\''+esc(subId)+'\',\''+esc(subName)+'\')">Save Card</button>';
+
+  pane.innerHTML = html;
+
+  // If no cards exist, init the Square card form immediately
+  if (!cards.length) {
+    setTimeout(initMpAddCardForm, 100);
+  }
+}
+
+function mpToggleAddNewCard(){
+  var section = document.getElementById('mp-add-card-section');
+  if (!section) return;
+  var showing = section.style.display !== 'none';
+  if (showing) {
+    section.style.display = 'none';
+  } else {
+    section.style.display = 'block';
+    // Uncheck all radios when adding new card
+    var radios = document.querySelectorAll('input[name="mp-saved-card"]');
+    radios.forEach(function(r){r.checked = false;});
+    setTimeout(initMpAddCardForm, 100);
+  }
+}
+
+async function initMpAddCardForm(){
+  var container = document.getElementById('mp-add-card-container');
+  if (!container) return;
+  if (_mpSqCardNew) { try{await _mpSqCardNew.destroy();}catch(e){}; _mpSqCardNew = null; }
+  container.innerHTML = '';
+  try {
+    if (!window.Square) { container.innerHTML='<span style="color:var(--orange);font-size:12px">Square SDK not loaded.</span>'; return; }
+    var cfgRes = await fetch(apiUrl('/api/square/config'),{credentials:'include'});
+    var cfg = await cfgRes.json();
+    if (!cfg.appId) { container.innerHTML='<span style="color:var(--orange);font-size:12px">Square not configured.</span>'; return; }
+    var payments = window.Square.payments(cfg.appId,'production');
+    var card = await payments.card();
+    await card.attach('#mp-add-card-container');
+    _mpSqCardNew = card;
+  } catch (e) {
+    container.innerHTML='<span style="color:var(--orange);font-size:12px">Could not load card form: '+e.message+'</span>';
+  }
+}
+
+async function saveMpCardSimple(subId, subName){
+  var extra = state.modal && state.modal.extra || {};
+  var plan = extra.plan || {};
+  var linkedContactId = plan.linked_contact_id || null;
+  var adminEmail = plan.admin_email || (plan.linked_contact_info && plan.linked_contact_info.email) || '';
+  var adminName = subName || (plan.linked_contact_info && plan.linked_contact_info.name) || '';
+
+  var payload = { subaccountId: subId, adminEmail: adminEmail, adminName: adminName, linkedContactId: linkedContactId };
+
+  // Did user select a saved card?
+  var checked = document.querySelector('input[name="mp-saved-card"]:checked');
+  var addSection = document.getElementById('mp-add-card-section');
+  var addingNew = addSection && addSection.style.display !== 'none';
+
+  if (checked && !addingNew) {
+    // Selected saved card
+    if (!state._mpPaneCustomerId) { toast('Customer ID missing. Try refreshing.','error'); return; }
+    payload.existingCustomerId = state._mpPaneCustomerId;
+    payload.existingCardId = checked.value;
+  } else if (addingNew) {
+    if (!_mpSqCardNew) { toast('Card form not loaded.','error'); return; }
+    var tokenResult = await _mpSqCardNew.tokenize();
+    if (tokenResult.status !== 'OK') {
+      var err = (tokenResult.errors && tokenResult.errors[0] && tokenResult.errors[0].message) || 'Unknown card error';
+      toast('Card error: '+err,'error'); return;
+    }
+    payload.sourceId = tokenResult.token;
+  } else {
+    toast('Select a saved card or add a new one.','error'); return;
+  }
+
+  try {
+    var r = await fetch(apiUrl('/api/billing/update-card'),{credentials:'include',
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) { var t = await r.text(); toast('Card update failed: '+t,'error'); return; }
+    toast('Card updated successfully.','success');
+    closeModal();
+    agencyLoadSubaccounts();
+    setTimeout(function(){openManagePlanModal(subId,subName);},400);
+  } catch (e) {
+    toast('Error: '+e.message,'error');
+  }
+}
+
+
+async function changeMpLinkedContact(subId){
+  if(!confirm('Unlink the current customer? You will need to select a new one.'))return;
+  try{
+    var r=await fetch(apiUrl('/api/agency/subaccount-link-contact'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subaccountId:subId,contactId:null})
+    });
+    if(!r.ok){var t=await r.text();toast('Unlink failed: '+t,'error');return;}
+    var subName=(state.modal&&state.modal.extra&&state.modal.extra.subName)||subId;
+    closeModal();
+    setTimeout(function(){openManagePlanModal(subId,subName);},200);
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+document.addEventListener('click',function(e){
+  var input=document.getElementById('mp-contact-search');
+  var results=document.getElementById('mp-contact-results');
+  if(!input||!results)return;
+  if(e.target!==input && !results.contains(e.target)){
+    results.style.display='none';
+  }
+});
+
+
+
 async function createSubaccount(){
   var name=(document.getElementById('new-sub-name')&&document.getElementById('new-sub-name').value||'').trim();
   var slug=(document.getElementById('new-sub-slug')&&document.getElementById('new-sub-slug').value||'').trim().toLowerCase();
@@ -36337,7 +36593,9 @@ async function createSubaccount(){
     if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
     // Handle billing setup
     if(!isExempt){
-      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote,linkedContactId:state._newSubLinkedContact&&state._newSubLinkedContact.id};
+      var skipTrialEl=document.getElementById('new-sub-skip-trial');
+      var skipTrial=!!(skipTrialEl&&skipTrialEl.checked);
+      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote,linkedContactId:state._newSubLinkedContact&&state._newSubLinkedContact.id,skipTrial:skipTrial};
       if(state._cardMode==='existing'){
         // Saved card from the linked contact's Square customer record
         var cardSel=document.getElementById('new-sub-existing-card');

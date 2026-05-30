@@ -11,6 +11,7 @@ const { findOrCreateCustomer, saveCardOnFile } = require('./lib/agency-billing')
 const { sendError } = require('./lib/square');
 const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
+const { logAudit } = require('./lib/audit');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
@@ -24,7 +25,8 @@ async function handler(req, res) {
     adminName,
     sourceId,
     existingCustomerId,
-    existingCardId
+    existingCardId,
+    linkedContactId
   } = req.body || {};
 
   if (!subaccountId) return sendError(res, 400, 'subaccountId required');
@@ -71,6 +73,38 @@ async function handler(req, res) {
     } catch (e) {
       return sendError(res, 500, 'Card saved but plan update failed: ' + e.message);
     }
+
+    // If linked contact provided, save Square customer ID back to contact
+    if (linkedContactId && customerId) {
+      try {
+        await db.query(
+          `UPDATE contacts SET litbiz_square_customer_id = $1, updated_at = NOW()
+           WHERE id = $2 AND subaccount_id = 'sub-litbiz'`,
+          [customerId, linkedContactId]
+        );
+      } catch (linkErr) {
+        console.warn('update-card: contact link save failed:', linkErr.message);
+      }
+    }
+
+    // Audit log
+    await logAudit({
+      req,
+      actorType: 'agency_admin',
+      actorId: auth.user_id,
+      actorUsername: auth.username,
+      actorRole: auth.role,
+      action: 'agency.subaccount.card_change',
+      targetType: 'subaccount',
+      targetId: subaccountId,
+      targetSubaccountId: subaccountId,
+      metadata: {
+        card_source: hasNewCard ? 'new' : 'existing',
+        card_brand: cardBrand || null,
+        card_last4: cardLast4 || null,
+        linked_contact_id: linkedContactId || null
+      }
+    });
 
     return res.status(200).json({
       success: true,
