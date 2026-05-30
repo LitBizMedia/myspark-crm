@@ -58,46 +58,27 @@ async function handler(req, res) {
   };
 
   try {
-    // Step 1: Resolve calling user. Three possible sources:
-    //   1. LitBiz workspace agency admin (subaccount_users with is_agency_admin=true).
-    //      requireAgencyAdmin sets auth.is_agency_admin and returns the subaccount
-    //      session. These users are already vetted by the 3-layer gate; no
-    //      secondary agency_users lookup needed. Treated as super_admin equivalent.
-    //   2. Legacy break-glass agency super_admin (auth.id === 'agency-admin-primary').
-    //   3. Regular agency_users row from /agency portal login.
+    // Step 1: Resolve calling user.
+    // After /agency portal removal (Phase 4C, May 30 2026), the only valid
+    // source is the LitBiz workspace agency admin (subaccount_users with
+    // is_agency_admin=true). requireAgencyAdmin sets auth.is_agency_admin
+    // and returns the subaccount session.
     let user = null;
     if (auth.is_agency_admin === true && auth.user_type === 'subaccount') {
-      // Source 1: LitBiz workspace agency admin
       user = {
         id:       actor.id,
         username: actor.username,
         name:     actor.name,
         role:     'super_admin'
       };
-    } else if (actor.id === 'agency-admin-primary' && ALLOWED_ROLES.includes(actor.role)) {
-      // Source 2: legacy break-glass agency primary
-      user = {
-        id:       actor.id,
-        username: actor.username || 'admin',
-        name:     actor.username || 'Admin',
-        role:     actor.role || 'super_admin'
-      };
     } else {
-      // Source 3: regular agency_users row (from /agency portal session)
-      const u = await db.findOne('agency_users',
-        { id: actor.id, active: true },
-        { select: 'id, username, name, role' }
-      );
-      if (!u) {
-        await logAudit({
-          req, actorType: 'agency_admin', actorId: actor.id, actorUsername: actor.username,
-          action: 'agency.login_as.start', targetType: 'subaccount',
-          outcome: 'denied', errorMessage: 'Agency user not found or inactive',
-          metadata: { target_slug: slug }
-        });
-        return res.status(403).json({ error: 'Not authorized' });
-      }
-      user = u;
+      await logAudit({
+        req, actorType: 'agency_admin', actorId: actor.id, actorUsername: actor.username,
+        action: 'agency.login_as.start', targetType: 'subaccount',
+        outcome: 'denied', errorMessage: 'Not a LitBiz agency admin',
+        metadata: { target_slug: slug }
+      });
+      return res.status(403).json({ error: 'Not authorized' });
     }
 
     if (!ALLOWED_ROLES.includes(user.role)) {

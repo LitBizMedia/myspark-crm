@@ -16,7 +16,7 @@ const db = require('./lib/db');
 const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('./lib/agency-billing');
 const { sendError } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
-const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz, getSubTimezone } = require('./lib/timezone');
 
@@ -48,7 +48,7 @@ async function handler(req, res) {
 
   const { subaccountId, newTier, newPeriod, newHipaa, newExempt, discountPercent, discountNote, customBillingDate } = req.body || {};
 
-  const auth = await requireAgencyAuth(req, res);
+  const auth = await requireAgencyAdminOrAgencyAuth(req, res);
   if (!auth) return;
   const actor = {
     actorType:     'agency',

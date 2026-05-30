@@ -48,14 +48,9 @@ async function handler(req, res) {
     let userName = '';
 
     if (context === 'agency') {
-      const u = await db.findOne('agency_users',
-        { email: lowerEmail, active: true },
-        { select: 'id, name, email' }
-      );
-      if (!u) return safeReturn();
-      userType = 'agency';
-      userIdentifier = u.id;
-      userName = u.name || '';
+      // /agency portal removed (Phase 4C, May 30 2026). Agency users must
+      // now reset their password through the LitBiz workspace subaccount path.
+      return safeReturn();
     } else {
       if (!slug) return safeReturn();
       const subId = 'sub-' + slug;

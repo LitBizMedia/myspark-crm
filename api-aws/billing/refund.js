@@ -11,7 +11,7 @@ const db = require('./lib/db');
 const { getAgencyCreds, makeIdempotencyKey } = require('./lib/agency-billing');
 const { sendError, squareHost, squareHeaders } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
-const { requireAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 async function handler(req, res) {
@@ -20,7 +20,7 @@ async function handler(req, res) {
   const { invoiceId, reason } = req.body || {};
   if (!invoiceId) return sendError(res, 400, 'invoiceId required');
 
-  const auth = await requireAgencyAuth(req, res);
+  const auth = await requireAgencyAdminOrAgencyAuth(req, res);
   if (!auth) return;
   const actor = {
     actorType:     'agency',
