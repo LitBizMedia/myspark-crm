@@ -14,6 +14,7 @@
 
 const db = require('./lib/db');
 const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('./lib/agency-billing');
+const pricing = require('./lib/plan-pricing');
 const { sendError } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
 const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
@@ -22,20 +23,33 @@ const { todayInTz, getSubTimezone } = require('./lib/timezone');
 
 const TIER_ORDER = { starter: 1, professional: 2, business: 3, enterprise: 4 };
 
-function calcProration(oldTier, newTier, billingPeriod, hipaaAddon, nextBillingDate, discountPercent, todayLocal) {
-  const oldCents = calculateCharge(oldTier, billingPeriod, hipaaAddon, discountPercent || 0);
-  const newCents = calculateCharge(newTier, billingPeriod, hipaaAddon, discountPercent || 0);
-  const totalDays = billingPeriod === 'annual' ? 365 : 30;
-  // Day-count math in pure date space, anchored to today-in-TZ.
-  const [ty, tm, td] = todayLocal.split('-').map(Number);
-  const [ny, nm, nd] = String(nextBillingDate).slice(0, 10).split('-').map(Number);
-  const todayMs = Date.UTC(ty, tm - 1, td);
-  const nextMs  = Date.UTC(ny, nm - 1, nd);
-  const daysRemaining = Math.max(1, Math.ceil((nextMs - todayMs) / 86400000));
-  const effectiveDays = Math.min(daysRemaining, totalDays);
-  const oldDaily = oldCents / totalDays;
-  const newDaily = newCents / totalDays;
-  return Math.round((newDaily - oldDaily) * effectiveDays);
+// Proration delegates to canonical pricing helper, which handles both tier
+// AND HIPAA add-on changes via getTotalPrice(). Uses current_period_start
+// (the actual cycle anchor) instead of next_billing_date for elapsed-day calc.
+async function calcProration(plan, newTier, newPeriod, newHipaa, discountPercent, todayLocal) {
+  // Anchor: prefer current_period_start (the actual cycle start);
+  // fall back to next_billing_date minus period_days if missing.
+  let periodStart = plan.current_period_start;
+  if (!periodStart && plan.next_billing_date) {
+    const days = pricing.daysInPeriod(plan.billing_period);
+    const next = new Date(String(plan.next_billing_date).slice(0,10));
+    periodStart = new Date(next.getTime() - days * 86400000).toISOString();
+  }
+  if (!periodStart) periodStart = new Date().toISOString();
+
+  const r = await pricing.calculateProration({
+    currentTier: plan.plan_tier,
+    currentBillingPeriod: plan.billing_period,
+    currentHipaa: !!plan.hipaa_addon,
+    newTier: newTier,
+    newBillingPeriod: newPeriod,
+    newHipaa: !!newHipaa,
+    currentPeriodStart: periodStart,
+    discountPercent: discountPercent || 0,
+    asOfDate: todayLocal
+  });
+
+  return r.finalChargeCents;
 }
 
 async function updatePlan(subaccountId, updates) {
@@ -86,23 +100,42 @@ async function handler(req, res) {
 
     // Exempt status change
     if (newExempt !== undefined && !!newExempt !== !!plan.exempt_from_billing) {
+      const goingExempt = !!newExempt;
       const exemptUpdatePayload = {
         plan_tier: newTier,
         billing_period: newPeriod,
         hipaa_addon: !!newHipaa,
-        exempt_from_billing: !!newExempt,
-        status: newExempt ? 'exempt' : 'trialing',
+        exempt_from_billing: goingExempt,
         discount_percent: discountPercent || 0,
         discount_note: discountNote || null
       };
-      if (!newExempt && customBillingDate) {
-        exemptUpdatePayload.next_billing_date = customBillingDate;
+
+      if (goingExempt) {
+        // Billed -> Exempt: stop billing, clear pending changes (no point queuing for an exempt account)
+        exemptUpdatePayload.status = 'exempt';
+        exemptUpdatePayload.pending_plan_tier = null;
+        exemptUpdatePayload.pending_billing_period = null;
+        exemptUpdatePayload.pending_hipaa_addon = null;
+        exemptUpdatePayload.pending_change_effective_at = null;
+        exemptUpdatePayload.pending_change_note = null;
+      } else {
+        // Exempt -> Billed: NO trial. Bills on customBillingDate, or today if blank.
+        // Card must already exist on file.
+        if (!plan.square_customer_id || !plan.square_card_id) {
+          return sendError(res, 400, 'No card on file. Add a card before removing exempt status.');
+        }
+        const billingDate = customBillingDate || todayLocal;
         exemptUpdatePayload.status = 'active';
+        exemptUpdatePayload.next_billing_date = billingDate;
+        exemptUpdatePayload.current_period_start = billingDate;
+        // No trial fields - clear any old ones
+        exemptUpdatePayload.trial_ends_at = null;
       }
+
       await updatePlan(subaccountId, exemptUpdatePayload);
       await logAudit({
         req, ...actor,
-        action: 'agency.plan.exempt_changed',
+        action: goingExempt ? 'agency.subaccount.exempt_added' : 'agency.subaccount.exempt_removed',
         targetType: 'subaccount',
         targetId: subaccountId,
         targetSubaccountId: subaccountId,
@@ -112,13 +145,21 @@ async function handler(req, res) {
             plan_tier: newTier,
             billing_period: newPeriod,
             hipaa_addon: !!newHipaa,
-            exempt_from_billing: !!newExempt,
+            exempt_from_billing: goingExempt,
             status: exemptUpdatePayload.status,
             next_billing_date: exemptUpdatePayload.next_billing_date || null
-          }
+          },
+          first_billing_date_used: !goingExempt ? (customBillingDate || todayLocal) : null,
+          billing_date_source: !goingExempt ? (customBillingDate ? 'admin_provided' : 'today_default') : null
         }
       });
-      return res.status(200).json({ success: true, action: 'exempt_changed' });
+      return res.status(200).json({
+        success: true,
+        action: goingExempt ? 'exempt_added' : 'exempt_removed',
+        message: goingExempt
+          ? 'Workspace is now exempt from billing.'
+          : ('Billing starts on ' + (customBillingDate || todayLocal) + '.')
+      });
     }
 
     if (plan.exempt_from_billing || newExempt) {
@@ -184,41 +225,70 @@ async function handler(req, res) {
 
     const oldTier = plan.plan_tier;
     const oldPeriod = plan.billing_period;
-    const isUpgrade = TIER_ORDER[newTier] > TIER_ORDER[oldTier];
-    const isPeriodChange = newPeriod !== oldPeriod;
     const isTierChange = newTier !== oldTier;
+    const isPeriodChange = newPeriod !== oldPeriod;
+    const isHipaaChange = !!newHipaa !== !!plan.hipaa_addon;
+
+    // Classify by price delta (handles tier, period, HIPAA in one shot)
+    const cls = await pricing.classifyChange({
+      currentTier: oldTier,
+      currentBillingPeriod: oldPeriod,
+      currentHipaa: !!plan.hipaa_addon,
+      newTier: newTier,
+      newBillingPeriod: newPeriod,
+      newHipaa: !!newHipaa
+    });
+    const isUpgrade = cls.type === 'upgrade';
+    const isDowngrade = cls.type === 'downgrade';
 
     if (!isUpgrade) {
-      await updatePlan(subaccountId, {
-        plan_tier: newTier,
-        billing_period: newPeriod,
-        hipaa_addon: !!newHipaa,
+      // Downgrades and same-price swaps: set pending_* fields. Cron applies at next_billing_date.
+      // Discount note + discount_percent can change immediately (no charge impact this cycle).
+      const updates = {
         discount_percent: discountPercent || 0,
         discount_note: discountNote || null
-      });
+      };
+      // If this is actually a downgrade or other change, queue it as pending.
+      const hasChange = isTierChange || isPeriodChange || isHipaaChange;
+      if (hasChange) {
+        updates.pending_plan_tier = newTier;
+        updates.pending_billing_period = newPeriod;
+        updates.pending_hipaa_addon = !!newHipaa;
+        updates.pending_change_effective_at = plan.next_billing_date || null;
+        updates.pending_change_note = (isDowngrade ? 'Downgrade' : 'Change') + ' scheduled by ' + (auth.username || 'admin');
+      }
+      await updatePlan(subaccountId, updates);
       await logAudit({
         req, ...actor,
-        action: 'agency.plan.swap',
+        action: isDowngrade ? 'agency.subaccount.plan_downgrade_scheduled' : 'agency.plan.swap',
         targetType: 'subaccount',
         targetId: subaccountId,
         targetSubaccountId: subaccountId,
         metadata: {
-          path: 'scheduled',
+          path: hasChange ? 'pending_change_set' : 'metadata_only',
           is_tier_change: isTierChange,
           is_period_change: isPeriodChange,
+          is_hipaa_change: isHipaaChange,
+          classification: cls.type,
+          price_delta_cents: cls.priceDelta,
+          effective_at: updates.pending_change_effective_at || null,
           before: beforeSnapshot,
-          after: {
-            plan_tier: newTier,
-            billing_period: newPeriod,
-            hipaa_addon: !!newHipaa,
+          after: hasChange ? {
+            pending_plan_tier: newTier,
+            pending_billing_period: newPeriod,
+            pending_hipaa_addon: !!newHipaa,
+            discount_percent: discountPercent || 0
+          } : {
             discount_percent: discountPercent || 0
           }
         }
       });
       return res.status(200).json({
         success: true,
-        action: 'scheduled',
-        message: 'Plan change scheduled for next billing cycle.'
+        action: hasChange ? 'scheduled' : 'metadata_updated',
+        message: hasChange
+          ? ('Plan change scheduled for ' + (updates.pending_change_effective_at || 'next billing date') + '.')
+          : 'Settings updated.'
       });
     }
 
@@ -240,9 +310,8 @@ async function handler(req, res) {
       return sendError(res, 400, 'No billing date found. Cannot calculate proration.');
     }
 
-    const proratedCents = calcProration(
-      oldTier, newTier, oldPeriod, !!newHipaa,
-      plan.next_billing_date,
+    const proratedCents = await calcProration(
+      plan, newTier, newPeriod, !!newHipaa,
       discountPercent || plan.discount_percent || 0,
       todayLocal
     );
@@ -326,12 +395,18 @@ async function handler(req, res) {
       hipaa_addon: !!newHipaa,
       status: 'active',
       discount_percent: discountPercent || 0,
-      discount_note: discountNote || null
+      discount_note: discountNote || null,
+      // Upgrade overrides any prior pending downgrade
+      pending_plan_tier: null,
+      pending_billing_period: null,
+      pending_hipaa_addon: null,
+      pending_change_effective_at: null,
+      pending_change_note: null
     });
 
     await logAudit({
       req, ...actor,
-      action: 'agency.plan.swap',
+      action: 'agency.subaccount.plan_upgrade',
       targetType: 'subaccount',
       targetId: subaccountId,
       targetSubaccountId: subaccountId,

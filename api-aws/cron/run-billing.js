@@ -56,6 +56,59 @@ async function processBilling(req, sub, summary) {
   const todayLocal = todayInTz(tz);
   const tomorrowLocal = dateInTzPlusDays(1, tz);
 
+  // BEFORE charging, apply any pending plan change that's effective today or earlier.
+  // This is the only place pending downgrades take effect; the cron sees them, applies
+  // them to the live plan fields, clears the pending_* fields, then charges at the new rate.
+  if (sub.pending_change_effective_at) {
+    const raw = sub.pending_change_effective_at;
+    const effDate = raw instanceof Date
+      ? raw.toISOString().slice(0, 10)
+      : String(raw).slice(0, 10);
+    if (effDate <= todayLocal) {
+      const beforeSnapshot = {
+        plan_tier: sub.plan_tier,
+        billing_period: sub.billing_period,
+        hipaa_addon: !!sub.hipaa_addon
+      };
+      const afterSnapshot = {
+        plan_tier: sub.pending_plan_tier || sub.plan_tier,
+        billing_period: sub.pending_billing_period || sub.billing_period,
+        hipaa_addon: sub.pending_hipaa_addon !== null && sub.pending_hipaa_addon !== undefined
+          ? !!sub.pending_hipaa_addon
+          : !!sub.hipaa_addon
+      };
+      await updatePlan(sub.subaccount_id, {
+        plan_tier: afterSnapshot.plan_tier,
+        billing_period: afterSnapshot.billing_period,
+        hipaa_addon: afterSnapshot.hipaa_addon,
+        pending_plan_tier: null,
+        pending_billing_period: null,
+        pending_hipaa_addon: null,
+        pending_change_effective_at: null,
+        pending_change_note: null
+      });
+      await logAudit({
+        req, ...CRON_ACTOR,
+        action: 'agency.subaccount.plan_downgrade_applied',
+        targetType: 'subaccount',
+        targetId: sub.subaccount_id,
+        targetSubaccountId: sub.subaccount_id,
+        metadata: {
+          effective_at: effDate,
+          before: beforeSnapshot,
+          after: afterSnapshot,
+          original_note: sub.pending_change_note || null
+        }
+      });
+      // Mutate the in-memory sub so the charge below uses the new rate.
+      sub.plan_tier = afterSnapshot.plan_tier;
+      sub.billing_period = afterSnapshot.billing_period;
+      sub.hipaa_addon = afterSnapshot.hipaa_addon;
+      console.log('run-billing: pending change applied for ' + sub.subaccount_id
+        + ' -> ' + afterSnapshot.plan_tier + ' (' + afterSnapshot.billing_period + ')');
+    }
+  }
+
   const amountCents = calculateCharge(
     sub.plan_tier,
     sub.billing_period,
