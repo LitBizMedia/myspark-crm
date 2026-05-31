@@ -61,7 +61,10 @@ async function handler(req, res) {
     const setupUrl = 'https://mysparkplus.app/' + sub.slug + '?reset=' + token;
 
     // Send welcome email
+    const loginUrl = 'https://mysparkplus.app/' + sub.slug;
     await agencyEmails.sendEmail(sub.admin_email, 'welcome_subaccount', {
+      loginUrl: loginUrl,
+      adminEmail: sub.admin_email,
       subName: sub.name,
       adminName: adminUser.display_name || sub.admin_username,
       slug: sub.slug,

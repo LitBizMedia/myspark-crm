@@ -8,7 +8,7 @@
 // If any one fails, all roll back.
 //
 // Required body fields:
-//   id, name, slug, tier, adminUsername, adminPassword
+//   id, name, slug, tier, adminEmail (adminUsername no longer required - email used as login)
 // Optional:
 //   adminEmail, adminName (display name; defaults to adminUsername)
 //   adminColor (defaults to #6b21ea)
@@ -51,7 +51,7 @@ async function handler(req, res) {
   if (!b.name) return res.status(400).json({ error: 'name required' });
   if (!b.slug) return res.status(400).json({ error: 'slug required' });
   if (!b.tier) return res.status(400).json({ error: 'tier required' });
-  if (!b.adminUsername) return res.status(400).json({ error: 'adminUsername required' });
+  if (!b.adminEmail) return res.status(400).json({ error: 'adminEmail required (used as login)' });
   // adminPassword is now optional. If absent, generate a throwaway and send setup link.
   // If admin provided one, we still honor it AND send setup link so they can use either.
   const useTempPassword = !b.adminPassword;
@@ -59,7 +59,10 @@ async function handler(req, res) {
 
   const subId = b.id;
   const slug = b.slug;
-  const adminUsername = String(b.adminUsername).trim().toLowerCase();
+  // Username IS the email. We keep the username column for backward compat
+  // but new accounts get email as the value.
+  const adminEmailNormalized = String(b.adminEmail).trim().toLowerCase();
+  const adminUsername = adminEmailNormalized;
   const adminEmail = b.adminEmail ? String(b.adminEmail).trim().toLowerCase() : null;
   const adminName = b.adminName || adminUsername;
   const adminColor = b.adminColor || '#6b21ea';
@@ -161,7 +164,10 @@ async function handler(req, res) {
         try {
           planRow = await db.findOne('subaccount_plans', { subaccount_id: subId }, { select: 'plan_tier, billing_period, trial_days' });
         } catch (e) { /* ignore */ }
-        await agencyEmails.sendEmail(adminEmail, 'welcome_subaccount', {
+        const loginUrl = 'https://mysparkplus.app/' + slug;
+      await agencyEmails.sendEmail(adminEmail, 'welcome_subaccount', {
+        loginUrl: loginUrl,
+        adminEmail: adminEmail,
           subName: b.name,
           adminName: adminName || adminUsername,
           slug: slug,

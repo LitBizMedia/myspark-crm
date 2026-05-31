@@ -101,9 +101,14 @@ function templateWelcomeSubaccount(data) {
     + (data.setupUrl
       ? '<div style="text-align:center;margin:24px 0;"><a href="' + data.setupUrl + '" style="display:inline-block;background:#6b21ea;color:#fff;text-decoration:none;font-weight:700;padding:14px 32px;border-radius:8px;font-size:15px;">Set up your password</a></div>'
         + muted('Click the button above to create your password and access your workspace. This link expires in 7 days.')
-      : (data.loginUrl
-          ? '<div style="text-align:center;margin:24px 0;"><a href="' + data.loginUrl + '" style="display:inline-block;background:#6b21ea;color:#fff;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:8px;font-size:15px;">Sign in to MySpark+</a></div>'
-          : ''))
+      : '')
+    + (data.loginUrl
+      ? '<div style="background:#f2f0f8;border-radius:8px;padding:14px 18px;margin:18px 0;">'
+        + '<p style="margin:0 0 4px;font-size:12px;color:#5a4d7a;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">For future sign-ins</p>'
+        + '<p style="margin:0 0 6px;font-size:13px;color:#1a1030;"><strong>Workspace URL:</strong> <a href="' + data.loginUrl + '" style="color:#6b21ea;text-decoration:none;">' + data.loginUrl.replace(/^https?:\/\//, '') + '</a></p>'
+        + (data.adminEmail ? '<p style="margin:0;font-size:13px;color:#1a1030;"><strong>Sign in with:</strong> ' + data.adminEmail + '</p>' : '')
+        + '</div>'
+      : '')
     + muted('Need help getting started? Reply to this email and our team will assist.')
   );
   return { subject, html };

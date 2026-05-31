@@ -1857,7 +1857,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
     </div>
     <div id="login-error" class="auth-error hidden"></div>
     <form id="login-form">
-      <div class="form-group"><label>Email or Username</label><input type="text" id="l-user" autocomplete="username" required></div>
+      <div class="form-group"><label>Email</label><input type="text" id="l-user" autocomplete="username" required></div>
       <div class="form-group"><label>Password</label><input type="password" id="l-pass" autocomplete="current-password" required></div>
       <button type="submit" class="btn btn-primary btn-full" style="margin-top:4px">Sign In</button>
       <div style="text-align:center;margin-top:14px"><button type="button" class="btn btn-ghost btn-sm" onclick="openForgotPassword('subaccount')" style="font-size:12px;color:var(--text-muted)">Forgot password?</button></div>
@@ -12675,7 +12675,7 @@ function openUserSchedModal(uid){
 
 function buildUserBody(){
   const cols=USER_COLORS.map((c,i)=>'<div class="color-sw'+(i===0?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
-  return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Email or Username</label><input id="uf-user" type="text" placeholder="jsmith"></div></div>'
+  return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Email</label><input id="uf-user" type="text" placeholder="jsmith"></div></div>'
     +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(for password recovery)</span></label><input id="uf-email" type="email" placeholder="jane@example.com"></div>'
     +'<div class="form-row"><div class="form-group"><label>Password</label><input id="uf-pass" type="password"></div><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Manager</option><option value="user">User</option><option value="practitioner">Practitioner</option></select></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
@@ -13766,7 +13766,7 @@ function openEditUserModal(userId){
   state.selUserColor=u.color||USER_COLORS[0];
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
-  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email or Username</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
+  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
     +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(for password recovery)</span></label><input id="eu-email" type="email" value="'+esc(u.email||u.emailAddress||'')+'" placeholder="email@example.com"></div>'
     +(state.user&&state.user.id===userId
       ?'<div class="form-group"><label>Current Password <span style="font-weight:400;color:var(--text-muted)">(required to change password)</span></label>'
@@ -36099,20 +36099,14 @@ function openCreateSubaccountModal(){
     +'<option value="business">Business</option>'
     +'<option value="enterprise">Enterprise</option>'
     +'</select></div>'
-    // === STEP 3: ADMIN LOGIN ===
-    +'<div style="border-top:1px solid var(--border);margin:18px 0 14px"></div>'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Step 3: Admin Login</div>'
-    +'<div id="new-sub-admin-display" style="background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;font-size:13px;color:var(--main-text-muted)">'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);margin-bottom:8px">Admin login (from selected customer)</div>'
-    +'<div style="color:var(--main-text);font-size:13px">Pick a customer in Step 1 to auto-fill the admin info.</div>'
-    +'</div>'
+    // === Hidden admin fields populated from Step 1 customer pick ===
     +'<input type="hidden" id="new-sub-admin-name">'
     +'<input type="hidden" id="new-sub-user">'
     +'<input type="hidden" id="new-sub-email">'
-    +'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text);line-height:1.6"><strong>Password setup</strong><br><span style="color:var(--text-muted)">A secure setup link will be emailed to the admin. They create their own password on first login. Link expires in 7 days.</span></div>'
-    // === STEP 4: SUBSCRIPTION + BILLING ===
+    +'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;margin:14px 0;font-size:12px;color:var(--text);line-height:1.5"><strong>Admin login:</strong> <span style="color:var(--text-muted)">A secure setup link will be emailed to the customer from Step 1. They create their own password and sign in with their email. Link expires in 7 days.</span></div>'
+    // === STEP 3: SUBSCRIPTION + BILLING ===
     +'<div style="border-top:1px solid var(--border);margin:18px 0 14px"></div>'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Step 4: Subscription & Billing</div>'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Step 3: Subscription & Billing</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
     +'<div class="form-group" style="margin:0"><label>Billing Period</label>'
     +'<select id="new-sub-billing-period" class="filter-sel" style="width:100%;height:38px" onchange="updateSubBillingPreview()">'
@@ -36238,24 +36232,10 @@ function selectLinkedContact(contactId){
   if(adminEmail) adminEmail.value=(contact.email||'').toLowerCase();
   // Derive username from email (everything before @, sanitized)
   if(adminUser){
-    var derived='';
-    if(contact.email){
-      derived=contact.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_.-]/g,'');
-    } else if(contact.name){
-      derived=contact.name.toLowerCase().replace(/[^a-z0-9_.-]/g,'').slice(0,20);
-    }
-    adminUser.value=derived;
+    // Username IS the email (stored for backward compat with the username column).
+    adminUser.value=(contact.email||'').toLowerCase();
   }
-  // Update the visible display block
-  var display=document.getElementById('new-sub-admin-display');
-  if(display){
-    display.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);margin-bottom:8px">Admin login</div>'
-      +'<div style="display:flex;flex-direction:column;gap:6px">'
-      +'<div><span style="color:var(--main-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Name</span> <span style="color:var(--main-text);font-weight:600;margin-left:6px">'+esc(adminName.value||'—')+'</span></div>'
-      +'<div><span style="color:var(--main-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Username</span> <span style="color:var(--main-text);font-family:monospace;font-weight:600;margin-left:6px">'+esc(adminUser.value||'—')+'</span></div>'
-      +'<div><span style="color:var(--main-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Email</span> <span style="color:var(--main-text);margin-left:6px">'+esc(adminEmail.value||'—')+'</span></div>'
-      +'</div>';
-  }
+  // Display block removed (no longer rendered)
 
   // If contact has a Square customer ID, surface saved cards option
   configureCardOptionsForLinkedContact();
@@ -36272,10 +36252,7 @@ function clearLinkedContact(){
     var el=document.getElementById(id);
     if(el)el.value='';
   });
-  var display=document.getElementById('new-sub-admin-display');
-  if(display){
-    display.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);margin-bottom:8px">Admin login (from selected customer)</div><div style="color:var(--main-text);font-size:13px">Pick a customer in Step 1 to auto-fill the admin info.</div>';
-  }
+  // Display block reset removed
   // Reset card section visibility
   var btnExisting=document.getElementById('new-sub-card-mode-existing');
   if(btnExisting)btnExisting.style.display='none';
@@ -36580,11 +36557,9 @@ async function createSubaccount(){
   var adminEmail=(document.getElementById('new-sub-email')&&document.getElementById('new-sub-email').value||'').trim().toLowerCase();
   if(!state._newSubLinkedContact||!state._newSubLinkedContact.id){toast('Pick a LitBiz contact first.','error');return;}
   if(!name||!slug){toast('Subaccount name and URL slug are required.','error');return;}
-  if(!adminName||!adminUser||!adminEmail){toast('Admin info missing. Pick a customer in Step 1 - their name, username, and email auto-fill.','error');return;}
+  if(!adminName||!adminEmail){toast('Pick a customer in Step 1 - their name and email will auto-fill.','error');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)){toast('Enter a valid admin email.','error');return;}
   if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
-  var passErr=checkPasswordStrength(adminPass);
-  if(passErr){toast(passErr,'error');return;}
   var subId='sub-'+slug;
   // Initial data blob. User-related fields (users, _subaccountAdmin) live
   // in the subaccount_users table. settings.adminProfile is fully dead.
@@ -36677,19 +36652,8 @@ async function createSubaccount(){
     }
     closeModal();
     agencyLoadSubaccounts();
-    // Fire welcome email to new admin
-    var welcomeHtml='<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
-      +'<h2 style="color:#6b21ea;margin:0 0 8px">Welcome to MySpark+</h2>'
-      +'<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">Hi '+adminName+', your workspace is ready.</p>'
-      +'<table style="width:100%;border-collapse:collapse;margin:0 0 24px">'
-      +'<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:120px">Workspace</td><td style="padding:8px 0;font-weight:600">'+name+'</td></tr>'
-      +'<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:120px">Login URL</td><td style="padding:8px 0;font-weight:600"><a href="https://mysparkplus.app/'+slug+'" style="color:#6b21ea">mysparkplus.app/'+slug+'</a></td></tr>'
-      +'<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:120px">Username</td><td style="padding:8px 0;font-weight:600">'+adminUser+'</td></tr>'
-      +'</table>'
-      +'<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">Log in with the password you were given. You can change it in your settings.</p>'
-      +'<p style="color:#5a4d7a;font-size:14px;margin:0">MySpark+</p>'
-      +'</div>';
-    fetch(apiUrl('/api/email/send'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:'litbiz',to:adminEmail,subject:'Your MySpark+ workspace is ready: '+name,html:welcomeHtml,fromName:'MySpark+',templateType:'welcome'})}).catch(function(){});
+    // Welcome email is fired server-side by subaccount-create Lambda (with magic link).
+    // The frontend used to fire a second redundant email here - removed.
   }catch(e){
     toast('Error creating subaccount: '+e.message,'error');
   }
