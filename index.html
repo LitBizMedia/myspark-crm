@@ -38126,6 +38126,98 @@ function canRefundVoid(){ return hasRole('admin','manager'); }
 
 var _agencyFocusTimer = null;
 
+// ── Agency Users panel (cross-subaccount user lookup + actions) ──
+var _atUsersData = null;
+
+function _atRenderUsers(){
+  var pane = document.getElementById('at-tab-users');
+  if(!pane) return;
+  pane.innerHTML = '<div class="at-placeholder">Loading users...</div>';
+  fetch(apiUrl('/api/agency/users-list'),{credentials:'include'})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(data){ _atUsersData = data; _atDrawUsers(); })
+    .catch(function(e){
+      pane.innerHTML = '<div class="at-placeholder">Could not load users. '
+        + '<button class="btn btn-sm" onclick="_atRenderUsers()">Retry</button></div>';
+      console.error('users-list load failed:', e);
+    });
+}
+
+function _atDrawUsers(){
+  var pane = document.getElementById('at-tab-users');
+  if(!pane || !_atUsersData) return;
+  var users = _atUsersData.users || [];
+  var activeVer = _atUsersData.active_eula_version;
+  // Group by subaccount, preserving the server's name-sorted order.
+  var groups = {}; var order = [];
+  users.forEach(function(u){
+    if(!groups[u.subaccountId]){ groups[u.subaccountId] = []; order.push(u.subaccountId); }
+    groups[u.subaccountId].push(u);
+  });
+  var totalAccepted = users.filter(function(u){return u.eulaAccepted;}).length;
+  var verLabel = activeVer ? ('EULA '+esc(activeVer)) : 'No active EULA yet';
+  var h = '';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px">';
+  h +=   '<div><div style="font-size:18px;font-weight:700;color:var(--main-text)">All Users</div>';
+  h +=     '<div style="font-size:13px;color:var(--main-text-muted);margin-top:2px">'
+         + users.length + ' active users across ' + order.length + ' subaccounts. '
+         + totalAccepted + ' of ' + users.length + ' accepted. ' + verLabel + '.</div></div>';
+  h +=   '<button class="btn btn-sm" onclick="_atRenderUsers()">Refresh</button>';
+  h += '</div>';
+  order.forEach(function(sid){
+    var list = groups[sid];
+    var sub = list[0];
+    var acc = list.filter(function(u){return u.eulaAccepted;}).length;
+    h += '<div class="card" style="margin-bottom:16px;padding:0;overflow:hidden">';
+    h +=   '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--main-border);background:var(--main-card-hover)">';
+    h +=     '<div style="font-weight:700;color:var(--main-text)">' + esc(sub.subaccountName||sub.subaccountSlug) + '</div>';
+    h +=     '<div style="font-size:12px;color:var(--main-text-muted)">' + acc + '/' + list.length + ' accepted</div>';
+    h +=   '</div>';
+    h +=   '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+    list.forEach(function(u){
+      var pill = u.eulaAccepted
+        ? '<span style="display:inline-block;background:var(--success-dim);color:var(--success-text);border:1px solid var(--success);font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radius-full)">Accepted</span>'
+        : '<span style="display:inline-block;background:var(--warning-dim);color:var(--warning-text);border:1px solid var(--warning);font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radius-full)">Pending</span>';
+      var noEmail = !u.email;
+      var resetBtn = '<button class="btn btn-sm" '
+        + (noEmail ? 'disabled title="No email on file" ' : '')
+        + 'onclick="_atUserAction(\'send_reset\',\'' + u.id + '\',\'' + esc(u.name).replace(/'/g,"\\'") + '\')">Send Reset</button>';
+      var unflagBtn = u.eulaAccepted
+        ? '<button class="btn btn-sm" style="margin-left:6px" onclick="_atUserAction(\'unflag\',\'' + u.id + '\',\'' + esc(u.name).replace(/'/g,"\\'") + '\')">Unflag</button>'
+        : '';
+      h += '<tr style="border-bottom:1px solid var(--main-border)">';
+      h +=   '<td style="padding:10px 16px;color:var(--main-text);font-weight:600">' + esc(u.name) + '</td>';
+      h +=   '<td style="padding:10px 16px;color:var(--main-text-muted)">' + (esc(u.email)||'<span style="opacity:.5">no email</span>') + '</td>';
+      h +=   '<td style="padding:10px 16px;color:var(--main-text-muted)">' + esc(u.role) + '</td>';
+      h +=   '<td style="padding:10px 16px">' + pill + '</td>';
+      h +=   '<td style="padding:10px 16px;white-space:nowrap;text-align:right">' + resetBtn + unflagBtn + '</td>';
+      h += '</tr>';
+    });
+    h +=   '</table></div>';
+    h += '</div>';
+  });
+  pane.innerHTML = h;
+}
+
+function _atUserAction(action, userId, name){
+  var verb = action==='send_reset' ? 'send a password reset email to' : 'unflag the EULA acceptance for';
+  var note = action==='unflag' ? ' They will be prompted to accept again on their next login.' : '';
+  if(!confirm('Are you sure you want to ' + verb + ' ' + name + '?' + note)) return;
+  fetch(apiUrl('/api/agency/user-action'),{
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ action: action, userId: userId })
+  })
+    .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+    .then(function(res){
+      if(!res.ok){ toast((res.j && res.j.error) || 'Action failed', 'error'); return; }
+      if(action==='send_reset') toast('Reset link sent to ' + (res.j.email||name), 'success');
+      else toast('EULA acceptance cleared for ' + name, 'success');
+      _atRenderUsers();
+    })
+    .catch(function(e){ toast('Action failed: ' + e.message, 'error'); });
+}
+
 function renderAgencyTools(){
   var mount = document.getElementById('agency-tools-mount');
   if(!mount) return;
@@ -38140,6 +38232,7 @@ function _agencyToolsHTML(){
     +   '<button class="at-tab" id="at-tab-subaccounts-btn" onclick="switchAgencyTab(\'subaccounts\')">Sub-Accounts</button>'
     +   '<button class="at-tab" id="at-tab-phone-btn" onclick="switchAgencyTab(\'phone\')">Phone</button>'
     +   '<button class="at-tab" id="at-tab-billing-btn" onclick="switchAgencyTab(\'billing\')">Billing</button>'
+    +   '<button class="at-tab" id="at-tab-users-btn" onclick="switchAgencyTab(\'users\')">Users</button>'
     +   '<button class="at-tab" id="at-tab-audit-btn" onclick="switchAgencyTab(\'audit\')">Agency Audit</button>'
     + '</div>'
     + '<div class="at-tab-content" id="at-tab-dashboard">'
@@ -38161,13 +38254,16 @@ function _agencyToolsHTML(){
     +     '<p>SaaS billing management is handled in the legacy agency portal.</p>'
     +   '</div>'
     + '</div>'
+    + '<div class="at-tab-content hidden" id="at-tab-users">'
+    +   '<div class="at-placeholder">Loading users...</div>'
+    + '</div>'
     + '<div class="at-tab-content hidden" id="at-tab-audit">'
     +   '<div class="at-placeholder">Agency Audit coming next</div>'
     + '</div>';
 }
 
 function switchAgencyTab(name){
-  var tabs = ['dashboard','subaccounts','phone','billing','audit'];
+  var tabs = ['dashboard','subaccounts','phone','billing','users','audit'];
   if(tabs.indexOf(name)<0)return;
   tabs.forEach(function(t){
     var btn = document.getElementById('at-tab-'+t+'-btn');
@@ -38181,6 +38277,7 @@ function switchAgencyTab(name){
   if(name==='subaccounts')_atRenderSubaccounts();
   else if(name==='phone')_atRenderPhone();
   else if(name==='billing')_atRenderBilling();
+  else if(name==='users')_atRenderUsers();
   else if(name==='audit')_atRenderAudit();
 }
 
