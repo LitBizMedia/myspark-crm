@@ -16540,6 +16540,7 @@ function _normalizeProductPricing(p){
 
 let editProductPrice=0;
 let editVariations=[];
+let editPriceOptions=[];
 
 function renderProducts(){
   const catF=document.getElementById('prod-cat-filter');
@@ -19680,13 +19681,28 @@ function openServiceModal(id, prefType){
   // Default tab is always Details.
   state.svcModalTab='details';
   var showSubTabs=defaultType==='individual';
+  // Seed the Pricing buffer (individual/group only). New service gets one Standard row.
+  if(showSubTabs){
+    if(s){
+      editPriceOptions=(db.serviceVariations||[]).filter(function(v){return v.service_id===s.id;}).map(function(v){
+        return {id:v.id,name:v.name||'',duration:v.duration||60,price:(v.price!=null?v.price:''),buffer_before:v.buffer_before||0,buffer_after:v.buffer_after||0,active:v.active!==false};
+      });
+      if(!editPriceOptions.length){
+        editPriceOptions=[{id:'pv-'+uid(),name:'Standard',duration:(s.duration_default||60),price:(s.price!=null?s.price:''),buffer_before:s.buffer_before||0,buffer_after:s.buffer_after||0,active:true}];
+      }
+    } else {
+      editPriceOptions=[{id:'pv-'+uid(),name:'Standard',duration:60,price:'',buffer_before:0,buffer_after:0,active:true}];
+    }
+  } else {
+    editPriceOptions=[];
+  }
 
   // Sessions tab only appears when editing a class (existing class has sessions to manage).
   var showSessionsTab=defaultType==='class'&&!!s;
 
   var tabsBar='<div class="pay-panel-tabs" style="margin:-22px -24px 18px">'
     +'<button class="pay-panel-tab active" id="svc-tab-details" onclick="switchSvcTab(\'details\')">Details</button>'
-    +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-variations" onclick="switchSvcTab(\'variations\')">Variations</button>':'')
+    +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-variations" onclick="switchSvcTab(\'variations\')">Pricing</button>':'')
     +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-addons" onclick="switchSvcTab(\'addons\')">Add-ons</button>':'')
     +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-resources" onclick="switchSvcTab(\'resources\')">Resources</button>':'')
     +(showSessionsTab?'<button class="pay-panel-tab" id="svc-tab-sessions" onclick="switchSvcTab(\'sessions\')">Upcoming Sessions</button>':'')
@@ -19700,7 +19716,7 @@ function openServiceModal(id, prefType){
     +'</div>';
 
   var variationsPane=showSubTabs?('<div id="svc-pane-variations" class="svc-pane hidden">'
-    +(s?'<div id="svc-var-section"></div>':'<div style="font-size:13px;color:var(--text-muted);padding:14px 0;text-align:center">Save the service first, then add variations.</div>')
+    +'<div id="svc-var-section"></div>'
     +'</div>'):'';
 
   var addonsPane=showSubTabs?('<div id="svc-pane-addons" class="svc-pane hidden">'
@@ -19733,9 +19749,9 @@ function openServiceModal(id, prefType){
   state.modal={type:'service',id:s?s.id:null};
 
   setTimeout(function(){
-    if(defaultType==='individual'&&s){
-      renderVariationsSection(s.id);
-      if(typeof renderServiceAddonsSection==='function')renderServiceAddonsSection(s.id);
+    if(defaultType==='individual'){
+      renderVariationsSection(s?s.id:null);
+      if(s&&typeof renderServiceAddonsSection==='function')renderServiceAddonsSection(s.id);
     }
     initServiceModalAfterRender(defaultType);
   },50);
@@ -19937,10 +19953,6 @@ function renderServiceIndividualFields(s){
   }).join('');
 
   return '<div class="form-row">'
-    +'<div class="form-group"><label>Display Price ($)</label><input id="svc-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+(s&&s.price!=null?s.price:'')+'"></div>'
-    +'<div class="form-group"><label>Default Duration (min)</label><input id="svc-dur" type="number" min="5" step="5" value="'+(s&&s.duration_default||60)+'"></div>'
-    +'</div>'
-    +'<div class="form-row">'
     +'<div class="form-group"><label>Buffer Before</label>'+_svcBufSel('svc-buf-before',s&&s.buffer_before||0)+'</div>'
     +'<div class="form-group"><label>Buffer After</label>'+_svcBufSel('svc-buf-after',s&&s.buffer_after||0)+'</div>'
     +'</div>'
@@ -20104,10 +20116,10 @@ function onServiceTypeChange(){
   if(typeSection)typeSection.innerHTML=renderServiceTypeFields(s,newType);
 
   // Variations section is now inside the Variations pane. Re-render if needed.
-  if(newType==='individual'&&s){
+  if(newType==='individual'){
     setTimeout(function(){
-      if(typeof renderVariationsSection==='function')renderVariationsSection(s.id);
-      if(typeof renderServiceAddonsSection==='function')renderServiceAddonsSection(s.id);
+      if(typeof renderVariationsSection==='function')renderVariationsSection(s?s.id:null);
+      if(s&&typeof renderServiceAddonsSection==='function')renderServiceAddonsSection(s.id);
     },30);
   }
 
@@ -20208,28 +20220,83 @@ function initServiceModalAfterRender(type){
 
 function renderVariationsSection(serviceId){
   var el=document.getElementById('svc-var-section');if(!el)return;
-  var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===serviceId;});
   var h='<div style="border-top:1px solid var(--main-border);padding-top:14px;margin-top:4px">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-    +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Variations</div>'
-    +'<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="openVariationModal(\''+serviceId+'\',null)">+ Add Variation</button>'
-    +'</div>';
-  if(!vars.length){
-    h+='<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No variations yet. Add variations for different durations or options.</div>';
+    +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Pricing</div>'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="addPriceOption()">+ Add Price Option</button>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:10px">Each option is a bookable price and length. Add one for a single price, or several for tiers like 30 min and 60 min.</div>';
+  if(!editPriceOptions.length){
+    h+='<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No price options yet. Click + Add Price Option.</div>';
   } else {
-    h+='<div style="display:flex;flex-direction:column;gap:6px">';
-    vars.forEach(function(v){
-      h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:6px">'
-        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--main-text)">'+esc(v.name)+'</div>'
-        +'<div style="font-size:11px;color:var(--main-text-muted)">'+(v.duration||60)+' min'+(v.price!=null?' &middot; $'+parseFloat(v.price).toFixed(2):'')+'</div></div>'
-        +(v.active===false?'<span style="font-size:9px;color:var(--main-text-muted)">Inactive</span>':'')
-        +'<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="openVariationModal(\''+serviceId+'\',\''+v.id+'\')">Edit</button>'
-        +'</div>';
-    });
+    h+='<div style="display:flex;flex-direction:column;gap:10px">';
+    editPriceOptions.forEach(function(o,i){ h+=_priceOptionRowHTML(o,i); });
     h+='</div>';
   }
   h+='</div>';
   el.innerHTML=h;
+}
+
+function _priceOptionRowHTML(o,i){
+  return '<div class="price-opt-row" data-idx="'+i+'" style="display:flex;gap:8px;align-items:flex-end;padding:10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:8px">'
+    +'<div class="form-group" style="flex:2;margin:0"><label style="font-size:10px">Name *</label><input class="po-name" type="text" placeholder="Standard, 60 min, Deep Tissue" value="'+esc(o.name||'')+'" oninput="_syncPriceOption('+i+')"></div>'
+    +'<div class="form-group" style="flex:1;margin:0"><label style="font-size:10px">Price ($)</label><input class="po-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+((o.price!=null&&o.price!=="")?o.price:"")+'" oninput="_syncPriceOption('+i+')"></div>'
+    +'<div class="form-group" style="flex:1;margin:0"><label style="font-size:10px">Min</label><input class="po-dur" type="number" min="5" step="5" value="'+(o.duration||60)+'" oninput="_syncPriceOption('+i+')"></div>'
+    +'<button class="btn btn-ghost btn-sm" style="font-size:16px;line-height:1;padding:8px 10px;flex-shrink:0" title="Remove" onclick="removePriceOption('+i+')">&times;</button>'
+    +'</div>';
+}
+
+function _syncPriceOption(i){
+  var rows=document.querySelectorAll('#svc-var-section .price-opt-row');
+  for(var k=0;k<rows.length;k++){
+    if(parseInt(rows[k].getAttribute('data-idx'),10)!==i)continue;
+    if(!editPriceOptions[i])return;
+    var nm=rows[k].querySelector('.po-name');
+    var pr=rows[k].querySelector('.po-price');
+    var du=rows[k].querySelector('.po-dur');
+    if(nm)editPriceOptions[i].name=nm.value;
+    if(pr)editPriceOptions[i].price=pr.value;
+    if(du)editPriceOptions[i].duration=parseInt(du.value,10)||60;
+    return;
+  }
+}
+
+function _readAllPriceOptions(){
+  var rows=document.querySelectorAll('#svc-var-section .price-opt-row');
+  for(var k=0;k<rows.length;k++){
+    var i=parseInt(rows[k].getAttribute('data-idx'),10);
+    if(!editPriceOptions[i])continue;
+    var nm=rows[k].querySelector('.po-name');
+    var pr=rows[k].querySelector('.po-price');
+    var du=rows[k].querySelector('.po-dur');
+    if(nm)editPriceOptions[i].name=nm.value;
+    if(pr)editPriceOptions[i].price=pr.value;
+    if(du)editPriceOptions[i].duration=parseInt(du.value,10)||60;
+  }
+}
+
+function addPriceOption(){
+  _readAllPriceOptions();
+  editPriceOptions.push({id:'pv-'+uid(),name:'',duration:60,price:'',buffer_before:0,buffer_after:0,active:true});
+  renderVariationsSection(state.modal&&state.modal.id?state.modal.id:null);
+}
+
+function removePriceOption(i){
+  _readAllPriceOptions();
+  editPriceOptions.splice(i,1);
+  renderVariationsSection(state.modal&&state.modal.id?state.modal.id:null);
+}
+
+function _flushPriceOptions(serviceId,deleteIds){
+  var ops=[];
+  editPriceOptions.forEach(function(o){
+    var row={id:o.id,service_id:serviceId,name:String(o.name||'').trim(),duration:parseInt(o.duration,10)||60,price:(o.price!==''&&o.price!=null)?parseFloat(o.price):null,buffer_before:o.buffer_before||0,buffer_after:o.buffer_after||0,active:o.active!==false};
+    ops.push(fetch(apiUrl('/api/subaccount/service-variations-upsert'),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(row)}).then(function(r){if(!r.ok)throw new Error('upsert failed');}));
+  });
+  (deleteIds||[]).forEach(function(id){
+    ops.push(fetch(apiUrl('/api/subaccount/service-variations-delete'),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}).then(function(r){if(!r.ok)throw new Error('delete failed');}));
+  });
+  return Promise.all(ops);
 }
 
 function renderServiceAddonsSection(serviceId){
@@ -20430,6 +20497,13 @@ function saveService(id){
     var staffChks=Array.from(document.querySelectorAll('.svc-staff-chk:checked')).map(function(c){return c.value;});
     if(!staffChks.length){toast('Assign at least one staff member.','error');return;}
 
+    // Pricing guard: read current rows, require at least one named price option.
+    _readAllPriceOptions();
+    if(!editPriceOptions.length){toast('Add at least one price option.','error');return;}
+    for(var _pi=0;_pi<editPriceOptions.length;_pi++){
+      if(!String(editPriceOptions[_pi].name||'').trim()){toast('Each price option needs a name.','error');return;}
+    }
+
     // Group booking inline config
     var groupCapableEl=document.getElementById('svc-group-capable');
     var groupCapable=!!(groupCapableEl&&groupCapableEl.checked);
@@ -20446,8 +20520,6 @@ function saveService(id){
     }
 
     Object.assign(svc,{
-      price:document.getElementById('svc-price').value!==''?parseFloat(document.getElementById('svc-price').value):null,
-      duration_default:parseInt(document.getElementById('svc-dur').value)||60,
       buffer_before:parseInt(document.getElementById('svc-buf-before').value)||0,
       buffer_after:parseInt(document.getElementById('svc-buf-after').value)||0,
       assigned_staff:staffChks,
@@ -20483,9 +20555,29 @@ function saveService(id){
   var existing=id?(db.services||[]).find(function(x){return x.id===id;}):null;
   if(existing){Object.assign(existing,svc);}
   else{if(!db.services)db.services=[];db.services.push(svc);}
-  closeModal();
-  renderServiceCal();
-  _saveServiceWithForce(svc, type, false);
+
+  if(type==='individual'){
+    var _sid=svc.id;
+    var _priorIds=(db.serviceVariations||[]).filter(function(v){return v.service_id===_sid;}).map(function(v){return v.id;});
+    db.serviceVariations=(db.serviceVariations||[]).filter(function(v){return v.service_id!==_sid;});
+    editPriceOptions.forEach(function(o){
+      db.serviceVariations.push({id:o.id,service_id:_sid,name:String(o.name||'').trim(),duration:parseInt(o.duration,10)||60,price:(o.price!==''&&o.price!=null)?parseFloat(o.price):null,buffer_before:o.buffer_before||0,buffer_after:o.buffer_after||0,active:o.active!==false});
+    });
+    var _keepIds=editPriceOptions.map(function(o){return o.id;});
+    var _toDelete=_priorIds.filter(function(pid){return _keepIds.indexOf(pid)<0;});
+    closeModal();
+    renderServiceCal();
+    _flushPriceOptions(_sid,_toDelete).then(function(){
+      _saveServiceWithForce(svc, type, false);
+    }).catch(function(){
+      toast('Pricing did not save. Reopen the service and try again.','error');
+      if(typeof fetchFromServer==='function')fetchFromServer();
+    });
+  } else {
+    closeModal();
+    renderServiceCal();
+    _saveServiceWithForce(svc, type, false);
+  }
 }
 
 // Posts service save. On 409 roster_block, prompts user to confirm regeneration
