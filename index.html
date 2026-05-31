@@ -20566,8 +20566,11 @@ function saveService(id){
     var _toDelete=_priorIds.filter(function(pid){return _keepIds.indexOf(pid)<0;});
     closeModal();
     renderServiceCal();
-    _flushPriceOptions(_sid,_toDelete).then(function(){
-      _saveServiceWithForce(svc, type, false);
+    // Parent must exist before variation rows can reference it (FK + service-scope check).
+    // Save the service first, then flush pricing on success.
+    Promise.resolve(_saveServiceWithForce(svc, type, false)).then(function(ok){
+      if(ok===false)return;
+      return _flushPriceOptions(_sid,_toDelete);
     }).catch(function(){
       toast('Pricing did not save. Reopen the service and try again.','error');
       if(typeof fetchFromServer==='function')fetchFromServer();
@@ -20584,7 +20587,7 @@ function saveService(id){
 // sessions appear on the calendar.
 function _saveServiceWithForce(svc, type, force){
   var payload = force ? Object.assign({}, svc, { force_regenerate: true }) : svc;
-  fetch(apiUrl('/api/subaccount/services-upsert'),{
+  return fetch(apiUrl('/api/subaccount/services-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(payload)
