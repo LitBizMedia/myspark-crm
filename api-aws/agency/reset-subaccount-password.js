@@ -58,22 +58,30 @@ async function handler(req, res) {
     return res.status(400).json({ error: 'Subaccount has no admin_username on file. Cannot determine which user to reset.' });
   }
 
-  // Magic-link path: generate token, email link, return early (no password update yet)
+  // Magic-link path: look up admin, generate token, email link, return early
   if (magicLinkOnly) {
     try {
-      const targetUser = await db.findOne('subaccount_users',
-        { id: userIdForAudit },
-        { select: 'email, display_name, username' }
+      // Look up admin user by username = admin_username (case-insensitive)
+      // Note: post-email-as-username migration, admin_username equals the email
+      const r = await db.query(
+        `SELECT id, email, display_name, username FROM subaccount_users
+         WHERE subaccount_id = $1 AND username ILIKE $2 AND active = true
+         LIMIT 1`,
+        [subaccountId, sub.admin_username]
       );
-      if (!targetUser || !targetUser.email) {
-        return res.status(400).json({ error: 'User has no email on file. Cannot send magic link.' });
+      const targetUser = r.rows[0];
+      if (!targetUser) {
+        return res.status(404).json({ error: 'Admin user not found for this subaccount' });
+      }
+      if (!targetUser.email) {
+        return res.status(400).json({ error: 'Admin user has no email on file. Cannot send magic link.' });
       }
       const token = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 60 min
       await db.insertOne('password_reset_tokens', {
         token: token,
         user_type: 'subaccount_user',
-        user_identifier: userIdForAudit,
+        user_identifier: targetUser.id,
         subaccount_slug: sub.slug,
         email: targetUser.email,
         expires_at: expiresAt
@@ -95,9 +103,9 @@ async function handler(req, res) {
         actorRole: auth.role,
         action: 'agency.subaccount.password_reset_link_sent',
         targetType: 'subaccount_user',
-        targetId: userIdForAudit,
+        targetId: targetUser.id,
         targetSubaccountId: subaccountId,
-        metadata: { subaccount_slug: sub.slug, target_username: sub.admin_username }
+        metadata: { subaccount_slug: sub.slug, target_email: targetUser.email }
       });
       return res.status(200).json({ success: true, magic_link_sent: true });
     } catch (e) {

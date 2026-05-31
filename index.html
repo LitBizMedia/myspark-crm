@@ -35581,10 +35581,6 @@ function agencyResetPassword(subId,slug){
 }
 
 async function agencyConfirmResetPassword(subId,slug){
-  if(!pass||!pass2){toast('Both fields required.','error');return;}
-  if(pass!==pass2){toast('Passwords do not match.','error');return;}
-  var passErr=checkPasswordStrength(pass);
-  if(passErr){toast(passErr,'error');return;}
   // Disable buttons during request
   var btns=document.querySelectorAll('#modal-foot button');
   btns.forEach(function(b){b.disabled=true;});
