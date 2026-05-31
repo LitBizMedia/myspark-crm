@@ -1417,6 +1417,27 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .agency-tab:hover{color:var(--text)}
 .agency-tab.active{color:var(--orange);border-bottom-color:var(--orange)}
 .agency-tab-content{padding:28px 32px}
+/* Agency Users master-detail panel */
+.au-wrap{display:flex;gap:0;border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;background:var(--main-card);min-height:520px}
+.au-side{width:260px;flex-shrink:0;border-right:1px solid var(--main-border);display:flex;flex-direction:column;background:var(--main-bg)}
+.au-side-search{padding:12px;border-bottom:1px solid var(--main-border)}
+.au-side-list{overflow-y:auto;flex:1}
+.au-side-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--main-border);font-size:13px;color:var(--main-text);transition:background .12s}
+.au-side-item:hover{background:var(--main-card-hover)}
+.au-side-item.active{background:var(--purple-dim);border-left:3px solid var(--orange);padding-left:11px}
+.au-side-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.au-side-badge{font-size:11px;color:var(--main-text-muted);flex-shrink:0;font-weight:600}
+.au-main{flex:1;display:flex;flex-direction:column;min-width:0}
+.au-toolbar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--main-border);flex-wrap:wrap}
+.au-toolbar .input{flex:1;min-width:200px}
+.au-table{width:100%;border-collapse:collapse;font-size:13px}
+.au-table th{text-align:left;padding:10px 16px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--main-text-muted);border-bottom:1px solid var(--main-border);font-weight:700}
+.au-table td{padding:13px 16px;border-bottom:1px solid var(--main-border);color:var(--main-text);vertical-align:middle}
+.au-table tr:hover td{background:var(--main-card-hover)}
+.au-pill-ok{display:inline-block;background:var(--success-dim);color:var(--success-text);border:1px solid var(--success);font-size:11px;font-weight:700;padding:3px 10px;border-radius:var(--radius-full)}
+.au-pill-pending{display:inline-block;background:var(--warning-dim);color:var(--warning-text);border:1px solid var(--warning);font-size:11px;font-weight:700;padding:3px 10px;border-radius:var(--radius-full)}
+.au-pager{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px}
+.au-empty{padding:48px 24px;text-align:center;color:var(--main-text-muted);font-size:14px}
 .agency-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
 .agency-toolbar input[type="text"],.agency-toolbar select{background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;height:34px;font-family:inherit}
 .agency-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
@@ -38127,76 +38148,156 @@ function canRefundVoid(){ return hasRole('admin','manager'); }
 var _agencyFocusTimer = null;
 
 // ── Agency Users panel (cross-subaccount user lookup + actions) ──
-var _atUsersData = null;
+var _auState = { users:[], loaded:false, sub:'all', search:'', status:'all', page:1, sideSearch:'' };
+var _auPageSize = 25;
 
 function _atRenderUsers(){
   var pane = document.getElementById('at-tab-users');
   if(!pane) return;
-  pane.innerHTML = '<div class="at-placeholder">Loading users...</div>';
+  if(_auState.loaded){ _atDrawUsers(); return; }
+  pane.innerHTML = '<div class="au-empty">Loading users...</div>';
   fetch(apiUrl('/api/agency/users-list'),{credentials:'include'})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(data){ _atUsersData = data; _atDrawUsers(); })
+    .then(function(data){
+      _auState.users = data.users || [];
+      _auState.activeVer = data.active_eula_version;
+      _auState.loaded = true;
+      _atDrawUsers();
+    })
     .catch(function(e){
-      pane.innerHTML = '<div class="at-placeholder">Could not load users. '
-        + '<button class="btn btn-sm" onclick="_atRenderUsers()">Retry</button></div>';
+      pane.innerHTML = '<div class="au-empty">Could not load users. '
+        + '<button class="btn btn-sm" onclick="_auState.loaded=false;_atRenderUsers()">Retry</button></div>';
       console.error('users-list load failed:', e);
     });
 }
 
+// Build the list of subaccounts (id, name, total, accepted) from loaded users.
+function _auSubaccounts(){
+  var map = {}; var order = [];
+  _auState.users.forEach(function(u){
+    if(!map[u.subaccountId]){ map[u.subaccountId] = { id:u.subaccountId, name:u.subaccountName||u.subaccountSlug, total:0, accepted:0 }; order.push(u.subaccountId); }
+    map[u.subaccountId].total++;
+    if(u.eulaAccepted) map[u.subaccountId].accepted++;
+  });
+  return order.map(function(id){ return map[id]; });
+}
+
+// Apply the filter rules and return the matching users (pre-pagination).
+function _auFiltered(){
+  var q = _auState.search.trim().toLowerCase();
+  var rows = _auState.users.slice();
+  // Rule: a name/email search goes global and ignores the sidebar selection.
+  if(q){
+    rows = rows.filter(function(u){
+      return (u.name||'').toLowerCase().indexOf(q) >= 0 || (u.email||'').toLowerCase().indexOf(q) >= 0;
+    });
+  } else if(_auState.sub !== 'all'){
+    rows = rows.filter(function(u){ return u.subaccountId === _auState.sub; });
+  }
+  // Status filter stacks on top of whatever is showing.
+  if(_auState.status === 'accepted') rows = rows.filter(function(u){ return u.eulaAccepted; });
+  else if(_auState.status === 'pending') rows = rows.filter(function(u){ return !u.eulaAccepted; });
+  return rows;
+}
+
 function _atDrawUsers(){
   var pane = document.getElementById('at-tab-users');
-  if(!pane || !_atUsersData) return;
-  var users = _atUsersData.users || [];
-  var activeVer = _atUsersData.active_eula_version;
-  // Group by subaccount, preserving the server's name-sorted order.
-  var groups = {}; var order = [];
-  users.forEach(function(u){
-    if(!groups[u.subaccountId]){ groups[u.subaccountId] = []; order.push(u.subaccountId); }
-    groups[u.subaccountId].push(u);
-  });
-  var totalAccepted = users.filter(function(u){return u.eulaAccepted;}).length;
-  var verLabel = activeVer ? ('EULA '+esc(activeVer)) : 'No active EULA yet';
-  var h = '';
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px">';
-  h +=   '<div><div style="font-size:18px;font-weight:700;color:var(--main-text)">All Users</div>';
-  h +=     '<div style="font-size:13px;color:var(--main-text-muted);margin-top:2px">'
-         + users.length + ' active users across ' + order.length + ' subaccounts. '
-         + totalAccepted + ' of ' + users.length + ' accepted. ' + verLabel + '.</div></div>';
-  h +=   '<button class="btn btn-sm" onclick="_atRenderUsers()">Refresh</button>';
-  h += '</div>';
-  order.forEach(function(sid){
-    var list = groups[sid];
-    var sub = list[0];
-    var acc = list.filter(function(u){return u.eulaAccepted;}).length;
-    h += '<div class="card" style="margin-bottom:16px;padding:0;overflow:hidden">';
-    h +=   '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--main-border);background:var(--main-card-hover)">';
-    h +=     '<div style="font-weight:700;color:var(--main-text)">' + esc(sub.subaccountName||sub.subaccountSlug) + '</div>';
-    h +=     '<div style="font-size:12px;color:var(--main-text-muted)">' + acc + '/' + list.length + ' accepted</div>';
-    h +=   '</div>';
-    h +=   '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
-    list.forEach(function(u){
-      var pill = u.eulaAccepted
-        ? '<span style="display:inline-block;background:var(--success-dim);color:var(--success-text);border:1px solid var(--success);font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radius-full)">Accepted</span>'
-        : '<span style="display:inline-block;background:var(--warning-dim);color:var(--warning-text);border:1px solid var(--warning);font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--radius-full)">Pending</span>';
+  if(!pane || !_auState.loaded) return;
+  var subs = _auSubaccounts();
+  var totalAccepted = _auState.users.filter(function(u){return u.eulaAccepted;}).length;
+  var verLabel = _auState.activeVer ? ('EULA '+esc(_auState.activeVer)) : 'No active EULA yet';
+  var searching = !!_auState.search.trim();
+
+  // ── Sidebar ──
+  var sideQ = _auState.sideSearch.trim().toLowerCase();
+  var visibleSubs = sideQ ? subs.filter(function(s){ return s.name.toLowerCase().indexOf(sideQ) >= 0; }) : subs;
+  var side = '';
+  side += '<div class="au-side-search"><input class="input" style="width:100%" placeholder="Search subaccounts..." value="' + esc(_auState.sideSearch) + '" oninput="_auState.sideSearch=this.value;_auDrawSideOnly()"></div>';
+  side += '<div class="au-side-list" id="au-side-list">' + _auSideListHTML(visibleSubs, searching) + '</div>';
+
+  // ── Main toolbar ──
+  var statusOpts = [['all','All statuses'],['pending','Pending'],['accepted','Accepted']].map(function(o){
+    return '<option value="'+o[0]+'"'+(_auState.status===o[0]?' selected':'')+'>'+o[1]+'</option>';
+  }).join('');
+  var main = '';
+  main += '<div class="au-toolbar">';
+  main +=   '<input class="input" placeholder="Search all users by name or email..." value="' + esc(_auState.search) + '" oninput="_auState.search=this.value;_auState.page=1;_atDrawUsers()">';
+  main +=   '<select class="input" style="flex:0 0 auto;min-width:150px" onchange="_auState.status=this.value;_auState.page=1;_atDrawUsers()">' + statusOpts + '</select>';
+  main +=   '<button class="btn btn-sm" onclick="_auState.loaded=false;_atRenderUsers()">Refresh</button>';
+  main += '</div>';
+
+  // ── Table ──
+  var rows = _auFiltered();
+  var totalRows = rows.length;
+  var pages = Math.max(1, Math.ceil(totalRows / _auPageSize));
+  if(_auState.page > pages) _auState.page = pages;
+  var startI = (_auState.page - 1) * _auPageSize;
+  var pageRows = rows.slice(startI, startI + _auPageSize);
+
+  if(totalRows === 0){
+    main += '<div class="au-empty">' + (searching ? 'No users match "' + esc(_auState.search) + '".' : 'No users to show.') + '</div>';
+  } else {
+    main += '<div style="overflow-x:auto"><table class="au-table"><thead><tr>';
+    main +=   '<th>Name</th><th>Email</th><th>Subaccount</th><th>Role</th><th>EULA</th><th style="text-align:right">Actions</th>';
+    main += '</tr></thead><tbody>';
+    pageRows.forEach(function(u){
+      var pill = u.eulaAccepted ? '<span class="au-pill-ok">Accepted</span>' : '<span class="au-pill-pending">Pending</span>';
+      var nm = esc(u.name).replace(/'/g, "\\'");
       var noEmail = !u.email;
-      var resetBtn = '<button class="btn btn-sm" '
-        + (noEmail ? 'disabled title="No email on file" ' : '')
-        + 'onclick="_atUserAction(\'send_reset\',\'' + u.id + '\',\'' + esc(u.name).replace(/'/g,"\\'") + '\')">Send Reset</button>';
-      var unflagBtn = u.eulaAccepted
-        ? '<button class="btn btn-sm" style="margin-left:6px" onclick="_atUserAction(\'unflag\',\'' + u.id + '\',\'' + esc(u.name).replace(/'/g,"\\'") + '\')">Unflag</button>'
-        : '';
-      h += '<tr style="border-bottom:1px solid var(--main-border)">';
-      h +=   '<td style="padding:10px 16px;color:var(--main-text);font-weight:600">' + esc(u.name) + '</td>';
-      h +=   '<td style="padding:10px 16px;color:var(--main-text-muted)">' + (esc(u.email)||'<span style="opacity:.5">no email</span>') + '</td>';
-      h +=   '<td style="padding:10px 16px;color:var(--main-text-muted)">' + esc(u.role) + '</td>';
-      h +=   '<td style="padding:10px 16px">' + pill + '</td>';
-      h +=   '<td style="padding:10px 16px;white-space:nowrap;text-align:right">' + resetBtn + unflagBtn + '</td>';
-      h += '</tr>';
+      var resetBtn = '<button class="btn btn-sm" ' + (noEmail ? 'disabled title="No email on file" ' : '') + 'onclick="_atUserAction(\'send_reset\',\'' + u.id + '\',\'' + nm + '\')">Send Reset</button>';
+      var unflagBtn = u.eulaAccepted ? '<button class="btn btn-sm" style="margin-left:6px" onclick="_atUserAction(\'unflag\',\'' + u.id + '\',\'' + nm + '\')">Unflag</button>' : '';
+      main += '<tr>';
+      main +=   '<td style="font-weight:600">' + esc(u.name) + '</td>';
+      main +=   '<td style="color:var(--main-text-muted)">' + (esc(u.email) || '<span style="opacity:.5">no email</span>') + '</td>';
+      main +=   '<td style="color:var(--main-text-muted)">' + esc(u.subaccountName||u.subaccountSlug) + '</td>';
+      main +=   '<td style="color:var(--main-text-muted)">' + esc(u.role) + '</td>';
+      main +=   '<td>' + pill + '</td>';
+      main +=   '<td style="text-align:right;white-space:nowrap">' + resetBtn + unflagBtn + '</td>';
+      main += '</tr>';
     });
-    h +=   '</table></div>';
-    h += '</div>';
+    main += '</tbody></table></div>';
+    // Pager
+    main += '<div class="au-pager">';
+    main +=   '<div style="font-size:12px;color:var(--main-text-muted)">Showing ' + (startI+1) + '–' + (startI+pageRows.length) + ' of ' + totalRows + ' · ' + totalAccepted + '/' + _auState.users.length + ' accepted · ' + verLabel + '</div>';
+    main +=   '<div style="display:flex;gap:8px;align-items:center">';
+    main +=     '<button class="btn btn-sm" ' + (_auState.page<=1?'disabled ':'') + 'onclick="_auState.page--;_atDrawUsers()">Prev</button>';
+    main +=     '<span style="font-size:12px;color:var(--main-text-muted)">Page ' + _auState.page + ' of ' + pages + '</span>';
+    main +=     '<button class="btn btn-sm" ' + (_auState.page>=pages?'disabled ':'') + 'onclick="_auState.page++;_atDrawUsers()">Next</button>';
+    main +=   '</div>';
+    main += '</div>';
+  }
+
+  pane.innerHTML = '<div class="au-wrap"><div class="au-side">' + side + '</div><div class="au-main">' + main + '</div></div>';
+}
+
+function _auSideListHTML(visibleSubs, searching){
+  var allActive = (_auState.sub === 'all' && !searching) ? ' active' : '';
+  var html = '<div class="au-side-item' + allActive + '" onclick="_auPickSub(\'all\')"><span class="au-side-name">All Subaccounts</span><span class="au-side-badge">' + _auState.users.length + '</span></div>';
+  visibleSubs.forEach(function(s){
+    var active = (!searching && _auState.sub === s.id) ? ' active' : '';
+    html += '<div class="au-side-item' + active + '" onclick="_auPickSub(\'' + s.id + '\')">';
+    html +=   '<span class="au-side-name">' + esc(s.name) + '</span>';
+    html +=   '<span class="au-side-badge">' + s.accepted + '/' + s.total + '</span>';
+    html += '</div>';
   });
-  pane.innerHTML = h;
+  return html;
+}
+
+// Redraw only the sidebar list (used by the sidebar search so the input keeps focus).
+function _auDrawSideOnly(){
+  var list = document.getElementById('au-side-list');
+  if(!list) return;
+  var subs = _auSubaccounts();
+  var sideQ = _auState.sideSearch.trim().toLowerCase();
+  var visibleSubs = sideQ ? subs.filter(function(s){ return s.name.toLowerCase().indexOf(sideQ) >= 0; }) : subs;
+  list.innerHTML = _auSideListHTML(visibleSubs, !!_auState.search.trim());
+}
+
+function _auPickSub(id){
+  _auState.sub = id;
+  _auState.search = '';
+  _auState.page = 1;
+  _atDrawUsers();
 }
 
 function _atUserAction(action, userId, name){
@@ -38212,8 +38313,8 @@ function _atUserAction(action, userId, name){
     .then(function(res){
       if(!res.ok){ toast((res.j && res.j.error) || 'Action failed', 'error'); return; }
       if(action==='send_reset') toast('Reset link sent to ' + (res.j.email||name), 'success');
-      else toast('EULA acceptance cleared for ' + name, 'success');
-      _atRenderUsers();
+      else { toast('EULA acceptance cleared for ' + name, 'success'); var hit=_auState.users.filter(function(u){return u.id===userId;})[0]; if(hit){ hit.eulaAccepted=false; hit.eulaAcceptedAt=null; } }
+      _atDrawUsers();
     })
     .catch(function(e){ toast('Action failed: ' + e.message, 'error'); });
 }
