@@ -38221,12 +38221,25 @@ function _atDrawUsers(){
   }).join('');
   var main = '';
   main += '<div class="au-toolbar">';
-  main +=   '<input class="input" placeholder="Search all users by name or email..." value="' + esc(_auState.search) + '" oninput="_auState.search=this.value;_auState.page=1;_atDrawUsers()">';
-  main +=   '<select class="input" style="flex:0 0 auto;min-width:150px" onchange="_auState.status=this.value;_auState.page=1;_atDrawUsers()">' + statusOpts + '</select>';
+  main +=   '<input class="input" placeholder="Search all users by name or email..." value="' + esc(_auState.search) + '" oninput="_auState.search=this.value;_auState.page=1;_auDrawTableOnly()">';
+  main +=   '<select class="input" style="flex:0 0 auto;min-width:150px" onchange="_auState.status=this.value;_auState.page=1;_auDrawTableOnly()">' + statusOpts + '</select>';
   main +=   '<button class="btn btn-sm" onclick="_auState.loaded=false;_atRenderUsers()">Refresh</button>';
   main += '</div>';
 
-  // ── Table ──
+  // ── Table ── (results buffer, rendered into #au-results)
+  var main_results = _auResultsHTML();
+  main += '<div id="au-results">' + main_results + '</div>';
+  pane.innerHTML = '<div class="au-wrap"><div class="au-side">' + side + '</div><div class="au-main">' + main + '</div></div>';
+  return;
+}
+
+// Builds ONLY the table + pager HTML from current state. Used both by the
+// full render and by the focus-preserving table-only redraw.
+function _auResultsHTML(){
+  var totalAccepted = _auState.users.filter(function(u){return u.eulaAccepted;}).length;
+  var verLabel = _auState.activeVer ? ('EULA '+esc(_auState.activeVer)) : 'No active EULA yet';
+  var searching = !!_auState.search.trim();
+  var main = '';
   var rows = _auFiltered();
   var totalRows = rows.length;
   var pages = Math.max(1, Math.ceil(totalRows / _auPageSize));
@@ -38260,14 +38273,20 @@ function _atDrawUsers(){
     main += '<div class="au-pager">';
     main +=   '<div style="font-size:12px;color:var(--main-text-muted)">Showing ' + (startI+1) + '–' + (startI+pageRows.length) + ' of ' + totalRows + ' · ' + totalAccepted + '/' + _auState.users.length + ' accepted · ' + verLabel + '</div>';
     main +=   '<div style="display:flex;gap:8px;align-items:center">';
-    main +=     '<button class="btn btn-sm" ' + (_auState.page<=1?'disabled ':'') + 'onclick="_auState.page--;_atDrawUsers()">Prev</button>';
+    main +=     '<button class="btn btn-sm" ' + (_auState.page<=1?'disabled ':'') + 'onclick="_auState.page--;_auDrawTableOnly()">Prev</button>';
     main +=     '<span style="font-size:12px;color:var(--main-text-muted)">Page ' + _auState.page + ' of ' + pages + '</span>';
-    main +=     '<button class="btn btn-sm" ' + (_auState.page>=pages?'disabled ':'') + 'onclick="_auState.page++;_atDrawUsers()">Next</button>';
+    main +=     '<button class="btn btn-sm" ' + (_auState.page>=pages?'disabled ':'') + 'onclick="_auState.page++;_auDrawTableOnly()">Next</button>';
     main +=   '</div>';
     main += '</div>';
   }
+  return main;
+}
 
-  pane.innerHTML = '<div class="au-wrap"><div class="au-side">' + side + '</div><div class="au-main">' + main + '</div></div>';
+function _auDrawTableOnly(){
+  var box = document.getElementById('au-results');
+  if(!box){ _atDrawUsers(); return; }
+  box.innerHTML = _auResultsHTML();
+  _auDrawSideOnly();
 }
 
 function _auSideListHTML(visibleSubs, searching){
