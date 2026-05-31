@@ -11,6 +11,7 @@
 
 const db = require('./lib/db');
 const { logAudit } = require('./lib/audit');
+const agencyEmails = require('./lib/agency-emails');
 const {
   hashPassword,
   verifyBcrypt,
@@ -115,6 +116,21 @@ async function handler(req, res) {
   }
 
   await revokeAllUserSessions(user.id, 'subaccount', 'password_changed');
+
+  // Send security confirmation email (best-effort)
+  try {
+    if (user.email) {
+      const sub = await db.findOne('subaccounts', { id: user.subaccount_id }, { select: 'name' });
+      await agencyEmails.sendEmail(user.email, 'password_changed_self', {
+        subName: (sub && sub.name) || user.subaccount_id,
+        userName: user.display_name || user.username || 'there',
+        changedAt: new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC',
+        subaccountId: user.subaccount_id
+      });
+    }
+  } catch (emailErr) {
+    console.error('change-password: security email failed:', emailErr.message);
+  }
 
   const newSession = await createSession({
     userId: user.id,

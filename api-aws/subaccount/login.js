@@ -122,22 +122,33 @@ async function handler(req, res) {
   }
 
   // ============================================================
-  // Look up the user (case-insensitive username, must be active)
+  // Look up the user - accepts EITHER email OR username (case-insensitive)
+  // If the input contains @, prefer email match. Otherwise username match.
+  // Falls back to the other column if first lookup fails.
   // ============================================================
   let user = null;
   if (subaccountId) {
+    const looksLikeEmail = normalizedUsername.indexOf('@') >= 0;
     try {
-      // ILIKE on username for case-insensitive match
-      const userRows = await db.query(
-        `SELECT * FROM subaccount_users
-         WHERE subaccount_id = $1
-           AND username ILIKE $2
-           AND active = true
-         LIMIT 1`,
-        [subaccountId, normalizedUsername]
-      );
-      if (userRows.rows && userRows.rows.length) {
-        user = userRows.rows[0];
+      if (looksLikeEmail) {
+        // Try email first
+        const r1 = await db.query(
+          `SELECT * FROM subaccount_users
+           WHERE subaccount_id = $1 AND LOWER(email) = $2 AND active = true
+           LIMIT 1`,
+          [subaccountId, normalizedUsername]
+        );
+        if (r1.rows && r1.rows.length) user = r1.rows[0];
+      }
+      if (!user) {
+        // Try username (fallback or primary if no @)
+        const r2 = await db.query(
+          `SELECT * FROM subaccount_users
+           WHERE subaccount_id = $1 AND username ILIKE $2 AND active = true
+           LIMIT 1`,
+          [subaccountId, normalizedUsername]
+        );
+        if (r2.rows && r2.rows.length) user = r2.rows[0];
       }
     } catch (e) {
       console.error('login: user lookup failed:', e.message);

@@ -13,6 +13,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
+const agencyEmails = require('./lib/agency-emails');
 const { wrap } = require('./lib/lambda-adapter');
 
 const BCRYPT_COST = 10;
@@ -33,10 +34,13 @@ async function handler(req, res) {
 
   const { subaccountId, newPassword } = req.body || {};
   if (!subaccountId) return res.status(400).json({ error: 'subaccountId required' });
-  if (!newPassword) return res.status(400).json({ error: 'newPassword required' });
+  // newPassword is now optional. If absent, we send a magic reset link instead.
+  const magicLinkOnly = !newPassword;
 
-  const passErr = checkPasswordStrength(newPassword);
-  if (passErr) return res.status(400).json({ error: passErr });
+  if (!magicLinkOnly) {
+    const passErr = checkPasswordStrength(newPassword);
+    if (passErr) return res.status(400).json({ error: passErr });
+  }
 
   // Look up the subaccount
   let sub;
@@ -54,6 +58,55 @@ async function handler(req, res) {
     return res.status(400).json({ error: 'Subaccount has no admin_username on file. Cannot determine which user to reset.' });
   }
 
+  // Magic-link path: generate token, email link, return early (no password update yet)
+  if (magicLinkOnly) {
+    try {
+      const targetUser = await db.findOne('subaccount_users',
+        { id: userIdForAudit },
+        { select: 'email, display_name, username' }
+      );
+      if (!targetUser || !targetUser.email) {
+        return res.status(400).json({ error: 'User has no email on file. Cannot send magic link.' });
+      }
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 60 min
+      await db.insertOne('password_reset_tokens', {
+        token: token,
+        user_type: 'subaccount_user',
+        user_identifier: userIdForAudit,
+        subaccount_slug: sub.slug,
+        email: targetUser.email,
+        expires_at: expiresAt
+      });
+      const resetUrl = 'https://mysparkplus.app/' + sub.slug + '?reset=' + token;
+      const agencyEmails = require('./lib/agency-emails');
+      await agencyEmails.sendEmail(targetUser.email, 'password_reset_by_admin', {
+        subName: sub.name || sub.slug,
+        userName: targetUser.display_name || targetUser.username || 'there',
+        resetUrl: resetUrl,
+        resetByName: auth.username || 'an administrator',
+        subaccountId: subaccountId
+      });
+      await logAudit({
+        req,
+        actorType: 'agency_admin',
+        actorId: auth.user_id,
+        actorUsername: auth.username,
+        actorRole: auth.role,
+        action: 'agency.subaccount.password_reset_link_sent',
+        targetType: 'subaccount_user',
+        targetId: userIdForAudit,
+        targetSubaccountId: subaccountId,
+        metadata: { subaccount_slug: sub.slug, target_username: sub.admin_username }
+      });
+      return res.status(200).json({ success: true, magic_link_sent: true });
+    } catch (e) {
+      console.error('reset-subaccount-password: magic link failed:', e.message);
+      return res.status(500).json({ error: 'Failed to send reset link: ' + e.message });
+    }
+  }
+
+  // Legacy direct-set path (admin provided newPassword)
   // Hash new password
   let newHash;
   try {

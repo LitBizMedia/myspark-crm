@@ -17,6 +17,7 @@ const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('./lib
 const pricing = require('./lib/plan-pricing');
 const { sendError } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
+const agencyEmails = require('./lib/agency-emails');
 const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz, getSubTimezone } = require('./lib/timezone');
@@ -258,6 +259,23 @@ async function handler(req, res) {
         updates.pending_change_note = (isDowngrade ? 'Downgrade' : 'Change') + ' scheduled by ' + (auth.username || 'admin');
       }
       await updatePlan(subaccountId, updates);
+
+      // Send scheduled-change email (best-effort)
+      try {
+        const subRow = await db.findOne('subaccounts', { id: subaccountId }, { select: 'name, admin_email' });
+        if (subRow && subRow.admin_email && hasChange) {
+          await agencyEmails.sendEmail(subRow.admin_email, 'plan_change_scheduled', {
+            subName: subRow.name || subaccountId,
+            oldPlan: (plan.plan_tier || '') + (plan.billing_period ? ' ' + plan.billing_period : ''),
+            newPlan: newTier + (newPeriod ? ' ' + newPeriod : ''),
+            effectiveDate: plan.next_billing_date ? String(plan.next_billing_date).slice(0, 10) : 'next billing date',
+            subaccountId: subaccountId
+          });
+        }
+      } catch (emailErr) {
+        console.error('swap-plan: scheduled email failed:', emailErr.message);
+      }
+
       await logAudit({
         req, ...actor,
         action: isDowngrade ? 'agency.subaccount.plan_downgrade_scheduled' : 'agency.plan.swap',
@@ -403,6 +421,24 @@ async function handler(req, res) {
       pending_change_effective_at: null,
       pending_change_note: null
     });
+
+    // Send upgrade receipt email (best-effort)
+    try {
+      const subRow = await db.findOne('subaccounts', { id: subaccountId }, { select: 'name, admin_email' });
+      if (subRow && subRow.admin_email) {
+        await agencyEmails.sendEmail(subRow.admin_email, 'plan_changed_upgrade', {
+          subName: subRow.name || subaccountId,
+          oldPlan: oldTier + (plan.billing_period ? ' ' + plan.billing_period : ''),
+          newPlan: newTier + (newPeriod ? ' ' + newPeriod : ''),
+          prorationAmount: proratedCents ? (proratedCents / 100).toFixed(2) : null,
+          nextBillingDate: plan.next_billing_date ? String(plan.next_billing_date).slice(0, 10) : null,
+          billingPeriod: newPeriod,
+          subaccountId: subaccountId
+        });
+      }
+    } catch (emailErr) {
+      console.error('swap-plan: upgrade email failed:', emailErr.message);
+    }
 
     await logAudit({
       req, ...actor,

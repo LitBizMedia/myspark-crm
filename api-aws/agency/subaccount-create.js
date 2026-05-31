@@ -19,6 +19,7 @@ const db = require('./lib/db');
 const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { hashPassword } = require('./lib/subaccount-auth');
 const { logAudit } = require('./lib/audit');
+const agencyEmails = require('./lib/agency-emails');
 const { wrap } = require('./lib/lambda-adapter');
 
 // Mirror data-save Lambda's strip list. The blob never holds user data.
@@ -51,7 +52,10 @@ async function handler(req, res) {
   if (!b.slug) return res.status(400).json({ error: 'slug required' });
   if (!b.tier) return res.status(400).json({ error: 'tier required' });
   if (!b.adminUsername) return res.status(400).json({ error: 'adminUsername required' });
-  if (!b.adminPassword) return res.status(400).json({ error: 'adminPassword required' });
+  // adminPassword is now optional. If absent, generate a throwaway and send setup link.
+  // If admin provided one, we still honor it AND send setup link so they can use either.
+  const useTempPassword = !b.adminPassword;
+  const effectivePassword = b.adminPassword || ('temp_' + require('crypto').randomBytes(16).toString('hex') + 'A1!');
 
   const subId = b.id;
   const slug = b.slug;
@@ -64,7 +68,7 @@ async function handler(req, res) {
 
   let adminPasswordHash;
   try {
-    adminPasswordHash = await hashPassword(String(b.adminPassword));
+    adminPasswordHash = await hashPassword(String(effectivePassword));
   } catch (e) {
     console.error('subaccount-create: password hash failed:', e.message);
     return res.status(500).json({ error: 'Password hashing failed' });
@@ -127,6 +131,51 @@ async function handler(req, res) {
         adminPasswordHash, adminColor
       ]);
     });
+
+    // Generate setup token for magic link flow
+    let setupUrl = null;
+    try {
+      if (adminEmail) {
+        const crypto = require('crypto');
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+        await db.insertOne('password_reset_tokens', {
+          token: token,
+          user_type: 'subaccount_user',
+          user_identifier: adminUserId,
+          subaccount_slug: slug,
+          email: adminEmail,
+          expires_at: expiresAt
+        });
+        setupUrl = 'https://mysparkplus.app/' + slug + '?reset=' + token;
+      }
+    } catch (e) {
+      console.error('subaccount-create: setup token generation failed:', e.message);
+    }
+
+    // Send welcome email to new admin (best-effort)
+    try {
+      if (adminEmail) {
+        // Get plan details for the email
+        let planRow = null;
+        try {
+          planRow = await db.findOne('subaccount_plans', { subaccount_id: subId }, { select: 'plan_tier, billing_period, trial_days' });
+        } catch (e) { /* ignore */ }
+        await agencyEmails.sendEmail(adminEmail, 'welcome_subaccount', {
+          subName: b.name,
+          adminName: adminName || adminUsername,
+          slug: slug,
+          planTier: planRow ? planRow.plan_tier : (b.tier || ''),
+          billingPeriod: planRow ? planRow.billing_period : (b.billingPeriod || 'monthly'),
+          trialDays: planRow ? planRow.trial_days : 0,
+          setupUrl: setupUrl,
+          loginUrl: 'https://mysparkplus.app/' + slug,
+          subaccountId: subId
+        });
+      }
+    } catch (emailErr) {
+      console.error('subaccount-create: welcome email failed:', emailErr.message);
+    }
 
     await logAudit({
       req,

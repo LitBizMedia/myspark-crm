@@ -1857,7 +1857,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
     </div>
     <div id="login-error" class="auth-error hidden"></div>
     <form id="login-form">
-      <div class="form-group"><label>Username</label><input type="text" id="l-user" autocomplete="username" required></div>
+      <div class="form-group"><label>Email or Username</label><input type="text" id="l-user" autocomplete="username" required></div>
       <div class="form-group"><label>Password</label><input type="password" id="l-pass" autocomplete="current-password" required></div>
       <button type="submit" class="btn btn-primary btn-full" style="margin-top:4px">Sign In</button>
       <div style="text-align:center;margin-top:14px"><button type="button" class="btn btn-ghost btn-sm" onclick="openForgotPassword('subaccount')" style="font-size:12px;color:var(--text-muted)">Forgot password?</button></div>
@@ -4606,10 +4606,6 @@ function openResetPasswordModal(token){
 async function submitResetPassword(token){
   var pass=document.getElementById('rp-pass')&&document.getElementById('rp-pass').value||'';
   var pass2=document.getElementById('rp-pass2')&&document.getElementById('rp-pass2').value||'';
-  if(!pass){toast('Enter a new password.','error');return;}
-  if(pass!==pass2){toast('Passwords do not match.','error');return;}
-  var passErr=checkPasswordStrength(pass);
-  if(passErr){toast(passErr,'error');return;}
   try{
     var r=await fetch(apiUrl('/api/auth/reset-password'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,newPassword:pass})});
     var data=await r.json();
@@ -12679,7 +12675,7 @@ function openUserSchedModal(uid){
 
 function buildUserBody(){
   const cols=USER_COLORS.map((c,i)=>'<div class="color-sw'+(i===0?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
-  return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Username</label><input id="uf-user" type="text" placeholder="jsmith"></div></div>'
+  return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Email or Username</label><input id="uf-user" type="text" placeholder="jsmith"></div></div>'
     +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(for password recovery)</span></label><input id="uf-email" type="email" placeholder="jane@example.com"></div>'
     +'<div class="form-row"><div class="form-group"><label>Password</label><input id="uf-pass" type="password"></div><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Manager</option><option value="user">User</option><option value="practitioner">Practitioner</option></select></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
@@ -13770,7 +13766,7 @@ function openEditUserModal(userId){
   state.selUserColor=u.color||USER_COLORS[0];
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
-  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Username</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
+  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email or Username</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
     +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(for password recovery)</span></label><input id="eu-email" type="email" value="'+esc(u.email||u.emailAddress||'')+'" placeholder="email@example.com"></div>'
     +(state.user&&state.user.id===userId
       ?'<div class="form-group"><label>Current Password <span style="font-weight:400;color:var(--text-muted)">(required to change password)</span></label>'
@@ -35553,22 +35549,38 @@ function agencyCurrentUserId(){return (state&&state.user&&state.user.id)||'';}
 
 
 // ── Agency Reset Subaccount Admin Password ──
+async function agencyResendWelcome(subId,subName){
+  if(!agencyCanManageSubaccounts()){toast('You do not have permission to do this.','error');return;}
+  if(!confirm('Resend the welcome email and a new setup link to the admin for '+subName+'?'))return;
+  try{
+    var r=await fetch(apiUrl('/api/agency/resend-welcome'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subaccountId:subId})
+    });
+    var data=await r.json();
+    if(!r.ok){toast('Resend failed: '+(data.error||'Unknown error'),'error');return;}
+    toast('Welcome email sent to '+(data.sent_to||'admin'),'success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
 function agencyResetPassword(subId,slug){
   if(!agencyCanManageSubaccounts()){toast('You do not have permission to reset passwords.','error');return;}
   state.modal={type:'agency-reset-pass',id:subId,extra:{slug:slug}};
-  var body='<div class="form-group"><label>New Admin Password *</label>'
-    +'<input id="agency-new-pass" type="password" placeholder="Strong password">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
-    +'<div class="form-group"><label>Confirm Password *</label>'
-    +'<input id="agency-new-pass2" type="password" placeholder="Confirm password"></div>';
-  openModal('Reset Admin Password: '+slug, body,
+  var body='<div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:8px">'
+    +'A secure reset link will be emailed to the admin. The link expires in 60 minutes.'
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-top:8px">'
+    +'<strong>Workspace:</strong> '+esc(slug)+'<br>'
+    +'<strong>Link goes to:</strong> the admin email on file'
+    +'</div>';
+  openModal('Send Password Reset Link', body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-danger" onclick="agencyConfirmResetPassword(\''+subId+'\',\''+slug+'\')">Reset Password</button>');
+    +'<button class="btn btn-primary" onclick="agencyConfirmResetPassword(\''+subId+'\',\''+slug+'\')">Send Reset Link</button>');
 }
 
 async function agencyConfirmResetPassword(subId,slug){
-  var pass=document.getElementById('agency-new-pass')&&document.getElementById('agency-new-pass').value||'';
-  var pass2=document.getElementById('agency-new-pass2')&&document.getElementById('agency-new-pass2').value||'';
   if(!pass||!pass2){toast('Both fields required.','error');return;}
   if(pass!==pass2){toast('Passwords do not match.','error');return;}
   var passErr=checkPasswordStrength(pass);
@@ -35581,7 +35593,7 @@ async function agencyConfirmResetPassword(subId,slug){
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,newPassword:pass})
+      body:JSON.stringify({subaccountId:subId})
     });
     var data=await r.json().catch(function(){return {error:'Server error'};});
     if(!r.ok){
@@ -35992,6 +36004,7 @@ async function agencyLoadSubaccounts(){
         +(agencyCanLoginAs()?'<button class="btn btn-primary btn-sm" onclick="agencyLoginAs(\''+esc(sub.slug)+'\',\''+esc(sub.name)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Login As</button>':'')
         +(agencyCanManageSubaccounts()?'<button class="btn btn-ghost btn-sm" onclick="openEditSubaccountModal(\''+sub.id+'\',\''+esc(sub.name)+'\',\''+esc(sub.slug)+'\',\''+esc(planTier)+'\')">Edit</button>':'')
         +(agencyCanManageSubaccounts()?'<button class="btn btn-purple btn-sm" onclick="openManagePlanModal(\''+sub.id+'\',\''+esc(sub.name)+'\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Manage Plan</button>':'')
+        +(agencyCanManageSubaccounts()?'<button class="btn btn-ghost btn-sm" onclick="agencyResendWelcome(\''+sub.id+'\',\''+esc(sub.name)+'\')">Resend Welcome</button>':'')
         +(agencyCanManageSubaccounts()?'<button class="btn btn-ghost btn-sm" onclick="agencyResetPassword(\''+sub.id+'\',\''+esc(sub.slug)+'\')">Reset Password</button>':'')
         +(agencyCanManageSubaccounts()&&!isProtected?(isActive
           ?'<button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:var(--warning-light);border:1px solid rgba(245,158,11,.3)" onclick="agencyToggleSub(\''+sub.id+'\',false,\''+esc(sub.name)+'\')">Suspend</button>'
@@ -36089,15 +36102,14 @@ function openCreateSubaccountModal(){
     // === STEP 3: ADMIN LOGIN ===
     +'<div style="border-top:1px solid var(--border);margin:18px 0 14px"></div>'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Step 3: Admin Login</div>'
-    +'<div class="form-group"><label>Admin Full Name *</label>'
-    +'<input id="new-sub-admin-name" type="text" placeholder="e.g. Davida Rose"></div>'
-    +'<div class="form-group"><label>Admin Username * <span style="font-weight:400;color:var(--text-muted)">(lowercase, for login)</span></label>'
-    +'<input id="new-sub-user" type="text" placeholder="davida" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.-]/g,\'\')"></div>'
-    +'<div class="form-group"><label>Admin Email * <span style="font-weight:400;color:var(--text-muted)">(for login notifications)</span></label>'
-    +'<input id="new-sub-email" type="email" placeholder="admin@theirbusiness.com"></div>'
-    +'<div class="form-group"><label>Admin Password *</label>'
-    +'<input id="new-sub-pass" type="password" placeholder="Strong password">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
+    +'<div id="new-sub-admin-display" style="background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;font-size:13px;color:var(--main-text-muted)">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);margin-bottom:8px">Admin login (from selected customer)</div>'
+    +'<div style="color:var(--main-text);font-size:13px">Pick a customer in Step 1 to auto-fill the admin info.</div>'
+    +'</div>'
+    +'<input type="hidden" id="new-sub-admin-name">'
+    +'<input type="hidden" id="new-sub-user">'
+    +'<input type="hidden" id="new-sub-email">'
+    +'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text);line-height:1.6"><strong>Password setup</strong><br><span style="color:var(--text-muted)">A secure setup link will be emailed to the admin. They create their own password on first login. Link expires in 7 days.</span></div>'
     // === STEP 4: SUBSCRIPTION + BILLING ===
     +'<div style="border-top:1px solid var(--border);margin:18px 0 14px"></div>'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Step 4: Subscription & Billing</div>'
@@ -36218,11 +36230,32 @@ function selectLinkedContact(contactId){
       +'</div>';
   }
 
-  // Pre-fill admin fields (editable)
+  // Auto-fill admin fields from contact (hidden inputs)
   var adminName=document.getElementById('new-sub-admin-name');
   var adminEmail=document.getElementById('new-sub-email');
-  if(adminName && !adminName.value) adminName.value=contact.name||'';
-  if(adminEmail && !adminEmail.value) adminEmail.value=contact.email||'';
+  var adminUser=document.getElementById('new-sub-user');
+  if(adminName) adminName.value=contact.name||'';
+  if(adminEmail) adminEmail.value=(contact.email||'').toLowerCase();
+  // Derive username from email (everything before @, sanitized)
+  if(adminUser){
+    var derived='';
+    if(contact.email){
+      derived=contact.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_.-]/g,'');
+    } else if(contact.name){
+      derived=contact.name.toLowerCase().replace(/[^a-z0-9_.-]/g,'').slice(0,20);
+    }
+    adminUser.value=derived;
+  }
+  // Update the visible display block
+  var display=document.getElementById('new-sub-admin-display');
+  if(display){
+    display.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);margin-bottom:8px">Admin login</div>'
+      +'<div style="display:flex;flex-direction:column;gap:6px">'
+      +'<div><span style="color:var(--main-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Name</span> <span style="color:var(--main-text);font-weight:600;margin-left:6px">'+esc(adminName.value||'—')+'</span></div>'
+      +'<div><span style="color:var(--main-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Username</span> <span style="color:var(--main-text);font-family:monospace;font-weight:600;margin-left:6px">'+esc(adminUser.value||'—')+'</span></div>'
+      +'<div><span style="color:var(--main-text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em">Email</span> <span style="color:var(--main-text);margin-left:6px">'+esc(adminEmail.value||'—')+'</span></div>'
+      +'</div>';
+  }
 
   // If contact has a Square customer ID, surface saved cards option
   configureCardOptionsForLinkedContact();
@@ -36234,6 +36267,15 @@ function clearLinkedContact(){
   var picked=document.getElementById('new-sub-contact-picked');
   if(picker)picker.style.display='block';
   if(picked){picked.style.display='none';picked.innerHTML='';}
+  // Reset admin hidden fields + display
+  ['new-sub-admin-name','new-sub-user','new-sub-email'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el)el.value='';
+  });
+  var display=document.getElementById('new-sub-admin-display');
+  if(display){
+    display.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);margin-bottom:8px">Admin login (from selected customer)</div><div style="color:var(--main-text);font-size:13px">Pick a customer in Step 1 to auto-fill the admin info.</div>';
+  }
   // Reset card section visibility
   var btnExisting=document.getElementById('new-sub-card-mode-existing');
   if(btnExisting)btnExisting.style.display='none';
@@ -36534,10 +36576,11 @@ async function createSubaccount(){
   var discountNote=(document.getElementById('new-sub-discount-note')&&document.getElementById('new-sub-discount-note').value||'').trim();
   var adminName=(document.getElementById('new-sub-admin-name')&&document.getElementById('new-sub-admin-name').value||'').trim();
   var adminUser=(document.getElementById('new-sub-user')&&document.getElementById('new-sub-user').value||'').trim().toLowerCase();
-  var adminPass=document.getElementById('new-sub-pass')&&document.getElementById('new-sub-pass').value||'';
+  var adminPass=null; // magic link flow, no inline password
   var adminEmail=(document.getElementById('new-sub-email')&&document.getElementById('new-sub-email').value||'').trim().toLowerCase();
   if(!state._newSubLinkedContact||!state._newSubLinkedContact.id){toast('Pick a LitBiz contact first.','error');return;}
-  if(!name||!slug||!adminName||!adminUser||!adminPass||!adminEmail){toast('All fields required.','error');return;}
+  if(!name||!slug){toast('Subaccount name and URL slug are required.','error');return;}
+  if(!adminName||!adminUser||!adminEmail){toast('Admin info missing. Pick a customer in Step 1 - their name, username, and email auto-fill.','error');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)){toast('Enter a valid admin email.','error');return;}
   if(slug===AGENCY_SLUG){toast('That slug is reserved.','error');return;}
   var passErr=checkPasswordStrength(adminPass);
@@ -36580,7 +36623,6 @@ async function createSubaccount(){
         adminEmail:adminEmail,
         adminUsername:adminUser,
         adminName:adminName,
-        adminPassword:adminPass,
         adminColor:'#6b21ea',
         billingPeriod:billingPeriod,
         hipaaAddon:hipaaAddon,

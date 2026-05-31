@@ -10,6 +10,7 @@
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
+const agencyEmails = require('./lib/agency-emails');
 const { wrap } = require('./lib/lambda-adapter');
 
 // Twilio-supported business types
@@ -159,6 +160,28 @@ async function handler(req, res) {
         targetStatus
       ]);
       row = ins.rows[0];
+    }
+
+    // Send acknowledgement email when actually submitted (not on save-draft)
+    if (!isDraft && r.contact_email) {
+      try {
+        // Get subaccount name for context
+        let subName = subaccountId;
+        try {
+          const sub = await db.findOne('subaccounts', { id: subaccountId }, { select: 'name' });
+          if (sub) subName = sub.name;
+        } catch (e) { /* ignore */ }
+        await agencyEmails.sendEmail(r.contact_email, 'sms_request_received', {
+          subName: subName,
+          contactName: (r.contact_first_name && r.contact_last_name)
+            ? (r.contact_first_name + ' ' + r.contact_last_name)
+            : (r.contact_name || 'there'),
+          businessName: r.legal_business_name,
+          subaccountId: subaccountId
+        });
+      } catch (emailErr) {
+        console.error('sms-registration-submit: ack email failed:', emailErr.message);
+      }
     }
 
     await logAudit({
