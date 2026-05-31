@@ -38260,14 +38260,14 @@ function _auResultsHTML(){
       var nm = esc(u.name).replace(/'/g, "\\'");
       var noEmail = !u.email;
       var resetBtn = '<button class="btn btn-sm" ' + (noEmail ? 'disabled title="No email on file" ' : '') + 'onclick="_atUserAction(\'send_reset\',\'' + u.id + '\',\'' + nm + '\')">Send Reset</button>';
-      var unflagBtn = u.eulaAccepted ? '<button class="btn btn-sm" style="margin-left:6px" onclick="_atUserAction(\'unflag\',\'' + u.id + '\',\'' + nm + '\')">Unflag</button>' : '';
+      var unflagBtn = u.eulaAccepted ? '<button class="btn btn-sm" onclick="_atUserAction(\'unflag\',\'' + u.id + '\',\'' + nm + '\')">Unflag</button>' : '';
       main += '<tr>';
       main +=   '<td style="font-weight:600">' + esc(u.name) + '</td>';
       main +=   '<td style="color:var(--main-text-muted)">' + (esc(u.email) || '<span style="opacity:.5">no email</span>') + '</td>';
       main +=   '<td style="color:var(--main-text-muted)">' + esc(u.subaccountName||u.subaccountSlug) + '</td>';
       main +=   '<td style="color:var(--main-text-muted)">' + esc(u.role) + '</td>';
       main +=   '<td>' + pill + '</td>';
-      main +=   '<td style="text-align:right;white-space:nowrap">' + resetBtn + unflagBtn + '</td>';
+      main +=   '<td><div style="display:flex;justify-content:flex-end;align-items:center;gap:8px"><span style="min-width:72px;display:flex;justify-content:flex-end">' + unflagBtn + '</span>' + resetBtn + '</div></td>';
       main += '</tr>';
     });
     main += '</tbody></table></div>';
