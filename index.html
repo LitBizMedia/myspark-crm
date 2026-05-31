@@ -2130,7 +2130,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <button class="cal-panel-tab active" id="cpt-calendar" onclick="switchCalTab('calendar')">Calendar</button>
           <button class="cal-panel-tab" id="cpt-appointments" onclick="switchCalTab('appointments')">Appointments</button>
           <button class="cal-panel-tab" id="cpt-classes" onclick="switchCalTab('classes')">Classes</button>
-          <button class="cal-panel-tab" id="cpt-service" onclick="switchCalTab('service')">Service Calendars</button>
+          <button class="cal-panel-tab" id="cpt-service" onclick="switchCalTab('service')">Calendars</button>
           <button class="cal-panel-tab" id="cpt-booking" onclick="switchCalTab('booking')">Booking Widgets</button>
         </div>
         <div id="cal-calendar-view">
@@ -9196,7 +9196,7 @@ function openScheduleMenu(btnEl){
 // +Add dropdown on the catalog (Service Calendars tab).
 function openCatalogAddMenu(btnEl){
   openDropdownMenu(btnEl, [
-    { label: 'Individual Service', onClick: function(){ openServiceModal(null, 'individual'); } },
+    { label: 'Service', onClick: function(){ openServiceModal(null, 'individual'); } },
     { label: 'Class',              onClick: function(){ openServiceModal(null, 'class'); } }
   ]);
 }
@@ -19746,7 +19746,7 @@ function openServiceModal(id, prefType){
   openModal(modalTitle,body,footer,'modal-lg');
 
   // Track currently-edited service id so switchSvcTab can lazy-render Sessions.
-  state.modal={type:'service',id:s?s.id:null};
+  state.modal={type:'service',svcType:defaultType,id:s?s.id:null};
 
   setTimeout(function(){
     if(defaultType==='individual'){
@@ -19909,7 +19909,6 @@ function renderServiceCommonFields(s,type){
     +'</select></div>'
     +'</div>'
     +'<div class="form-row">'
-    +'<div class="form-group"><label>Type</label><select id="svc-type" onchange="onServiceTypeChange()"><option value="individual"'+(type==='individual'?' selected':'')+'>Individual</option><option value="class"'+(type==='class'?' selected':'')+'>Class</option></select></div>'
     +'<div class="form-group"><label>Color</label><input id="svc-color" type="color" value="'+(s&&s.color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
     +'</div>'
     +'<div class="form-group"><label>Description</label><textarea id="svc-desc" rows="2" style="resize:vertical">'+esc(s&&s.description||'')+'</textarea></div>'
@@ -20238,11 +20237,11 @@ function renderVariationsSection(serviceId){
 }
 
 function _priceOptionRowHTML(o,i){
-  return '<div class="price-opt-row" data-idx="'+i+'" style="display:flex;gap:8px;align-items:flex-end;padding:10px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:8px">'
-    +'<div class="form-group" style="flex:2;margin:0"><label style="font-size:10px">Name *</label><input class="po-name" type="text" placeholder="Standard, 60 min, Deep Tissue" value="'+esc(o.name||'')+'" oninput="_syncPriceOption('+i+')"></div>'
-    +'<div class="form-group" style="flex:1;margin:0"><label style="font-size:10px">Price ($)</label><input class="po-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+((o.price!=null&&o.price!=="")?o.price:"")+'" oninput="_syncPriceOption('+i+')"></div>'
-    +'<div class="form-group" style="flex:1;margin:0"><label style="font-size:10px">Min</label><input class="po-dur" type="number" min="5" step="5" value="'+(o.duration||60)+'" oninput="_syncPriceOption('+i+')"></div>'
-    +'<button class="btn btn-ghost btn-sm" style="font-size:16px;line-height:1;padding:8px 10px;flex-shrink:0" title="Remove" onclick="removePriceOption('+i+')">&times;</button>'
+  return '<div class="price-opt-row" data-idx="'+i+'" style="display:flex;gap:10px;align-items:flex-end;padding:12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius)">'
+    +'<div class="form-group" style="flex:2;margin:0"><label style="font-size:10px;color:var(--text-muted)">Name *</label><input class="po-name" type="text" placeholder="Standard, 60 min, Deep Tissue" value="'+esc(o.name||'')+'" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text)" oninput="_syncPriceOption('+i+')"></div>'
+    +'<div class="form-group" style="flex:1;margin:0"><label style="font-size:10px;color:var(--text-muted)">Price ($)</label><input class="po-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+((o.price!=null&&o.price!=="")?o.price:"")+'" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text)" oninput="_syncPriceOption('+i+')"></div>'
+    +'<div class="form-group" style="flex:1;margin:0"><label style="font-size:10px;color:var(--text-muted)">Min</label><input class="po-dur" type="number" min="5" step="5" value="'+(o.duration||60)+'" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text)" oninput="_syncPriceOption('+i+')"></div>'
+    +'<button class="po-remove" type="button" title="Remove" onclick="removePriceOption('+i+')" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:16px;line-height:1;padding:8px 11px;border-radius:var(--radius);flex-shrink:0;cursor:pointer">&times;</button>'
     +'</div>';
 }
 
@@ -20467,9 +20466,9 @@ function _doDeleteAddon(serviceId,addonId){
 
 function saveService(id){
   var name=document.getElementById('svc-name').value.trim();
-  if(!name){toast(document.getElementById('svc-type').value==='class'?'Class name is required.':'Service name is required.','error');return;}
+  if(!name){toast((state.modal&&state.modal.svcType==='class')?'Class name is required.':'Service name is required.','error');return;}
 
-  var type=document.getElementById('svc-type').value;
+  var type=(state.modal&&state.modal.svcType)||'individual';
 
   // Common fields built first; type-specific fields layered in below.
   var svc={
