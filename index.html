@@ -13696,6 +13696,78 @@ function toggleUserMenu(e){
   }
 }
 
+// ── EULA gate modal ──
+// True gate: a full-screen overlay with no dismiss path. The only exit is
+// the I Agree button, which is enabled only after the user scrolls the terms
+// to the bottom (stronger click-through evidence). On accept, POSTs to
+// eula-accept and re-enters _postLoginGate to advance the boot chain.
+var _eulaGateState = { version:null };
+
+function showEulaGate(version, title, bodyHtml){
+  _eulaGateState.version = version;
+  // Remove any prior instance.
+  var prior = document.getElementById('eula-gate-overlay');
+  if(prior) prior.remove();
+  var ov = document.createElement('div');
+  ov.id = 'eula-gate-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:var(--main-bg);z-index:3000;display:flex;align-items:center;justify-content:center;padding:24px';
+  var safeTitle = title || 'Terms of Service';
+  ov.innerHTML = ''
+    + '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:720px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'
+    +   '<div style="padding:20px 24px;border-bottom:1px solid var(--main-border)">'
+    +     '<div style="font-size:18px;font-weight:700;color:var(--main-text)">' + esc(safeTitle) + '</div>'
+    +     '<div style="font-size:13px;color:var(--main-text-muted);margin-top:4px">Please review and accept to continue. You must scroll to the end before agreeing.</div>'
+    +   '</div>'
+    +   '<div id="eula-gate-body" style="padding:20px 24px;overflow-y:auto;flex:1;color:var(--main-text);font-size:14px;line-height:1.6">' + bodyHtml + '</div>'
+    +   '<div style="padding:16px 24px;border-top:1px solid var(--main-border);display:flex;align-items:center;justify-content:space-between;gap:12px">'
+    +     '<div id="eula-scroll-hint" style="font-size:12px;color:var(--main-text-muted)">Scroll to the bottom to enable the button.</div>'
+    +     '<button id="eula-agree-btn" class="btn btn-primary" disabled style="opacity:.5;cursor:not-allowed" onclick="acceptEula()">I Agree</button>'
+    +   '</div>'
+    + '</div>';
+  document.body.appendChild(ov);
+  // Enable the button once scrolled (near) the bottom.
+  var bodyEl = document.getElementById('eula-gate-body');
+  var btn = document.getElementById('eula-agree-btn');
+  var hint = document.getElementById('eula-scroll-hint');
+  function checkScroll(){
+    // 24px tolerance for sub-pixel and short content.
+    var atBottom = (bodyEl.scrollTop + bodyEl.clientHeight) >= (bodyEl.scrollHeight - 24);
+    if(atBottom){
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+      if(hint) hint.textContent = 'Thank you for reviewing. Click I Agree to continue.';
+    }
+  }
+  bodyEl.addEventListener('scroll', checkScroll);
+  // If the terms are short enough that there is nothing to scroll, enable now.
+  setTimeout(checkScroll, 60);
+}
+
+async function acceptEula(){
+  var btn = document.getElementById('eula-agree-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Recording...'; }
+  try{
+    var r = await fetch(apiUrl('/api/subaccount/eula-accept'), {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    var data = await r.json().catch(function(){ return {error:'Server error'}; });
+    if(!r.ok){
+      toast(data.error || 'Could not record acceptance.', 'error');
+      if(btn){ btn.disabled = false; btn.textContent = 'I Agree'; }
+      return;
+    }
+    var ov = document.getElementById('eula-gate-overlay');
+    if(ov) ov.remove();
+    // Re-enter the boot chain. Now that EULA is accepted, the gate advances.
+    if(typeof _postLoginGate === 'function') _postLoginGate();
+  }catch(e){
+    toast('Cannot reach server. Check your connection.', 'error');
+    if(btn){ btn.disabled = false; btn.textContent = 'I Agree'; }
+  }
+}
+
 function openProfileModal(forced){
   const m=document.getElementById('user-menu');if(m)m.classList.add('hidden');
   const u=state.user;
