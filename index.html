@@ -36862,9 +36862,9 @@ async function openEditSubaccountModal(id,name,slug,plan){
     ?'<div style="font-size:12px;color:var(--text-muted);padding:10px 12px;background:var(--bg-card);border-radius:var(--radius);margin-bottom:12px">The LitBiz workspace admin is managed separately through Patrick\'s profile.</div>'
     :'<div class="form-group"><label>Admin Full Name</label>'
       +'<input id="edit-sub-admin-name" type="text" value="'+esc(adminName)+'" placeholder="e.g. Davida Rose"></div>'
-      +'<div class="form-group"><label>Admin Username <span style="font-weight:400;color:var(--text-muted)">(lowercase, for login)</span></label>'
-      +'<input id="edit-sub-admin-user" type="text" value="'+esc(adminUser)+'" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.-]/g,\'\')">'
-      +'<div style="font-size:11px;color:var(--warning-light);margin-top:4px">Changing the username means the admin must use the new username on their next login. Existing sessions stay valid.</div></div>';
+      +'<div class="form-group"><label>Admin Email <span style="font-weight:400;color:var(--text-muted)">(used to sign in)</span></label>'
+      +'<input id="edit-sub-admin-email" type="email" value="'+esc(adminEmail)+'" placeholder="admin@example.com">'
+      +'<div style="font-size:11px;color:var(--warning-light);margin-top:4px">Changing the email changes the login. The admin must use the new email next time. Existing sessions stay valid.</div></div>';
   var body='<div class="form-group"><label>Subaccount Name</label>'
     +'<input id="edit-sub-name" type="text" value="'+esc(name)+'"></div>'
     +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">URL slug cannot be changed after creation. Use Manage Plan to change billing tier.</div>'
@@ -36885,12 +36885,13 @@ async function saveEditSubaccount(id){
   var origAdminUser=state.modal&&state.modal.extra&&state.modal.extra.origAdminUser||'';
   var isLitBiz=slug===DEFAULT_SLUG;
   var adminNameEl=document.getElementById('edit-sub-admin-name');
-  var adminUserEl=document.getElementById('edit-sub-admin-user');
+  var adminEmailEl=document.getElementById('edit-sub-admin-email');
   var newAdminName=adminNameEl?adminNameEl.value.trim():'';
-  var newAdminUser=adminUserEl?adminUserEl.value.trim().toLowerCase():'';
+  var newAdminEmail=adminEmailEl?adminEmailEl.value.trim().toLowerCase():'';
   if(!isLitBiz){
     if(!newAdminName){toast('Admin full name required.','error');return;}
-    if(!newAdminUser){toast('Admin username required.','error');return;}
+    if(!newAdminEmail){toast('Admin email required.','error');return;}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newAdminEmail)){toast('Enter a valid email.','error');return;}
   }
   try{
     // Patch the subaccounts table (name + plan)
@@ -36904,10 +36905,13 @@ async function saveEditSubaccount(id){
     // Update the primary admin's username + display_name in subaccount_users
     // via the agency admin-update endpoint. LitBiz workspace's primary admin
     // (Patrick) is managed separately so skip there.
-    if(!isLitBiz&&(newAdminName||newAdminUser)){
+    if(!isLitBiz&&(newAdminName||newAdminEmail)){
       var adminPatch={subaccountId:id};
       if(newAdminName)adminPatch.newDisplayName=newAdminName;
-      if(newAdminUser)adminPatch.newUsername=newAdminUser;
+      if(newAdminEmail){
+        adminPatch.newEmail=newAdminEmail;
+        adminPatch.newUsername=newAdminEmail; // username = email post-migration
+      }
       try{
         var r2=await fetch(apiUrl('/api/agency/subaccount-admin-update'),{
           method:'POST',
@@ -36924,8 +36928,8 @@ async function saveEditSubaccount(id){
       }
     }
     closeModal();
-    var msg=(!isLitBiz&&origAdminUser&&origAdminUser!==newAdminUser)
-      ?'Subaccount updated. Admin must now log in with "'+newAdminUser+'".'
+    var msg=(!isLitBiz&&origAdminUser&&origAdminUser!==newAdminEmail&&newAdminEmail)
+      ?'Subaccount updated. Admin must now log in with "'+newAdminEmail+'".'
       :'Subaccount updated.';
     toast(msg,'success');
     agencyLoadSubaccounts();

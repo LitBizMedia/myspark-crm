@@ -37,8 +37,12 @@ async function handler(req, res) {
   if (typeof b.newUsername === 'string') {
     const cleaned = b.newUsername.trim().toLowerCase();
     if (!cleaned) return res.status(400).json({ error: 'newUsername cannot be empty' });
-    if (!/^[a-z0-9_.-]+$/.test(cleaned)) {
-      return res.status(400).json({ error: 'username can only contain lowercase letters, numbers, dot, dash, underscore' });
+    // Allow email-format usernames (post email-as-username migration)
+    // Either a plain identifier or a valid email address.
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned);
+    const isPlain = /^[a-z0-9_.-]+$/.test(cleaned);
+    if (!isEmail && !isPlain) {
+      return res.status(400).json({ error: 'username must be a valid email or contain only lowercase letters, numbers, dot, dash, underscore' });
     }
     patch.username = cleaned;
   }
