@@ -4574,13 +4574,9 @@ document.getElementById('login-form').addEventListener('submit',async function(e
       }
     });
     document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    initApp();
-    // Force password change for new admins or admin-reset accounts.
-    // Modal cannot be dismissed until they complete the change.
-    if(state.user.mustChangePassword){
-      setTimeout(function(){openProfileModal(true);},150);
-    }
+    // Post-login gate chain: password change, then EULA, then boot the app.
+    // The app stays hidden until every gate passes.
+    _postLoginGate();
   }catch(networkErr){
     err.textContent='Cannot reach login server. Check your connection and try again.';
     err.classList.remove('hidden');
@@ -13696,6 +13692,50 @@ function toggleUserMenu(e){
   }
 }
 
+// ── Post-login gate chain ──
+// Re-entrant orchestrator. Each gate, when satisfied, re-calls this fn,
+// which advances to the next unsatisfied gate, or finally boots the app.
+// Order: (1) forced password change, (2) EULA acceptance, (3) initApp.
+// The app is only unhidden here, after all gates pass.
+var _eulaGateChecking = false;
+async function _postLoginGate(){
+  // Gate 1: forced password change.
+  if(state.user && state.user.mustChangePassword){
+    setTimeout(function(){ openProfileModal(true); }, 80);
+    return;
+  }
+  // Gate 2: EULA acceptance. Skip silently for impersonation sessions
+  // (the backend also reports needsAcceptance:false in that case).
+  if(_eulaGateChecking) return;
+  _eulaGateChecking = true;
+  try{
+    var r = await fetch(apiUrl('/api/subaccount/eula-status'), { credentials:'include' });
+    if(r.ok){
+      var st = await r.json();
+      if(st && st.needsAcceptance && st.bodyHtml){
+        _eulaGateChecking = false;
+        showEulaGate(st.version, st.title, st.bodyHtml);
+        return;
+      }
+    }
+    // Any non-ok response, or needsAcceptance false: fall through and boot.
+    // eula-status already fails open on its end, so this will not trap a user.
+  }catch(e){
+    // Network error on the status check: do not block boot. The user is
+    // re-checked on the next login.
+    console.error('eula-status check failed, proceeding to boot:', e);
+  }
+  _eulaGateChecking = false;
+  _bootApp();
+}
+
+// Single owner of the app-reveal + init. Reached only when all gates pass.
+function _bootApp(){
+  var appEl = document.getElementById('app');
+  if(appEl) appEl.classList.remove('hidden');
+  initApp();
+}
+
 // ── EULA gate modal ──
 // True gate: a full-screen overlay with no dismiss path. The only exit is
 // the I Agree button, which is enabled only after the user scrolls the terms
@@ -13841,8 +13881,13 @@ async function saveProfile(){
     }
   }
 
+  // If this password change was part of the forced post-login gate, advance
+  // the gate chain (EULA next, then boot) instead of returning to a running
+  // app. A normal in-app password change just closes and toasts.
+  var wasForcedLogin = state.modal && state.modal.type==='profile' && state.modal.forced;
   closeModal();
   toast('Password changed.','success');
+  if(wasForcedLogin){ _postLoginGate(); }
 }
 
 // =====================================================
