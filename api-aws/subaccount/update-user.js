@@ -43,14 +43,16 @@ async function handler(req, res) {
   }
 
   const subaccountId = session.subaccount_id;
-  const { username, role, email, displayName, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin } = req.body || {};
+  const { username, role, email, displayName, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly } = req.body || {};
+  // Accept email as identifier when username not provided (post email-as-login migration)
+  const identifier = username || email;
 
-  if (!username || typeof username !== 'string') {
-    return res.status(400).json({ error: 'username required' });
+  if (!identifier || typeof identifier !== 'string') {
+    return res.status(400).json({ error: 'username or email required' });
   }
-  const normUsername = username.trim().toLowerCase();
+  const normUsername = identifier.trim().toLowerCase();
   if (!normUsername) {
-    return res.status(400).json({ error: 'username required' });
+    return res.status(400).json({ error: 'username or email required' });
   }
 
   if (role !== undefined && role !== null) {
@@ -117,12 +119,14 @@ async function handler(req, res) {
     }
   }
 
-  // Look up the target user, scoped to this subaccount (case-insensitive username)
+  // Look up the target user, scoped to this subaccount.
+  // Tries username AND email match since they're now usually the same.
   let targetUser;
   try {
     const r = await db.query(
       `SELECT * FROM subaccount_users
-       WHERE subaccount_id = $1 AND username ILIKE $2
+       WHERE subaccount_id = $1
+         AND (username ILIKE $2 OR LOWER(email) = $2)
        LIMIT 1`,
       [subaccountId, normUsername]
     );
@@ -133,27 +137,44 @@ async function handler(req, res) {
   }
 
   if (!targetUser) {
-    if (!newPassword) {
-      return res.status(404).json({
-        error: 'User not in auth table. Provide newPassword to migrate them.',
-        code: 'USER_NEEDS_MIGRATION'
-      });
+    // Create new user via magic-link flow.
+    // We require an email (which is also the username post-migration).
+    if (!email) {
+      return res.status(400).json({ error: 'email required to create user' });
+    }
+    const normEmail = String(email).trim().toLowerCase();
+    if (!normEmail || normEmail.indexOf('@') < 0) {
+      return res.status(400).json({ error: 'valid email required' });
     }
 
-    // Create new row
+    // Look up subaccount slug for the magic link
+    let subSlug;
+    try {
+      const subRow = await db.findOne('subaccounts',
+        { id: subaccountId },
+        { select: 'slug, name' }
+      );
+      if (!subRow) return res.status(404).json({ error: 'Subaccount not found' });
+      subSlug = subRow.slug;
+    } catch (e) {
+      return res.status(500).json({ error: 'Subaccount lookup failed: ' + e.message });
+    }
+
+    // Generate throwaway password hash. User will set their own via magic link.
     const newId = crypto.randomUUID();
-    const newHash = await hashPassword(newPassword);
+    const tempPass = 'temp_' + crypto.randomBytes(16).toString('hex') + 'A1!';
+    const newHash = await hashPassword(tempPass);
     const createBody = {
       id: newId,
       subaccount_id: subaccountId,
-      username: normUsername,
-      display_name: displayName || normUsername,
+      username: normEmail, // username IS email post-migration
+      email: normEmail,
+      display_name: displayName || normEmail,
       password_hash: newHash,
       role: role || 'user',
       active: active !== false,
-      must_change_password: false
+      must_change_password: true
     };
-    if (email) createBody.email = String(email).toLowerCase();
     if (color) createBody.color = color;
     if (schedule) createBody.schedule = JSON.stringify(schedule);
     if (dateOverrides) createBody.date_overrides = JSON.stringify(dateOverrides);
@@ -162,7 +183,38 @@ async function handler(req, res) {
     try {
       await db.insertOne('subaccount_users', createBody);
     } catch (e) {
-      return res.status(500).json({ error: 'Failed to create auth row: ' + e.message });
+      return res.status(500).json({ error: 'Failed to create user: ' + e.message });
+    }
+
+    // Generate magic-link token (7 day expiry for setup)
+    let magicLinkSent = false;
+    try {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      await db.insertOne('password_reset_tokens', {
+        token: token,
+        user_type: 'subaccount_user',
+        user_identifier: newId,
+        subaccount_slug: subSlug,
+        email: normEmail,
+        expires_at: expiresAt
+      });
+      const setupUrl = 'https://mysparkplus.app/' + subSlug + '?reset=' + token;
+      const loginUrl = 'https://mysparkplus.app/' + subSlug;
+      const agencyEmails = require('./lib/agency-emails');
+      await agencyEmails.sendEmail(normEmail, 'welcome_subaccount', {
+        subName: subSlug,
+        adminName: displayName || normEmail,
+        slug: subSlug,
+        loginUrl: loginUrl,
+        adminEmail: normEmail,
+        setupUrl: setupUrl,
+        subaccountId: subaccountId
+      });
+      magicLinkSent = true;
+    } catch (e) {
+      console.error('update-user: magic link send failed:', e.message);
+      // User was created; magic link can be resent later
     }
 
     await logAudit({
@@ -171,18 +223,72 @@ async function handler(req, res) {
       actorId:       session.user_id,
       actorUsername: session.username,
       actorRole:     session.role,
-      action: 'subaccount.user.migrate',
+      action: 'subaccount.user.create',
       targetType: 'subaccount_user',
       targetId: newId,
       targetSubaccountId: subaccountId,
       metadata: {
-        username: normUsername,
+        email: normEmail,
         role: role || 'user',
+        magic_link_sent: magicLinkSent,
         is_agency_admin: !!createBody.is_agency_admin
       }
     });
 
-    return res.status(200).json({ success: true, created: true, userId: newId });
+    return res.status(200).json({
+      success: true,
+      created: true,
+      userId: newId,
+      magicLinkSent: magicLinkSent
+    });
+  }
+
+  // Magic-link-only branch: send password reset link without changing password
+  if (magicLinkOnly) {
+    if (!targetUser.email) {
+      return res.status(400).json({ error: 'User has no email on file' });
+    }
+    try {
+      const subRow = await db.findOne('subaccounts',
+        { id: subaccountId },
+        { select: 'slug, name' }
+      );
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      await db.insertOne('password_reset_tokens', {
+        token: token,
+        user_type: 'subaccount_user',
+        user_identifier: targetUser.id,
+        subaccount_slug: subRow.slug,
+        email: targetUser.email,
+        expires_at: expiresAt
+      });
+      const resetUrl = 'https://mysparkplus.app/' + subRow.slug + '?reset=' + token;
+      const agencyEmails = require('./lib/agency-emails');
+      await agencyEmails.sendEmail(targetUser.email, 'password_reset_by_admin', {
+        subName: subRow.name || subRow.slug,
+        userName: targetUser.display_name || targetUser.username || 'there',
+        resetUrl: resetUrl,
+        resetByName: session.username || 'an administrator',
+        subaccountId: subaccountId
+      });
+      await logAudit({
+        req,
+        actorType: 'subaccount',
+        actorId: session.user_id,
+        actorUsername: session.username,
+        actorRole: session.role,
+        action: 'subaccount.user.password_reset_link_sent',
+        targetType: 'subaccount_user',
+        targetId: targetUser.id,
+        targetSubaccountId: subaccountId,
+        metadata: { target_email: targetUser.email }
+      });
+      return res.status(200).json({ success: true, magicLinkSent: true });
+    } catch (e) {
+      console.error('update-user: magic link only failed:', e.message);
+      return res.status(500).json({ error: 'Failed to send reset link: ' + e.message });
+    }
   }
 
   // Build the patch
@@ -196,6 +302,11 @@ async function handler(req, res) {
   if (email !== undefined && email !== targetUser.email) {
     patch.email = email ? String(email).trim().toLowerCase() : null;
     changedFields.push('email');
+    // Email IS the username post-migration. Keep them in sync.
+    if (patch.email) {
+      patch.username = patch.email;
+      changedFields.push('username');
+    }
   }
   if (displayName !== undefined && displayName !== targetUser.display_name) {
     patch.display_name = displayName;

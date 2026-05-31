@@ -12675,9 +12675,9 @@ function openUserSchedModal(uid){
 
 function buildUserBody(){
   const cols=USER_COLORS.map((c,i)=>'<div class="color-sw'+(i===0?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
-  return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Email</label><input id="uf-user" type="text" placeholder="jsmith"></div></div>'
-    +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(for password recovery)</span></label><input id="uf-email" type="email" placeholder="jane@example.com"></div>'
-    +'<div class="form-row"><div class="form-group"><label>Password</label><input id="uf-pass" type="password"></div><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Manager</option><option value="user">User</option><option value="practitioner">Practitioner</option></select></div></div>'
+  return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(used to sign in)</span></label><input id="uf-email" type="email" placeholder="jane@example.com" autocomplete="off"></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Manager</option><option value="user">User</option><option value="practitioner">Practitioner</option></select></div></div>'
+    +'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;margin:0 0 14px;font-size:12px;color:var(--text);line-height:1.5"><strong>Password setup:</strong> <span style="color:var(--text-muted)">A secure setup link will be emailed to the address above. The user creates their own password on first login.</span></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Working Schedule</div>'
     +buildSchedSection(false);
@@ -12857,11 +12857,12 @@ function selUserColor(el,color){state.selUserColor=color;document.querySelectorA
 
 async function saveUser(){
   const name=document.getElementById('uf-name').value.trim();
-  const username=document.getElementById('uf-user').value.trim().toLowerCase();
-  const password=document.getElementById('uf-pass').value;
+  const email=(document.getElementById('uf-email')&&document.getElementById('uf-email').value||'').trim().toLowerCase();
   const role=document.getElementById('uf-role').value;
-  if(!username||!password){toast('Username and password required.','error');return}
-  if(allUsers().find(u=>u.username===username)){toast('Username taken.','error');return}
+  if(!name){toast('Display name required.','error');return}
+  if(!email){toast('Email required.','error');return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Enter a valid email.','error');return}
+  if(allUsers().find(u=>(u.username||'').toLowerCase()===email||(u.email||'').toLowerCase()===email)){toast('A user with this email already exists.','error');return}
   const sched=JSON.parse(JSON.stringify(editSched));
   _readSchedFromDOM(sched);
   // Max bookings per day. Empty/0 = no cap (delete the field).
@@ -12884,22 +12885,18 @@ async function saveUser(){
     if(isNaN(ba)||ba<=0)delete sched.defaultBufferAfter;
     else sched.defaultBufferAfter=ba;
   }
-  var userEmail=(document.getElementById('uf-email')&&document.getElementById('uf-email').value||'').trim().toLowerCase();
-
-  // Call update-user. With newPassword and a username that doesn't exist,
-  // the Lambda creates a row in subaccount_users with a real UUID.
+  // Call update-user. Email is the identifier AND the new username.
+  // Backend creates the user + sends a magic-link welcome email.
   try{
     var res=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        username:username,
-        displayName:name||username,
-        email:userEmail||null,
+        email:email,
+        displayName:name||email,
         role:role,
         active:true,
-        newPassword:password,
         color:state.selUserColor,
         schedule:sched,
         dateOverrides:[...userOvs]
@@ -12919,7 +12916,7 @@ async function saveUser(){
   // schedule, and date_overrides as persisted by the Lambda.
   await fetchFromServer();
 
-  var newUser=(db.users||[]).find(function(u){return u.username===username;});
+  var newUser=(db.users||[]).find(function(u){return (u.username||'').toLowerCase()===email||(u.email||'').toLowerCase()===email;});
 
   closeModal();
   renderUserList();
@@ -12928,9 +12925,9 @@ async function saveUser(){
   logSubaccountAudit('subaccount.user.create', {
     targetId: newUser?newUser.id:null,
     targetType: 'user',
-    metadata: { username: username, name: name||username, role: role }
+    metadata: { email: email, name: name||email, role: role }
   });
-  toast('User added.','success');
+  toast('User added. A setup link was emailed to '+email+'.','success');
 }
 
 async function saveUserSched(){
@@ -13756,6 +13753,28 @@ async function saveProfile(){
 // =====================================================
 // EDIT EXISTING USER
 // =====================================================
+async function sendUserPasswordResetLink(userId){
+  var u=getUserById(userId);
+  if(!u){toast('User not found.','error');return;}
+  var email=u.email||u.username||'';
+  if(!email){toast('User has no email on file.','error');return;}
+  if(!confirm('Send a password reset link to '+email+'? The link expires in 60 minutes.'))return;
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/update-user'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        email:email,
+        magicLinkOnly:true
+      })
+    });
+    var data=await r.json().catch(function(){return {};});
+    if(!r.ok){toast('Send failed: '+(data.error||('Status '+r.status)),'error');return;}
+    toast('Reset link sent to '+email+'.','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
 function openEditUserModal(userId){
   const isAdmin=isPrimaryAdmin(userId);
   const u=isAdmin?getEffectiveAdmin():getUserById(userId);
@@ -13766,47 +13785,25 @@ function openEditUserModal(userId){
   state.selUserColor=u.color||USER_COLORS[0];
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
-  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email</label><input id="eu-user" type="text" value="'+esc(u.username||'')+'"'+(isAdmin?' disabled':'')+'></div></div>'
-    +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(for password recovery)</span></label><input id="eu-email" type="email" value="'+esc(u.email||u.emailAddress||'')+'" placeholder="email@example.com"></div>'
-    +(state.user&&state.user.id===userId
-      ?'<div class="form-group"><label>Current Password <span style="font-weight:400;color:var(--text-muted)">(required to change password)</span></label>'
-      +'<input id="eu-old-pass" type="password" autocomplete="current-password" placeholder="Your current password"></div>'
-      :'')
-    +'<div class="form-row"><div class="form-group"><label>New Password <span style="font-weight:400;color:var(--text-muted)">(blank to keep)</span></label>'
-    +'<input id="eu-pass" type="password" autocomplete="new-password" placeholder=""></div>'+roleField+'</div>'
-    +'<div class="form-group"><label>Confirm New Password</label>'
-    +'<input id="eu-pass2" type="password" autocomplete="new-password" placeholder=""></div>'
-    +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>';
+  const currentEmail = u.email || u.username || '';
+  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login)</span></label><input id="eu-email" type="email" value="'+esc(currentEmail)+'" placeholder="user@example.com"'+(isAdmin?' disabled':'')+'></div></div>'
+    +(isAdmin?'':'<div class="form-row">'+roleField+'<div class="form-group"><label>&nbsp;</label><button type="button" class="btn btn-ghost" style="height:38px" onclick="sendUserPasswordResetLink(\''+userId+'\')">Send Password Reset Link</button></div></div>')
+    +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
+    +(isAdmin?'':'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;margin:8px 0 0;font-size:12px;color:var(--text);line-height:1.5"><strong>Password:</strong> <span style="color:var(--text-muted)">Use the Send Password Reset Link button above to email the user a secure link. They set their own password.</span></div>');
   openModal('Edit: '+(u.name||u.username),b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEditUser()">Save Changes</button>','modal-lg');
 }
 
 async function saveEditUser(){
   const userId=state.modal.id,isAdmin=isPrimaryAdmin(userId);
   const name=document.getElementById('eu-name').value.trim();
-  const pass=document.getElementById('eu-pass').value;
   const role=!isAdmin&&document.getElementById('eu-role')?document.getElementById('eu-role').value:null;
-  // Schedule + date overrides are managed in the dedicated Edit Schedule modal
-  // (calendar icon on the user card). They are not in this form.
+  // Schedule + date overrides are managed in the dedicated Edit Schedule modal.
+  // Password changes are done via the Send Password Reset Link button (magic-link flow).
   const euEmail=(document.getElementById('eu-email')&&document.getElementById('eu-email').value||'').trim().toLowerCase();
-  const pass2=document.getElementById('eu-pass2')&&document.getElementById('eu-pass2').value||'';
+  if(euEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(euEmail)){toast('Enter a valid email.','error');return;}
   const updates={name,color:state.selUserColor};
   if(euEmail)updates.email=euEmail;
   if(role)updates.role=role;
-  if(pass){
-    if(pass!==pass2){toast('Passwords do not match.','error');return;}
-    var passStrErr=checkPasswordStrength(pass);
-    if(passStrErr){toast(passStrErr,'error');return;}
-    // If editing self, require old password
-    if(state.user&&state.user.id===userId){
-      const oldPass=document.getElementById('eu-old-pass')&&document.getElementById('eu-old-pass').value||'';
-      if(!oldPass){toast('Enter your current password to set a new one.','error');return;}
-      const oldHash=await sha256(oldPass);
-      const selfUser=allUsers().find(function(u){return u.id===userId;});
-      const expectedHash=selfUser?selfUser.passwordHash:null;
-      if(oldHash!==expectedHash){toast('Current password is incorrect.','error');return;}
-    }
-    updates.passwordHash=await sha256(pass);
-  }
   // DOM-only optimistic update if editing self. Server is the single
   // source of truth; fetchFromServer + refreshStateUser run after the
   // API call and sync everything from subaccount_users.
@@ -13835,7 +13832,6 @@ async function saveEditUser(){
         if(role)syncBody.role=role;
         if(name)syncBody.displayName=name;
         if(euEmail)syncBody.email=euEmail;
-        if(updates.passwordHash&&pass)syncBody.newPassword=pass;
         if(updates.color)syncBody.color=updates.color;
         var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
           method:'POST',
