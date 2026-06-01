@@ -3017,6 +3017,7 @@ let state={
   posItems:[],posTip:'15',posPM:'card',
   paymentsTab:'pos',subsPage:1,subsSearch:'',subsStatusFilter:'',subsCycleFilter:'',subsSort:'next_bill_asc',
   calTab:'calendar',formsTab:'',
+  media:{files:[],folders:[],loaded:false,view:'grid'},
   serverDataLoaded:false
 };
 
@@ -37787,6 +37788,7 @@ async function renderMedia() {
 }
 
 async function loadMediaFiles() {
+  if(!state.media)state.media={files:[],folders:[],loaded:false,view:'grid'};
   try {
     var r = await fetch(apiUrl('/api/media/list'), { credentials: 'include' });
     if (!r.ok) {
