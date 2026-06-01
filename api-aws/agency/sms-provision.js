@@ -37,6 +37,22 @@ async function handler(req, res) {
         updated_at = NOW()
     `, [subaccount_id, twilio_number, twilio_number_sid, finalStatus]);
 
+    // Ensure inbound is fully wired on the Twilio side: every Messaging Service
+    // defers to the number webhook, and every number's SmsUrl points at us.
+    // Account-wide and idempotent. Soft fail: a Twilio hiccup must not block
+    // onboarding. The daily sms-inbound-sync cron is the backstop.
+    let webhookResult = { ok: false, errors: ['not attempted'] };
+    try {
+      const { syncTwilioInboundConfig } = require('./lib/twilio');
+      webhookResult = await syncTwilioInboundConfig();
+      if (!webhookResult.ok) {
+        console.error('sms-provision: inbound sync incomplete for', subaccount_id, '-', (webhookResult.errors || []).join('; '));
+      }
+    } catch (e) {
+      webhookResult = { ok: false, errors: [e.message] };
+      console.error('sms-provision: inbound sync threw for', subaccount_id, '-', e.message);
+    }
+
     // Update registration request status
     if (request_id) {
       await db.query(`
@@ -56,10 +72,10 @@ async function handler(req, res) {
       targetType: 'sms_settings',
       targetId: subaccount_id,
       targetSubaccountId: subaccount_id,
-      metadata: { twilio_number, campaign_status, request_id }
+      metadata: { twilio_number, campaign_status, request_id, inbound_sync_ok: webhookResult.ok, inbound_sync_errors: webhookResult.ok ? null : (webhookResult.errors || []) }
     });
 
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, inbound_sync_ok: webhookResult.ok });
   } catch (e) {
     console.error('sms-provision error:', e.message);
     return res.status(500).json({ error: 'Failed to provision SMS' });

@@ -42,6 +42,141 @@ function inboundWebhookUrl() {
   return 'https://' + apiHost + '/api/sms/inbound';
 }
 
+// Set a phone number's inbound SMS webhook on the Twilio side.
+// Points Twilio at /api/sms/inbound so patient replies reach us.
+// Idempotent: setting the same URL twice is a harmless no-op.
+// Returns { ok, smsUrl?, error?, code? }.
+async function setInboundWebhook(pnSid) {
+  if (!pnSid) return { ok: false, error: 'pnSid is required' };
+
+  let creds;
+  try {
+    creds = await getTwilioCreds();
+  } catch (e) {
+    return { ok: false, error: 'Twilio credentials unavailable: ' + e.message };
+  }
+  if (!creds.sid || !creds.keySid || !creds.keySecret) {
+    return { ok: false, error: 'Twilio credentials not configured' };
+  }
+
+  const targetUrl = inboundWebhookUrl();
+  const params = new URLSearchParams({
+    SmsUrl: targetUrl,
+    SmsMethod: 'POST'
+  });
+
+  try {
+    const res = await fetch(
+      'https://api.twilio.com/2010-04-01/Accounts/' + creds.sid + '/IncomingPhoneNumbers/' + pnSid + '.json',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': basicAuthHeader(creds.keySid, creds.keySecret),
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: data.message || ('Twilio error ' + res.status), code: data.code };
+    }
+    return { ok: true, smsUrl: data.sms_url };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Account-wide inbound sync. Two invariants, both required for inbound to work:
+//   1. Every Messaging Service has useInboundWebhookOnNumber = true (so the
+//      service defers to the number's webhook instead of swallowing inbound).
+//   2. Every number's SmsUrl points at /api/sms/inbound.
+// Idempotent. Run at provision time and by the daily cron.
+// PageSize 1000 covers the account well past current scale; beyond 1000
+// services or numbers, add next-page following (forward-path item).
+// Returns { ok, services:[...], numbers:[...], errors:[...] }.
+async function syncTwilioInboundConfig() {
+  let creds;
+  try {
+    creds = await getTwilioCreds();
+  } catch (e) {
+    return { ok: false, errors: ['Twilio credentials unavailable: ' + e.message] };
+  }
+  if (!creds.sid || !creds.keySid || !creds.keySecret) {
+    return { ok: false, errors: ['Twilio credentials not configured'] };
+  }
+  const auth = basicAuthHeader(creds.keySid, creds.keySecret);
+  const results = { ok: true, services: [], numbers: [], errors: [] };
+
+  // 1. Messaging Services: ensure useInboundWebhookOnNumber = true
+  try {
+    const svcRes = await fetch('https://messaging.twilio.com/v1/Services?PageSize=1000',
+      { headers: { Authorization: auth } });
+    const svcData = await svcRes.json();
+    if (!svcRes.ok) {
+      results.ok = false;
+      results.errors.push('list services: ' + (svcData.message || svcRes.status));
+    } else {
+      for (const s of (svcData.services || [])) {
+        if (s.use_inbound_webhook_on_number === true) {
+          results.services.push({ sid: s.sid, action: 'already_ok' });
+          continue;
+        }
+        const params = new URLSearchParams({ UseInboundWebhookOnNumber: 'true' });
+        const r = await fetch('https://messaging.twilio.com/v1/Services/' + s.sid, {
+          method: 'POST',
+          headers: { Authorization: auth, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        });
+        const d = await r.json();
+        if (r.ok) {
+          results.services.push({ sid: s.sid, action: 'set_true' });
+        } else {
+          results.ok = false;
+          results.services.push({ sid: s.sid, action: 'failed', error: d.message });
+          results.errors.push('service ' + s.sid + ': ' + (d.message || r.status));
+        }
+      }
+    }
+  } catch (e) {
+    results.ok = false;
+    results.errors.push('services step: ' + e.message);
+  }
+
+  // 2. Numbers: ensure SmsUrl points at the inbound endpoint
+  try {
+    const numRes = await fetch(
+      'https://api.twilio.com/2010-04-01/Accounts/' + creds.sid + '/IncomingPhoneNumbers.json?PageSize=1000',
+      { headers: { Authorization: auth } });
+    const numData = await numRes.json();
+    if (!numRes.ok) {
+      results.ok = false;
+      results.errors.push('list numbers: ' + (numData.message || numRes.status));
+    } else {
+      const targetUrl = inboundWebhookUrl();
+      for (const n of (numData.incoming_phone_numbers || [])) {
+        if (n.sms_url === targetUrl && n.sms_method === 'POST') {
+          results.numbers.push({ sid: n.sid, action: 'already_ok' });
+          continue;
+        }
+        const setRes = await setInboundWebhook(n.sid);
+        if (setRes.ok) {
+          results.numbers.push({ sid: n.sid, action: 'set' });
+        } else {
+          results.ok = false;
+          results.numbers.push({ sid: n.sid, action: 'failed', error: setRes.error });
+          results.errors.push('number ' + n.sid + ': ' + setRes.error);
+        }
+      }
+    }
+  } catch (e) {
+    results.ok = false;
+    results.errors.push('numbers step: ' + e.message);
+  }
+
+  return results;
+}
+
 async function getSmsSettings(subaccountId) {
   try {
     return await db.findOne('sms_settings', { subaccount_id: subaccountId });
@@ -339,6 +474,8 @@ module.exports = {
   normalizePhone,
   inboundWebhookUrl,
   statusCallbackUrl,
+  setInboundWebhook,
+  syncTwilioInboundConfig,
   findOrCreateSmsConversation,
   logOutboundSms,
   bumpConversationAfterOutbound
