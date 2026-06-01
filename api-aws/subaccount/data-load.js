@@ -167,7 +167,7 @@ async function handler(req, res) {
       usersResult, widgetsResult, paymentsResult, appointmentsResult, apptClientsResult, apptStaffResult,
       plansResult, subscriptionsResult, planCategoriesResult,
       subscriptionEventsResult, resourcesResult, groupsResult, groupMembersResult,
-      refundsResult
+      refundsResult, timeBlocksResult
     ] = await Promise.all([
       db.query(
         'SELECT data, service_categories FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
@@ -216,6 +216,10 @@ async function handler(req, res) {
       ),
       db.query(
         'SELECT * FROM appointments WHERE subaccount_id = $1 ORDER BY date ASC, time ASC',
+        [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM time_blocks WHERE subaccount_id = $1 ORDER BY block_date ASC, start_time ASC',
         [subaccountId]
       ),
       // Group booking: clients per appointment (for multi-client appointments)
@@ -416,7 +420,18 @@ async function handler(req, res) {
       })(),
       subscriptionPlans: plansResult.rows.map(planToFrontend),
       subscriptions: subscriptionsWithEvents,
-      subscriptionPlanCategories: planCategoriesResult.rows.map(planCategoryToFrontend)
+      subscriptionPlanCategories: planCategoriesResult.rows.map(planCategoryToFrontend),
+      timeBlocks: ((timeBlocksResult && timeBlocksResult.rows) || []).map(function(row){
+        return {
+          id: row.id,
+          assignedTo: row.staff_id,
+          date: row.block_date instanceof Date ? row.block_date.toISOString().slice(0,10) : String(row.block_date).slice(0,10),
+          startTime: row.start_time,
+          endTime: row.end_time,
+          label: row.label || '',
+          createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at
+        };
+      })
     });
   } catch (e) {
     console.error('data-load error:', e.message);
