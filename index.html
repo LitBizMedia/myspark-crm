@@ -30577,6 +30577,7 @@ function renderSquareCard(){
 function renderCardsTab(contact){
   const cards=(contact&&contact.squareCards)||[];
   const hasSquare=!!(contact&&contact.squareCustomerId);
+  const connected=sqIsConnected();
   let h='<div class="sec-label" style="margin-bottom:12px">Payment Methods</div>';
   if(cards.length){
     h+=cards.map(function(c){
@@ -30589,6 +30590,10 @@ function renderCardsTab(contact){
         '<button class="btn btn-danger btn-sm" onclick="removeCardFromContact(\''+esc(contact.id)+'\',\''+esc(c.id)+'\')">Remove</button>'+
       '</div>';
     }).join('');
+  }else if(connected && (contact.email||contact.phone) && !contact._cardsPulled){
+    h+='<div class="empty-state" style="padding:24px 0">'+
+      '<div style="font-size:13px;color:var(--text-muted)">Checking Square for saved cards...</div>'+
+    '</div>';
   }else{
     h+='<div class="empty-state" style="padding:24px 0">'+
       '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 10px;display:block;opacity:.3" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>'+
@@ -30597,10 +30602,17 @@ function renderCardsTab(contact){
   }
   if(hasSquare){
     h+='<button class="btn btn-purple btn-sm" onclick="openAddCardModal(\''+esc(contact.id)+'\')">+ Add Card</button>';
-  }else if(sqIsConnected()){
+    h+=' <a href="#" onclick="pullSquareCards(\''+esc(contact.id)+'\',{toast:true});return false" style="font-size:12px;color:var(--purple);text-decoration:none;margin-left:10px">Refresh from Square</a>';
+  }else if(connected){
     h+='<button class="btn btn-purple btn-sm" onclick="addCardFlow(\''+esc(contact.id)+'\')">+ Add Card</button>';
   }else{
     h+='<div style="font-size:12px;color:var(--text-muted);margin-top:8px">Connect Square in Settings to save cards on file.</div>';
+  }
+  // Background auto-pull for a linked contact whose cards we have not pulled yet
+  // this view. Page-safe, single customer, cannot time out.
+  if(connected && (contact.email||contact.phone) && !contact._cardsPulled){
+    contact._cardsPulled=true;
+    setTimeout(function(){ pullSquareCards(contact.id,{silent:true}); }, 30);
   }
   return h;
 }
@@ -30619,6 +30631,56 @@ async function addCardFlow(contactId){
   }
   await ensureContactFull(contactId);
   openAddCardModal(contactId);
+}
+
+// Pulls a contact's EXISTING cards from the subaccount's own Square account
+// and stores them on the contact. Links the contact first if needed. One
+// customer, one API call, cannot time out. opts.silent suppresses toasts
+// (used by the background auto-pull); opts.toast shows a result toast.
+async function pullSquareCards(contactId, opts){
+  opts = opts || {};
+  if(!sqIsConnected()){ if(opts.toast)toast('Connect Square first.','error'); return; }
+  const full=await ensureContactFull(contactId);
+  if(!full){ if(opts.toast)toast('Could not load contact.','error'); return; }
+  let custId=full.squareCustomerId;
+  if(!custId){
+    custId=await linkContactToSquare(contactId, full);
+    if(!custId){ if(opts.toast)toast('Could not link to Square.','error'); return; }
+  }
+  try{
+    const r=await fetch(apiUrl('/api/square/customer-cards'),{credentials:'include',
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({slug:state.subaccountSlug,customerId:custId})
+    });
+    const d=await r.json();
+    if(d.error){ if(opts.toast)toast('Could not load cards: '+d.error,'error'); return; }
+    const cards=d.cards||[];
+    const prev=full.squareCards||[];
+    const changed = cards.length!==prev.length ||
+      cards.some(function(c,i){ return !prev[i] || prev[i].id!==c.id; });
+    if(changed){
+      try{
+        await contactUpdate(contactId, {square_cards: cards});
+        _invalidateContactFull(contactId);
+        full.squareCards=cards;
+        const local=db.contacts&&db.contacts.find(function(x){return x.id===contactId;});
+        if(local)local.squareCards=cards;
+      }catch(e2){
+        console.error('pullSquareCards persist:', e2);
+        if(opts.toast)toast('Loaded from Square but failed to save locally.','error');
+        return;
+      }
+    }
+    if(opts.toast)toast(cards.length?(cards.length+' card'+(cards.length===1?'':'s')+' loaded from Square.'):'No saved cards in Square for this contact.','success');
+    // Re-render the cards tab if it is the one showing.
+    if(state.drawer===contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
+      renderDrawer();
+    }
+  }catch(e){
+    console.error('pullSquareCards error:', e);
+    if(opts.toast)toast('Could not reach Square.','error');
+  }
 }
 
 function removeCardFromContact(contactId,cardId){
