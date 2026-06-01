@@ -1390,7 +1390,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .staff-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
 .staff-card-avatar{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:#fff;flex-shrink:0}
 .staff-card-name{font-size:14px;font-weight:700}
-.staff-card-pos{font-size:12px;font-weight:600;color:var(--text)}.staff-card-role{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted)}
+.staff-card-pos{font-size:12px;font-weight:600;color:var(--text);min-height:15px}.staff-card-role{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted)}
 .staff-card-sched{font-size:11px;color:var(--text-muted);margin-top:2px}
 /* REPORTING TABLE */
 .rpt-filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
@@ -29884,7 +29884,7 @@ function renderStaffTeam(){
     h+='<div class="staff-card">'
       +'<div class="staff-card-avatar" style="background:'+col+'">'+initials(u.name||u.username)+'</div>'
       +'<div class="staff-card-name">'+esc(u.name||u.username)+'</div>'
-      +(u.jobTitle?'<div class="staff-card-pos">'+esc(u.jobTitle)+'</div>':'')+'<div class="staff-card-role">'+esc(roleLabel(u.role))+'</div>'
+      +'<div class="staff-card-pos">'+(u.jobTitle?esc(u.jobTitle):'\u00A0')+'</div>'+'<div class="staff-card-role">'+esc(roleLabel(u.role))+'</div>'
       +'<div class="staff-card-sched">'+todayAppts.length+' appt'+(todayAppts.length!==1?'s':'')+' today</div>'
       +'<div class="staff-card-sched" style="margin-top:2px">'+schedLabel+'</div>'
       +(isAdminOrManager()?'<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">'
