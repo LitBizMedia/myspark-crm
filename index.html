@@ -8033,6 +8033,17 @@ function selPosC(id,name){
   state.posCOFIndex=0;
   setTimeout(updatePosCoFTab,50);
   setTimeout(updatePosGCTab,60);
+  // Pull this customer's saved cards from Square so the COF tab shows them
+  // on first selection, not after a later cache refresh. Single customer,
+  // cannot time out. Re-render the COF tab once cards land.
+  (async function(){
+    try{
+      await pullSquareCards(id,{silent:true});
+      // Only refresh if this contact is still the selected POS customer.
+      const cur=document.getElementById('pos-c-id')&&document.getElementById('pos-c-id').value;
+      if(cur===id)updatePosCoFTab();
+    }catch(e){ console.warn('POS card pull:',e); }
+  })();
 }
 
 function posAddItem(){
