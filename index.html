@@ -12730,14 +12730,14 @@ function buildSchedSection(standalone){
       +'</div></div>';
   }).join('');
   const ov='<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:7px">Date Overrides</div><div id="ov-list">'+renderOvList()+'</div>'
-    +'<div style="display:flex;gap:7px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">'
-    +'<div class="form-group" style="margin:0">'
+    +'<div style="display:flex;gap:7px;align-items:flex-end;margin-top:8px">'
+    +'<div class="form-group" style="margin:0;flex:1 1 0;min-width:120px">'
       +'<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Date</label>'
       +_dateInputHTML('ov-date','',false,'')
     +'</div>'
-    +'<div class="form-group" style="margin:0">'
+    +'<div class="form-group" style="margin:0;flex:1 1 0;min-width:150px">'
       +'<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Type</label>'
-      +'<select id="ov-type" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;height:36px" onchange="updateOvHrsLabels(this.value)">'
+      +'<select id="ov-type" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;height:36px;width:100%" onchange="updateOvHrsLabels(this.value)">'
         +'<option value="off">Day Off (whole day)</option>'
         +'<option value="hoursOff">Hours Off (gap in workday)</option>'
         +'<option value="custom">Work These Hours (replace day)</option>'
@@ -12753,9 +12753,9 @@ function buildSchedSection(standalone){
         +_timeInputHTML('ov-end','14:00',false)
       +'</div>'
     +'</div>'
-    +'<div class="form-group" style="margin:0">'
+    +'<div class="form-group" style="margin:0;flex:1 1 0;min-width:110px">'
       +'<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Note</label>'
-      +'<input type="text" id="ov-note" placeholder="Vacation, conf..." style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;width:130px">'
+      +'<input type="text" id="ov-note" placeholder="Vacation, conf..." style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box">'
     +'</div>'
     +'<button onclick="addOv()" title="Add date override" aria-label="Add date override" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--orange);border:none;border-radius:var(--radius);color:#fff;cursor:pointer;padding:0" onmouseover="this.style.background=&#39;var(--orange-hover)&#39;" onmouseout="this.style.background=&#39;var(--orange)&#39;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>'
     +'</div></div>';
