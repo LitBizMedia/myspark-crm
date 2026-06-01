@@ -7762,6 +7762,47 @@ function buildTimedCol(dateStr,appts,allHours){
   return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'" ondragover="_calColDragOverWeek(event,\''+dateStr+'\')" ondrop="_calColDropWeek(event,\''+dateStr+'\')">'+allHours.map(function(h){return'<div class="tgrid-row'+(hoursSet.has(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';}).join('')+offHTML+eventsHTML+nowLine2+'</div>';
 }
 
+function _timeBlocksHTML(dateStr, staffId, minH, allHours){
+  if(!Array.isArray(db.timeBlocks) || !allHours.length) return '';
+  var firstH = allHours[0], lastH = allHours[allHours.length-1];
+  return db.timeBlocks.filter(function(b){
+    return b && b.date===dateStr && b.assignedTo===staffId;
+  }).map(function(b){
+    var s = t2m(b.startTime||'09:00');
+    var e = t2m(b.endTime||'10:00');
+    var dur = Math.max(e - s, 15);
+    if(s/60 < firstH || s/60 >= lastH+1) return '';
+    var topPx = (s - minH*60)/60*CAL_HOUR_PX;
+    var heightPx = Math.max(dur/60*CAL_HOUR_PX, 18);
+    var stripe = 'repeating-linear-gradient(45deg, var(--text-disabled) 0px, var(--text-disabled) 6px, transparent 6px, transparent 12px)';
+    var labelHTML = b.label ? '<div class="tb-label">'+esc(b.label)+'</div>' : '<div class="tb-label">Blocked</div>';
+    return '<div class="time-block-ev" style="position:absolute;top:'+topPx+'px;height:'+heightPx+'px;left:3px;right:3px;'
+      + 'background:var(--main-card-hover);background-image:'+stripe+';border:1px solid var(--main-border);'
+      + 'border-radius:4px;z-index:1;overflow:hidden;padding:3px 6px;box-sizing:border-box" '
+      + 'title="Blocked '+esc(fmtTime(b.startTime))+' - '+esc(fmtTime(b.endTime))+(b.label?' ('+esc(b.label)+')':'')+'">'
+      + '<button onclick="event.stopPropagation();deleteTimeBlock(\''+b.id+'\')" title="Remove block" '
+      + 'style="position:absolute;top:1px;right:2px;background:none;border:none;cursor:pointer;color:var(--main-text-muted);font-size:13px;line-height:1;padding:1px 3px">\u00d7</button>'
+      + labelHTML
+      + '</div>';
+  }).join('');
+}
+
+function deleteTimeBlock(id){
+  if(!confirm('Remove this time block?')) return;
+  fetch(apiUrl('/api/subaccount/time-block-delete'), {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id: id })
+  }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+    .then(function(res){
+      if(!res.ok){ toast((res.j && res.j.error) || 'Could not remove block.','error'); return; }
+      db.timeBlocks = (db.timeBlocks||[]).filter(function(b){ return b.id !== id; });
+      if(typeof renderCal === 'function') renderCal();
+      toast('Block removed.','success');
+    })
+    .catch(function(e){ console.error('deleteTimeBlock failed:', e); toast('Could not remove block.','error'); });
+}
+
 function buildTimedColForUser(dateStr,appts,allHours,uid){
   var minH=allHours.length?allHours[0]:8;
   var maxH=(allHours.length?allHours[allHours.length-1]:18)+1;
@@ -7804,7 +7845,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
   var nowLineU='';if(dateStr===todayStr()){var nMU=nowHM().totalMinutes;var nTopU=Math.round((nMU-(allHours[0]||8)*60)/60*CAL_HOUR_PX);nowLineU='<div class="cal-now-line" style="top:'+nTopU+'px"><div class="cal-now-dot"></div></div>';}
   return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'" ondragover="_calColDragOver(event,\''+dateStr+'\',\''+uid+'\')" ondrop="_calColDrop(event,\''+dateStr+'\',\''+uid+'\')">'+allHours.map(function(h){
     return'<div class="tgrid-row'+(hours.includes(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\',\''+uid+'\')"></div>';
-  }).join('')+offHTML+eventsHTML+nowLineU+'</div>';
+  }).join('')+offHTML+_timeBlocksHTML(dateStr,uid,minH,allHours)+eventsHTML+nowLineU+'</div>';
 }
 
 function renderWeekCal(){
