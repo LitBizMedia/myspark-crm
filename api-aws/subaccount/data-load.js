@@ -218,10 +218,6 @@ async function handler(req, res) {
         'SELECT * FROM appointments WHERE subaccount_id = $1 ORDER BY date ASC, time ASC',
         [subaccountId]
       ),
-      db.query(
-        'SELECT * FROM time_blocks WHERE subaccount_id = $1 ORDER BY block_date ASC, start_time ASC',
-        [subaccountId]
-      ),
       // Group booking: clients per appointment (for multi-client appointments)
       db.query(
         `SELECT ac.appointment_id, ac.contact_id, ac.is_primary
@@ -293,6 +289,10 @@ async function handler(req, res) {
            FROM payment_refunds
           WHERE subaccount_id = $1
           ORDER BY refunded_at DESC`,
+        [subaccountId]
+      ),
+      db.query(
+        'SELECT * FROM time_blocks WHERE subaccount_id = $1 ORDER BY block_date ASC, start_time ASC',
         [subaccountId]
       )]);
 
