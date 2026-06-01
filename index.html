@@ -33920,11 +33920,14 @@ function openPackTemplateModal(id){
   var isNew=!t;
   var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
   var hasSpecific=t&&t.serviceRestriction==='specific';
-  var svcOpts=(db.services||[]).filter(function(s){return s.active!==false;}).map(function(s){
-    var nm=s.name||s.title||'Untitled';
-    var sel=(t&&t.services&&t.services.includes(nm))?'selected':'';
-    return'<option value="'+esc(nm)+'" '+sel+'>'+esc(nm)+'</option>';
-  }).join('');
+  // Seed the combo chip state from the template. Prefer new serviceItems shape;
+  // fall back to legacy name array (no variation) for older templates.
+  _spComboItems = [];
+  if(t&&Array.isArray(t.serviceItems)&&t.serviceItems.length){
+    _spComboItems = t.serviceItems.map(function(it){return {serviceId:it.serviceId,variationId:it.variationId,label:it.label};});
+  } else if(t&&Array.isArray(t.services)&&t.services.length){
+    _spComboItems = t.services.map(function(nm){return {serviceId:null,variationId:null,label:nm};});
+  }
   var body='<div class="form-row">'
     +'<div class="form-group" style="flex:2"><label>Pack Name</label><input id="spt-name" type="text" style="'+inpS+'" value="'+esc(t?t.name||'':'')+'" placeholder="e.g. Buy 5 Get 1 Swedish"></div>'
     +'<div class="form-group" style="flex:1"><label>Price ($)</label><input id="spt-price" type="number" min="0" step="0.01" style="'+inpS+'" value="'+(t?t.price||'':'')+'" placeholder="0.00"></div>'
@@ -33941,8 +33944,19 @@ function openPackTemplateModal(id){
     +'<option value="specific"'+(hasSpecific?' selected':'')+'>Specific services</option>'
     +'</select></div>'
     +'<div id="spt-svc-wrap" class="form-group" style="'+(hasSpecific?'':'display:none;')+'">'
-    +'<label>Select Services</label>'
-    +(svcOpts?'<select id="spt-services" multiple style="'+inpS+';height:100px">'+svcOpts+'</select>':'<div style="font-size:13px;color:var(--text-muted)">No services defined yet. Add services in the Services section first.</div>')
+    +'<label>Select Services and Pricing Options</label>'
+    +'<div style="display:flex;gap:7px;align-items:flex-end;margin-bottom:8px">'
+      +'<div style="flex:1 1 0;min-width:0;position:relative">'
+        +'<input type="text" id="spt-svc-search" placeholder="Search services..." autocomplete="off" style="'+inpS+'" oninput="spComboSvcFilter(this.value)" onfocus="spComboSvcFilter(this.value)">'
+        +'<input type="hidden" id="spt-svc-picked" value="">'
+        +'<div id="spt-svc-drop" class="ss-drop hidden" style="position:absolute;top:100%;left:0;right:0;z-index:50;max-height:200px;overflow:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-top:2px"></div>'
+      +'</div>'
+      +'<div style="flex:1 1 0;min-width:0">'
+        +'<select id="spt-var-sel" style="'+inpS+'" disabled><option value="">Pick a service first</option></select>'
+      +'</div>'
+      +'<button type="button" onclick="spComboAdd()" title="Add" aria-label="Add service option" style="flex:0 0 auto;width:36px;height:38px;display:flex;align-items:center;justify-content:center;background:var(--orange);border:none;border-radius:var(--radius);color:#fff;cursor:pointer;padding:0" onmouseover="this.style.background=&#39;var(--orange-hover)&#39;" onmouseout="this.style.background=&#39;var(--orange)&#39;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>'
+    +'</div>'
+    +'<div id="spt-combo-chips"></div>'
     +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Expiration</label>'
@@ -33960,15 +33974,105 @@ function openPackTemplateModal(id){
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" onclick="savePackTemplate('+(isNew?'null':"'"+id+"'")+')">'+( isNew?'Create Template':'Save Changes')+'</button>',
     'modal-lg');
+  spRenderComboChips();
 }
 
 function spToggleSvcList(){
   var v=document.getElementById('spt-svcrestrict')&&document.getElementById('spt-svcrestrict').value;
   var w=document.getElementById('spt-svc-wrap');if(w)w.style.display=v==='specific'?'':'none';
+  if(v==='specific')spRenderComboChips();
 }
 function spToggleExp(){
   var v=document.getElementById('spt-exptype')&&document.getElementById('spt-exptype').value;
   var w=document.getElementById('spt-exp-wrap');if(w)w.style.display=v==='months'?'':'none';
+}
+
+// --- Session pack: searchable service + variation combo picker ---
+// State holds the chosen combos as {serviceId, variationId, label}. Seeded in
+// openPackTemplateModal, read in savePackTemplate. Dedicated to this modal so it
+// never touches the appointment service picker (which hardcodes apptOnServiceChange).
+var _spComboItems = [];
+
+function spComboSvcFilter(v){
+  var drop=document.getElementById('spt-svc-drop');
+  if(!drop)return;
+  var q=(v||'').trim().toLowerCase();
+  var svcs=(db.services||[]).filter(function(s){return s.active!==false;});
+  if(q)svcs=svcs.filter(function(s){return (s.name||s.title||'').toLowerCase().indexOf(q)>=0;});
+  svcs=svcs.slice(0,40);
+  if(!svcs.length){drop.innerHTML='<div style="padding:8px 12px;font-size:13px;color:var(--text-muted)">No services found</div>';drop.classList.remove('hidden');return;}
+  drop.innerHTML=svcs.map(function(s){
+    var nm=s.name||s.title||'Untitled';
+    var nmEsc=esc(nm).replace(/'/g,'&#39;');
+    return '<div class="ss-opt" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--text)" onmouseover="this.style.background=&#39;var(--bg-card-hover)&#39;" onmouseout="this.style.background=&#39;transparent&#39;" onclick="spComboSvcPick(&#39;'+s.id+'&#39;,&#39;'+nmEsc+'&#39;)">'+esc(nm)+'</div>';
+  }).join('');
+  drop.classList.remove('hidden');
+}
+
+function spComboSvcPick(id,name){
+  var inp=document.getElementById('spt-svc-search');
+  var hid=document.getElementById('spt-svc-picked');
+  var drop=document.getElementById('spt-svc-drop');
+  if(inp)inp.value=name;
+  if(hid)hid.value=id;
+  if(drop)drop.classList.add('hidden');
+  spComboVarPopulate(id);
+}
+
+function spComboVarPopulate(serviceId){
+  var sel=document.getElementById('spt-var-sel');
+  if(!sel)return;
+  var vars=(db.serviceVariations||[]).filter(function(v){return v.service_id===serviceId&&v.active!==false;});
+  if(!vars.length){
+    sel.innerHTML='<option value="">No pricing options for this service</option>';
+    sel.disabled=true;
+    return;
+  }
+  sel.innerHTML=vars.map(function(v){
+    var bits=[v.name||'Option'];
+    if(v.duration)bits.push(v.duration+' min');
+    if(v.price!=null&&v.price!=='')bits.push(fmt$(v.price));
+    return '<option value="'+esc(v.id)+'">'+esc(bits.join(', '))+'</option>';
+  }).join('');
+  sel.disabled=false;
+}
+
+function spComboAdd(){
+  var hid=document.getElementById('spt-svc-picked');
+  var sel=document.getElementById('spt-var-sel');
+  var serviceId=hid&&hid.value;
+  if(!serviceId){toast('Pick a service first.','error');return;}
+  var variationId=sel&&sel.value;
+  if(!variationId){toast('Pick a pricing option.','error');return;}
+  if(_spComboItems.some(function(it){return it.serviceId===serviceId&&it.variationId===variationId;})){
+    toast('That option is already added.','error');return;
+  }
+  var svc=(db.services||[]).find(function(s){return s.id===serviceId;});
+  var v=(db.serviceVariations||[]).find(function(x){return x.id===variationId;});
+  var svcNm=svc?(svc.name||svc.title||'Service'):'Service';
+  var bits=[svcNm];
+  if(v){if(v.name)bits.push(v.name);if(v.duration)bits.push(v.duration+' min');if(v.price!=null&&v.price!=='')bits.push(fmt$(v.price));}
+  var label=bits.join(', ');
+  _spComboItems.push({serviceId:serviceId,variationId:variationId,label:label});
+  // Reset the pickers for the next add.
+  var inp=document.getElementById('spt-svc-search');if(inp)inp.value='';
+  if(hid)hid.value='';
+  if(sel){sel.innerHTML='<option value="">Pick a service first</option>';sel.disabled=true;}
+  spRenderComboChips();
+}
+
+function spComboRemove(idx){
+  _spComboItems.splice(idx,1);
+  spRenderComboChips();
+}
+
+function spRenderComboChips(){
+  var wrap=document.getElementById('spt-combo-chips');
+  if(!wrap)return;
+  if(!_spComboItems.length){wrap.innerHTML='<div style="font-size:12px;color:var(--text-muted)">No options added yet.</div>';return;}
+  wrap.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:6px">'+_spComboItems.map(function(it,i){
+    return '<span style="display:inline-flex;align-items:center;gap:6px;background:var(--purple-dim);border:1px solid var(--purple-border);color:var(--purple-light);border-radius:var(--radius);padding:4px 8px;font-size:12px">'+esc(it.label)+'<span onclick="spComboRemove('+i+')" style="cursor:pointer;font-weight:700;line-height:1" title="Remove">&times;</span></span>';
+  }).join('')+'</div>';
 }
 
 function savePackTemplate(id){
@@ -33981,9 +34085,16 @@ function savePackTemplate(id){
   var restrict=document.getElementById('spt-svcrestrict')&&document.getElementById('spt-svcrestrict').value||'any';
   var expType=document.getElementById('spt-exptype')&&document.getElementById('spt-exptype').value||'never';
   var expMonths=expType==='months'?(parseInt(document.getElementById('spt-expmonths')&&document.getElementById('spt-expmonths').value)||null):null;
+  // Read combos from chip state. Build new serviceItems shape plus a legacy
+  // name array so display spots and the sale snapshot keep working unchanged.
+  var serviceItems=[];
   var services=[];
-  if(restrict==='specific'){var sel=document.getElementById('spt-services');if(sel)services=Array.from(sel.selectedOptions).map(function(o){return o.value;});}
+  if(restrict==='specific'){
+    serviceItems=_spComboItems.slice();
+    services=serviceItems.map(function(it){return it.label;});
+  }
   if(!name){toast('Enter a pack name.','error');return;}
+  if(restrict==='specific'&&!serviceItems.length){toast('Add at least one service option, or set Applies To: Any service.','error');return;}
   if(paid<1||total<1){toast('Enter valid session counts.','error');return;}
   if(total<paid){toast('Total sessions must be >= sessions paid.','error');return;}
   if(!db.sessionPackTemplates)db.sessionPackTemplates=[];
@@ -33997,12 +34108,12 @@ function savePackTemplate(id){
     var t=db.sessionPackTemplates.find(function(x){return x.id===id;});
     if(!t){toast('Template not found.','error');return;}
     t.name=name;t.price=price;t.sessionsPaid=paid;t.sessionsTotal=total;t.description=desc;
-    t.serviceRestriction=restrict;t.services=services;t.expiresMonths=expMonths;
+    t.serviceRestriction=restrict;t.services=services;t.serviceItems=serviceItems;t.expiresMonths=expMonths;
     t.taxable=taxable;
     var statusEl=document.getElementById('spt-status');if(statusEl)t.status=statusEl.value;
     t.updatedAt=now_();
   }else{
-    db.sessionPackTemplates.push({id:uid(),name:name,price:price,sessionsPaid:paid,sessionsTotal:total,description:desc,serviceRestriction:restrict,services:services,expiresMonths:expMonths,taxable:taxable,status:'active',createdAt:now_()});
+    db.sessionPackTemplates.push({id:uid(),name:name,price:price,sessionsPaid:paid,sessionsTotal:total,description:desc,serviceRestriction:restrict,services:services,serviceItems:serviceItems,expiresMonths:expMonths,taxable:taxable,status:'active',createdAt:now_()});
   }
   saveData();closeModal();renderSessionPacks();toast(id?'Template updated.':'Template created.','success');
 }
