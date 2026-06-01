@@ -7944,7 +7944,7 @@ function renderDayCal(){
     html+='<div class="cal-mc-head" style="border-top:3px solid '+col+'">';
     html+='<div class="cal-mc-avatar" style="background:'+col+'">'+initials(u.name||u.username)+'</div>';
     html+='<div style="min-width:0;flex:1"><div class="cal-mc-name">'+esc(u.name||u.username)+'</div>'
-      +'<div class="cal-mc-role">'+esc(u.role)+(apptCount?' · '+apptCount+' appt'+(apptCount!==1?'s':''):'')+'</div></div>';
+      +'<div class="cal-mc-role">'+esc(u.jobTitle||u.role)+(apptCount?' · '+apptCount+' appt'+(apptCount!==1?'s':''):'')+'</div></div>';
     html+='<button onclick="openApptModal(null,null,\''+str+'\',null,\''+u.id+'\')" title="Book appointment" style="background:none;border:none;cursor:pointer;color:'+col+';padding:2px;flex-shrink:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
     html+='</div>';
     // Timed body for this user
@@ -13571,6 +13571,7 @@ async function fetchFromServer(opts){
             id:u.id,
             username:u.username,
             name:u.display_name||u.username,
+            jobTitle:u.job_title||'',
             email:u.email,
             role:u.role,
             color:u.color||'#6b21ea',
@@ -13997,6 +13998,7 @@ function openEditUserModal(userId){
   const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+(r[0].toUpperCase()+r.slice(1))+'</option>').join('')+'</select></div>';
   const currentEmail = u.email || u.username || '';
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login)</span></label><input id="eu-email" type="email" value="'+esc(currentEmail)+'" placeholder="user@example.com"'+(isAdmin?' disabled':'')+'></div></div>'
+    +'<div class="form-group"><label>Position <span style="font-weight:400;color:var(--text-muted)">(shown on staff cards)</span></label><input id="eu-jobtitle" type="text" value="'+esc(u.jobTitle||'')+'" placeholder="e.g. Massage Therapist"></div>'
     +(isAdmin?'':'<div class="form-row">'+roleField+'<div class="form-group"><label>&nbsp;</label><button type="button" class="btn btn-ghost" style="height:38px" onclick="sendUserPasswordResetLink(\''+userId+'\')">Send Password Reset Link</button></div></div>')
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +(isAdmin?'':'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;margin:8px 0 0;font-size:12px;color:var(--text);line-height:1.5"><strong>Password:</strong> <span style="color:var(--text-muted)">Use the Send Password Reset Link button above to email the user a secure link. They set their own password.</span></div>');
@@ -14011,6 +14013,7 @@ async function saveEditUser(){
   // Password changes are done via the Send Password Reset Link button (magic-link flow).
   const euEmail=(document.getElementById('eu-email')&&document.getElementById('eu-email').value||'').trim().toLowerCase();
   if(euEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(euEmail)){toast('Enter a valid email.','error');return;}
+  const jobTitle=(document.getElementById('eu-jobtitle')&&document.getElementById('eu-jobtitle').value||'').trim();
   const updates={name,color:state.selUserColor};
   if(euEmail)updates.email=euEmail;
   if(role)updates.role=role;
@@ -14041,6 +14044,7 @@ async function saveEditUser(){
         var syncBody={username:targetUsername};
         if(role)syncBody.role=role;
         if(name)syncBody.displayName=name;
+        syncBody.jobTitle=jobTitle;
         if(euEmail)syncBody.email=euEmail;
         if(updates.color)syncBody.color=updates.color;
         var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
@@ -28349,7 +28353,7 @@ function renderStaffReporting(){
   rows.forEach(function(r){
     h+='<tr style="cursor:pointer" onclick="openStaffDrillDown(\''+r.u.id+'\')">'
       +'<td><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:'+(r.u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;font-family:\'Syne\',sans-serif">'+initials(r.u.name||r.u.username)+'</div>'+esc(r.u.name||r.u.username)+'</div></td>'
-      +'<td><span class="role-badge role-'+r.u.role+'">'+r.u.role+'</span></td>'
+      +'<td><span class="role-badge role-'+r.u.role+'">'+esc(r.u.jobTitle||r.u.role)+'</span></td>'
       +'<td>'+r.apptCount+'</td>'
       +'<td>'+r.txCount+'</td>'
       +'<td>$'+r.sales.toFixed(2)+'</td>'
@@ -29879,7 +29883,7 @@ function renderStaffTeam(){
     h+='<div class="staff-card">'
       +'<div class="staff-card-avatar" style="background:'+col+'">'+initials(u.name||u.username)+'</div>'
       +'<div class="staff-card-name">'+esc(u.name||u.username)+'</div>'
-      +'<div class="staff-card-role">'+esc(u.role)+'</div>'
+      +'<div class="staff-card-role">'+esc(u.jobTitle||u.role)+'</div>'
       +'<div class="staff-card-sched">'+todayAppts.length+' appt'+(todayAppts.length!==1?'s':'')+' today</div>'
       +'<div class="staff-card-sched" style="margin-top:2px">'+schedLabel+'</div>'
       +(isAdminOrManager()?'<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">'
@@ -29990,7 +29994,7 @@ function exportAllStaffCSV(){
   var users=allUsers();
   var payments=(db.payments||[]).filter(function(p){return p.createdAt&&p.createdAt>=from&&p.createdAt<=to+'T23:59:59';});
   var appts=(db.appointments||[]).filter(function(a){return a.date>=from&&a.date<=to;});
-  var lines=['Staff Name,Role,Appointments,Transactions,Sales Revenue,Tips,Total (with Tips)'];
+  var lines=['Staff Name,Position,Appointments,Transactions,Sales Revenue,Tips,Total (with Tips)'];
   users.forEach(function(u){
     var uPay=payments.filter(function(p){return p.staffId===u.id;});
     var uTip=payments.filter(function(p){return(p.tipStaffId||p.staffId)===u.id&&p.tipAmount>0;});
@@ -29998,7 +30002,7 @@ function exportAllStaffCSV(){
     var tips=uTip.reduce(function(s,p){return s+(p.tipAmount||0);},0);
     var ac=appts.filter(function(a){return a.assignedTo===u.id;}).length;
     var nm='"'+(u.name||u.username).replace(/"/g,"''")+'"';
-    lines.push([nm,u.role,ac,uPay.length,sales.toFixed(2),tips.toFixed(2),(sales+tips).toFixed(2)].join(','));
+    lines.push([nm,(u.jobTitle||u.role),ac,uPay.length,sales.toFixed(2),tips.toFixed(2),(sales+tips).toFixed(2)].join(','));
   });
   var blob=new Blob([lines.join('\n')],{type:'text/csv'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);
@@ -30514,7 +30518,7 @@ function renderCalManage(){
       +'<input class="cal-sf-cb" type="checkbox" data-uid="'+u.id+'" '+(chk?'checked':'')+' onchange="calToggleStaff(this.dataset.uid,this.checked)">'
       +'<span class="cal-sf-dot" style="background:'+(u.color||'#6b21ea')+'"></span>'
       +'<span class="cal-sf-name">'+esc(u.name||u.username)+'</span>'
-      +'<span class="cal-sf-role">'+esc(u.role)+'</span>'
+      +'<span class="cal-sf-role">'+esc(u.jobTitle||u.role)+'</span>'
       +'</label>';
   }).join('');
   h+='</div>';

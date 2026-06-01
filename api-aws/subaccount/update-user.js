@@ -43,7 +43,7 @@ async function handler(req, res) {
   }
 
   const subaccountId = session.subaccount_id;
-  const { username, role, email, displayName, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly } = req.body || {};
+  const { username, role, email, displayName, jobTitle, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly } = req.body || {};
   // Accept email as identifier when username not provided (post email-as-login migration)
   const identifier = username || email;
 
@@ -170,6 +170,7 @@ async function handler(req, res) {
       username: normEmail, // username IS email post-migration
       email: normEmail,
       display_name: displayName || normEmail,
+      job_title: jobTitle || null,
       password_hash: newHash,
       role: role || 'user',
       active: active !== false,
@@ -325,6 +326,10 @@ async function handler(req, res) {
   if (color !== undefined && color !== targetUser.color) {
     patch.color = color;
     changedFields.push('color');
+  }
+  if (jobTitle !== undefined && jobTitle !== targetUser.job_title) {
+    patch.job_title = jobTitle;
+    changedFields.push('job_title');
   }
   if (schedule !== undefined) {
     patch.schedule = schedule ? JSON.stringify(schedule) : null;

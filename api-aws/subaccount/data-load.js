@@ -197,7 +197,7 @@ async function handler(req, res) {
         [subaccountId]
       ),
       db.query(
-        `SELECT id, username, display_name, email, role, color, active,
+        `SELECT id, username, display_name, job_title, email, role, color, active,
                 schedule, date_overrides, must_change_password,
                 is_agency_admin,
                 created_at, updated_at
