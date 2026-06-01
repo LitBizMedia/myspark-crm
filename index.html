@@ -7942,7 +7942,7 @@ function renderDayCal(){
     html+='<div class="cal-mc-col">';
     // Header
     html+='<div class="cal-mc-head" style="border-top:3px solid '+col+'">';
-    html+='<div class="cal-mc-avatar" style="background:'+col+'">'+initials(u.name||u.username)+'</div>';
+    html+=avatarHtml(u,30);
     html+='<div style="min-width:0;flex:1"><div class="cal-mc-name">'+esc(u.name||u.username)+'</div>'
       +'<div class="cal-mc-role">'+esc(u.jobTitle||u.role)+(apptCount?' · '+apptCount+' appt'+(apptCount!==1?'s':''):'')+'</div></div>';
     html+='<button onclick="openApptModal(null,null,\''+str+'\',null,\''+u.id+'\')" title="Book appointment" style="background:none;border:none;cursor:pointer;color:'+col+';padding:2px;flex-shrink:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
@@ -13572,6 +13572,8 @@ async function fetchFromServer(opts){
             username:u.username,
             name:u.display_name||u.username,
             jobTitle:u.job_title||'',
+            avatarUrl:u.avatar_url||'',
+            avatarFileId:u.avatar_file_id||'',
             email:u.email,
             role:u.role,
             color:u.color||'#6b21ea',
@@ -13699,12 +13701,35 @@ function forceIdleLogout(){
 
 var ROLE_LABELS={admin:'Admin',manager:'Full Access',user:'Staff',practitioner:'Practitioner'};
 function roleLabel(r){return ROLE_LABELS[r]||r;}
+function avatarHtml(u,size){
+  var col=u.color||'#6b21ea';
+  var fs=Math.round(size*0.32);
+  var base='width:'+size+'px;height:'+size+'px;border-radius:50%;flex-shrink:0;';
+  if(u.avatarUrl){
+    return '<div style="'+base+'background-image:url(\''+u.avatarUrl+'\');background-size:cover;background-position:center"></div>';
+  }
+  return '<div style="'+base+'background:'+col+';display:flex;align-items:center;justify-content:center;font-family:\'Exo 2\',sans-serif;font-weight:700;color:#fff;font-size:'+fs+'px">'+initials(u.name||u.username)+'</div>';
+}
+function setSidebarAvatar(u){
+  var av=document.getElementById('sb-avatar');
+  if(!av||!u)return;
+  if(u.avatarUrl){
+    av.textContent='';
+    av.style.backgroundImage='url(\''+u.avatarUrl+'\')';
+    av.style.backgroundSize='cover';
+    av.style.backgroundPosition='center';
+  }else{
+    av.style.backgroundImage='';
+    av.textContent=initials(u.name||u.username);
+    av.style.background=u.color||'#6b21ea';
+  }
+}
 function initApp(){
   const u=state.user;
   document.getElementById('sb-name').textContent=u.name||u.username;
   document.getElementById('sb-role').textContent=roleLabel(u.role);
   const av=document.getElementById('sb-avatar');
-  av.textContent=initials(u.name||u.username);av.style.background=u.color||'#6b21ea';
+  setSidebarAvatar(u);
   renderWorkspacePill();
   applyRolePermissions();
   updateNotifBadge();initBrowserNotifs();renderPanel();
@@ -13995,17 +14020,67 @@ function openEditUserModal(userId){
   userOvs=JSON.parse(JSON.stringify(u.dateOverrides||[]));
   state.modal={type:'edituser',id:userId};
   state.selUserColor=u.color||USER_COLORS[0];
+  state.selUserAvatarId=u.avatarFileId||'';
+  state.selUserAvatarUrl=u.avatarUrl||'';
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select></div>';
   const currentEmail = u.email || u.username || '';
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login)</span></label><input id="eu-email" type="email" value="'+esc(currentEmail)+'" placeholder="user@example.com"'+(isAdmin?' disabled':'')+'></div></div>'
     +'<div class="form-group"><label>Position <span style="font-weight:400;color:var(--text-muted)">(shown on staff cards)</span></label><input id="eu-jobtitle" type="text" value="'+esc(u.jobTitle||'')+'" placeholder="e.g. Massage Therapist"></div>'
     +(isAdmin?'':'<div class="form-row">'+roleField+'<div class="form-group"><label>&nbsp;</label><button type="button" class="btn btn-ghost" style="height:38px" onclick="sendUserPasswordResetLink(\''+userId+'\')">Send Password Reset Link</button></div></div>')
+    +'<div class="form-group"><label>Profile Photo</label><div style="display:flex;align-items:center;gap:12px"><div id="eu-avatar-preview">'+avatarHtml({avatarUrl:(u.avatarUrl||''),name:u.name,username:u.username,color:(u.color||USER_COLORS[0])},56)+'</div><div style="display:flex;flex-direction:column;gap:4px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'eu-avatar-input\').click()">Upload Photo</button><button type="button" class="btn btn-ghost btn-sm" id="eu-avatar-remove" onclick="removeUserAvatar()" style="'+((u.avatarFileId)?'':'display:none')+'">Remove Photo</button></div></div><input type="file" id="eu-avatar-input" accept="image/png,image/jpeg,image/jpg" style="display:none" onchange="uploadUserAvatar(event)"><div id="eu-avatar-status" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +(isAdmin?'':'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;margin:8px 0 0;font-size:12px;color:var(--text);line-height:1.5"><strong>Password:</strong> <span style="color:var(--text-muted)">Use the Send Password Reset Link button above to email the user a secure link. They set their own password.</span></div>');
   openModal('Edit: '+(u.name||u.username),b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEditUser()">Save Changes</button>','modal-lg');
 }
 
+function _setEuAvatarStatus(msg,kind){
+  var el=document.getElementById('eu-avatar-status');
+  if(!el)return;
+  el.textContent=msg||'';
+  el.style.color=kind==='error'?'var(--danger-light)':(kind==='ok'?'var(--success-light)':'var(--text-muted)');
+}
+function _refreshEuAvatarPreview(){
+  var box=document.getElementById('eu-avatar-preview');
+  if(box)box.innerHTML=avatarHtml({avatarUrl:state.selUserAvatarUrl||'',name:document.getElementById('eu-name')?document.getElementById('eu-name').value:'',username:'',color:state.selUserColor},56);
+  var rm=document.getElementById('eu-avatar-remove');
+  if(rm)rm.style.display=state.selUserAvatarId?'':'none';
+}
+async function uploadUserAvatar(event){
+  var file=event&&event.target&&event.target.files&&event.target.files[0];
+  if(!file)return;
+  if(file.size>2*1024*1024){_setEuAvatarStatus('File too large. Maximum 2MB.','error');event.target.value='';return;}
+  var allowed=['image/png','image/jpeg','image/jpg'];
+  if(allowed.indexOf(file.type)<0){_setEuAvatarStatus('Use PNG or JPG.','error');event.target.value='';return;}
+  _setEuAvatarStatus('Uploading...','');
+  try{
+    var presignRes=await fetch(apiUrl('/api/media/upload-url'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileName:file.name,fileType:file.type||'image/png',fileSize:file.size,folder:'Avatars'})});
+    var presignData=await presignRes.json().catch(function(){return{error:'Server error'};});
+    if(!presignRes.ok){_setEuAvatarStatus('Could not start upload: '+(presignData.error||'Status '+presignRes.status),'error');event.target.value='';return;}
+    await new Promise(function(resolve,reject){
+      var xhr=new XMLHttpRequest();
+      xhr.open('PUT',presignData.uploadUrl);
+      xhr.setRequestHeader('Content-Type',file.type||'image/png');
+      xhr.onload=function(){if(xhr.status>=200&&xhr.status<300)resolve();else reject(new Error('S3 upload failed: '+xhr.status));};
+      xhr.onerror=function(){reject(new Error('Upload network error'));};
+      xhr.send(file);
+    });
+    var listRes=await fetch(apiUrl('/api/media/list'),{credentials:'include'});
+    var listData=await listRes.json().catch(function(){return{files:[]};});
+    var newRow=(listData.files||[]).find(function(f){return f.id===presignData.fileId;});
+    state.selUserAvatarId=presignData.fileId||'';
+    state.selUserAvatarUrl=(newRow&&newRow.url)||'';
+    _refreshEuAvatarPreview();
+    _setEuAvatarStatus('Photo uploaded. Save to apply.','ok');
+    event.target.value='';
+  }catch(e){_setEuAvatarStatus('Upload failed: '+e.message,'error');event.target.value='';}
+}
+function removeUserAvatar(){
+  state.selUserAvatarId='';
+  state.selUserAvatarUrl='';
+  _refreshEuAvatarPreview();
+  _setEuAvatarStatus('Photo removed. Save to apply.','');
+}
 async function saveEditUser(){
   const userId=state.modal.id,isAdmin=isPrimaryAdmin(userId);
   const name=document.getElementById('eu-name').value.trim();
@@ -14046,6 +14121,7 @@ async function saveEditUser(){
         if(role)syncBody.role=role;
         if(name)syncBody.displayName=name;
         syncBody.jobTitle=jobTitle;
+        syncBody.avatarFileId=state.selUserAvatarId||'';
         if(euEmail)syncBody.email=euEmail;
         if(updates.color)syncBody.color=updates.color;
         var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
@@ -14083,7 +14159,7 @@ async function saveEditUser(){
 // =====================================================
 function renderUserList(){
   const el=document.getElementById('user-list');if(!el)return;
-  el.innerHTML=allUsers().map(u=>'<div class="user-row"><div class="user-color-dot" style="background:'+(u.color||'#6b21ea')+'"></div><div style="width:28px;height:28px;border-radius:50%;background:'+(u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-family:\'Syne\',sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">'+initials(u.name||u.username)+'</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div><span class="role-badge role-'+u.role+'">'+roleLabel(u.role)+'</span><button class="icon-btn-xs" onclick="openEditUserModal(\''+u.id+'\')" title="Edit User"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+(!isPrimaryAdmin(u.id)?'<button class="icon-btn-xs" onclick="openUserSchedModal(\''+u.id+'\')" title="Edit Schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button><button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')+'</div>').join('');
+  el.innerHTML=allUsers().map(u=>'<div class="user-row"><div class="user-color-dot" style="background:'+(u.color||'#6b21ea')+'"></div>'+avatarHtml(u,28)+'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(u.name||u.username)+'</div><div style="font-size:11px;color:var(--text-muted)">@'+esc(u.username)+'</div></div><span class="role-badge role-'+u.role+'">'+roleLabel(u.role)+'</span><button class="icon-btn-xs" onclick="openEditUserModal(\''+u.id+'\')" title="Edit User"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+(!isPrimaryAdmin(u.id)?'<button class="icon-btn-xs" onclick="openUserSchedModal(\''+u.id+'\')" title="Edit Schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button><button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')+'</div>').join('');
 }
 
 // =====================================================
@@ -28353,7 +28429,7 @@ function renderStaffReporting(){
     +'<th>Team Member</th><th>Role</th><th>Appts</th><th>Transactions</th><th>Sales</th>'+(taxOn?'<th>'+esc(taxLabel)+'</th>':'')+'<th style="color:var(--success-light)">Tips</th></tr></thead><tbody>';
   rows.forEach(function(r){
     h+='<tr style="cursor:pointer" onclick="openStaffDrillDown(\''+r.u.id+'\')">'
-      +'<td><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:'+(r.u.color||'#6b21ea')+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;font-family:\'Syne\',sans-serif">'+initials(r.u.name||r.u.username)+'</div>'+esc(r.u.name||r.u.username)+'</div></td>'
+      +'<td><div style="display:flex;align-items:center;gap:8px">'+avatarHtml(r.u,28)+''+esc(r.u.name||r.u.username)+'</div></td>'
       +'<td><span class="role-badge role-'+r.u.role+'">'+esc(r.u.jobTitle||roleLabel(r.u.role))+'</span></td>'
       +'<td>'+r.apptCount+'</td>'
       +'<td>'+r.txCount+'</td>'
@@ -29882,7 +29958,7 @@ function renderStaffTeam(){
     else if(dayStatus.status==='off')schedLabel='Off today'+(dayStatus.reason&&dayStatus.reason!=='Not scheduled'?' ('+dayStatus.reason+')':'');
     else if(dayStatus.status==='custom')schedLabel='Custom: '+fmtTime(dayStatus.start)+' \u2013 '+fmtTime(dayStatus.end);
     h+='<div class="staff-card">'
-      +'<div class="staff-card-avatar" style="background:'+col+'">'+initials(u.name||u.username)+'</div>'
+      +avatarHtml(u,52)
       +'<div class="staff-card-name">'+esc(u.name||u.username)+'</div>'
       +'<div class="staff-card-pos">'+(u.jobTitle?esc(u.jobTitle):'\u00A0')+'</div>'+'<div class="staff-card-role">'+esc(roleLabel(u.role))+'</div>'
       +'<div class="staff-card-sched">'+todayAppts.length+' appt'+(todayAppts.length!==1?'s':'')+' today</div>'

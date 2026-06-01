@@ -43,7 +43,7 @@ async function handler(req, res) {
   }
 
   const subaccountId = session.subaccount_id;
-  const { username, role, email, displayName, jobTitle, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly } = req.body || {};
+  const { username, role, email, displayName, jobTitle, avatarFileId, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly } = req.body || {};
   // Accept email as identifier when username not provided (post email-as-login migration)
   const identifier = username || email;
 
@@ -171,6 +171,7 @@ async function handler(req, res) {
       email: normEmail,
       display_name: displayName || normEmail,
       job_title: jobTitle || null,
+      avatar_file_id: avatarFileId || null,
       password_hash: newHash,
       role: role || 'user',
       active: active !== false,
@@ -326,6 +327,10 @@ async function handler(req, res) {
   if (color !== undefined && color !== targetUser.color) {
     patch.color = color;
     changedFields.push('color');
+  }
+  if (avatarFileId !== undefined && avatarFileId !== targetUser.avatar_file_id) {
+    patch.avatar_file_id = avatarFileId || null;
+    changedFields.push('avatar_file_id');
   }
   if (jobTitle !== undefined && jobTitle !== targetUser.job_title) {
     patch.job_title = jobTitle;

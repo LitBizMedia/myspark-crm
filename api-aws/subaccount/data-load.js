@@ -9,6 +9,10 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const { appointmentToFrontend } = require('./lib/appointments');
+const { GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { s3, BUCKET } = require('./lib/s3-client');
+const AVATAR_URL_EXPIRY_SECONDS = 3600;
 
 // Maps a payments table row (snake_case) to the camelCase shape the
 // frontend expects (matching the legacy blob shape).
@@ -197,7 +201,7 @@ async function handler(req, res) {
         [subaccountId]
       ),
       db.query(
-        `SELECT id, username, display_name, job_title, email, role, color, active,
+        `SELECT id, username, display_name, job_title, avatar_file_id, email, role, color, active,
                 schedule, date_overrides, must_change_password,
                 is_agency_admin,
                 created_at, updated_at
@@ -316,6 +320,33 @@ async function handler(req, res) {
       sub.events = eventsBySubId[sub.id] || [];
       return sub;
     });
+
+    // Resolve a fresh presigned avatar URL per user that has one.
+    // Presigned URLs expire, so we never store them; we re-resolve
+    // each load from media_files, same pattern as media/list.js.
+    try {
+      const avatarIds = usersResult.rows
+        .map(function(u){ return u.avatar_file_id; })
+        .filter(function(id){ return !!id; });
+      if (avatarIds.length) {
+        const mediaRes = await db.query(
+          'SELECT id, file_key FROM media_files WHERE subaccount_id = $1 AND id = ANY($2::text[])',
+          [subaccountId, avatarIds]
+        );
+        const keyById = {};
+        mediaRes.rows.forEach(function(m){ keyById[m.id] = m.file_key; });
+        await Promise.all(usersResult.rows.map(async function(u){
+          const key = u.avatar_file_id && keyById[u.avatar_file_id];
+          if (!key) return;
+          try {
+            const cmd = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+            u.avatar_url = await getSignedUrl(s3, cmd, { expiresIn: AVATAR_URL_EXPIRY_SECONDS });
+          } catch (e) {
+            console.warn('data-load: avatar presign failed for', key, e.message);
+          }
+        }));
+      }
+    } catch (e) { console.warn('avatar resolve failed (data-load):', e.message); }
 
     // Audit: bulk PHI access. Log aggregate counts, not contents, to
     // satisfy HIPAA observability without exploding audit_log volume.
