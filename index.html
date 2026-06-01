@@ -4838,16 +4838,16 @@ function renderDash(){
     }).join('');
   }
 
-  // Tasks: overdue + due today + due tomorrow. Always scoped to the current
+  // Tasks: overdue + due today + next 3 days. Always scoped to the current
   // user regardless of admin/manager dashboard scope toggle. Admins can see
   // the full team task view in the Tasks tab.
-  const tomorrowDate=new Date();tomorrowDate.setDate(tomorrowDate.getDate()+1);
-  const tomorrow=tomorrowDate.getFullYear()+'-'+String(tomorrowDate.getMonth()+1).padStart(2,'0')+'-'+String(tomorrowDate.getDate()).padStart(2,'0');
+  const horizonDate=new Date();horizonDate.setDate(horizonDate.getDate()+3);
+  const horizon=horizonDate.getFullYear()+'-'+String(horizonDate.getMonth()+1).padStart(2,'0')+'-'+String(horizonDate.getDate()).padStart(2,'0');
   const dueTasks=db.tasks.filter(function(t){
     if(t.status==='done')return false;
     if(t.assignedTo && t.assignedTo!==uid)return false;
     if(!t.dueDate)return false;
-    return t.dueDate<=tomorrow;
+    return t.dueDate<=horizon;
   }).sort(function(a,b){return (a.dueDate||'9').localeCompare(b.dueDate||'9');});
 
   const te=document.getElementById('dash-tasks');
