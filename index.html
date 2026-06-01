@@ -5769,7 +5769,6 @@ function _dPayPacks(c){
     +'<button class="chip'+(filter==='exhausted'?' active':'')+'" onclick="setDPayPackFilter(\'exhausted\')">Used Up ('+buckets.exhausted.length+')</button>'
     +'<button class="chip'+(filter==='expired'?' active':'')+'" onclick="setDPayPackFilter(\'expired\')">Expired ('+buckets.expired.length+')</button>'
     +'</div>'
-    +'<button class="btn btn-purple btn-sm" onclick="spOpenIssueModal(\''+c.id+'\')">+ Issue</button>'
     +'</div>';
 
   if(!list.length){
@@ -34813,64 +34812,8 @@ function renderContactSessionPacks(contactId){
 }
 
 
-function spDrawerUpdateSummary(){
-  var tmplId=document.getElementById('sp-drawer-tmpl')&&document.getElementById('sp-drawer-tmpl').value;
-  var tmpl=tmplId?(db.sessionPackTemplates||[]).find(function(x){return x.id===tmplId;}):null;
-  var el=document.getElementById('sp-drawer-summary');if(!el)return;
-  if(!tmpl){el.textContent='';return;}
-  var svcTxt=tmpl.serviceRestriction==='specific'&&tmpl.services&&tmpl.services.length?tmpl.services.join(', '):'Any service';
-  el.textContent=tmpl.sessionsPaid+' paid, '+tmpl.sessionsTotal+' total sessions. '+svcTxt+(tmpl.expiresMonths?' Expires in '+tmpl.expiresMonths+' months.':' No expiration.');
-}
 
-// Issue Session Pack from contact drawer. Quick issuance modal that
-// reuses spSellFinalize via spDrawerIssuePack. For complex sales (gift
-// card payment, partial payment), users should use the Session Packs
-// panel instead since this modal keeps the form simple.
-function spOpenIssueModal(contactId){
-  var c=getContact(contactId);
-  if(!c){toast('Contact not found.','error');return;}
-  var templates=(db.sessionPackTemplates||[]).filter(function(t){return t.active!==false;});
-  if(!templates.length){
-    toast('Create a session pack template first.','error');
-    return;
-  }
-  var tmplOpts=templates.map(function(t){
-    var price=t.price?fmt$(t.price):'free';
-    return '<option value="'+t.id+'">'+esc(t.name)+' \u00b7 '+t.sessionsTotal+' sessions \u00b7 '+price+'</option>';
-  }).join('');
-  var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
-  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">For: <strong style="color:var(--text)">'+esc(c.name)+'</strong></div>'
-    +'<div class="form-group"><label>Template</label>'
-    +'<select id="sp-drawer-tmpl" style="'+inpS+'" onchange="spDrawerUpdateSummary()">'
-    +'<option value="">-- Pick a template --</option>'+tmplOpts
-    +'</select>'
-    +'<div id="sp-drawer-summary" style="font-size:11px;color:var(--text-muted);margin-top:6px"></div></div>'
-    +'<div class="form-group"><label>Payment Method</label>'
-    +'<select id="sp-drawer-pm" style="'+inpS+'">'
-    +'<option value="card">Card</option>'
-    +'<option value="cash">Cash</option>'
-    +'<option value="other">Other</option>'
-    +'</select></div>'
-    +'<div class="form-group"><label>Notes <span style="font-weight:400;color:var(--main-text-muted)">(optional)</span></label>'
-    +'<textarea id="sp-drawer-notes" rows="2" style="'+inpS+'" placeholder="Internal notes for this pack sale"></textarea></div>';
-  openModal('Issue Session Pack',body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="spDrawerIssuePack(\''+contactId+'\')">Issue Pack</button>');
-}
 
-function spDrawerIssuePack(contactId){
-  var tmplId=document.getElementById('sp-drawer-tmpl')&&document.getElementById('sp-drawer-tmpl').value;
-  var tmpl=tmplId?(db.sessionPackTemplates||[]).find(function(x){return x.id===tmplId;}):null;
-  if(!tmpl){toast('Select a template.','error');return;}
-  var pm=document.getElementById('sp-drawer-pm')&&document.getElementById('sp-drawer-pm').value||'card';
-  var notes=(document.getElementById('sp-drawer-notes')&&document.getElementById('sp-drawer-notes').value||'').trim();
-  var staffId=state.user&&state.user.id||'';
-  // Pack taxability via 'sessionPacks' section policy.
-  var taxableFlag=isLineTaxable('sessionPacks',tmpl);
-  var spTaxCalc=calcTax([{price:tmpl.price,taxable:taxableFlag,qty:1}],0);
-  closeModal();
-  spSellFinalize(tmpl,contactId,staffId,pm,'',notes,'',null,spTaxCalc.tax,spTaxCalc.taxableAmount);
-}
 
 // =====================================================
 // MULTI-TENANCY ROUTING
