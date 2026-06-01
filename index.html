@@ -9870,29 +9870,50 @@ function _expandedAppointmentsForCalendar(){
 // saveAppt reads the right title regardless of mode.
 function _switchApptMode(mode){
   state.apptMode = mode;
+  var isBlock = (mode === 'block');
   var svcWrap = document.getElementById('apt-mode-service-wrap');
   var custWrap = document.getElementById('apt-mode-custom-wrap');
-  if(svcWrap)  svcWrap.style.display  = (mode === 'service' ? 'block' : 'none');
-  if(custWrap) custWrap.style.display = (mode === 'custom'  ? 'block' : 'none');
-  // Duration field (Service) vs End Time picker (Custom) toggle.
+  var blockWrap = document.getElementById('apt-mode-block-wrap');
+  if(svcWrap)   svcWrap.style.display   = (mode === 'service' ? 'block' : 'none');
+  if(custWrap)  custWrap.style.display  = (mode === 'custom'  ? 'block' : 'none');
+  if(blockWrap) blockWrap.style.display = (isBlock ? 'block' : 'none');
+
+  // Block mode hides every appointment-only field. A block is just staff +
+  // date + start + end + label. Show only those.
+  var hideForBlock = ['apt-cv-wrap','apt-dur-wrap','apt-row-buffers','apt-row-status','apt-notes-wrap'];
+  hideForBlock.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.style.display = (isBlock ? 'none' : '');
+  });
+
+  // Duration field (Service) vs End Time picker (Custom/Block) toggle.
+  // Block needs start+end like Custom, no duration.
   var durWrap = document.getElementById('apt-dur-wrap');
   var endWrap = document.getElementById('apt-end-wrap');
-  if(durWrap) durWrap.style.display = (mode === 'custom' ? 'none' : 'block');
-  if(endWrap) endWrap.style.display = (mode === 'custom' ? 'block' : 'none');
-  // Date/Time row uses 3 cols when End Time is shown, 2 cols otherwise.
+  if(durWrap) durWrap.style.display = ((mode === 'custom' || isBlock) ? 'none' : 'block');
+  if(endWrap) endWrap.style.display = ((mode === 'custom' || isBlock) ? 'block' : 'none');
+
+  // Staff field: keep visible in block mode (a block needs a staff member).
+  var userWrap = document.getElementById('apt-user-wrap');
+  if(userWrap) userWrap.style.display = '';
+
+  // Date/Time row uses 3 cols when End Time is shown (custom or block).
   var dtRow = document.getElementById('apt-datetime-row');
   if(dtRow){
-    dtRow.classList.toggle('form-row-3', mode === 'custom');
-    dtRow.classList.toggle('form-row',  mode !== 'custom');
+    var threeCol = (mode === 'custom' || isBlock);
+    dtRow.classList.toggle('form-row-3', threeCol);
+    dtRow.classList.toggle('form-row',  !threeCol);
   }
   document.querySelectorAll('[data-mode]').forEach(function(t){
     t.classList.toggle('active', t.getAttribute('data-mode') === mode);
   });
   // Update modal title
   var titleEl = document.getElementById('modal-title');
-  if(titleEl && !state.modal.id) titleEl.textContent = mode === 'service' ? 'Book Service' : 'Book Appointment';
+  if(titleEl && !state.modal.id){
+    titleEl.textContent = isBlock ? 'Block Time' : (mode === 'service' ? 'Book Service' : 'Book Appointment');
+  }
   // Sync af-title hidden input from the active block's title field.
-  _syncApptTitleField();
+  if(!isBlock) _syncApptTitleField();
 }
 
 // Keeps af-title (the hidden input that saveAppt reads) in sync with the
@@ -10107,6 +10128,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     modeTabsHTML = '<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px">'
       + '<button class="svc-detail-tab' + (initialMode === 'service' ? ' active' : '') + '" data-mode="service" onclick="_switchApptMode(\'service\')">Service</button>'
       + '<button class="svc-detail-tab' + (initialMode === 'custom' ? ' active' : '') + '" data-mode="custom" onclick="_switchApptMode(\'custom\')">Custom</button>'
+      + '<button class="svc-detail-tab" data-mode="block" onclick="_switchApptMode(\'block\')">Block Time</button>'
       + '</div>';
   }
 
@@ -10131,6 +10153,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     modeBlocksHTML =
       '<div id="apt-mode-service-wrap" style="display:'+(initialMode==='service'?'block':'none')+'">' + serviceBlockHTML + '</div>'
       + '<div id="apt-mode-custom-wrap" style="display:'+(initialMode==='custom'?'block':'none')+'">' + customBlockHTML + '</div>'
+      + '<div id="apt-mode-block-wrap" style="display:none"><div class="form-group"><label>Reason (optional)</label><input id="af-block-label" type="text" placeholder="Lunch, vacation, meeting..." maxlength="200"></div></div>'
       // af-title is dynamically read from the active mode's title field via getter.
       + '<input type="hidden" id="af-title" value="'+esc(a&&a.title||'')+'">';
   }
@@ -10177,9 +10200,9 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     + '</div>'
     + '<div id="apt-group-clients-wrap" style="display:none"></div>'
     + '<div id="apt-group-staff-wrap" style="display:none"></div>'
-    + '<div class="form-row"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
-    + '<div class="form-row"><div class="form-group"><label>Status</label><select id="af-status">'+Object.keys(APPT_STATUSES).map(function(x){return '<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+APPT_STATUSES[x].label+'</option>';}).join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
-    + '<div class="form-group"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
+    + '<div class="form-row" id="apt-row-buffers"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
+    + '<div class="form-row" id="apt-row-status"><div class="form-group"><label>Status</label><select id="af-status">'+Object.keys(APPT_STATUSES).map(function(x){return '<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+APPT_STATUSES[x].label+'</option>';}).join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
+    + '<div class="form-group" id="apt-notes-wrap"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
 
   // Title reflects mode for clarity. Edit always says "Edit Appointment".
   var modalTitle;
@@ -12233,7 +12256,42 @@ async function submitReschedule(originalApptId){
   }
 }
 
+function saveTimeBlock(){
+  var staffId = (document.getElementById('af-user')||{}).value || '';
+  var date = _readDateInput('af-date');
+  var startTime = _readTimeInput('af-time');
+  var endTime = _readTimeInput('af-end');
+  var label = ((document.getElementById('af-block-label')||{}).value || '').trim();
+
+  if(!staffId){ toast('Pick a staff member to block.','error'); return; }
+  if(!date){ toast('Pick a date.','error'); return; }
+  if(!startTime || !endTime){ toast('Set a start and end time.','error'); return; }
+  // Compare as minutes; _readTimeInput returns HH:MM 24h.
+  function _m(t){ var p=String(t).split(':'); return (parseInt(p[0],10)||0)*60+(parseInt(p[1],10)||0); }
+  if(_m(endTime) <= _m(startTime)){ toast('End time must be after start time.','error'); return; }
+
+  var payload = { staff_id: staffId, block_date: date, start_time: startTime, end_time: endTime, label: label };
+
+  fetch(apiUrl('/api/subaccount/time-block-upsert'), {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+    .then(function(res){
+      if(!res.ok){ toast((res.j && res.j.error) || 'Could not save time block.','error'); return; }
+      if(!Array.isArray(db.timeBlocks)) db.timeBlocks=[];
+      db.timeBlocks.push(res.j.timeBlock);
+      closeModal();
+      if(typeof renderCal === 'function') renderCal();
+      toast('Time blocked.','success');
+    })
+    .catch(function(e){ console.error('saveTimeBlock failed:', e); toast('Could not save time block.','error'); });
+}
+
 function saveAppt(){
+  // Block Time mode: short-circuit the entire appointment flow. A block has no
+  // contact, service, status, or payment. Post to time-block-upsert and exit.
+  if(state.apptMode === 'block'){ return saveTimeBlock(); }
   const title=document.getElementById('af-title').value.trim(),date=_readDateInput('af-date');
   if(!title||!date){toast('Title and date required.','error');return}
   // Past-date validation. Edits of already-past appointments stay allowed so staff
