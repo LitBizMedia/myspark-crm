@@ -37758,6 +37758,17 @@ function mediaFmtSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+const MEDIA_ICON_COLORS = {
+  pdf: 'var(--danger)',
+  doc: 'var(--info)', docx: 'var(--info)',
+  xls: 'var(--success)', xlsx: 'var(--success)', csv: 'var(--success)',
+  ppt: 'var(--orange)', pptx: 'var(--orange)',
+  zip: 'var(--text-muted)', rar: 'var(--text-muted)',
+  txt: 'var(--text-muted)',
+  jpg: 'var(--purple)', jpeg: 'var(--purple)', png: 'var(--purple)', gif: 'var(--purple)', webp: 'var(--purple)', svg: 'var(--purple)',
+  default: 'var(--purple-dim)'
+};
+
 function mediaIconColor(name) {
   return MEDIA_ICON_COLORS[mediaFileExt(name)] || MEDIA_ICON_COLORS.default;
 }
