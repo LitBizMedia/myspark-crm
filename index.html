@@ -12296,6 +12296,18 @@ function saveAppt(){
     if(!serviceId){toast('Pick a service or switch to Custom mode.','error');return;}
   }
   var apptAddons = (state.apptSelectedAddons || []).map(function(x){return {id:x.id};});
+  // Require staff for non-group bookings. Unassigned appointments don't render
+  // on the calendar since every view groups/colors by assignedTo. Group bookings
+  // validate staff separately via _apptGroupValidate below.
+  var _grpActive = !!(state.apptGroup && state.apptGroup.active);
+  if(!_grpActive){
+    var _staffSel=document.getElementById('af-user');
+    if(!_staffSel||!_staffSel.value){
+      toast('Assign a staff member. Unassigned appointments won\u2019t show on the calendar.','error');
+      if(_staffSel)_staffSel.focus();
+      return;
+    }
+  }
   // Group booking validation: if active, pull clients+staff from state and
   // override the contact/staff fields the legacy save flow expects.
   var groupActive = !!(state.apptGroup && state.apptGroup.active);
