@@ -14046,24 +14046,51 @@ function _refreshEuAvatarPreview(){
   var rm=document.getElementById('eu-avatar-remove');
   if(rm)rm.style.display=state.selUserAvatarId?'':'none';
 }
+function _resizeAvatarToSquare(file,dim){
+  return new Promise(function(resolve,reject){
+    var url=URL.createObjectURL(file);
+    var img=new Image();
+    img.onload=function(){
+      try{
+        var side=Math.min(img.width,img.height);
+        var sx=Math.round((img.width-side)/2);
+        var sy=Math.round((img.height-side)/2);
+        var canvas=document.createElement('canvas');
+        canvas.width=dim;canvas.height=dim;
+        var ctx=canvas.getContext('2d');
+        ctx.drawImage(img,sx,sy,side,side,0,0,dim,dim);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(function(blob){
+          if(blob)resolve(blob);else reject(new Error('Image processing failed'));
+        },'image/jpeg',0.85);
+      }catch(e){URL.revokeObjectURL(url);reject(e);}
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);reject(new Error('Could not read image'));};
+    img.src=url;
+  });
+}
 async function uploadUserAvatar(event){
   var file=event&&event.target&&event.target.files&&event.target.files[0];
   if(!file)return;
   if(file.size>2*1024*1024){_setEuAvatarStatus('File too large. Maximum 2MB.','error');event.target.value='';return;}
   var allowed=['image/png','image/jpeg','image/jpg'];
   if(allowed.indexOf(file.type)<0){_setEuAvatarStatus('Use PNG or JPG.','error');event.target.value='';return;}
-  _setEuAvatarStatus('Uploading...','');
+  _setEuAvatarStatus('Processing...','');
   try{
-    var presignRes=await fetch(apiUrl('/api/media/upload-url'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileName:file.name,fileType:file.type||'image/png',fileSize:file.size,folder:'Avatars'})});
+    var blob=await _resizeAvatarToSquare(file,256);
+    var baseName=(file.name||'avatar').replace(/\.[^.]+$/,'');
+    var uploadName=baseName+'.jpg';
+    _setEuAvatarStatus('Uploading...','');
+    var presignRes=await fetch(apiUrl('/api/media/upload-url'),{credentials:'include',method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileName:uploadName,fileType:'image/jpeg',fileSize:blob.size,folder:'Avatars'})});
     var presignData=await presignRes.json().catch(function(){return{error:'Server error'};});
     if(!presignRes.ok){_setEuAvatarStatus('Could not start upload: '+(presignData.error||'Status '+presignRes.status),'error');event.target.value='';return;}
     await new Promise(function(resolve,reject){
       var xhr=new XMLHttpRequest();
       xhr.open('PUT',presignData.uploadUrl);
-      xhr.setRequestHeader('Content-Type',file.type||'image/png');
+      xhr.setRequestHeader('Content-Type','image/jpeg');
       xhr.onload=function(){if(xhr.status>=200&&xhr.status<300)resolve();else reject(new Error('S3 upload failed: '+xhr.status));};
       xhr.onerror=function(){reject(new Error('Upload network error'));};
-      xhr.send(file);
+      xhr.send(blob);
     });
     var listRes=await fetch(apiUrl('/api/media/list'),{credentials:'include'});
     var listData=await listRes.json().catch(function(){return{files:[]};});
