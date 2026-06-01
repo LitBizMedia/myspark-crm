@@ -33920,9 +33920,10 @@ function openPackTemplateModal(id){
   var isNew=!t;
   var inpS='width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none;box-sizing:border-box';
   var hasSpecific=t&&t.serviceRestriction==='specific';
-  var svcOpts=(db.products||[]).map(function(p){
-    var sel=(t&&t.services&&t.services.includes(p.name))?'selected':'';
-    return'<option value="'+esc(p.name)+'" '+sel+'>'+esc(p.name)+'</option>';
+  var svcOpts=(db.services||[]).filter(function(s){return s.active!==false;}).map(function(s){
+    var nm=s.name||s.title||'Untitled';
+    var sel=(t&&t.services&&t.services.includes(nm))?'selected':'';
+    return'<option value="'+esc(nm)+'" '+sel+'>'+esc(nm)+'</option>';
   }).join('');
   var body='<div class="form-row">'
     +'<div class="form-group" style="flex:2"><label>Pack Name</label><input id="spt-name" type="text" style="'+inpS+'" value="'+esc(t?t.name||'':'')+'" placeholder="e.g. Buy 5 Get 1 Swedish"></div>'
@@ -33941,7 +33942,7 @@ function openPackTemplateModal(id){
     +'</select></div>'
     +'<div id="spt-svc-wrap" class="form-group" style="'+(hasSpecific?'':'display:none;')+'">'
     +'<label>Select Services</label>'
-    +(svcOpts?'<select id="spt-services" multiple style="'+inpS+';height:100px">'+svcOpts+'</select>':'<div style="font-size:13px;color:var(--text-muted)">No products defined yet. Add products in the Products section first.</div>')
+    +(svcOpts?'<select id="spt-services" multiple style="'+inpS+';height:100px">'+svcOpts+'</select>':'<div style="font-size:13px;color:var(--text-muted)">No services defined yet. Add services in the Services section first.</div>')
     +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Expiration</label>'
