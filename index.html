@@ -13448,6 +13448,8 @@ async function fetchFromServer(opts){
       // Migrated to RDS appointments table. Override blob appointments during transition.
       // The booking widget writes here, so this is now the source of truth.
       if(Array.isArray(result.appointments))db.appointments=result.appointments;
+      // Time blocks (RDS time_blocks table). Staff calendar blocks, no contact/payment.
+      if(Array.isArray(result.timeBlocks))db.timeBlocks=result.timeBlocks;
       // Migrated to RDS subscription_plans + subscriptions tables (May 6, 2026).
       // The blob fields are stripped server-side on save; these are now the source of truth.
       if(Array.isArray(result.subscriptionPlans))db.subscriptionPlans=result.subscriptionPlans;
