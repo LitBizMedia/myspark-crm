@@ -876,6 +876,10 @@ body:not(.agency-admin) #sb-agency-tools{display:none!important}
 .card-details{flex:1}
 .card-number{font-size:13px;font-weight:600;color:var(--text)}
 .card-exp{font-size:11px;color:rgba(255,255,255,.55)}
+.card-on-file.on-light{background:var(--main-card);border-color:var(--main-border)}
+.card-on-file.on-light .card-brand-icon{background:var(--purple-dim);color:var(--purple)}
+.card-on-file.on-light .card-number{color:var(--main-text)}
+.card-on-file.on-light .card-exp{color:var(--main-text-muted)}
 .sq-card-form{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;min-height:44px}
 
 /* BULK ACTION BAR */
@@ -30853,7 +30857,7 @@ function updatePosCoFTab(){
         cards.map(function(card,i){
           const label=(card.brand||'Card')+(card.last4?' ending in '+card.last4:'on file');
           const exp=card.expMonth&&card.expYear?card.expMonth+'/'+card.expYear:'';
-          return'<div class="card-on-file" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.posCOFIndex===i?'var(--purple)':'var(--border)')+'" onclick="selectPosCard('+i+')">'
+          return'<div class="card-on-file on-light" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.posCOFIndex===i?'var(--purple)':'var(--main-border)')+'" onclick="selectPosCard('+i+')">'
             +'<div class="card-brand-icon">'+esc((card.brand||'Card').slice(0,4).toUpperCase())+'</div>'
             +'<div class="card-details"><div class="card-number">'+esc(label)+'</div>'+(exp?'<div class="card-exp">Expires '+esc(exp)+'</div>':'')+'</div>'
             +'<div style="width:16px;height:16px;border-radius:50%;border:2px solid '+(state.posCOFIndex===i?'var(--purple)':'var(--border)')+';background:'+(state.posCOFIndex===i?'var(--purple)':'transparent')+';flex-shrink:0"></div>'
@@ -33234,7 +33238,7 @@ function updateGcCofTab(){
         cards.map(function(card,i){
           var label=(card.brand||'Card')+(card.last4?' ending in '+card.last4:' on file');
           var exp=card.expMonth&&card.expYear?card.expMonth+'/'+card.expYear:'';
-          return'<div class="card-on-file" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.gcSellCOFIndex===i?'var(--purple)':'var(--border)')+'" onclick="gcSelectCofCard('+i+')">'
+          return'<div class="card-on-file on-light" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.gcSellCOFIndex===i?'var(--purple)':'var(--main-border)')+'" onclick="gcSelectCofCard('+i+')">'
             +'<div class="card-brand-icon">'+esc((card.brand||'Card').slice(0,4).toUpperCase())+'</div>'
             +'<div class="card-details"><div class="card-number">'+esc(label)+'</div>'+(exp?'<div class="card-exp">Expires '+esc(exp)+'</div>':'')+'</div>'
             +'<div style="width:16px;height:16px;border-radius:50%;border:2px solid '+(state.gcSellCOFIndex===i?'var(--purple)':'var(--border)')+';background:'+(state.gcSellCOFIndex===i?'var(--purple)':'transparent')+';flex-shrink:0"></div>'
@@ -34320,7 +34324,7 @@ function updateSpCofTab(){
         cards.map(function(card,i){
           var label=(card.brand||'Card')+(card.last4?' ending in '+card.last4:' on file');
           var exp=card.expMonth&&card.expYear?card.expMonth+'/'+card.expYear:'';
-          return'<div class="card-on-file" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.spSellCOFIndex===i?'var(--purple)':'var(--border)')+'" onclick="spSelectCofCard('+i+')">'
+          return'<div class="card-on-file on-light" style="margin-bottom:6px;cursor:pointer;border:2px solid '+(state.spSellCOFIndex===i?'var(--purple)':'var(--main-border)')+'" onclick="spSelectCofCard('+i+')">'
             +'<div class="card-brand-icon">'+esc((card.brand||'Card').slice(0,4).toUpperCase())+'</div>'
             +'<div class="card-details"><div class="card-number">'+esc(label)+'</div>'+(exp?'<div class="card-exp">Expires '+esc(exp)+'</div>':'')+'</div>'
             +'<div style="width:16px;height:16px;border-radius:50%;border:2px solid '+(state.spSellCOFIndex===i?'var(--purple)':'var(--border)')+';background:'+(state.spSellCOFIndex===i?'var(--purple)':'transparent')+';flex-shrink:0"></div>'
