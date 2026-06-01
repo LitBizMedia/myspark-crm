@@ -21187,19 +21187,38 @@ function _convChannelLabel(channel){
 }
 
 function renderConversations(){
+  // CONV-POLL-FIX: This function runs on BOTH first entry into the tab and on
+  // every background repaint (30s poll, drawer refresh). First entry should
+  // start at the empty state; a background repaint must NOT close the open
+  // thread. We branch on s._loadedOnce to tell the two apart.
   var s = _convState();
   if(!db.conversations) db.conversations = [];
   if(!db.conversationMessages) db.conversationMessages = {};
-  // Always start at the empty state. User must click to open a conversation.
-  // Cancels any in-flight auto-read timer from a prior session.
-  _convCancelReadTimer();
-  s.activeId = null;
-  convRenderList();
-  convRenderThread();
+
   if(!s._loadedOnce){
+    // First entry into the tab: start at the empty state, load the list.
+    _convCancelReadTimer();
+    s.activeId = null;
     s._loadedOnce = true;
+    convRenderList();
+    convRenderThread();
     convFetchList();
+  } else {
+    // Background repaint: preserve the open conversation. Refresh the list in
+    // place, and repaint the thread only if one is open. If the active thread's
+    // messages aren't cached yet, fetch them rather than dropping to placeholder.
+    convRenderList();
+    if(s.activeId){
+      if(db.conversationMessages[s.activeId]){
+        convRenderThread();
+      } else {
+        convFetchThread(s.activeId, function(err){ if(!err) convRenderThread(); });
+      }
+    } else {
+      convRenderThread();
+    }
   }
+
   // Start the tiered poll. Idempotent - safe to call on every render.
   _convStartPoll();
 }
