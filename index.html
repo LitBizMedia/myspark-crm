@@ -19248,14 +19248,23 @@ function renderClassesList(){
     var nextLine=nextSess
       ? 'Next: '+fmtDate(nextSess.date)+(nextSess.time?' at '+fmtTime(nextSess.time):'')+' &middot; '+nextEnrolled+'/'+cap
       : 'No upcoming sessions';
+    // Payments-due flag: any upcoming session with an unpaid/partial roster.
+    var hasDue=upcoming.some(function(cs){
+      var st=_getClassSessionPaymentStatus(cs);
+      return st==='unpaid'||st==='partial';
+    });
+    var dueFlag=hasDue
+      ? '<span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;background:var(--warning-dim);color:var(--warning-text)">Payments due</span>'
+      : '';
     return '<div onclick="openClassDetail(\''+s.id+'\')" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:16px;cursor:pointer;transition:background .12s" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'var(--main-card)\'">'
       +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">'+esc(s.name)+'</div>'
       +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:10px">'+esc(instrName)+'</div>'
       +'<div style="font-size:12px;color:var(--main-text);background:var(--purple-dim);border-radius:var(--radius);padding:6px 10px;margin-bottom:10px;display:inline-block">'+esc(summary)+'</div>'
-      +'<div style="font-size:12px;color:var(--main-text-muted);display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-size:12px;color:var(--main-text-muted);display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
         +'<span>'+nextLine+'</span>'
         +'<span style="font-weight:600;color:var(--purple)">'+upcoming.length+' upcoming</span>'
       +'</div>'
+      +(dueFlag?'<div>'+dueFlag+'</div>':'')
       +'</div>';
   }).join('')+'</div>';
 }
@@ -19302,10 +19311,14 @@ function openClassDetail(serviceId){
 
   var dateRows=upcoming.length?upcoming.map(function(cs){
     var enrolled=Array.isArray(cs.participants)?cs.participants.filter(function(p){return p.status==='enrolled';}).length:0;
+    var payStatus=_getClassSessionPaymentStatus(cs);
     var unpaid=_classUnpaidCount(cs);
-    var unpaidPill=unpaid>0
-      ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;background:var(--warning-dim);color:var(--warning-text)">'+unpaid+' unpaid</span>'
-      : '';
+    var unpaidPill='';
+    if(payStatus==='paid'){
+      unpaidPill='<span style="font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;background:var(--success-dim);color:var(--success-text)">Paid</span>';
+    } else if((payStatus==='partial'||payStatus==='unpaid') && unpaid>0){
+      unpaidPill='<span style="font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;background:var(--warning-dim);color:var(--warning-text)">'+unpaid+' unpaid</span>';
+    }
     return '<div onclick="closeModal();setTimeout(function(){openRosterModal(\''+cs.id+'\')},60)" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;cursor:pointer;background:var(--bg-card)" onmouseover="this.style.background=\'var(--bg-card-hover)\'" onmouseout="this.style.background=\'var(--bg-card)\'">'
       +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text)">'+fmtDate(cs.date)+'</div><div style="font-size:11px;color:var(--text-muted)">'+(cs.time?fmtTime(cs.time):'')+'</div></div>'
       +unpaidPill
