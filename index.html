@@ -13271,13 +13271,14 @@ function refreshStateUser(){
     email:rec.email||state.user.email,
     role:rec.role||state.user.role,
     color:rec.color,
+    avatarUrl:rec.avatarUrl||'',
+    avatarFileId:rec.avatarFileId||'',
     schedule:rec.schedule,
     dateOverrides:rec.dateOverrides,
     isAgencyAdmin:!!rec.isAgencyAdmin
   };
-  // Repaint sidebar avatar with the fresh color
-  var av=document.getElementById('sb-avatar');
-  if(av&&rec.color){av.style.background=rec.color;}
+  // Repaint sidebar avatar (photo if set, else colored initials)
+  setSidebarAvatar(state.user);
   var nm=document.getElementById('sb-name');
   if(nm){nm.textContent=state.user.name||state.user.username;}
 }
@@ -14116,8 +14117,7 @@ async function saveEditUser(){
   // API call and sync everything from subaccount_users.
   if(state.user&&state.user.id===userId){
     document.getElementById('sb-name').textContent=updates.name||state.user.username;
-    document.getElementById('sb-avatar').textContent=initials(updates.name||state.user.username);
-    if(updates.color)document.getElementById('sb-avatar').style.background=updates.color;
+    setSidebarAvatar({avatarUrl:state.selUserAvatarUrl||'',name:updates.name||state.user.username,username:state.user.username,color:updates.color||state.user.color});
   }
   // Sync to subaccount_users for both admin and non-admin paths.
   // The Lambda looks up by username scoped to this subaccount, so admin
