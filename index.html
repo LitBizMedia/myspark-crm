@@ -4769,7 +4769,8 @@ function renderDash(){
   renderDashWeek&&setTimeout(renderDashWeek,0);
   const h=nowHM().h;
   const greet=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
-  const name=state.user&&(state.user.name||state.user.username)||'';
+  const fullName=state.user&&(state.user.name||state.user.username)||'';
+  const name=(fullName.split(' ')[0])||fullName;
   document.getElementById('dash-greet').innerHTML=greet+', <span>'+esc(name)+'!</span>';
   document.getElementById('dash-time').textContent=
     fmtDateOnly(new Date(),{weekday:'long',year:'numeric',month:'long',day:'numeric'})
