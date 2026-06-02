@@ -1595,7 +1595,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .swg-tab-badge{display:inline-block;background:var(--main-bg);color:var(--text-muted);font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;min-width:14px;text-align:center}
 .swg-tab.active .swg-tab-badge{background:var(--purple);color:#fff}
 .swg-tab-pane{display:none}
-.swg-tab-pane.active{display:flex;flex-direction:column;gap:14px;min-height:0;flex:1 1 auto}
+.swg-tab-pane.active{display:flex;flex-direction:column;gap:14px}
 .swg-svc-add-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .swg-svc-add-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:var(--purple);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
 .swg-svc-add-btn:hover{filter:brightness(1.1)}
@@ -28869,6 +28869,8 @@ function _swgPolicySection(w, opts){
       +'<div class="form-group"><label>Buffer after <span style="color:var(--text-muted);font-weight:400">(minutes, override)</span></label><input id="swg-buf-after" type="number" min="0" max="240" placeholder="use service default" value="'+esc(bufAfter)+'"></div>'
       +'</div>';
   }
+
+  html += '</div>'; // close Booking Policies wrapper opened at top of html
 
   return html;
 }
