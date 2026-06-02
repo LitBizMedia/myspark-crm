@@ -13283,22 +13283,13 @@ function refreshStateUser(){
 }
 
 function getEffectiveAdmin(){
-  // Look up the primary admin from db.users (canonical, populated from
-  // subaccount_users). For litbiz, the primary admin's username is 'patrick'.
-  // For other workspaces, the primary admin is whichever user has role='admin'
-  // and has the lowest created_at (the original admin from subaccount-create).
-  const isDefault=(state.subaccountSlug===DEFAULT_SLUG||!state.subaccountSlug);
-  var realAdmin;
-  if(isDefault){
-    realAdmin=(db.users||[]).find(function(u){
-      return u.username==='patrick'&&u.role==='admin';
-    });
-  }else{
-    // Find the original admin: oldest createdAt with role=admin
-    var admins=(db.users||[]).filter(function(u){return u.role==='admin';});
-    admins.sort(function(a,b){return(a.createdAt||'').localeCompare(b.createdAt||'');});
-    realAdmin=admins[0];
-  }
+  // Identify the primary admin by ROLE and creation order, never by
+  // username/email string. This survives email changes, username
+  // migrations, and display-name edits. Same logic for every subaccount,
+  // including the default (LitBiz), so no special case can drift.
+  var admins=(db.users||[]).filter(function(u){return u.role==='admin';});
+  admins.sort(function(a,b){return(a.createdAt||'').localeCompare(b.createdAt||'');});
+  var realAdmin=admins[0];
 
   if(realAdmin){
     return{
@@ -14135,9 +14126,12 @@ async function saveEditUser(){
     var targetUsername;
     if(isAdmin){
       var primaryAdmin=getEffectiveAdmin();
-      var primaryAdminUsername=(primaryAdmin&&primaryAdmin.username)||'admin';
-      var adminRow=(db.users||[]).find(function(x){return x.username===primaryAdminUsername;});
-      targetUsername=adminRow?adminRow.username:primaryAdminUsername;
+      // Resolve by the admin's real id, then read their current username.
+      // Never fall back to a literal 'admin' string; a wrong username can
+      // match the wrong row and corrupt a role. If unresolved, leave blank
+      // so the sync is skipped rather than sent with a bad identity.
+      var adminRow=primaryAdmin&&(db.users||[]).find(function(x){return x.id===primaryAdmin.id;});
+      targetUsername=adminRow?adminRow.username:'';
     }else{
       var targetUser=db.users.find(x=>x.id===userId);
       targetUsername=targetUser&&targetUser.username;
