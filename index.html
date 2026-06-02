@@ -20374,7 +20374,6 @@ function renderServiceClassFields(s){
     +'<div class="form-group"><label id="svc-price-label">Price per Session ($)</label><input id="svc-price" type="number" step="0.01" min="0" placeholder="0.00" value="'+(s&&s.price!=null?s.price:'')+'"><div id="svc-price-hint" style="font-size:11px;color:var(--text-muted);margin-top:4px;display:none">Series pricing not applicable to never-ending classes.</div></div>'
     +'</div>'
     +'<div class="form-group"><label>Location</label><input id="svc-location" type="text" value="'+esc(s&&s.location||'')+'" placeholder="Studio A, Zoom link, address..."></div>'
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-dropin" type="checkbox" onchange="updateClassPriceLabel()"'+((s&&s.drop_in_allowed!==false)||!s?' checked':'')+'>Customers can book individual sessions</label></div>'
     +renderRecurrenceFields(s);
 }
 
@@ -20383,28 +20382,11 @@ function renderServiceClassFields(s){
 // Drop-in unchecked AND end_type finite -> "Series Price (total)"
 // Drop-in unchecked AND end_type=never  -> "Price per Session" + hint about why
 function updateClassPriceLabel(){
+  // Classes are always priced per session. Drop-in toggle removed June 2026.
   var labelEl=document.getElementById('svc-price-label');
   var hintEl=document.getElementById('svc-price-hint');
-  var dropinEl=document.getElementById('svc-dropin');
-  var endTypeEl=document.getElementById('svc-rec-endtype');
-  var repeatsEl=document.getElementById('svc-rec-repeats');
-  if(!labelEl||!hintEl)return;
-
-  var dropin=dropinEl?dropinEl.checked:true;
-  var endType=endTypeEl?endTypeEl.value:'never';
-  var repeats=repeatsEl?repeatsEl.value:'weekly';
-  // For "once" repeats, treat as finite end (single session = price per session anyway).
-  var finiteEnd=(repeats==='once')||(endType==='after')||(endType==='on_date');
-
-  if(dropin||!finiteEnd){
-    labelEl.textContent='Price per Session ($)';
-  } else {
-    labelEl.textContent='Series Price (total) ($)';
-  }
-
-  // Hint shows only in the awkward case: drop-in unchecked + end_type=never
-  var awkward=(!dropin&&!finiteEnd&&repeats!=='once');
-  hintEl.style.display=awkward?'block':'none';
+  if(labelEl)labelEl.textContent='Price per Session ($)';
+  if(hintEl)hintEl.style.display='none';
 }
 
 // Recurrence/schedule sub-section. Conditional fields swap on Repeats and End Type changes.
@@ -20908,7 +20890,6 @@ function saveService(id){
       duration_default:parseInt((document.getElementById('svc-dur')||{}).value)||60,
       location:(document.getElementById('svc-location')||{}).value.trim()||null,
       price:(document.getElementById('svc-price')||{}).value!==''?parseFloat(document.getElementById('svc-price').value):null,
-      drop_in_allowed:(document.getElementById('svc-dropin')||{}).checked,
       recurrence_rule:rule
     });
   }

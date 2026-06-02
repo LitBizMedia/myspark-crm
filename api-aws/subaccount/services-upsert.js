@@ -136,7 +136,7 @@ async function handler(req, res) {
       s.instructor_id || null,
       s.capacity != null ? parseInt(s.capacity) : null,
       s.location || null,
-      s.drop_in_allowed !== false,
+      true, // drop_in_allowed inert: classes always per-session. Column dropped in later migration.
       s.recurrence_rule ? JSON.stringify(s.recurrence_rule) : null,
       lastGeneratedThrough,
       s.taxable !== false,
