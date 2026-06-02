@@ -43,7 +43,7 @@ async function handler(req, res) {
   }
 
   const subaccountId = session.subaccount_id;
-  const { username, role, email, displayName, jobTitle, avatarFileId, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly } = req.body || {};
+  const { username, role, email, displayName, jobTitle, avatarFileId, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly, welcomeResend } = req.body || {};
   // Accept email as identifier when username not provided (post email-as-login migration)
   const identifier = username || email;
 
@@ -256,7 +256,11 @@ async function handler(req, res) {
         { select: 'slug, name' }
       );
       const token = crypto.randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      // Welcome resend uses a 7-day token (matches original setup link) so a
+      // user who does not act immediately still has a working link. Password
+      // reset stays at 60 minutes for security.
+      const ttlMs = welcomeResend ? (7 * 24 * 60 * 60 * 1000) : (60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
       await db.insertOne('password_reset_tokens', {
         token: token,
         user_type: 'subaccount_user',
@@ -265,22 +269,35 @@ async function handler(req, res) {
         email: targetUser.email,
         expires_at: expiresAt
       });
-      const resetUrl = 'https://mysparkplus.app/' + subRow.slug + '?reset=' + token;
+      const setupUrl = 'https://mysparkplus.app/' + subRow.slug + '?reset=' + token;
+      const loginUrl = 'https://mysparkplus.app/' + subRow.slug;
       const agencyEmails = require('./lib/agency-emails');
-      await agencyEmails.sendEmail(targetUser.email, 'password_reset_by_admin', {
-        subName: subRow.name || subRow.slug,
-        userName: targetUser.display_name || targetUser.username || 'there',
-        resetUrl: resetUrl,
-        resetByName: session.username || 'an administrator',
-        subaccountId: subaccountId
-      });
+      if (welcomeResend) {
+        await agencyEmails.sendEmail(targetUser.email, 'welcome_subaccount', {
+          subName: subRow.name || subRow.slug,
+          adminName: targetUser.display_name || targetUser.username || targetUser.email,
+          slug: subRow.slug,
+          loginUrl: loginUrl,
+          adminEmail: targetUser.email,
+          setupUrl: setupUrl,
+          subaccountId: subaccountId
+        });
+      } else {
+        await agencyEmails.sendEmail(targetUser.email, 'password_reset_by_admin', {
+          subName: subRow.name || subRow.slug,
+          userName: targetUser.display_name || targetUser.username || 'there',
+          resetUrl: setupUrl,
+          resetByName: session.username || 'an administrator',
+          subaccountId: subaccountId
+        });
+      }
       await logAudit({
         req,
         actorType: 'subaccount',
         actorId: session.user_id,
         actorUsername: session.username,
         actorRole: session.role,
-        action: 'subaccount.user.password_reset_link_sent',
+        action: welcomeResend ? 'subaccount.user.welcome_resent' : 'subaccount.user.password_reset_link_sent',
         targetType: 'subaccount_user',
         targetId: targetUser.id,
         targetSubaccountId: subaccountId,

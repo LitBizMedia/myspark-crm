@@ -203,7 +203,7 @@ async function handler(req, res) {
       db.query(
         `SELECT id, username, display_name, job_title, avatar_file_id, email, role, color, active,
                 schedule, date_overrides, must_change_password,
-                is_agency_admin,
+                is_agency_admin, last_login_at,
                 created_at, updated_at
          FROM subaccount_users
          WHERE subaccount_id = $1

@@ -1392,6 +1392,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .staff-card-name{font-size:14px;font-weight:700}
 .staff-card-pos{font-size:12px;font-weight:600;color:var(--text);min-height:15px}.staff-card-role{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted)}
 .staff-card-sched{font-size:11px;color:var(--text-muted);margin-top:2px}
+.staff-pending-badge{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:var(--warning-dim);color:var(--warning-light);border:1px solid var(--warning);border-radius:var(--radius-full);padding:2px 10px;margin-top:2px;cursor:default}
 /* REPORTING TABLE */
 .rpt-filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
 .rpt-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--main-card)}
@@ -13741,6 +13742,7 @@ async function fetchFromServer(opts){
             dateOverrides:_ovr,
             mustChangePassword:u.must_change_password,
             isAgencyAdmin:!!u.is_agency_admin,
+            lastLoginAt:u.last_login_at||null,
             createdAt:u.created_at,
             updatedAt:u.updated_at
           };
@@ -14171,6 +14173,29 @@ async function sendUserPasswordResetLink(userId){
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
+async function resendWelcomeEmail(userId){
+  var u=getUserById(userId);
+  if(!u){toast('User not found.','error');return;}
+  var email=u.email||u.username||'';
+  if(!email){toast('User has no email on file.','error');return;}
+  if(!confirm('Resend the welcome and setup email to '+email+'? The setup link is valid for 7 days.'))return;
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/update-user'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        email:email,
+        magicLinkOnly:true,
+        welcomeResend:true
+      })
+    });
+    var data=await r.json().catch(function(){return {};});
+    if(!r.ok){toast('Send failed: '+(data.error||('Status '+r.status)),'error');return;}
+    toast('Welcome email resent to '+email+'.','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
 function openEditUserModal(userId){
   const isAdmin=isPrimaryAdmin(userId);
   const u=isAdmin?getEffectiveAdmin():getUserById(userId);
@@ -14187,6 +14212,7 @@ function openEditUserModal(userId){
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login)</span></label><input id="eu-email" type="email" value="'+esc(currentEmail)+'" placeholder="user@example.com"'+(isAdmin?' disabled':'')+'></div></div>'
     +'<div class="form-group"><label>Position <span style="font-weight:400;color:var(--text-muted)">(shown on staff cards)</span></label><input id="eu-jobtitle" type="text" value="'+esc(u.jobTitle||'')+'" placeholder="e.g. Massage Therapist"></div>'
     +(isAdmin?'':'<div class="form-row">'+roleField+'<div class="form-group"><label>&nbsp;</label><button type="button" class="btn btn-ghost" style="height:38px" onclick="sendUserPasswordResetLink(\''+userId+'\')">Send Password Reset Link</button></div></div>')
+    +(isAdmin?'':'<div class="form-group"><button type="button" class="btn btn-ghost btn-sm" onclick="resendWelcomeEmail(\''+userId+'\')">Resend Welcome Email</button><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Use this if the user deleted or never received their setup email. Sends a fresh setup link valid for 7 days.</div></div>')
     +'<div class="form-group"><label>Profile Photo</label><div style="display:flex;align-items:center;gap:12px"><div id="eu-avatar-preview">'+avatarHtml({avatarUrl:(u.avatarUrl||''),name:u.name,username:u.username,color:(u.color||USER_COLORS[0])},56)+'</div><div style="display:flex;flex-direction:column;gap:4px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'eu-avatar-input\').click()">Upload Photo</button><button type="button" class="btn btn-ghost btn-sm" id="eu-avatar-remove" onclick="removeUserAvatar()" style="'+((u.avatarFileId)?'':'display:none')+'">Remove Photo</button></div></div><input type="file" id="eu-avatar-input" accept="image/png,image/jpeg,image/jpg" style="display:none" onchange="uploadUserAvatar(event)"><div id="eu-avatar-status" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +(isAdmin?'':'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;margin:8px 0 0;font-size:12px;color:var(--text);line-height:1.5"><strong>Password:</strong> <span style="color:var(--text-muted)">Use the Send Password Reset Link button above to email the user a secure link. They set their own password.</span></div>');
@@ -30091,6 +30117,7 @@ function renderStaffTeam(){
       +avatarHtml(u,52)
       +'<div class="staff-card-name">'+esc(u.name||u.username)+'</div>'
       +'<div class="staff-card-pos">'+(u.jobTitle?esc(u.jobTitle):'\u00A0')+'</div>'+'<div class="staff-card-role">'+esc(roleLabel(u.role))+'</div>'
+      +((isAdminOrManager()&&!u.lastLoginAt)?'<div class="staff-pending-badge" title="This user has not signed in yet. Use Resend Welcome Email if they never received or deleted their setup email.">Pending login</div>':'')
       +'<div class="staff-card-sched">'+todayAppts.length+' appt'+(todayAppts.length!==1?'s':'')+' today</div>'
       +'<div class="staff-card-sched" style="margin-top:2px">'+schedLabel+'</div>'
       +(isAdminOrManager()?'<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">'
