@@ -8826,14 +8826,31 @@ function checkDoubleBook(apptId,date,time,duration,userId){
   var candAppt = (db.appointments||[]).find(function(x){return x.id===apptId;}) || {};
   var candBuf = getApptEffectiveBuffer(candAppt, userId);
   const s=t2m(time)-candBuf.before, e=s+candBuf.before+(parseInt(duration)||60)+candBuf.after;
-  return db.appointments.find(a=>{
+  var apptHit = db.appointments.find(a=>{
     if(a.id===apptId)return false;
     if(a.date!==date||!a.assignedTo||a.assignedTo!==userId||!isActiveAppt(a))return false;
     // Rival effective buffer: MAX of its stamped buffer and its assigned staff default.
     var rb = getApptEffectiveBuffer(a);
     const as=t2m(a.time||'00:00')-rb.before, ae=as+rb.before+(a.duration||60)+rb.after;
     return s<ae&&e>as;
-  })||null;
+  });
+  if(apptHit)return apptHit;
+  // Class sessions block the assigned instructor's time, same as an appointment.
+  // A class occupies exactly its duration (no buffer). An off-hours class is
+  // already excluded from bookable hours by the staff-hours check upstream, so
+  // this only bites on-hours overlaps. Returns an appointment-shaped object so
+  // callers reading hit.title/.time keep working.
+  var classHit=(db.classSessions||[]).find(function(cs){
+    if(!cs||cs.instructor_id!==userId||cs.date!==date)return false;
+    if((cs.status||'')==='cancelled')return false;
+    var cstart=t2m(cs.time||'00:00'), cend=cstart+(parseInt(cs.duration)||60);
+    return s<cend&&e>cstart;
+  });
+  if(classHit){
+    var svc=(db.services||[]).find(function(x){return x.id===classHit.service_id;});
+    return {id:classHit.id,title:(classHit.title||(svc&&svc.name)||'Class'),time:classHit.time,duration:classHit.duration,_isClassSession:true};
+  }
+  return null;
 }
 
 // =====================================================

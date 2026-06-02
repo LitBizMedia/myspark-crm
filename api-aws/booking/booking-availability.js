@@ -240,6 +240,31 @@ async function handler(req, res) {
       apptsByStaff[a.assigned_to].push(a);
     }
 
+    // Class sessions block the assigned instructor's time, same as an
+    // appointment. Pull this date's non-cancelled sessions for these staff and
+    // merge them into apptsByStaff as busy blocks. The slot conflict loop
+    // treats them identically (time + duration + buffers). An off-hours class
+    // blocks nothing because those hours are not in the staff's available
+    // windows to begin with; an on-hours class blocks exactly its span.
+    const classResult = await db.query(
+      `SELECT instructor_id, time, duration, status
+       FROM class_sessions
+       WHERE subaccount_id = $1 AND date = $2 AND instructor_id = ANY($3)
+         AND status != 'cancelled'`,
+      [subaccountId, date, staffIds]
+    );
+    for (const cs of classResult.rows) {
+      if (!cs.instructor_id) continue;
+      if (!apptsByStaff[cs.instructor_id]) apptsByStaff[cs.instructor_id] = [];
+      apptsByStaff[cs.instructor_id].push({
+        time: cs.time,
+        duration: cs.duration,
+        buffer_before: 0,
+        buffer_after: 0,
+        status: cs.status
+      });
+    }
+
     const dayCounts = {};
     for (const a of apptResult.rows) {
       if (a.status === 'cancelled') continue;
