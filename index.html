@@ -4716,6 +4716,8 @@ function switchPanel(name){
   state.panel=name;
   document.querySelectorAll('.sb-item').forEach(i=>i.classList.toggle('active',i.dataset.panel===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('hidden',p.id!=='panel-'+name));
+  document.body.classList.toggle('cal-panel-active', name==='calendar');
+  if(name!=='calendar' && typeof closeCalJumpDrawer==='function') closeCalJumpDrawer();
   document.getElementById('top-bar-title').textContent=PANEL_TITLES[name]||name;
   // Media Library is visible to all authenticated users.
   // Read access is open; upload/delete are restricted in the UI by isAdminOrManager().
@@ -7692,6 +7694,133 @@ function renderMonthCal(){
 }
 
 function openDayInCal(s){state.calDate=new Date(s+'T12:00:00');setCalView('day')}
+
+// ===== CALENDAR JUMP DRAWER =====
+// Slide-in rail: mini month calendar (own month state) + day agenda.
+// Agenda respects state.calUser via getCalAppts. Pure presentation, no fetch.
+function _caljumpYMD(dt){return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');}
+
+function openCalJumpDrawer(){
+  // Seed mini month + selected day from the current main view date.
+  var base = state.calDate instanceof Date ? state.calDate : new Date();
+  state.miniCalDate = new Date(base.getFullYear(), base.getMonth(), 1);
+  state.jumpSelDate = _caljumpYMD(base);
+  renderMiniCal();
+  renderJumpAgenda();
+  var ov = document.getElementById('caljump-overlay');
+  var dr = document.getElementById('caljump-drawer');
+  if(ov) ov.classList.add('open');
+  if(dr) dr.classList.add('open');
+  var tab = document.getElementById('caljump-tab');
+  if(tab) tab.classList.add('drawer-open');
+  document.addEventListener('keydown', _caljumpEsc);
+}
+
+function closeCalJumpDrawer(){
+  var ov = document.getElementById('caljump-overlay');
+  var dr = document.getElementById('caljump-drawer');
+  if(ov) ov.classList.remove('open');
+  if(dr) dr.classList.remove('open');
+  var tab = document.getElementById('caljump-tab');
+  if(tab) tab.classList.remove('drawer-open');
+  document.removeEventListener('keydown', _caljumpEsc);
+}
+
+function _caljumpEsc(e){ if(e.key === 'Escape') closeCalJumpDrawer(); }
+
+function miniCalNav(d){
+  var m = state.miniCalDate instanceof Date ? state.miniCalDate : new Date();
+  state.miniCalDate = new Date(m.getFullYear(), m.getMonth() + d, 1);
+  renderMiniCal();
+}
+
+function renderMiniCal(){
+  var m = state.miniCalDate instanceof Date ? state.miniCalDate : new Date();
+  var y = m.getFullYear(), mo = m.getMonth(), td = todayStr();
+  var monthEl = document.getElementById('caljump-mini-month');
+  if(monthEl) monthEl.textContent = MONTHS[mo] + ' ' + y;
+  var dowEl = document.getElementById('caljump-mini-dow');
+  if(dowEl) dowEl.innerHTML = DSHORT.map(function(x){return '<div>' + x.slice(0,1) + '</div>';}).join('');
+  var first = new Date(y, mo, 1).getDay();
+  var days = new Date(y, mo + 1, 0).getDate();
+  var cells = [];
+  for(var i=0;i<first;i++) cells.push({day:'', cur:false, str:''});
+  for(var i=1;i<=days;i++){
+    var s = y + '-' + String(mo+1).padStart(2,'0') + '-' + String(i).padStart(2,'0');
+    cells.push({day:i, cur:true, str:s});
+  }
+  var html = cells.map(function(c){
+    if(!c.cur) return '<div class="caljump-mini-cell other"></div>';
+    var cls = 'caljump-mini-cell';
+    if(c.str === td) cls += ' today';
+    if(c.str === state.jumpSelDate) cls += ' sel';
+    var hasAppts = getCalAppts(state.calUser, c.str, 'day').length > 0;
+    var dot = hasAppts ? '<span class="caljump-mini-dot"></span>' : '';
+    return '<div class="' + cls + '" onclick="selectJumpDate(\'' + c.str + '\')">' + c.day + dot + '</div>';
+  }).join('');
+  var grid = document.getElementById('caljump-mini-grid');
+  if(grid) grid.innerHTML = html;
+}
+
+function selectJumpDate(str){
+  if(!str) return;
+  state.jumpSelDate = str;
+  // Move the MAIN calendar to this date, keep current view (month/week/day).
+  state.calDate = new Date(str + 'T12:00:00');
+  renderCal();
+  renderMiniCal();
+  renderJumpAgenda();
+}
+
+function jumpToToday(){
+  var t = todayStr();
+  state.jumpSelDate = t;
+  var now = new Date();
+  state.miniCalDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  state.calDate = new Date();
+  renderCal();
+  renderMiniCal();
+  renderJumpAgenda();
+}
+
+function renderJumpAgenda(){
+  var str = state.jumpSelDate || todayStr();
+  var dt = new Date(str + 'T12:00:00');
+  var dateEl = document.getElementById('caljump-agenda-date');
+  if(dateEl){
+    var _dlong = (typeof DAYS_LONG !== 'undefined') ? DAYS_LONG
+      : ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    var label = _dlong[dt.getDay()];
+    dateEl.textContent = label + ', ' + MONTHS[dt.getMonth()] + ' ' + dt.getDate();
+  }
+  var appts = getCalAppts(state.calUser, str, 'day') || [];
+  // Sort by time string (HH:MM 24h assumed); untimed last.
+  appts = appts.slice().sort(function(a,b){
+    var ta = a.time || '99:99', tb = b.time || '99:99';
+    return ta < tb ? -1 : ta > tb ? 1 : 0;
+  });
+  var body = document.getElementById('caljump-agenda-body');
+  if(!body) return;
+  if(!appts.length){
+    body.innerHTML = '<div class="caljump-empty">No appointments this day.</div>';
+    return;
+  }
+  body.innerHTML = appts.map(function(a){
+    var col = getUserColor(a.assignedTo) || 'var(--purple)';
+    var time = a.time ? fmtTime(a.time) : 'All day';
+    var payPill = (typeof _paymentPillHTML === 'function' && typeof _eventPaymentStatus === 'function')
+      ? _paymentPillHTML(_eventPaymentStatus(a), true) : '';
+    var groupPill = (typeof _apptGroupBadgeHTML === 'function') ? _apptGroupBadgeHTML(a) : '';
+    var warnPill = (typeof _apptWarningBadgeHTML === 'function') ? _apptWarningBadgeHTML(a) : '';
+    return '<div class="caljump-row" onclick="_calEventClick(\'' + a.id + '\')">'
+      + '<span class="caljump-row-stripe" style="background:' + col + '"></span>'
+      + '<span class="caljump-row-time">' + esc(time) + '</span>'
+      + '<span class="caljump-row-title">' + esc(a.title || '(untitled)') + '</span>'
+      + '<span class="caljump-row-pills">' + payPill + groupPill + warnPill + '</span>'
+      + '</div>';
+  }).join('');
+}
+// ===== END CALENDAR JUMP DRAWER =====
 
 function getOffBlocksForCol(dateStr){
   var blocks=[];
@@ -40332,6 +40461,83 @@ function helpSearchInput(val) {
   }, 150);
 }
 </script>
+<!-- CALENDAR JUMP DRAWER (date-jump rail + day agenda) -->
+<style>
+#caljump-overlay{position:fixed;inset:0;background:var(--overlay);z-index:200;opacity:0;pointer-events:none;transition:opacity .2s}
+#caljump-overlay.open{opacity:1;pointer-events:all}
+#caljump-tab{position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:199;display:none;flex-direction:column;align-items:center;gap:4px;background:var(--purple);color:#ffffff;border:none;border-radius:var(--radius) 0 0 var(--radius);padding:14px 8px;cursor:pointer;box-shadow:var(--shadow-md);transition:right .24s cubic-bezier(.4,0,.2,1),background .14s}
+body.cal-panel-active #caljump-tab{display:flex}
+#caljump-tab:hover{background:var(--purple-hover)}
+#caljump-tab.drawer-open{right:340px}
+.caljump-tab-chev{transition:transform .24s}
+#caljump-tab.drawer-open .caljump-tab-chev{transform:rotate(180deg)}
+#caljump-drawer{position:fixed;top:0;right:-360px;width:340px;max-width:90vw;height:100vh;height:100dvh;background:var(--bg-card);border-left:1px solid var(--border);z-index:201;display:flex;flex-direction:column;transition:right .24s cubic-bezier(.4,0,.2,1);box-shadow:var(--shadow-lg)}
+#caljump-drawer.open{right:0}
+.caljump-head{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.caljump-title{font-family:'Exo 2',sans-serif;font-size:16px;font-weight:700;color:#ffffff}
+.caljump-close{background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;padding:4px;line-height:1;border-radius:var(--radius-sm);transition:color .14s,background .14s}
+.caljump-close:hover{color:#ffffff;background:var(--bg-card-hover)}
+.caljump-mini{padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.caljump-mini-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.caljump-mini-month{font-size:13px;font-weight:700;color:var(--text)}
+.caljump-mini-nav{display:flex;gap:4px}
+.caljump-mini-arrow{background:var(--bg-input);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;width:24px;height:24px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;transition:color .14s,background .14s}
+.caljump-mini-arrow:hover{color:#ffffff;background:var(--bg-card-hover)}
+.caljump-mini-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px}
+.caljump-mini-dow div{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);text-align:center}
+.caljump-mini-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.caljump-mini-cell{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:12px;border-radius:var(--radius-sm);cursor:pointer;color:var(--text);transition:background .12s}
+.caljump-mini-cell:hover{background:var(--bg-card-hover)}
+.caljump-mini-cell.other{color:var(--text-dim);cursor:default}
+.caljump-mini-cell.other:hover{background:transparent}
+.caljump-mini-cell.today{font-weight:800;color:var(--purple-light)}
+.caljump-mini-cell.sel{background:var(--purple);color:#ffffff;font-weight:700}
+.caljump-mini-cell.sel:hover{background:var(--purple-hover)}
+.caljump-mini-dot{position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--orange)}
+.caljump-mini-cell.sel .caljump-mini-dot{background:#ffffff}
+.caljump-agenda-head{padding:12px 18px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.caljump-agenda-date{font-size:13px;font-weight:700;color:var(--text)}
+.caljump-today-btn{background:var(--orange);color:#ffffff;border:none;border-radius:var(--radius-sm);font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;transition:background .14s}
+.caljump-today-btn:hover{background:var(--orange-hover)}
+.caljump-agenda-body{flex:1;overflow-y:auto;padding:0 18px 18px;min-height:0;-webkit-overflow-scrolling:touch}
+.caljump-row{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:var(--radius);background:var(--bg-input);border:1px solid var(--border);margin-bottom:6px;cursor:pointer;transition:background .12s,border-color .12s}
+.caljump-row:hover{background:var(--bg-card-hover);border-color:var(--border)}
+.caljump-row-stripe{width:3px;align-self:stretch;border-radius:2px;flex-shrink:0}
+.caljump-row-time{font-size:11px;font-weight:700;color:var(--text-muted);white-space:nowrap;flex-shrink:0;min-width:58px}
+.caljump-row-title{flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.caljump-row-pills{display:flex;gap:3px;align-items:center;flex-shrink:0}
+.caljump-empty{padding:28px 8px;text-align:center;color:var(--text-dim);font-size:12px}
+</style>
+<div id="caljump-overlay" onclick="closeCalJumpDrawer()"></div>
+<button id="caljump-tab" onclick="openCalJumpDrawer()" title="Jump to a date" aria-label="Jump to a date">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+  <svg class="caljump-tab-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="15 18 9 12 15 6"/></svg>
+</button>
+<div id="caljump-drawer" role="dialog" aria-label="Jump to date">
+  <div class="caljump-head">
+    <span class="caljump-title">Jump to Date</span>
+    <button class="caljump-close" onclick="closeCalJumpDrawer()" title="Close" aria-label="Close">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="caljump-mini">
+    <div class="caljump-mini-head">
+      <span class="caljump-mini-month" id="caljump-mini-month"></span>
+      <div class="caljump-mini-nav">
+        <button class="caljump-mini-arrow" onclick="miniCalNav(-1)" title="Previous month">&#8249;</button>
+        <button class="caljump-mini-arrow" onclick="miniCalNav(1)" title="Next month">&#8250;</button>
+      </div>
+    </div>
+    <div class="caljump-mini-dow" id="caljump-mini-dow"></div>
+    <div class="caljump-mini-grid" id="caljump-mini-grid"></div>
+  </div>
+  <div class="caljump-agenda-head">
+    <span class="caljump-agenda-date" id="caljump-agenda-date"></span>
+    <button class="caljump-today-btn" onclick="jumpToToday()">Today</button>
+  </div>
+  <div class="caljump-agenda-body" id="caljump-agenda-body"></div>
+</div>
+<!-- END CALENDAR JUMP DRAWER -->
 </body>
 </html>
  
