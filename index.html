@@ -2189,20 +2189,14 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
             <div>
               <div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Classes</div>
-              <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="classes-list-sub">Upcoming class sessions</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="classes-list-sub">Manage your classes</div>
             </div>
-            <button class="btn btn-primary" onclick="openEnrollInClassModal()">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add to Class
+            <button class="btn btn-primary" onclick="openServiceModal(null,'class')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Class
             </button>
           </div>
           <div class="toolbar" style="margin-bottom:14px">
             <div class="search-box" style="max-width:230px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="classes-list-search" type="text" placeholder="Search classes..." oninput="renderClassesList()"></div>
-            <select class="filter-sel" id="classes-list-range" onchange="renderClassesList()"><option value="2w">Next 2 weeks</option><option value="30d">Next 30 days</option><option value="60d">Next 60 days</option><option value="future">All upcoming</option></select>
-            <select class="filter-sel" id="classes-list-filter" onchange="renderClassesList()">
-              <option value="upcoming">Any roster</option>
-              <option value="has_roster">Has roster (≥1 enrolled)</option>
-              <option value="unpaid">Unpaid roster</option>
-            </select>
             <select class="filter-sel" id="classes-list-instructor" onchange="renderClassesList()"><option value="">All instructors</option></select>
           </div>
           <div id="classes-list-body"></div>
@@ -10618,11 +10612,18 @@ function switchApptTab(tab){
 
 // Opens the payment form modal for a class participant. Closes the roster
 // first, then opens fresh. On close of the payment modal, reopens the roster.
-function openClassParticipantPayment(sessionId, contactId){
+async function openClassParticipantPayment(sessionId, contactId){
   var session=(db.classSessions||[]).find(function(x){return x.id===sessionId;});
   if(!session){toast('Session not found.','error');return;}
   var contact=getContact(contactId);
   if(!contact){toast('Contact not found.','error');return;}
+
+  // Load the full contact so squareCards + squareCustomerId are present for
+  // card on file. After pagination, getContact returns a slim record without
+  // saved cards; ensureContactFull merges the heavy fields into db.contacts,
+  // which the payment form reads. Mirrors the appointment Collect Payment flow.
+  try { await ensureContactFull(contactId); }
+  catch(e){ console.warn('Class payment: full contact load failed', e); }
 
   // Reset payment-form state so previous payments don't leak in
   _resetPaymentFormState();
@@ -19204,7 +19205,7 @@ function _classUnpaidCount(session){
 function renderClassesList(){
   var body=document.getElementById('classes-list-body');
   if(!body)return;
-  // Populate instructor filter once
+  // Populate instructor filter once.
   var instrSel=document.getElementById('classes-list-instructor');
   if(instrSel && instrSel.options.length<=1){
     var staff=allUsers();
@@ -19213,63 +19214,122 @@ function renderClassesList(){
     }).join('');
   }
   var search=(document.getElementById('classes-list-search')&&document.getElementById('classes-list-search').value||'').toLowerCase().trim();
-  var filter=(document.getElementById('classes-list-filter')&&document.getElementById('classes-list-filter').value)||'upcoming';
   var instructor=(document.getElementById('classes-list-instructor')&&document.getElementById('classes-list-instructor').value)||'';
-  var range=(document.getElementById('classes-list-range')&&document.getElementById('classes-list-range').value)||'2w';
   var today=todayStr();
-  // Compute the cutoff date for the range filter. 'future' = no cutoff.
-  var cutoff=null;
-  if(range==='2w')cutoff=_localDS(new Date(Date.now()+14*86400000));
-  else if(range==='30d')cutoff=_localDS(new Date(Date.now()+30*86400000));
-  else if(range==='60d')cutoff=_localDS(new Date(Date.now()+60*86400000));
-  var sessions=(db.classSessions||[]).filter(function(s){
-    if(s.status==='cancelled')return false;
-    if(s.date<today)return false;
-    if(cutoff && s.date>cutoff)return false;
+
+  // One card per CLASS service (not per session).
+  var classes=(db.services||[]).filter(function(s){
+    if(s.type!=='class')return false;
+    if(s.active===false)return false;
     if(instructor && s.instructor_id!==instructor)return false;
-    var enrolled=Array.isArray(s.participants)?s.participants.filter(function(p){return p.status==='enrolled';}):[];
-    if(filter==='has_roster' && enrolled.length===0)return false;
-    if(filter==='unpaid' && _classUnpaidCount(s)===0)return false;
-    if(search){
-      var svc=db.services.find(function(x){return x.id===s.service_id;});
-      var nm=(svc&&svc.name||'').toLowerCase();
-      if(!nm.includes(search))return false;
-    }
+    if(search && (s.name||'').toLowerCase().indexOf(search)<0)return false;
     return true;
-  }).sort(function(a,b){
-    return a.date.localeCompare(b.date) || (a.time||'').localeCompare(b.time||'');
-  });
+  }).sort(function(a,b){return (a.name||'').localeCompare(b.name||'');});
 
   var subEl=document.getElementById('classes-list-sub');
-  if(subEl)subEl.textContent=sessions.length+' session'+(sessions.length!==1?'s':'');
+  if(subEl)subEl.textContent=classes.length+' class'+(classes.length!==1?'es':'');
 
-  if(sessions.length===0){
-    body.innerHTML='<div class="empty-state" style="padding:32px;text-align:center;color:var(--text-muted)"><div style="font-size:13px">No classes match these filters.</div></div>';
+  if(classes.length===0){
+    body.innerHTML='<div class="empty-state" style="padding:40px;text-align:center;color:var(--main-text-muted)"><div style="font-size:14px;font-weight:600;margin-bottom:4px">No classes yet.</div><div style="font-size:12px">Click New Class to create one.</div></div>';
     return;
   }
 
-  body.innerHTML=sessions.map(function(s){
-    var svc=db.services.find(function(x){return x.id===s.service_id;});
-    var name=svc?svc.name:'Class';
+  body.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px">'+classes.map(function(s){
     var instr=getUserById(s.instructor_id);
-    var instrName=instr?(instr.name||instr.username):'TBD';
-    var enrolled=Array.isArray(s.participants)?s.participants.filter(function(p){return p.status==='enrolled';}):[];
+    var instrName=instr?(instr.name||instr.username):'No instructor';
+    var summary=_recurrenceSummary(s.recurrence_rule);
+    // Upcoming sessions for this class.
+    var upcoming=(db.classSessions||[]).filter(function(cs){
+      return cs.service_id===s.id && cs.status!=='cancelled' && cs.date>=today;
+    }).sort(function(a,b){return a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||'');});
+    var nextSess=upcoming[0]||null;
+    var nextEnrolled=nextSess&&Array.isArray(nextSess.participants)?nextSess.participants.filter(function(p){return p.status==='enrolled';}).length:0;
     var cap=s.capacity||10;
-    var unpaidN=_classUnpaidCount(s);
-    var unpaidPill=unpaidN>0
-      ? '<span class="sb-sm" style="background:rgba(245,158,11,.15);color:var(--warning-light);border:1px solid rgba(245,158,11,.4);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">'+unpaidN+' unpaid</span>'
-      : (enrolled.length>0?'<span class="sb-sm" style="background:rgba(52,211,153,.15);color:var(--success-light);border:1px solid rgba(52,211,153,.4);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">All paid</span>':'');
-    var rosterPill='<span style="font-size:11px;color:var(--text-muted);font-weight:500">'+enrolled.length+'/'+cap+'</span>';
-    return '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">'
-      +'<div style="width:54px;flex-shrink:0;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;line-height:1">'+(new Date(s.date+'T12:00:00').getDate())+'</div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600">'+MONTHS[new Date(s.date+'T12:00:00').getMonth()].slice(0,3)+'</div></div>'
-      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+esc(name)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+fmtTime(s.time||'')+' &middot; '+esc(instrName)+'</div></div>'
-      +'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+rosterPill+unpaidPill+'</div>'
-      +'<div style="display:flex;gap:6px;flex-shrink:0">'
-        +'<button class="btn btn-ghost btn-sm" onclick="quickAddToClass(\''+s.id+'\')" title="Add someone to this class">+ Add</button>'
-        +'<button class="btn btn-ghost btn-sm" onclick="openRosterModal(\''+s.id+'\')">Roster</button>'
+    var nextLine=nextSess
+      ? 'Next: '+fmtDate(nextSess.date)+(nextSess.time?' at '+fmtTime(nextSess.time):'')+' &middot; '+nextEnrolled+'/'+cap
+      : 'No upcoming sessions';
+    return '<div onclick="openClassDetail(\''+s.id+'\')" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:16px;cursor:pointer;transition:background .12s" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'var(--main-card)\'">'
+      +'<div style="font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:4px">'+esc(s.name)+'</div>'
+      +'<div style="font-size:12px;color:var(--main-text-muted);margin-bottom:10px">'+esc(instrName)+'</div>'
+      +'<div style="font-size:12px;color:var(--main-text);background:var(--purple-dim);border-radius:var(--radius);padding:6px 10px;margin-bottom:10px;display:inline-block">'+esc(summary)+'</div>'
+      +'<div style="font-size:12px;color:var(--main-text-muted);display:flex;align-items:center;justify-content:space-between">'
+        +'<span>'+nextLine+'</span>'
+        +'<span style="font-weight:600;color:var(--purple)">'+upcoming.length+' upcoming</span>'
       +'</div>'
       +'</div>';
-  }).join('');
+  }).join('')+'</div>';
+}
+
+// Turns a stored recurrence_rule into a plain-language sentence for the cards
+// and the detail header.
+function _recurrenceSummary(rule){
+  if(!rule)return 'No schedule';
+  if(typeof rule==='string'){try{rule=JSON.parse(rule);}catch(e){return 'No schedule';}}
+  var time=rule.start_time?(' at '+fmtTime(rule.start_time)):'';
+  if(rule.repeats==='once'){
+    return 'One time'+(rule.start_date?(' on '+fmtDate(rule.start_date)):'')+time;
+  }
+  if(rule.repeats==='daily'){
+    return 'Daily'+time;
+  }
+  if(rule.repeats==='weekly'){
+    var names=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var dows=(rule.days_of_week||[]).slice().sort(function(a,b){return a-b;}).map(function(i){return names[i];});
+    var dayStr=dows.length?dows.join(', '):'weekly';
+    return 'Weekly on '+dayStr+time;
+  }
+  if(rule.repeats==='monthly'){
+    var d=parseInt(rule.day_of_month)||1;
+    return 'Monthly on day '+d+time;
+  }
+  return 'Custom schedule';
+}
+
+// Class detail modal: recurrence summary, Edit Class, and upcoming dates that
+// each open the roster.
+function openClassDetail(serviceId){
+  var s=(db.services||[]).find(function(x){return x.id===serviceId;});
+  if(!s){toast('Class not found.','error');return;}
+  var instr=getUserById(s.instructor_id);
+  var instrName=instr?(instr.name||instr.username):'No instructor';
+  var summary=_recurrenceSummary(s.recurrence_rule);
+  var today=todayStr();
+  var cap=s.capacity||10;
+
+  var upcoming=(db.classSessions||[]).filter(function(cs){
+    return cs.service_id===serviceId && cs.status!=='cancelled' && cs.date>=today;
+  }).sort(function(a,b){return a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||'');});
+
+  var dateRows=upcoming.length?upcoming.map(function(cs){
+    var enrolled=Array.isArray(cs.participants)?cs.participants.filter(function(p){return p.status==='enrolled';}).length:0;
+    var unpaid=_classUnpaidCount(cs);
+    var unpaidPill=unpaid>0
+      ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;background:var(--warning-dim);color:var(--warning-text)">'+unpaid+' unpaid</span>'
+      : '';
+    return '<div onclick="closeModal();setTimeout(function(){openRosterModal(\''+cs.id+'\')},60)" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--main-border);border-radius:var(--radius);margin-bottom:8px;cursor:pointer;background:var(--main-card)" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'var(--main-card)\'">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--main-text)">'+fmtDate(cs.date)+'</div><div style="font-size:11px;color:var(--main-text-muted)">'+(cs.time?fmtTime(cs.time):'')+'</div></div>'
+      +unpaidPill
+      +'<span style="font-size:12px;font-weight:600;color:'+(enrolled>=cap?'var(--danger)':'var(--main-text-muted)')+'">'+enrolled+'/'+cap+'</span>'
+      +'<span style="font-size:11px;color:var(--purple);font-weight:600">Roster &rsaquo;</span>'
+      +'</div>';
+  }).join(''):'<div style="color:var(--main-text-muted);font-size:13px;text-align:center;padding:20px">No upcoming sessions.</div>';
+
+  var hdr='<div style="margin-bottom:16px">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+    +'<div style="font-size:13px;color:var(--main-text-muted)">'+esc(instrName)+'</div>'
+    +'<div style="font-size:12px;color:var(--main-text);background:var(--purple-dim);border-radius:var(--radius);padding:4px 10px">'+esc(summary)+'</div>'
+    +'</div>'
+    +'</div>';
+
+  var body='<div>'+hdr
+    +'<div style="font-size:12px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Upcoming dates</div>'
+    +'<div style="max-height:46vh;overflow-y:auto">'+dateRows+'</div>'
+    +'</div>';
+
+  var foot='<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
+    +'<button class="btn btn-action" onclick="closeModal();setTimeout(function(){openServiceModal(\''+serviceId+'\',\'class\')},60)">Edit Class</button>';
+
+  openModal(esc(s.name), body, foot, 'modal-lg');
 }
 
 // Quick-add a contact to a class session via a tiny picker modal.
