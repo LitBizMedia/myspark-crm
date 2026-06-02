@@ -19306,23 +19306,23 @@ function openClassDetail(serviceId){
     var unpaidPill=unpaid>0
       ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;background:var(--warning-dim);color:var(--warning-text)">'+unpaid+' unpaid</span>'
       : '';
-    return '<div onclick="closeModal();setTimeout(function(){openRosterModal(\''+cs.id+'\')},60)" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--main-border);border-radius:var(--radius);margin-bottom:8px;cursor:pointer;background:var(--main-card)" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'var(--main-card)\'">'
-      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--main-text)">'+fmtDate(cs.date)+'</div><div style="font-size:11px;color:var(--main-text-muted)">'+(cs.time?fmtTime(cs.time):'')+'</div></div>'
+    return '<div onclick="closeModal();setTimeout(function(){openRosterModal(\''+cs.id+'\')},60)" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;cursor:pointer;background:var(--bg-card)" onmouseover="this.style.background=\'var(--bg-card-hover)\'" onmouseout="this.style.background=\'var(--bg-card)\'">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text)">'+fmtDate(cs.date)+'</div><div style="font-size:11px;color:var(--text-muted)">'+(cs.time?fmtTime(cs.time):'')+'</div></div>'
       +unpaidPill
-      +'<span style="font-size:12px;font-weight:600;color:'+(enrolled>=cap?'var(--danger)':'var(--main-text-muted)')+'">'+enrolled+'/'+cap+'</span>'
+      +'<span style="font-size:12px;font-weight:600;color:'+(enrolled>=cap?'var(--danger)':'var(--text-muted)')+'">'+enrolled+'/'+cap+'</span>'
       +'<span style="font-size:11px;color:var(--purple);font-weight:600">Roster &rsaquo;</span>'
       +'</div>';
-  }).join(''):'<div style="color:var(--main-text-muted);font-size:13px;text-align:center;padding:20px">No upcoming sessions.</div>';
+  }).join(''):'<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">No upcoming sessions.</div>';
 
   var hdr='<div style="margin-bottom:16px">'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
-    +'<div style="font-size:13px;color:var(--main-text-muted)">'+esc(instrName)+'</div>'
-    +'<div style="font-size:12px;color:var(--main-text);background:var(--purple-dim);border-radius:var(--radius);padding:4px 10px">'+esc(summary)+'</div>'
+    +'<div style="font-size:13px;color:var(--text-muted)">'+esc(instrName)+'</div>'
+    +'<div style="font-size:12px;color:var(--text);background:var(--purple-dim);border-radius:var(--radius);padding:4px 10px">'+esc(summary)+'</div>'
     +'</div>'
     +'</div>';
 
   var body='<div>'+hdr
-    +'<div style="font-size:12px;font-weight:700;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Upcoming dates</div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Upcoming dates</div>'
     +'<div style="max-height:46vh;overflow-y:auto">'+dateRows+'</div>'
     +'</div>';
 
