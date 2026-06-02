@@ -29334,19 +29334,11 @@ function openClassWidgetEditor(w,isNew){
   var classServices=(db.services||[]).filter(function(s){return s.type==='class' && s.active!==false;});
   var _selSvcs=(w&&w.service_ids)||[];
 
-  var svcMsOpts=classServices.map(function(s){
-    var col=s.color||'#6b21ea';
-    return'<div class="svc-ms-opt" onclick="swgMsToggle(\''+s.id+'\')">'
-      +'<div class="svc-ms-dot" style="background:'+col+'"></div>'
-      +esc(s.name)
-      +'<span id="swg-ms-ck-'+s.id+'" style="margin-left:auto;color:#4ade80;font-weight:700;'+(_selSvcs.includes(s.id)?'':'display:none')+'">&#10003;</span>'
-      +'<input type="checkbox" id="swg-svc-'+s.id+'" class="swg-svc-chk" value="'+s.id+'" style="display:none"'+(_selSvcs.includes(s.id)?' checked':'')+'>'
-      +'</div>';
+  // Single-offering: one class per widget. Native select, first selected id wins.
+  var _selClass=_selSvcs.length?_selSvcs[0]:'';
+  var classOpts='<option value="">Select a class...</option>'+classServices.map(function(s){
+    return'<option value="'+s.id+'"'+(s.id===_selClass?' selected':'')+'>'+esc(s.name)+'</option>';
   }).join('');
-
-  var initialChips=_selSvcs.length
-    ?_selSvcs.map(function(sid){var s=classServices.find(function(x){return x.id===sid;});var col=s?s.color||'#6b21ea':'#6b21ea';var nm=s?esc(s.name):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();swgMsRemove(\''+sid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join('')
-    :'<span style="color:var(--text-muted);font-size:12px">All classes (none selected)</span>';
 
   // Count upcoming sessions for context
   var today=_localDS(new Date());
@@ -29367,18 +29359,11 @@ function openClassWidgetEditor(w,isNew){
     +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'" placeholder="e.g. Group Yoga Sessions"></div>'
 
     // Class service picker
-    +'<div class="form-group"><label>Included Classes <span style="color:var(--text-muted);font-weight:400">(none = show all class services)</span></label>'
+    +'<div class="form-group"><label>Class *</label>'
     +(classServices.length
-      ?'<div class="svc-ms-wrap" id="swg-svc-ms">'
-        +'<div class="svc-ms-display" onclick="swgMsOpen(event)">'
-        +'<div class="svc-ms-chips" id="swg-ms-chips">'+initialChips+'</div>'
-        +'<span class="svc-ms-arrow">&#9660;</span></div>'
-        +'<div class="svc-ms-dd hidden" id="swg-ms-dd">'
-        +'<input type="text" class="svc-ms-search" placeholder="Search classes..." oninput="swgMsFilter(this)">'
-        +'<div class="svc-ms-options">'+svcMsOpts+'</div>'
-        +'</div></div>'
+      ?'<select id="swg-class-select" class="input">'+classOpts+'</select>'
       :'<div style="font-size:12px;color:var(--text-muted);padding:8px">No class services configured.</div>')
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-transform:none;font-weight:400;line-height:1.4">Patients see upcoming sessions for the selected classes. '+upcomingCount+' upcoming session'+(upcomingCount===1?'':'s')+' total across your workspace.</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-transform:none;font-weight:400;line-height:1.4">Patients see upcoming sessions for this class. '+upcomingCount+' upcoming session'+(upcomingCount===1?'':'s')+' total across your workspace.</div>'
     +'</div>'
 
     // Instructor info (read-only - comes from sessions)
@@ -29430,8 +29415,10 @@ function saveClassWidget(id){
   var name=((document.getElementById('swg-name')||{}).value||'').trim();
   if(!name){toast('Widget name is required.','error');return;}
   if(!_swgConfirmDeactivate(id)) return;
-  var svcIds=Array.from(document.querySelectorAll('.swg-svc-chk:checked')).map(function(c){return c.value;});
-  // Class widgets store the chosen class service IDs. If none chosen, all class services show.
+  var classId=(document.getElementById('swg-class-select')||{}).value||'';
+  if(!classId){toast('Select a class for this widget.','error');return;}
+  // Single-offering: one class per widget. Stored as a one-element service_ids array.
+  var svcIds=[classId];
   var w={
     id:id||uid(),
     name:name,
