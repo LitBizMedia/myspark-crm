@@ -28728,6 +28728,8 @@ function _renderSvcWidgetsTab(){
 function _swgPolicySection(w, opts){
   opts = opts || {};
   var includeBuffers = opts.includeBuffers !== false;
+  var widgetType = opts.widgetType || 'service';
+  var isClass = widgetType === 'class';
 
   var paymentMode      = (w && w.payment_mode) || 'full';
   var depositType      = (w && w.deposit_type) || 'flat';
@@ -28744,7 +28746,6 @@ function _swgPolicySection(w, opts){
   var advanceDays      = (w && w.booking_advance_days != null) ? w.booking_advance_days : '';
   var bufBefore        = (w && w.buffer_before_override != null) ? w.buffer_before_override : '';
   var bufAfter         = (w && w.buffer_after_override != null) ? w.buffer_after_override : '';
-  var customDomain     = (w && w.custom_domain) || '';
   var slotInterval     = (w && w.slot_interval_minutes) ? String(w.slot_interval_minutes) : '';
   var requirePayment   = !!(w && w.require_payment);
 
@@ -28768,8 +28769,15 @@ function _swgPolicySection(w, opts){
 
     // PAYMENT
     +sectionLabel('Payment')
+    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
+    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-req-pay\');c.checked=!c.checked;_swgTogglePolicy()">'
+    +'<input id="swg-req-pay" type="checkbox"'+(requirePayment?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()" onchange="_swgTogglePolicy()">'
+    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Require payment to book</div>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-left:26px;text-transform:none;font-weight:400">When enabled, patients must pay before the booking is confirmed. Requires Square to be connected.</div>'
+    +'</div>'
     +'<div id="swg-pol-payment-wrap" style="'+(requirePayment?'':'opacity:0.5;pointer-events:none')+'">'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;font-style:italic">'+(requirePayment?'':'Turn on "Require payment to book online" above to enable these settings.')+'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;font-style:italic">'+(requirePayment?'':'Turn on "Require payment to book" above to enable these settings.')+'</div>'
     +'<div class="form-group">'
     +'<label>Payment mode</label>'
     +'<select id="swg-payment-mode" onchange="_swgTogglePolicy()">'
@@ -28811,16 +28819,19 @@ function _swgPolicySection(w, opts){
 
     // BOOKING WINDOW
     +sectionLabel('Booking window')
-    +'<div class="form-group">'
-    +'<label>Slot interval <span style="color:var(--text-muted);font-weight:400">(how often a new slot is offered)</span></label>'
-    +'<select id="swg-slot-interval">'
-    +'<option value=""'+(!slotInterval?' selected':'')+'>Default (every 15 min)</option>'
-    +'<option value="10"'+(slotInterval==='10'?' selected':'')+'>Every 10 min</option>'
-    +'<option value="15"'+(slotInterval==='15'?' selected':'')+'>Every 15 min</option>'
-    +'<option value="30"'+(slotInterval==='30'?' selected':'')+'>Every 30 min</option>'
-    +'<option value="60"'+(slotInterval==='60'?' selected':'')+'>Every hour</option>'
-    +'</select>'
-    +'</div>'
+    // Slot interval omitted for class widgets: a class session is a fixed
+    // time block, not a series of bookable slots.
+    +(isClass?'':''
+      +'<div class="form-group">'
+      +'<label>Slot interval <span style="color:var(--text-muted);font-weight:400">(how often a new slot is offered)</span></label>'
+      +'<select id="swg-slot-interval">'
+      +'<option value=""'+(!slotInterval?' selected':'')+'>Default (every 15 min)</option>'
+      +'<option value="10"'+(slotInterval==='10'?' selected':'')+'>Every 10 min</option>'
+      +'<option value="15"'+(slotInterval==='15'?' selected':'')+'>Every 15 min</option>'
+      +'<option value="30"'+(slotInterval==='30'?' selected':'')+'>Every 30 min</option>'
+      +'<option value="60"'+(slotInterval==='60'?' selected':'')+'>Every hour</option>'
+      +'</select>'
+      +'</div>')
     +'<div class="form-row">'
     +'<div class="form-group"><label>Lead time <span style="color:var(--text-muted);font-weight:400">(hours)</span></label><input id="swg-lead-hours" type="number" min="0" max="720" placeholder="no minimum" value="'+esc(leadHours)+'"></div>'
     +'<div class="form-group"><label>Advance window <span style="color:var(--text-muted);font-weight:400">(days)</span></label><input id="swg-advance-days" type="number" min="0" max="365" placeholder="no maximum" value="'+esc(advanceDays)+'"></div>'
@@ -28833,12 +28844,6 @@ function _swgPolicySection(w, opts){
       +'<div class="form-group"><label>Buffer after <span style="color:var(--text-muted);font-weight:400">(minutes, override)</span></label><input id="swg-buf-after" type="number" min="0" max="240" placeholder="use service default" value="'+esc(bufAfter)+'"></div>'
       +'</div>';
   }
-
-  // ADVANCED
-  html += ''
-    +sectionLabel('Advanced')
-    +'<div class="form-group"><label>Custom domain <span style="color:var(--text-muted);font-weight:400">(coming soon)</span></label><input id="swg-custom-domain" type="text" placeholder="book.yourbiz.com" value="'+esc(customDomain)+'"></div>'
-    +'</div>';
 
   return html;
 }
@@ -28924,7 +28929,6 @@ function _swgPolicyToPayload(){
     booking_advance_days: nullableInt('swg-advance-days'),
     buffer_before_override: nullableInt('swg-buf-before'),
     buffer_after_override: nullableInt('swg-buf-after'),
-    custom_domain: (getValue('swg-custom-domain','').trim() || null),
     slot_interval_minutes: slotIntervalMins
   };
 }
@@ -29219,7 +29223,6 @@ function openServiceWidgetEditor(w,isNew){
   _swgState.dragId=null;
 
   var curLogo=(w&&w.logo_url)||'';
-  var requirePayment=!!(w&&w.require_payment);
   var confirmMsg=(w&&w.confirm_message)||'';
   // Read saved round_robin_config strategy (default 'random')
   var savedStrategy=(w&&w.round_robin_config&&w.round_robin_config.strategy)||'random';
@@ -29273,13 +29276,6 @@ function openServiceWidgetEditor(w,isNew){
     +'</div>'
 
     // Require payment toggle
-    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
-    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-req-pay\');c.checked=!c.checked;_swgTogglePolicy()">'
-    +'<input id="swg-req-pay" type="checkbox"'+(requirePayment?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()" onchange="_swgTogglePolicy()">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Require payment to book online</div>'
-    +'</div>'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-left:26px;text-transform:none;font-weight:400">When enabled, patients must enter card info and pay before the booking is confirmed. Requires Square to be connected.</div>'
-    +'</div>'
 
     // Custom confirmation message
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after booking)</span></label>'
@@ -29347,7 +29343,6 @@ function openClassWidgetEditor(w,isNew){
   }).length;
 
   var curLogo=(w&&w.logo_url)||'';
-  var requirePayment=!!(w&&w.require_payment);
   var confirmMsg=(w&&w.confirm_message)||'';
 
   var body='<div style="display:flex;flex-direction:column;gap:14px">'
@@ -29366,11 +29361,6 @@ function openClassWidgetEditor(w,isNew){
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-transform:none;font-weight:400;line-height:1.4">Patients see upcoming sessions for this class. '+upcomingCount+' upcoming session'+(upcomingCount===1?'':'s')+' total across your workspace.</div>'
     +'</div>'
 
-    // Instructor info (read-only - comes from sessions)
-    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text);margin-bottom:4px">Instructor</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.5">Each class session has its own instructor, set when you create the session. Patients see the instructor name on each session card.</div>'
-    +'</div>'
 
     +'<div class="form-row">'
     +'<div class="form-group"><label>Primary Color</label><input id="swg-color" type="color" value="'+(w&&w.primary_color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
@@ -29388,19 +29378,12 @@ function openClassWidgetEditor(w,isNew){
     +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Reserve your spot in our upcoming classes" value="'+esc(w&&w.tagline||'')+'"></div>'
 
     // Require payment toggle
-    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
-    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-req-pay\');c.checked=!c.checked;_swgTogglePolicy()">'
-    +'<input id="swg-req-pay" type="checkbox"'+(requirePayment?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()" onchange="_swgTogglePolicy()">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Require payment to register</div>'
-    +'</div>'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-left:26px;text-transform:none;font-weight:400">When enabled, patients must pay the session price before registration is confirmed. Each session has its own price set in the class service.</div>'
-    +'</div>'
 
     // Custom confirmation message
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after registration)</span></label>'
     +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thanks for registering! See you in class.">'+esc(confirmMsg)+'</textarea></div>'
 
-    +_swgPolicySection(w, {includeBuffers:false})
+    +_swgPolicySection(w, {includeBuffers:false, widgetType:'class'})
 
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
@@ -29515,7 +29498,6 @@ function openAppointmentWidgetModal(w,isNew){
     :'<span style="color:var(--text-muted);font-size:12px">Select providers...</span>';
 
   var curLogo=(w&&w.logo_url)||'';
-  var requirePayment=!!(w&&w.require_payment);
   var confirmMsg=(w&&w.confirm_message)||'';
 
   var body='<div style="display:flex;flex-direction:column;gap:14px">'
@@ -29590,13 +29572,6 @@ function openAppointmentWidgetModal(w,isNew){
     +'</div>'
     +'<div class="form-group"><label>Tagline</label><input id="swg-tag" type="text" placeholder="Schedule a consultation" value="'+esc((w&&w.tagline)||'')+'"></div>'
 
-    +'<div class="form-group" style="background:var(--bg-card);border-radius:6px;padding:12px">'
-    +'<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-req-pay\');c.checked=!c.checked;_swgTogglePolicy()">'
-    +'<input id="swg-req-pay" type="checkbox"'+(requirePayment?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()" onchange="_swgTogglePolicy()">'
-    +'<div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Require payment to book online</div>'
-    +'</div>'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-left:26px;text-transform:none;font-weight:400">When enabled, patients pay the appointment type price up front. Requires Square to be connected.</div>'
-    +'</div>'
 
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after booking)</span></label>'
     +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thank you! Your appointment is confirmed.">'+esc(confirmMsg)+'</textarea></div>'
