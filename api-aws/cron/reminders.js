@@ -60,30 +60,6 @@ async function getSubaccountData(subaccountId) {
   }
 }
 
-// Load widget reminder config for a subaccount. Returns map of widget_id -> config.
-async function getWidgetReminderConfig(subaccountId) {
-  try {
-    const r = await db.query(
-      `SELECT id, send_reminder_email, send_reminder_sms, reminder_hours_before
-         FROM service_widgets
-        WHERE subaccount_id = $1`,
-      [subaccountId]
-    );
-    const map = {};
-    for (const w of r.rows) {
-      map[w.id] = {
-        send_reminder_email: w.send_reminder_email !== false,
-        send_reminder_sms: !!w.send_reminder_sms,
-        reminder_hours_before: w.reminder_hours_before != null ? parseInt(w.reminder_hours_before) : 24
-      };
-    }
-    return map;
-  } catch (e) {
-    console.error('getWidgetReminderConfig error:', e.message);
-    return {};
-  }
-}
-
 // getSmsSettings removed 2026-05-21: replaced by lib/sms-gate.canSubaccountSendSms helper.
 
 async function getTemplate(subaccountId, templateType) {
@@ -162,15 +138,6 @@ async function runReminders() {
     subDataCache.set(subaccountId, d);
     return d;
   }
-  // Cache widget reminder configs per-tenant
-  const widgetCfgCache = new Map();
-  async function getCachedWidgetCfgs(subaccountId) {
-    if (widgetCfgCache.has(subaccountId)) return widgetCfgCache.get(subaccountId);
-    const cfgs = await getWidgetReminderConfig(subaccountId);
-    widgetCfgCache.set(subaccountId, cfgs);
-    return cfgs;
-  }
-
   // Pre-fetch contacts and users referenced by this batch in one query each.
   // Contacts and users moved to RDS; do not read them from the blob.
   const contactIds = [...new Set(appointments.map(a => a.contact_id).filter(Boolean))];
@@ -216,30 +183,18 @@ async function runReminders() {
 
     const hoursUntilDate = (apptDate - now) / 3600000;
 
-    // Subaccount-level notification settings are the authoritative gate.
+    // Subaccount-level notification settings are the only gate.
     // If the admin has disabled appointment_reminder for this subaccount,
-    // skip the appointment entirely regardless of widget config.
+    // skip the appointment entirely.
     const notifGate = await shouldSend(appt.subaccount_id, 'appointment_reminder', db);
     if (!notifGate.ok) { skipped++; continue; }
 
-    // Start with subaccount-level settings as the baseline.
+    // Timing and channels come from the global notification settings.
     let hoursBefore = notifGate.timing_minutes_before
       ? Math.round(notifGate.timing_minutes_before / 60)
       : 24;
     let emailEnabled = notifGate.email_enabled;
     let smsEnabled = notifGate.sms_enabled;
-
-    // Widget-level config can further restrict but not expand. AND-logic
-    // ensures a widget cannot bypass a subaccount-level disable.
-    if (appt.booked_via === 'widget' && appt.widget_id) {
-      const widgetCfgs = await getCachedWidgetCfgs(appt.subaccount_id);
-      const cfg = widgetCfgs[appt.widget_id];
-      if (cfg) {
-        hoursBefore = cfg.reminder_hours_before;
-        emailEnabled = emailEnabled && cfg.send_reminder_email;
-        smsEnabled = smsEnabled && cfg.send_reminder_sms;
-      }
-    }
 
     // Window: hoursBefore +/- 2 hours. Cron runs hourly so each appt is
     // checked multiple times in this 4h window; idempotency guard below

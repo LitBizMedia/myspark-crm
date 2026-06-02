@@ -28,6 +28,7 @@ const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
 const { logAudit } = require('./lib/audit');
 const mailgun = require('./lib/mailgun');
+const { shouldSend } = require('./lib/notifications');
 const { getSquareCreds, squareHost, squareHeaders } = require('./lib/square');
 const { isTimeAvailable } = require('./lib/schedule');
 const { isLineTaxable } = require('./lib/tax');
@@ -1075,11 +1076,10 @@ async function handler(req, res) {
     });
 
     // 16. Confirmation email (don't fail the booking if email fails)
-    // Per-widget send_confirmation_email overrides global bookingSettings.send_confirmation_email.
-    // Default: send. Either setting being explicitly false suppresses.
-    const emailGate = (widget && widget.send_confirmation_email === false)
-      ? false
-      : (bs.send_confirmation_email !== false);
+    // Send decision is owned globally by the notifications catalog.
+    // appointment_confirmation covers all booking sources (service, appointment, class).
+    const confirmGate = await shouldSend(subaccountId, 'appointment_confirmation', db);
+    const emailGate = confirmGate.ok;
 
     // Self-serve cancel/reschedule: generate tokens when widget allows.
     // Cancel deadline: appointment time minus widget.cancel_window_hours (default 24).

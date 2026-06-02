@@ -28759,10 +28759,6 @@ function _swgPolicySection(w, opts){
   var requireExisting  = !!(w && w.require_existing_patient);
   var allowCancel      = !w || w.allow_self_cancel !== false;
   var cancelWindow     = (w && w.cancel_window_hours != null) ? w.cancel_window_hours : 24;
-  var sendConfEmail    = !w || w.send_confirmation_email !== false;
-  var sendReminderEmail= !w || w.send_reminder_email !== false;
-  var reminderHours    = (w && w.reminder_hours_before != null) ? w.reminder_hours_before : 24;
-  var sendReminderSms  = !!(w && w.send_reminder_sms);
   var leadHours        = (w && w.booking_lead_time_hours != null) ? w.booking_lead_time_hours : '';
   var advanceDays      = (w && w.booking_advance_days != null) ? w.booking_advance_days : '';
   var bufBefore        = (w && w.buffer_before_override != null) ? w.buffer_before_override : '';
@@ -28787,7 +28783,7 @@ function _swgPolicySection(w, opts){
   var html = ''
     +'<div style="margin-top:24px;padding-top:18px;border-top:2px solid var(--main-border)">'
     +'<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Booking Policies</div>'
-    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Per-widget settings for payment, patient form, cancellation, reminders, and booking window.</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Per-widget settings for payment, patient form, cancellation, and booking window.</div>'
 
     // PAYMENT
     +sectionLabel('Payment')
@@ -28831,15 +28827,6 @@ function _swgPolicySection(w, opts){
     +'<input id="swg-cancel-window" type="number" min="0" max="720" value="'+esc(cancelWindow)+'">'
     +'</div>'
 
-    // EMAIL & SMS
-    +sectionLabel('Notifications')
-    +cbRow('swg-send-confirm-email','Send confirmation email',sendConfEmail,'Sent immediately after booking.','')
-    +cbRow('swg-send-reminder-email','Send reminder email',sendReminderEmail,'Sent X hours before the appointment.','_swgTogglePolicy()')
-    +'<div class="form-group" id="swg-reminder-wrap" style="'+(sendReminderEmail?'':'display:none')+'">'
-    +'<label>Reminder lead time (hours)</label>'
-    +'<input id="swg-reminder-hours" type="number" min="1" max="168" value="'+esc(reminderHours)+'">'
-    +'</div>'
-    +cbRow('swg-send-reminder-sms','Send reminder SMS',sendReminderSms,'Requires Twilio campaign approval.','')
 
     // BOOKING WINDOW
     +sectionLabel('Booking window')
@@ -28905,10 +28892,6 @@ function _swgTogglePolicy(){
   var cw = document.getElementById('swg-cancel-wrap');
   if (cancelEl && cw) cw.style.display = cancelEl.checked ? '' : 'none';
 
-  // Reminder hours only when send_reminder_email
-  var remEl = document.getElementById('swg-send-reminder-email');
-  var rw = document.getElementById('swg-reminder-wrap');
-  if (remEl && rw) rw.style.display = remEl.checked ? '' : 'none';
 }
 
 function _swgPolicyToPayload(){
@@ -28956,10 +28939,6 @@ function _swgPolicyToPayload(){
     require_existing_patient: getCheckbox('swg-require-existing', false),
     allow_self_cancel: getCheckbox('swg-allow-cancel', true),
     cancel_window_hours: parseInt(getValue('swg-cancel-window','24'),10) || 24,
-    send_confirmation_email: getCheckbox('swg-send-confirm-email', true),
-    send_reminder_email: getCheckbox('swg-send-reminder-email', true),
-    reminder_hours_before: parseInt(getValue('swg-reminder-hours','24'),10) || 24,
-    send_reminder_sms: getCheckbox('swg-send-reminder-sms', false),
     booking_lead_time_hours: nullableInt('swg-lead-hours'),
     booking_advance_days: nullableInt('swg-advance-days'),
     buffer_before_override: nullableInt('swg-buf-before'),

@@ -94,10 +94,6 @@ async function handler(req, res) {
   if (cancelWindow < 0 || cancelWindow > 720) {
     return res.status(400).json({ error: 'cancel_window_hours must be 0-720' });
   }
-  const reminderHours = toIntWithDefault(w.reminder_hours_before, 24);
-  if (reminderHours < 1 || reminderHours > 168) {
-    return res.status(400).json({ error: 'reminder_hours_before must be 1-168' });
-  }
   const leadHours = toNullableInt(w.booking_lead_time_hours);
   if (leadHours != null && (leadHours < 0 || leadHours > 720)) {
     return res.status(400).json({ error: 'booking_lead_time_hours must be 0-720' });
@@ -174,10 +170,13 @@ async function handler(req, res) {
       toBool(w.require_existing_patient, false),                  // $26
       toBool(w.allow_self_cancel, true),                          // $27
       cancelWindow,                                               // $28
-      toBool(w.send_confirmation_email, true),                    // $29
-      toBool(w.send_reminder_email, true),                        // $30
-      reminderHours,                                              // $31
-      toBool(w.send_reminder_sms, false),                         // $32
+      // Inert: global notification settings own all send decisions.
+      // Columns and these placeholders are removed together in the
+      // service_widgets column-drop migration (see booking plan doc).
+      true,                                                       // $29 send_confirmation_email (inert)
+      true,                                                       // $30 send_reminder_email (inert)
+      24,                                                         // $31 reminder_hours_before (inert)
+      false,                                                      // $32 send_reminder_sms (inert)
       leadHours,                                                  // $33
       advanceDays,                                                // $34
       toNullableInt(w.buffer_before_override),                    // $35

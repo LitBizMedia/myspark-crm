@@ -51,7 +51,6 @@ async function handler(req, res) {
                 allow_coupons, allow_tip, tip_percentages,
                 collect_phone, collect_notes, require_existing_patient,
                 allow_self_cancel, cancel_window_hours,
-                send_confirmation_email, send_reminder_email, reminder_hours_before, send_reminder_sms,
                 booking_lead_time_hours, booking_advance_days,
                 buffer_before_override, buffer_after_override,
                 total_views, total_bookings, custom_domain, slot_interval_minutes
@@ -85,7 +84,6 @@ async function handler(req, res) {
                 allow_coupons, allow_tip, tip_percentages,
                 collect_phone, collect_notes, require_existing_patient,
                 allow_self_cancel, cancel_window_hours,
-                send_confirmation_email, send_reminder_email, reminder_hours_before, send_reminder_sms,
                 booking_lead_time_hours, booking_advance_days,
                 buffer_before_override, buffer_after_override,
                 total_views, total_bookings, custom_domain, slot_interval_minutes
