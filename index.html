@@ -9311,53 +9311,6 @@ function _apptVariationOptionsHTML(serviceId, currentId){
 // Generic dropdown menu attached to a trigger button. Items: [{label, onClick}].
 // Menu auto-closes on outside click. Right-aligned to button so it never overflows
 // off the right edge of the screen (most +Add buttons sit on the right of headers).
-function openDropdownMenu(buttonEl, items){
-  closeDropdownMenu();
-  var rect = buttonEl.getBoundingClientRect();
-  var menu = document.createElement('div');
-  menu.id = 'global-dropdown-menu';
-  // Anchor right edge of menu to right edge of button. Menu grows leftward.
-  var rightOffset = window.innerWidth - rect.right;
-  menu.style.cssText = 'position:fixed;top:' + (rect.bottom + 4) + 'px;right:' + rightOffset + 'px;'
-    + 'background:var(--main-card);border:1px solid var(--main-border);border-radius:6px;'
-    + 'box-shadow:0 6px 20px rgba(0,0,0,.25);padding:4px;z-index:10000;min-width:' + Math.max(rect.width, 180) + 'px;';
-  items.forEach(function(item){
-    if (item.divider) {
-      var d = document.createElement('div');
-      d.style.cssText = 'height:1px;background:var(--main-border);margin:4px 0;';
-      menu.appendChild(d);
-      return;
-    }
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.style.cssText = 'display:block;width:100%;padding:8px 12px;text-align:left;'
-      + 'background:transparent;border:none;cursor:pointer;color:var(--main-text);'
-      + 'font-size:13px;font-weight:500;border-radius:4px;font-family:inherit;';
-    btn.textContent = item.label;
-    btn.onmouseover = function(){ btn.style.background = 'var(--main-bg)'; };
-    btn.onmouseout = function(){ btn.style.background = 'transparent'; };
-    btn.onclick = function(e){
-      e.stopPropagation();
-      closeDropdownMenu();
-      item.onClick();
-    };
-    menu.appendChild(btn);
-  });
-  document.body.appendChild(menu);
-  setTimeout(function(){
-    document.addEventListener('click', _dropdownOutsideHandler);
-  }, 10);
-}
-function _dropdownOutsideHandler(e){
-  var menu = document.getElementById('global-dropdown-menu');
-  if (!menu || !menu.contains(e.target)) closeDropdownMenu();
-}
-function closeDropdownMenu(){
-  var menu = document.getElementById('global-dropdown-menu');
-  if (menu) menu.remove();
-  document.removeEventListener('click', _dropdownOutsideHandler);
-}
-
 // +Schedule dropdown on calendar and appointments list views.
 // Opens the unified appointment modal. The modal itself handles Service vs
 // Custom mode via internal tabs (see _renderApptModeTabs).
@@ -9365,104 +9318,8 @@ function openScheduleMenu(btnEl){
   openApptModal(null, null, null, null, null, null, null);
 }
 
-// +Add dropdown on the catalog (Service Calendars tab).
-function openCatalogAddMenu(btnEl){
-  openDropdownMenu(btnEl, [
-    { label: 'Service', onClick: function(){ openServiceModal(null, 'individual'); } },
-    { label: 'Class',              onClick: function(){ openServiceModal(null, 'class'); } }
-  ]);
-}
-
 // Add to Class flow: pick class, pick session, pick contact, enroll.
 // Reuses svcEnroll which handles capacity, already-enrolled, and roster display.
-function openEnrollInClassModal(){
-  var today = todayStr();
-  var classesWithSessions = (db.services || []).filter(function(svc){
-    if (svc.type !== 'class' || svc.active === false) return false;
-    return (db.classSessions || []).some(function(cs){
-      return cs.service_id === svc.id && cs.date >= today && cs.status !== 'cancelled';
-    });
-  });
-
-  if (!classesWithSessions.length) {
-    toast('No upcoming class sessions. Schedule one in Service Calendars first.', 'warn');
-    return;
-  }
-
-  var classOpts = '<option value="">Pick a class...</option>'
-    + classesWithSessions.map(function(c){
-      return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
-    }).join('');
-
-  // min-height keeps the contact search-select dropdown visible without
-  // scrolling. The dropdown renders absolute-positioned, and a tighter modal
-  // would clip it inside the body's overflow:auto.
-  var body = '<div style="display:flex;flex-direction:column;gap:14px;min-height:480px">'
-    + '<div class="form-group"><label>Class *</label><select id="enroll-class" onchange="enrollOnClassChange()">' + classOpts + '</select></div>'
-    + '<div class="form-group" id="enroll-session-wrap" style="display:none"><label>Session *</label><select id="enroll-session" onchange="enrollOnSessionChange()"></select></div>'
-    + '<div class="form-group" id="enroll-contact-wrap" style="display:none"><label>Contact *</label>' + ssHTML('enroll-cw','enroll-ci','enroll-cv','enroll-cd','Search contact...','') + '</div>'
-    + '</div>';
-
-  var footer = '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    + '<button class="btn btn-primary" onclick="enrollSubmit()">Enroll</button>';
-
-  openModal('Add to Class', body, footer);
-}
-
-function enrollOnClassChange(){
-  var classSel = document.getElementById('enroll-class');
-  var classId = classSel ? classSel.value : '';
-  var sessionWrap = document.getElementById('enroll-session-wrap');
-  var contactWrap = document.getElementById('enroll-contact-wrap');
-
-  if (!classId) {
-    if (sessionWrap) sessionWrap.style.display = 'none';
-    if (contactWrap) contactWrap.style.display = 'none';
-    return;
-  }
-
-  var today = todayStr();
-  var sessions = (db.classSessions || []).filter(function(cs){
-    return cs.service_id === classId && cs.date >= today && cs.status !== 'cancelled';
-  }).sort(function(a, b){
-    return a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '');
-  });
-
-  var sessOpts = '<option value="">Pick a session...</option>'
-    + sessions.map(function(s){
-      var enrolled = (s.participants || []).filter(function(p){ return p.status === 'enrolled'; }).length;
-      var cap = s.capacity || 10;
-      var full = enrolled >= cap;
-      return '<option value="' + s.id + '"' + (full ? ' disabled' : '') + '>'
-        + fmtDate(s.date) + (s.time ? ' at ' + fmtTime(s.time) : '')
-        + ' (' + enrolled + '/' + cap + (full ? ' - FULL' : '') + ')</option>';
-    }).join('');
-
-  var sessSel = document.getElementById('enroll-session');
-  if (sessSel) sessSel.innerHTML = sessOpts;
-  if (sessionWrap) sessionWrap.style.display = 'block';
-  if (contactWrap) contactWrap.style.display = 'none';
-}
-
-function enrollOnSessionChange(){
-  var sessSel = document.getElementById('enroll-session');
-  var sessionId = sessSel ? sessSel.value : '';
-  var contactWrap = document.getElementById('enroll-contact-wrap');
-  if (contactWrap) contactWrap.style.display = sessionId ? 'block' : 'none';
-}
-
-function enrollSubmit(){
-  var sessSel = document.getElementById('enroll-session');
-  var contactInp = document.getElementById('enroll-cv');
-  var sessionId = sessSel ? sessSel.value : '';
-  var contactId = contactInp ? contactInp.value : '';
-  if (!sessionId) { toast('Pick a session.', 'error'); return; }
-  if (!contactId) { toast('Pick a contact.', 'error'); return; }
-  closeModal();
-  // svcEnroll handles capacity, already-enrolled, and opens the roster modal as confirmation.
-  svcEnroll(sessionId, contactId);
-}
-
 // Called when service dropdown changes. Prefills title, duration, buffers,
 // refreshes variation dropdown, and filters staff to assigned_staff.
 function renderApptAddonsSection(){
@@ -19347,55 +19204,6 @@ function openClassDetail(serviceId){
 
 // Quick-add a contact to a class session via a tiny picker modal.
 // Reuses svcEnroll for the actual enrollment.
-function quickAddToClass(sessionId){
-  var s=(db.classSessions||[]).find(function(x){return x.id===sessionId;});
-  if(!s){toast('Session not found.','error');return;}
-  var svc=db.services.find(function(x){return x.id===s.service_id;});
-  var enrolled=Array.isArray(s.participants)?s.participants.filter(function(p){return p.status==='enrolled';}):[];
-  var enrolledIds=enrolled.map(function(p){return p.contact_id;});
-  var available=(db.contacts||[]).filter(function(c){return !enrolledIds.includes(c.id);})
-    .sort(function(a,b){return ((a.first||'')+(a.last||'')).localeCompare((b.first||'')+(b.last||''));});
-  var capLeft=(s.capacity||10)-enrolled.length;
-  var body='<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px"><strong>'+esc(svc?svc.name:'Class')+'</strong> &middot; '+fmtDate(s.date)+' '+fmtTime(s.time||'')+' &middot; '+capLeft+' spot'+(capLeft!==1?'s':'')+' left</div>'
-    +'<div class="form-group"><label>Search contacts</label><input id="qac-search" type="text" placeholder="Type to filter..." oninput="_qacFilter()" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box"></div>'
-    +'<div id="qac-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)"></div>';
-  state._qacSession=sessionId;
-  state._qacAvail=available;
-  openModal('Add to class', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-md');
-  _qacRender();
-}
-
-function _qacRender(){
-  var listEl=document.getElementById('qac-list');
-  var search=(document.getElementById('qac-search')&&document.getElementById('qac-search').value||'').toLowerCase().trim();
-  var avail=state._qacAvail||[];
-  var filtered=avail.filter(function(c){
-    if(!search)return true;
-    var nm=((c.first||'')+' '+(c.last||'')+' '+(c.email||'')).toLowerCase();
-    return nm.includes(search);
-  }).slice(0,30);
-  if(filtered.length===0){
-    listEl.innerHTML='<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:13px">No contacts match.</div>';
-    return;
-  }
-  listEl.innerHTML=filtered.map(function(c){
-    var nm=((c.first||'')+' '+(c.last||'')).trim()||c.email||'(unnamed)';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="_qacAdd(\''+c.id+'\')"><div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(nm)+'</div>'+(c.email?'<div style="font-size:11px;color:var(--text-muted)">'+esc(c.email)+'</div>':'')+'</div><span class="btn btn-purple btn-sm" style="pointer-events:none">Add</span></div>';
-  }).join('');
-}
-
-function _qacFilter(){_qacRender();}
-
-function _qacAdd(contactId){
-  var sessionId=state._qacSession;
-  if(!sessionId)return;
-  closeModal();
-  svcEnroll(sessionId, contactId);
-  // Refresh the list view after the enrollment posts
-  setTimeout(renderClassesList, 250);
-}
-
-
 // =====================================================
 // SERVICE CALENDARS
 // =====================================================
@@ -19447,7 +19255,6 @@ function svcMsFilter(inp){
 function renderServiceCal(){
   var el=document.getElementById('svc-cal-body');if(!el)return;
   if(state.svcCatF==null)state.svcCatF='';
-  if(state.svcTypeF==null)state.svcTypeF='';
   if(state.svcStatF==null)state.svcStatF='';
   if(state.svcStaffF==null)state.svcStaffF='';
 
@@ -19457,9 +19264,8 @@ function renderServiceCal(){
 
   // Apply filters
   var filtered=allSvcs.filter(function(s){
+    if(s.type==='class')return false; // classes are managed in the Classes tab
     if(state.svcCatF&&s.category!==state.svcCatF)return false;
-    if(state.svcTypeF==='individual'&&s.type==='class')return false;
-    if(state.svcTypeF==='class'&&s.type!=='class')return false;
     if(state.svcStatF==='active'&&s.active===false)return false;
     if(state.svcStatF==='inactive'&&s.active!==false)return false;
     if(state.svcStaffF){
@@ -19480,7 +19286,7 @@ function renderServiceCal(){
 
   var total=filtered.length;
   var totalAll=allSvcs.length;
-  var hasActiveFilter=!!(state.svcCatF||state.svcTypeF||state.svcStatF||state.svcStaffF);
+  var hasActiveFilter=!!(state.svcCatF||state.svcStatF||state.svcStaffF);
 
   // Header
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">'
@@ -19489,7 +19295,7 @@ function renderServiceCal(){
     +'<div style="display:flex;gap:8px">'
     +'<button class="btn btn-ghost btn-sm" onclick="openCategoriesModal()">Manage Categories</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="openResourcesModal()">Manage Resources</button>'
-    +'<button class="btn btn-primary" onclick="openCatalogAddMenu(this)">+ Add</button>'
+    +'<button class="btn btn-primary" onclick="openServiceModal(null,\'individual\')">+ Add Service</button>'
     +'</div></div>';
 
   // Filter bar: type pill toggle + category dropdown + staff dropdown + status dropdown + clear
@@ -19499,11 +19305,6 @@ function renderServiceCal(){
     +cats.map(function(c){return'<option value="'+esc(c)+'"'+(state.svcCatF===c?' selected':'')+'>'+esc(c)+'</option>';}).join('');
 
   h+='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">'
-    +'<div class="view-toggle" style="flex-shrink:0">'
-    +'<button class="view-btn'+(state.svcTypeF===''?' active':'')+'" onclick="state.svcTypeF=\'\';renderServiceCal()">All</button>'
-    +'<button class="view-btn'+(state.svcTypeF==='individual'?' active':'')+'" onclick="state.svcTypeF=\'individual\';renderServiceCal()">Services</button>'
-    +'<button class="view-btn'+(state.svcTypeF==='class'?' active':'')+'" onclick="state.svcTypeF=\'class\';renderServiceCal()">Classes</button>'
-    +'</div>'
     +'<select class="filter-sel" onchange="state.svcCatF=this.value;renderServiceCal()">'+catOpts+'</select>'
     +'<select class="filter-sel" onchange="state.svcStaffF=this.value;renderServiceCal()">'+staffOpts+'</select>'
     +'<select class="filter-sel" onchange="state.svcStatF=this.value;renderServiceCal()">'
@@ -19512,7 +19313,7 @@ function renderServiceCal(){
     +'<option value="inactive"'+(state.svcStatF==='inactive'?' selected':'')+'>Inactive</option>'
     +'</select>'
     +(hasActiveFilter
-      ?'<button class="btn btn-ghost btn-sm" onclick="state.svcCatF=\'\';state.svcTypeF=\'\';state.svcStatF=\'\';state.svcStaffF=\'\';renderServiceCal()">Clear filters</button>'
+      ?'<button class="btn btn-ghost btn-sm" onclick="state.svcCatF=\'\';state.svcStatF=\'\';state.svcStaffF=\'\';renderServiceCal()">Clear filters</button>'
       :'')
     +'</div>';
 
