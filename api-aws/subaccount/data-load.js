@@ -330,7 +330,7 @@ async function handler(req, res) {
         .filter(function(id){ return !!id; });
       if (avatarIds.length) {
         const mediaRes = await db.query(
-          'SELECT id, file_key FROM media_files WHERE subaccount_id = $1 AND id = ANY($2::text[])',
+          'SELECT id::text AS id, file_key FROM media_files WHERE subaccount_id = $1 AND id::text = ANY($2::text[])',
           [subaccountId, avatarIds]
         );
         const keyById = {};
