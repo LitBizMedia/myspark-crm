@@ -1553,6 +1553,9 @@ function renderCouponBlock() {
   const subtotal = parseFloat(S.class_session?.price ?? S.variation?.price ?? S.appointment_type?.price ?? S.service?.price ?? 0) || 0;
   if (subtotal <= 0) return ''; // no coupon for free services
   if (D.settings.allow_coupons === false) return ''; // widget has coupons disabled
+  const requirePayment = !!D.settings.require_payment;
+  const paymentMode = D.settings.payment_mode || 'full';
+  if (!requirePayment || paymentMode === 'none') return ''; // no charge at booking, coupon would discount nothing
   const applied = !!S.coupon_code;
   const validating = !!S.coupon_validating;
   const status = S.coupon_status; // 'success' | 'error' | null
