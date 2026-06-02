@@ -8887,6 +8887,28 @@ function closeSecondaryModal(){
 }
 function onModalBg(e){}
 
+// Positions a search dropdown using fixed coordinates from the input's screen
+// rect, so it escapes any overflow-clipping modal body. Called by the modal
+// pickers (ssFilter, svcSsFilter) right after they unhide the dropdown. The
+// dropdown is reparented to <body> on first use so no ancestor can clip it.
+// Cleared/repositioned each show. Closes on scroll to avoid stranding.
+function _positionSsDrop(inputId, ddId){
+  var inp=document.getElementById(inputId);
+  var dd=document.getElementById(ddId);
+  if(!inp||!dd)return;
+  if(dd.parentNode!==document.body)document.body.appendChild(dd);
+  var r=inp.getBoundingClientRect();
+  dd.style.position='fixed';
+  dd.style.top=(r.bottom+3)+'px';
+  dd.style.left=r.left+'px';
+  dd.style.width=r.width+'px';
+  dd.style.right='auto';
+  dd.style.zIndex='1700';
+  // Close on scroll so a fixed dropdown never strands over the page.
+  var onScroll=function(){ dd.classList.add('hidden'); window.removeEventListener('scroll',onScroll,true); };
+  window.addEventListener('scroll',onScroll,true);
+}
+
 function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,val){
   // Resolve the preselected contact's display name. db.contacts only holds the
   // current contacts-panel page after pagination, so fall back to the always-
@@ -8910,11 +8932,13 @@ function ssFilter(inputId,hiddenId,ddId,v){
   if((v||'').trim().length < 2){
     dd.innerHTML = noneOpt + '<div class="ss-empty" style="font-size:11px">Type 2+ chars to search</div>';
     dd.classList.remove('hidden');
+    _positionSsDrop(inputId, ddId);
     setTimeout(function(){document.addEventListener('click', function f(){dd.classList.add('hidden');document.removeEventListener('click',f);}, {capture:true});}, 10);
     return;
   }
   dd.innerHTML = noneOpt + '<div class="ss-empty">Searching...</div>';
   dd.classList.remove('hidden');
+  _positionSsDrop(inputId, ddId);
   _contactPickerSearch(v, {limit:8}, function(matches, truncated){
     if(!matches.length){
       dd.innerHTML = noneOpt + '<div class="ss-empty">No contacts found</div>';
@@ -8926,6 +8950,7 @@ function ssFilter(inputId,hiddenId,ddId,v){
       dd.innerHTML = noneOpt + optsHtml;
     }
     dd.classList.remove('hidden');
+    _positionSsDrop(inputId, ddId);
     setTimeout(function(){document.addEventListener('click', function f(){dd.classList.add('hidden');document.removeEventListener('click',f);}, {capture:true});}, 10);
   });
 }
@@ -9237,6 +9262,7 @@ function svcSsFilter(inputId, hiddenId, ddId, v){
     }).join('');
   }
   dd.classList.remove('hidden');
+  _positionSsDrop(inputId, ddId);
   setTimeout(function(){
     document.addEventListener('click', function f(){
       dd.classList.add('hidden');
@@ -21441,13 +21467,11 @@ function openRosterModal(sessionId){
       +'</div>';
   }).join('');
 
-  // Decide whether to show the Add Participant picker. Skip when at capacity
-  // or when there are no eligible (non-archived) contacts to add.
-  var hasAddable = (db.contacts||[]).some(function(c){
-    if(c.archived)return false;
-    var p=(s.participants||[]).find(function(x){return x.contact_id===c.id;});
-    return !p || p.status !== 'enrolled';
-  });
+  // Show the Add Participant picker whenever the session is under capacity.
+  // The picker (ssHTML/ssFilter) searches contacts server-side via
+  // contact-search, so it does NOT depend on the paginated db.contacts page
+  // being populated. Gating on a local db.contacts scan broke the add row when
+  // the roster opened from the calendar without the contacts panel loaded.
 
   var body='<div>'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
@@ -21455,11 +21479,11 @@ function openRosterModal(sessionId){
     +'<div style="font-size:12px;color:var(--text-muted)">'+s.date+(s.time?' at '+s.time:'')+'</div>'
     +'<div style="margin-left:auto;font-size:12px;font-weight:700;color:'+(enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80')+'">'+enrolled+'/'+cap+' enrolled</div>'
     +'</div>'
-    +(hasAddable&&enrolled<cap?'<div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-start">'
+    +(enrolled<cap?'<div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-start">'
       +'<div style="flex:1">'+ssHTML('roster-add-cw','roster-add-ci','roster-add-cv','roster-add-dd','Search contact...','')+'</div>'
       +'<button class="btn btn-primary btn-sm" onclick="svcEnroll(\''+sessionId+'\',document.getElementById(\'roster-add-cv\').value)">Enroll</button>'
       +'</div>':'')
-    +(rows?'<div>'+rows+'</div>':'<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">No participants yet.</div>')
+    +(rows?'<div style="max-height:46vh;overflow-y:auto">'+rows+'</div>':'<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">No participants yet.</div>')
     +'</div>';
 
   openModal('Class Roster',body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>','modal-lg');
