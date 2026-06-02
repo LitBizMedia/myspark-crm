@@ -8871,8 +8871,15 @@ function closeSecondaryModal(){
 function onModalBg(e){}
 
 function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,val){
-  const c=val?db.contacts.find(x=>x.id===val):null;
-  const iv=c?c.name:'';
+  // Resolve the preselected contact's display name. db.contacts only holds the
+  // current contacts-panel page after pagination, so fall back to the always-
+  // loaded db.contactNameMap when the contact isn't on the loaded page.
+  let iv='';
+  if(val){
+    const c=(db.contacts||[]).find(x=>x.id===val);
+    if(c){ iv=c.name||''; }
+    else if(db.contactNameMap && db.contactNameMap[val]){ iv=db.contactNameMap[val].name||''; }
+  }
   const sf="ssFilter(\'"+inputId+"\',\'"+hiddenId+"\',\'"+ddId+"\',this.value)";
   return'<div class="ss-wrap" id="'+wrapId+'"><input class="ss-inp" id="'+inputId+'" type="text" placeholder="'+esc(placeholder)+'" value="'+esc(iv)+'" oninput="'+sf+'" onclick="'+sf+'" autocomplete="off"><input type="hidden" id="'+hiddenId+'" value="'+esc(val||'')+'"><div class="ss-drop hidden" id="'+ddId+'"></div></div>';
 }
@@ -10307,7 +10314,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   // For edit flows (a !== null) only the original mode renders (legacy).
   var serviceBlockHTML = '<div id="apt-svc-section">'
     + '<div class="form-group"><label>Service *</label>' + svcSsHTML('af-svc-wrap','af-svc-inp','af-service','af-svc-drop','Search services...', initialServiceId || '') + '</div>'
-    + '<div class="form-group" id="apt-var-wrap" style="display:' + (initialVarHTML ? 'block' : 'none') + '"><label>Variation</label><select id="af-variation" onchange="apptOnVariationChange()">' + initialVarHTML + '</select></div>'
+    + '<div class="form-group" id="apt-var-wrap" style="display:' + (initialVarHTML ? 'block' : 'none') + '"><label>Pricing Option</label><select id="af-variation" onchange="apptOnVariationChange()">' + initialVarHTML + '</select></div>'
     + '<div class="form-group" id="apt-addons-wrap" style="display:none"><label>Add-ons</label><div id="apt-addons-list"></div></div>'
     + '<input type="hidden" id="af-title-svc" value="'+esc(a&&a.title||'')+'">'
     + '</div>';
@@ -10342,9 +10349,21 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     }
   }
 
-  const b = rescheduledFromBanner + widgetBanner + addonsSection + modeTabsHTML + modeBlocksHTML
+  // Reordered body. modeBlocksHTML holds the service block in service mode, or
+  // the Title field in custom mode. In service mode we move the service block
+  // BELOW the scheduling fields behind a divider; in custom mode the Title
+  // stays at the top. Divider is a simple horizontal rule using the border token.
+  var _isCustomMode = (initialMode === 'custom');
+  var _divider = '<div style="border-top:1px solid var(--main-border);margin:18px 0"></div>';
+  // Top slot: in custom mode, modeBlocksHTML (the Title field) sits up top.
+  // In service mode, nothing goes up top; the service block moves down.
+  var _topSlot = _isCustomMode ? modeBlocksHTML : '';
+  // Service slot: in service mode, the service block (service + pricing option +
+  // add-ons) renders after status/location behind a divider. Custom mode: none.
+  var _serviceSlot = _isCustomMode ? '' : (_divider + modeBlocksHTML);
 
-    // Existing fields (unchanged)
+  const b = rescheduledFromBanner + widgetBanner + modeTabsHTML + _topSlot
+
     + '<div id="appt-warn" class="warn-box hidden"></div>'
     + '<div class="form-group" id="apt-cv-wrap"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
     // Lock date/time fields when editing an existing appointment. Reschedule
@@ -10362,17 +10381,40 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     // Duration (Service mode only) + Assigned To. End Time moved into the
     // Date/Time row above. In Custom mode, Duration is hidden and Assigned To
     // remains. End Time provides the duration via onApptEndTimeChange.
-    + '<div class="form-row">'
-      + '<div class="form-group" id="apt-dur-wrap" style="display:'+(initialMode==='custom'?'none':'block')+'">'
-        + '<label>Duration (min)</label>'
-        + '<input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15"'+(a?' disabled':'')+' onchange="onApptDurationChange()">'
-      + '</div>'
-      + '<div class="form-group" id="apt-user-wrap"><label>Assigned To *</label><select id="af-user" onchange="apptOnStaffChange()">'+uOpts+'</select></div>'
-    + '</div>'
+    // Row layout branches by mode. Service mode is unchanged. Custom mode groups
+    // the scheduling fields: Buffers under the Date row, then Status full-width
+    // on its own row, then Assigned To / Location. Duration is omitted in custom
+    // (End Time lives in the Date row), so Status takes the full width.
+    + (function(){
+        var statusField = '<div class="form-group"><label>Status</label><select id="af-status">'+Object.keys(APPT_STATUSES).map(function(x){return '<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+APPT_STATUSES[x].label+'</option>';}).join('')+'</select></div>';
+        var bufferRow = '<div class="form-row" id="apt-row-buffers"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>';
+        var assignLocRow = '<div class="form-row">'
+          + '<div class="form-group" id="apt-user-wrap"><label>Assigned To *</label><select id="af-user" onchange="apptOnStaffChange()">'+uOpts+'</select></div>'
+          + '<div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div>'
+          + '</div>';
+        if(initialMode==='custom'){
+          // Custom: Buffers, then full-width Status (own row), then Assigned/Location.
+          // apt-dur-wrap kept (hidden) so _switchApptMode toggle stays safe.
+          var statusFullRow = '<div class="form-row" id="apt-row-status" style="grid-template-columns:1fr">'+statusField+'</div>';
+          var hiddenDur = '<div class="form-group" id="apt-dur-wrap" style="display:none"><label>Duration (min)</label><input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15"'+(a?' disabled':'')+' onchange="onApptDurationChange()"></div>';
+          return bufferRow + statusFullRow + hiddenDur + assignLocRow;
+        }
+        // Service mode: Buffers, then Duration / Status, then Assigned/Location.
+        // Duration derives from service time + buffers, so buffers lead and the
+        // computed Duration sits next to Status.
+        var durStatusRow = '<div class="form-row" id="apt-row-status">'
+          + '<div class="form-group" id="apt-dur-wrap" style="display:block">'
+          + '<label>Duration (min)</label>'
+          + '<input id="af-dur" type="number" value="'+(a&&a.duration||60)+'" min="15" step="15"'+(a?' disabled':'')+' onchange="onApptDurationChange()">'
+          + '</div>'
+          + statusField
+          + '</div>';
+        return bufferRow + durStatusRow + assignLocRow;
+      })()
     + '<div id="apt-group-clients-wrap" style="display:none"></div>'
     + '<div id="apt-group-staff-wrap" style="display:none"></div>'
-    + '<div class="form-row" id="apt-row-buffers"><div class="form-group"><label>Buffer Before</label><select id="af-buf-before">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_before||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div><div class="form-group"><label>Buffer After</label><select id="af-buf-after">'+[0,5,10,15,20,30,45,60].map(function(v){return'<option value="'+v+'"'+(parseInt(a&&a.buffer_after||0)===v?' selected':'')+'>'+( v===0?'None':v+' min')+'</option>';}).join('')+'</select></div></div>'
-    + '<div class="form-row" id="apt-row-status"><div class="form-group"><label>Status</label><select id="af-status">'+Object.keys(APPT_STATUSES).map(function(x){return '<option value="'+x+'"'+(a&&a.status===x?' selected':'')+'>'+APPT_STATUSES[x].label+'</option>';}).join('')+'</select></div><div class="form-group"><label>Location</label><input id="af-loc" type="text" value="'+esc(a&&a.location||'')+'" placeholder="Zoom, office..."></div></div>'
+    + _serviceSlot
+    + _divider
     + '<div class="form-group" id="apt-notes-wrap"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
 
   // Title reflects mode for clarity. Edit always says "Edit Appointment".
@@ -10386,11 +10428,10 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var bodyHTML;
   if (a) {
     state.apptDetail = { id: a.id, tab: 'details' };
-    bodyHTML = '<div id="appt-detail-tabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:18px">'
-      + '<button class="svc-detail-tab active" data-tab="details" onclick="switchApptTab(\'details\')">Details</button>'
-      + '<button class="svc-detail-tab" data-tab="payment" onclick="switchApptTab(\'payment\')">Take Payment</button>'
-      + '</div>'
-      + '<div id="appt-detail-content">' + b + '</div>';
+    // Tabs removed. Edit modal is a single clean form. Payment happens via the
+    // green Collect Payment button in the footer, which saves then opens a
+    // dedicated payment modal.
+    bodyHTML = '<div id="appt-detail-content">' + b + '</div>';
   } else {
     bodyHTML = b;
   }
@@ -10405,7 +10446,21 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var isCancelled = a && a.status === 'cancelled';
   var hardDeleteBtn = isExisting ? '<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="hardDelAppt(\''+a.id+'\')">Delete Forever</button>' : '';
   var cancelBtn = (isExisting && !isCancelled) ? '<button class="btn btn-ghost" onclick="delAppt(\''+a.id+'\')">Cancel Appointment</button>' : '';
-  var detailFooter = hardDeleteBtn + cancelBtn + rescheduleBtn + '<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
+  var detailFooter;
+  if (isExisting) {
+    // Two-row footer. Collect Payment is the primary cash-out action: full width,
+    // green (distinct from orange Save), on its own row above the rest.
+    var collectBtn = '<button class="btn" id="appt-collect-btn" onclick="_collectApptPaymentClick(\''+a.id+'\')" '
+      + 'style="width:100%;background:var(--success);color:#fff;border:none;font-weight:700;text-align:center;display:block">Collect Payment</button>';
+    var secondaryRow = '<div style="display:flex;align-items:center;gap:8px;width:100%">'
+      + hardDeleteBtn + cancelBtn + rescheduleBtn
+      + '<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>'
+      + '</div>';
+    detailFooter = '<div style="display:flex;flex-direction:column;gap:10px;width:100%">'
+      + collectBtn + secondaryRow + '</div>';
+  } else {
+    detailFooter = hardDeleteBtn + cancelBtn + rescheduleBtn + '<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
+  }
 
   openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
   setTimeout(function(){
@@ -10414,6 +10469,76 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     checkApptConflict();
   }, 80);
 }
+
+// ===== COLLECT PAYMENT FLOW =====
+// Primary cash-out: save the edit form first (so addons/variation/contact
+// changes are persisted and totals are fresh), await server sync, load the
+// full contact (so card-on-file populates), then open a dedicated payment
+// modal. Save failures (conflict, resource block, network) abort before any
+// payment surface opens, per Payment Policy: no money flow on a failed save.
+// Click wrapper for the Collect Payment button. Paints an immediate disabled
+// "Saving..." state so the click registers during the save+sync+fetch gap and
+// a double-click can't fire two saves. The button is re-rendered fresh by the
+// edit modal on save failure, and replaced entirely by the payment modal on
+// success, so no manual reset is needed.
+function _collectApptPaymentClick(apptId){
+  var btn = document.getElementById('appt-collect-btn');
+  if(btn){
+    if(btn.disabled) return; // already in flight
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    btn.style.opacity = '0.75';
+    btn.style.cursor = 'wait';
+  }
+  // Defer one frame so the disabled/Saving paint lands before the sync work.
+  setTimeout(function(){ collectApptPayment(apptId); }, 0);
+}
+
+async function collectApptPayment(apptId){
+  // Guard: must be editing an existing appointment.
+  if(!apptId){ toast('Save the appointment first.','error'); return; }
+  // saveAppt reads the live form fields and runs its full validation + sync.
+  // We pass a callback that fires ONLY on the success branch.
+  saveAppt(async function(savedId){
+    var a = getAppt(savedId);
+    if(!a){ toast('Could not load the saved appointment.','error'); return; }
+    if(!a.contactId){
+      // No contact linked: payment can still be recorded (cash/other) but card
+      // on file is impossible. Open payment without a card fetch.
+      _openApptPaymentModal(a, null);
+      return;
+    }
+    // Load the full contact so squareCards + squareCustomerId are present.
+    // ensureContactFull pushes the off-page record into db.contacts, which the
+    // payment form and charge handlers read from.
+    var full = null;
+    try { full = await ensureContactFull(a.contactId); }
+    catch(e){ console.warn('Collect Payment: contact load failed', e); }
+    _openApptPaymentModal(a, full);
+  });
+}
+
+// Opens the dedicated appointment payment modal. Mirrors
+// openClassParticipantPayment: close any open modal first, then open fresh so
+// the animation is clean and modalAfterClose isn't clobbered.
+function _openApptPaymentModal(a, fullContact){
+  _resetPaymentFormState();
+  state.payCtx = _buildApptPayCtx(a);
+  var who = (fullContact && fullContact.name)
+    || (a.contactId && getContactName(a.contactId))
+    || '';
+  var title = (a.title || 'Appointment') + (who ? ' - ' + who : '');
+  var body = '<div id="appt-pay-body">' + _renderPaymentForm(state.payCtx) + '</div>';
+  // No Close button; user closes via the modal X. Keeps the footer clean for
+  // the payment action chips.
+  var foot = '';
+  closeModal();
+  setTimeout(function(){
+    openModal(title, body, foot, 'modal-lg');
+    setTimeout(function(){ if(typeof apptUpdateTotals==='function')apptUpdateTotals(); }, 30);
+  }, 90);
+}
+// ===== END COLLECT PAYMENT FLOW =====
 
 // Switch between Details and Take Payment tabs in the appointment modal.
 function switchApptTab(tab){
@@ -10667,7 +10792,13 @@ function _buildApptPayCtx(appt){
     taxable:taxable,
     tipStaffId:appt.assignedTo||null,
     tipStaffName:staff?(staff.name||staff.username):null,
-    onSuccess:function(){switchApptTab('payment');}
+    onSuccess:function(){
+      // Payment recorded. Refresh calendar and close to it. The charge handlers
+      // already fired the success/fail toast.
+      if(state.panel==='calendar' && typeof renderCal==='function')renderCal();
+      if(state.drawer && typeof renderDrawer==='function')renderDrawer();
+      if(typeof closeModal==='function')closeModal();
+    }
   };
 }
 
@@ -10802,7 +10933,7 @@ function _renderPaymentForm(ctx){
       // Card-on-file picker - hidden by default, reused for both 'cof' and gc-remainder='cof'
       +'<div id="apt-pay-cof-fields" style="display:none;margin-bottom:12px">'
       +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">SAVED CARD</label>'
-      +'<select id="apt-pay-cof-select" style="width:100%">'
+      +'<select id="apt-pay-cof-select" style="width:100%;padding:10px 12px;min-height:42px;border-radius:var(--radius)">'
       +cofCards.map(function(c,i){return'<option value="'+i+'">'+esc(c.brand||'Card')+' ending in '+esc(c.last4||'****')+'</option>';}).join('')
       +'</select>'
       +'</div>'
@@ -12459,7 +12590,7 @@ function saveTimeBlock(){
     .catch(function(e){ console.error('saveTimeBlock failed:', e); toast('Could not save time block.','error'); });
 }
 
-function saveAppt(){
+function saveAppt(afterSave){
   // Block Time mode: short-circuit the entire appointment flow. A block has no
   // contact, service, status, or payment. Post to time-block-upsert and exit.
   if(state.apptMode === 'block'){ return saveTimeBlock(); }
@@ -12579,12 +12710,18 @@ function saveAppt(){
         targetType: 'appointment',
         metadata: auditMeta
       });
-      // Success: close modal, refresh views, toast.
+      // Success: persist + refresh views.
       saveData();
-      closeModal();
       if(state.panel==='calendar')renderCal();
       if(state.drawer)renderDrawer();
       updateNotifBadge();
+      if(typeof afterSave==='function'){
+        // Collect Payment path: hand off to the callback with the saved appt id.
+        // Callback owns closing this modal and opening the payment surface.
+        afterSave(apptIdForAudit);
+        return;
+      }
+      closeModal();
       toast(isNewAppt?'Appointment saved.':'Appointment updated.','success');
       return;
     }
