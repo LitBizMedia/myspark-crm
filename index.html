@@ -845,7 +845,7 @@ body:not(.agency-admin) #sb-agency-tools{display:none!important}
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .modal-title{font-family:'Exo 2',sans-serif;font-size:16px;font-weight:700;color:#ffffff}
-.modal-body{flex:1;overflow-y:auto;padding:20px;color:var(--text)}
+.modal-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:20px;color:var(--text)}
 .modal-foot{padding:12px 20px;border-top:1px solid var(--border);
   display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
 .warn-box{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);
@@ -1089,7 +1089,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .conv-composer-close{background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center}
 .conv-composer-close:hover{background:var(--bg-card-hover);color:var(--text)}
 .conv-composer-close svg{width:18px;height:18px}
-.conv-composer-card .modal-body{flex:1;overflow-y:auto;padding:20px;color:var(--text)}
+.conv-composer-card .modal-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:20px;color:var(--text)}
 .conv-composer-card .modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border)}
 .conv-composer-section{margin-bottom:18px}
 .conv-composer-section:last-child{margin-bottom:0}
@@ -20444,24 +20444,25 @@ function readSvcAvailabilityFields(){
 function renderServiceCommonFields(s,type){
   return '<div class="form-row">'
     +'<div class="form-group"><label>'+(type==='class'?'Class Name *':'Service Name *')+'</label><input id="svc-name" type="text" value="'+esc(s?s.name:'')+'"></div>'
-    +'<div class="form-group"><label>Category</label>'
-    +'<select id="svc-cat">'
-    +'<option value="">No Category</option>'
-    +(db.serviceCategories||[]).map(function(c){return'<option value="'+esc(c)+'"'+((s&&s.category===c)?' selected':'')+'>'+esc(c)+'</option>';}).join('')
-    +'</select></div>'
+    +(type!=='class'?'<div class="form-group"><label>Category</label>'
+      +'<select id="svc-cat">'
+      +'<option value="">No Category</option>'
+      +(db.serviceCategories||[]).map(function(c){return'<option value="'+esc(c)+'"'+((s&&s.category===c)?' selected':'')+'>'+esc(c)+'</option>';}).join('')
+      +'</select></div>':'')
     +'</div>'
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Color</label><input id="svc-color" type="color" value="'+(s&&s.color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
-    +'</div>'
+    +(type!=='class'?'<div class="form-row">'
+      +'<div class="form-group"><label>Color</label><input id="svc-color" type="color" value="'+(s&&s.color||'#6b21ea')+'" style="height:38px;width:100%;cursor:pointer"></div>'
+      +'</div>':'')
     +'<div class="form-group"><label>Description</label><textarea id="svc-desc" rows="2" style="resize:vertical">'+esc(s&&s.description||'')+'</textarea></div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Booking Lead Time (hours)</label><input id="svc-lead" type="number" min="0" value="'+(s&&s.booking_lead_time_hours||0)+'"></div>'
-    +'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>'
+    +(type!=='class'?'<div class="form-group"><label>Max Advance Booking (days)</label><input id="svc-adv" type="number" min="1" value="'+(s&&s.booking_advance_days||60)+'"></div>':'')
     +'</div>'
-    +'<div class="form-group" style="display:flex;gap:18px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label>'
+    +'<div class="form-group" style="display:flex;gap:18px;flex-wrap:wrap">'
+    +(type!=='class'?'<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-active" type="checkbox"'+((s&&s.active!==false)||!s?' checked':'')+'>Active (visible for booking)</label>':'')
     +taxableEditorControl('services','<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="svc-taxable" type="checkbox"'+((s&&s.taxable!==false)||!s?' checked':'')+'>Charge tax on this '+(type==='class'?'class':'service')+'</label>')
     +'</div>'
-    +renderSvcAvailabilityFields(s);
+    +(type!=='class'?renderSvcAvailabilityFields(s):'');
 }
 
 // Dispatcher: renders Individual or Class field set based on type.
@@ -21010,19 +21011,24 @@ function saveService(id){
   var name=document.getElementById('svc-name').value.trim();
   if(!name){toast((state.modal&&state.modal.svcType==='class')?'Class name is required.':'Service name is required.','error');return;}
 
+  // Existing service record being edited (null for new). Used to preserve
+  // stored fields when their editor controls are hidden (e.g. tax checkbox
+  // hidden by section policy; category/color/advance/active hidden for class).
+  var s = id ? (db.services||[]).find(function(x){return x.id===id;}) : null;
+
   var type=(state.modal&&state.modal.svcType)||'individual';
 
   // Common fields built first; type-specific fields layered in below.
   var svc={
     id:id||uid(),
     name:name,
-    category:document.getElementById('svc-cat').value.trim(),
+    category:(function(){var el=document.getElementById('svc-cat');return el?el.value.trim():(s&&s.category||'');})(),
     type:type,
-    color:document.getElementById('svc-color').value,
+    color:(function(){var el=document.getElementById('svc-color');return el?el.value:(s&&s.color||'#6b21ea');})(),
     description:document.getElementById('svc-desc').value.trim(),
     booking_lead_time_hours:parseInt(document.getElementById('svc-lead').value)||0,
-    booking_advance_days:parseInt(document.getElementById('svc-adv').value)||60,
-    active:document.getElementById('svc-active').checked,
+    booking_advance_days:(function(){var el=document.getElementById('svc-adv');return el?(parseInt(el.value)||60):(s&&s.booking_advance_days!=null?s.booking_advance_days:60);})(),
+    active:(function(){var el=document.getElementById('svc-active');return el?el.checked:true;})(),
     taxable:(function(){
       var el=document.getElementById('svc-taxable');
       if(el)return !!el.checked;
