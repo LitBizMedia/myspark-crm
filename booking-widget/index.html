@@ -533,7 +533,6 @@ function render() {
   renderProgress();
   const el = document.getElementById('bw-main');
   el.innerHTML = '';
-  if (S.error) el.innerHTML += `<div class="bw-error">${S.error}</div>`;
   switch (S.step) {
     case 'service':         renderServices(el); break;
     case 'variation':       renderVariations(el); break;
@@ -547,6 +546,10 @@ function render() {
     case 'payment':         renderPayment(el); break;
     case 'confirm':         renderConfirm(el); break;
   }
+  // Error banner is injected AFTER the step renderer paints. Step renderers
+  // assign el.innerHTML directly, so injecting before the switch gets wiped.
+  // Prepend it to the top of the painted step so the patient sees the reason.
+  if (S.error) el.insertAdjacentHTML('afterbegin', `<div class="bw-error">${S.error}</div>`);
   if (EMBED) postHeightToParent();
 }
 
