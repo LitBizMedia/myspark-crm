@@ -27,6 +27,7 @@ const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocat
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
+const { fireIntakeForServiceBooking } = require('./lib/intake-trigger');
 const { logAudit } = require('./lib/audit');
 const mailgun = require('./lib/mailgun');
 const { shouldSend } = require('./lib/notifications');
@@ -1245,6 +1246,33 @@ async function handler(req, res) {
           isFirstBooking,
           appointmentDate: (body.date && body.time) ? (body.date + 'T' + body.time) : (body.date || null)
         });
+
+        // Intake forms: on a first qualifying SERVICE booking, send any intake
+        // forms the booked service lists (services.intake_form_ids). Selection
+        // and per-form delivery live in lib/intake-trigger + lib/intake-dispatch.
+        // Fire-and-forget: never block or fail the booking on an intake problem.
+        if (isFirstBooking && body.service_id) {
+          // Awaited (not fire-and-forget): Lambda suspends the container as soon
+          // as the handler returns, which cuts off un-awaited promises. Same
+          // reason sendConfirmationEmail is awaited above. Wrapped so a slow or
+          // failed intake send never blocks or fails the booking response.
+          try {
+            await fireIntakeForServiceBooking({
+              subaccountId,
+              slug,
+              contactId,
+              serviceId: body.service_id,
+              appointmentId: apptId,
+              contact: {
+                email: client_info.email || '',
+                phone: client_info.phone || '',
+                name: client_info.name || ''
+              }
+            });
+          } catch (e) {
+            console.error('fireIntakeForServiceBooking failed (non-fatal):', e.message);
+          }
+        }
       }
     } catch (autoErr) {
       console.error('Automation trigger fire error (non-fatal):', autoErr.message);

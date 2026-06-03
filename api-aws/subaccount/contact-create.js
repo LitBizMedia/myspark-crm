@@ -3,6 +3,7 @@
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
+const { fireIntakeForContactCreated } = require('./lib/intake-trigger');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 
@@ -108,6 +109,29 @@ async function handler(req, res) {
       });
     } catch (autoErr) {
       console.error('Automation trigger fire error (non-fatal):', autoErr.message);
+    }
+
+    // Intake forms with triggerEvent='contact_created' (e.g. onboarding for
+    // non-service businesses). Fire-and-forget; never block contact creation.
+    // Dispatcher records send_failed honestly if the contact has no reachable
+    // channel, which is useful signal rather than a silent skip.
+    try {
+      const slug = String(auth.subaccount_id).replace(/^sub-/, '');
+      fireIntakeForContactCreated({
+        subaccountId: auth.subaccount_id,
+        slug,
+        contactId: id,
+        contact: {
+          email: email || '',
+          phone: phone || '',
+          name: displayName || '',
+          bizName: 'MySpark+'
+        }
+      }).catch(function (e) {
+        console.error('fireIntakeForContactCreated failed (non-fatal):', e.message);
+      });
+    } catch (intakeErr) {
+      console.error('Intake trigger fire error (non-fatal):', intakeErr.message);
     }
 
     return res.status(200).json({ success: true, id });

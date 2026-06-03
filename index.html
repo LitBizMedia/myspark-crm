@@ -26643,7 +26643,7 @@ function fbDefaultLabel(type){
 }
 
 function fbNewForm(){
-  return{id:'form-'+uid(),name:'New Form',status:'draft',pages:[{id:'pg-'+uid(),title:'Page 1',fields:[]}],settings:{submitAction:'message',successMessage:'Thank you! We received your submission.',redirectUrl:'',createContact:true,updateContact:true,contactTags:[],notifyEmail:'',honeypot:true,workflowTrigger:null,multiStep:false,style:{primaryColor:'#6b21ea',buttonBg:'#ff4000',buttonText:'Submit',buttonTextColor:'#ffffff',bgColor:'#ffffff',fieldBg:'#f8f8f8',textColor:'#111111',labelColor:'#222222',borderColor:'#d0d0d8',borderRadius:'8',fontFamily:'DM Sans',buttonAlign:'left',buttonWidth:'auto',buttonSize:'normal'}},createdAt:now_(),updatedAt:now_()};
+  return{id:'form-'+uid(),name:'New Form',status:'draft',pages:[{id:'pg-'+uid(),title:'Page 1',fields:[]}],settings:{submitAction:'message',successMessage:'Thank you! We received your submission.',redirectUrl:'',createContact:true,updateContact:true,contactTags:[],notifyEmail:'',honeypot:true,workflowTrigger:null,intake:{enabled:false,triggerEvent:'manual',serviceIds:[],sendEmail:true,sendSms:true,emailSubject:'',emailBody:'',smsBody:'',linkTtlDays:30},multiStep:false,style:{primaryColor:'#6b21ea',buttonBg:'#ff4000',buttonText:'Submit',buttonTextColor:'#ffffff',bgColor:'#ffffff',fieldBg:'#f8f8f8',textColor:'#111111',labelColor:'#222222',borderColor:'#d0d0d8',borderRadius:'8',fontFamily:'DM Sans',buttonAlign:'left',buttonWidth:'auto',buttonSize:'normal'}},createdAt:now_(),updatedAt:now_()};
 }
 
 // =====================================================
@@ -28276,6 +28276,7 @@ function fbCheckEmbedMode(){
 async function fbHandleEmbedSubmit(){
   const params=new URLSearchParams(window.location.search);
   const fid=params.get('fbembed');
+  const attributionToken=params.get('t')||'';
   const f=(db.forms||[]).find(function(x){return x.id===fid;});if(!f)return;
 
   // Lock the submit button to prevent double-submit
@@ -28398,6 +28399,7 @@ async function fbHandleEmbedSubmit(){
         subaccount_id: state.subaccountId,
         form_id: fid,
         form_name: f.name,
+        t: attributionToken,
         notify_email: (f.settings&&f.settings.notifyEmail)||'',
         submission_data: data,
         page_url: window.location.href,

@@ -27,7 +27,7 @@ const { sendSms } = require('./twilio');
 const { canSubaccountSendSms } = require('./sms-gate');
 const tokens = require('./tokens');
 
-const PUBLIC_FORM_BASE = 'https://book.mysparkplus.app';
+const PUBLIC_FORM_BASE = 'https://mysparkplus.app';
 // Default intake link lifetime. Config-overridable per send (config.linkTtlDays).
 const DEFAULT_LINK_TTL_DAYS = 30;
 
@@ -45,7 +45,7 @@ async function buildFormLink(slug, subaccountId, formId, contactId, ttlDays) {
   const days = (typeof ttlDays === 'number' && ttlDays > 0) ? ttlDays : DEFAULT_LINK_TTL_DAYS;
   const exp = Math.floor(Date.now() / 1000) + days * 24 * 60 * 60;
   const token = await tokens.signToken({ subaccountId, contactId, formId, exp });
-  return PUBLIC_FORM_BASE + '/' + slug + '/' + formId + '?t=' + encodeURIComponent(token);
+  return PUBLIC_FORM_BASE + '/' + slug + '?fbembed=' + encodeURIComponent(formId) + '&t=' + encodeURIComponent(token);
 }
 
 // Look up an existing intake_sends row for this contact+form.
