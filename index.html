@@ -4559,6 +4559,7 @@ document.getElementById('login-form').addEventListener('submit',async function(e
       name:data.user.name||data.user.username,
       color:data.user.color,
       email:data.user.email,
+      phone:data.user.phone||'',
       breakglass:!!data.user.breakglass,
       isAgencyAdmin:!!data.user.is_agency_admin,
       mustChangePassword:!!data.user.must_change_password
@@ -13438,6 +13439,7 @@ function refreshStateUser(){
     id:rec.id,
     name:rec.name||state.user.name,
     email:rec.email||state.user.email,
+    phone:rec.phone||'',
     role:rec.role||state.user.role,
     color:rec.color,
     avatarUrl:rec.avatarUrl||'',
@@ -14091,13 +14093,15 @@ function openProfileModal(forced){
     ? '<button class="btn btn-primary" onclick="saveProfile()">Save Password</button>'
     : '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>';
   const curPhone=(u&&u.phone)||'';
+  const curEmail=(u&&u.email)||'';
   const b=banner
     +(forced?'':'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Contact</div>'
-      +'<div class="form-group"><label>Phone <span style="font-weight:400;color:var(--text-muted)">(for SMS notifications)</span></label><input id="pf-phone" type="tel" value="'+esc(curPhone)+'" placeholder="(555) 123-4567"></div>'
+      +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login, password required to change)</span></label><input id="pf-email" type="email" value="'+esc(curEmail)+'" data-orig="'+esc(curEmail)+'" autocomplete="off" placeholder="you@example.com"></div>'
+      +'<div class="form-group"><label>Phone <span style="font-weight:400;color:var(--text-muted)">(for SMS notifications)</span></label><input id="pf-phone" type="tel" value="'+esc(curPhone)+'" autocomplete="off" placeholder="(555) 123-4567"></div>'
       +'<div class="divider"></div>')
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Change Password</div>'
-    +'<div class="form-group"><label>Current Password <span style=\"font-weight:400;color:var(--text-muted)\">(required to change password)</span></label><input id="pf-old-pass" type="password" placeholder="Enter current password"></div>'
-    +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" placeholder="'+newPwPlaceholder+'"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" placeholder="Confirm new password"></div></div>'
+    +'<div class="form-group"><label>Current Password <span style=\"font-weight:400;color:var(--text-muted)\">(required to change password)</span></label><input id="pf-old-pass" type="password" autocomplete="new-password" placeholder="Enter current password"></div>'
+    +'<div class="form-row"><div class="form-group"><label>New Password</label><input id="pf-pass" type="password" autocomplete="new-password" placeholder="'+newPwPlaceholder+'"></div><div class="form-group"><label>Confirm</label><input id="pf-pass2" type="password" autocomplete="new-password" placeholder="Confirm new password"></div></div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div>';
   openModal(title,b,footer,'modal-lg');
   // In forced mode, also disable the modal backdrop click and ESC dismissal
@@ -14118,21 +14122,32 @@ async function saveProfile(){
   const phoneEl=document.getElementById('pf-phone');
   const phoneVal=phoneEl?phoneEl.value.trim():null;
   const phoneChanged=phoneEl&&phoneVal!==((state.user&&state.user.phone)||'');
-  // Phone-only save: no password required.
-  if(phoneChanged){
+  const emailEl=document.getElementById('pf-email');
+  const emailVal=emailEl?emailEl.value.trim().toLowerCase():null;
+  const emailOrig=emailEl?(emailEl.getAttribute('data-orig')||'').toLowerCase():'';
+  const emailChanged=emailEl&&emailVal!==emailOrig;
+  if(emailChanged&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)){toast('Enter a valid email.','error');return;}
+  const curPassEl=document.getElementById('pf-old-pass');
+  const curPassVal=curPassEl?curPassEl.value:'';
+  if(emailChanged&&!curPassVal){toast('Enter your current password to change your email.','error');return;}
+  // Profile fields (phone always allowed; email gated by current password).
+  if(phoneChanged||emailChanged){
+    var body={};
+    if(phoneChanged)body.phone=phoneVal;
+    if(emailChanged){body.email=emailVal;body.currentPassword=curPassVal;}
     try{
       const pr=await fetch(apiUrl('/api/subaccount/update-my-profile'),{credentials:'include',
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({phone:phoneVal})
+        body:JSON.stringify(body)
       });
       const pd=await pr.json().catch(function(){return {error:'Server error'}});
-      if(!pr.ok){toast(pd.error||'Could not save phone.','error');return;}
-      if(state.user)state.user.phone=pd.phone||'';
+      if(!pr.ok){toast(pd.error||'Could not save profile.','error');return;}
+      if(state.user){state.user.phone=pd.phone||'';if(pd.email)state.user.email=pd.email;}
     }catch(e){toast('Cannot reach server. Check your connection.','error');return;}
   }
   if(!pass){
-    if(phoneChanged){closeModal();toast('Profile updated.','success');try{fetchFromServer();}catch(e){}}
+    if(phoneChanged||emailChanged){closeModal();toast('Profile updated.','success');try{fetchFromServer();}catch(e){}}
     else{toast('No changes to save.','warning');}
     return;
   }
@@ -14235,8 +14250,8 @@ function openEditUserModal(userId){
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select></div>';
   const currentEmail = u.email || u.username || '';
-  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login)</span></label><input id="eu-email" type="email" value="'+esc(currentEmail)+'" placeholder="user@example.com"'+(isAdmin?' disabled':'')+'></div></div>'
-    +'<div class="form-group"><label>Position <span style="font-weight:400;color:var(--text-muted)">(shown on staff cards)</span></label><input id="eu-jobtitle" type="text" value="'+esc(u.jobTitle||'')+'" placeholder="e.g. Massage Therapist"></div>'+'<div class="form-group"><label>Phone <span style="font-weight:400;color:var(--text-muted)">(optional, for SMS)</span></label><input id="eu-phone" type="tel" value="'+esc(u.phone||'')+'" placeholder="(555) 123-4567"></div>'
+  const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Position <span style="font-weight:400;color:var(--text-muted)">(shown on staff cards)</span></label><input id="eu-jobtitle" type="text" value="'+esc(u.jobTitle||'')+'" placeholder="e.g. Massage Therapist"></div></div>'
+    +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login)</span></label><input id="eu-email" type="email" value="'+esc(currentEmail)+'" autocomplete="off" placeholder="user@example.com"'+(isAdmin?' disabled':'')+'></div>'+'<div class="form-group"><label>Phone <span style="font-weight:400;color:var(--text-muted)">(optional, for SMS)</span></label><input id="eu-phone" type="tel" value="'+esc(u.phone||'')+'" autocomplete="off" placeholder="(555) 123-4567"></div>'
     +(isAdmin?'':'<div class="form-row">'+roleField+'<div class="form-group"><label>&nbsp;</label><button type="button" class="btn btn-ghost" style="height:38px" onclick="sendUserPasswordResetLink(\''+userId+'\')">Send Password Reset Link</button></div></div>')
     +(isAdmin?'':'<div class="form-group"><button type="button" class="btn btn-ghost btn-sm" onclick="resendWelcomeEmail(\''+userId+'\')">Resend Welcome Email</button><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Use this if the user deleted or never received their setup email. Sends a fresh setup link valid for 7 days.</div></div>')
     +'<div class="form-group"><label>Profile Photo</label><div style="display:flex;align-items:center;gap:12px"><div id="eu-avatar-preview">'+avatarHtml({avatarUrl:(u.avatarUrl||''),name:u.name,username:u.username,color:(u.color||USER_COLORS[0])},56)+'</div><div style="display:flex;flex-direction:column;gap:4px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'eu-avatar-input\').click()">Upload Photo</button><button type="button" class="btn btn-ghost btn-sm" id="eu-avatar-remove" onclick="removeUserAvatar()" style="'+((u.avatarFileId)?'':'display:none')+'">Remove Photo</button></div></div><input type="file" id="eu-avatar-input" accept="image/png,image/jpeg,image/jpg" style="display:none" onchange="uploadUserAvatar(event)"><div id="eu-avatar-status" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div></div>'
