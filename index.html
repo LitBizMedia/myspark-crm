@@ -30672,7 +30672,7 @@ async function saveCredit(contactId,type){
   const apiType = type==='add' ? 'credit' : 'debit';
   try{
     await contactCreditAdd(contactId, apiType, amt, note);
-    await fetchFromServer();
+    await refreshContactPHI(contactId);
     closeModal();
     if(state.drawer) renderDrawer();
     toast((type==='add'?'$'+amt.toFixed(2)+' credits added.':'$'+amt.toFixed(2)+' credits deducted.'),'success');
