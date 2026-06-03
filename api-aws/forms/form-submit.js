@@ -28,12 +28,12 @@ const db = require('./lib/db');
 const crypto = require('crypto');
 const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
-const { SESv2Client, SendEmailCommand } = require('@aws-sdk/client-sesv2');
+const { sendEmail } = require('./lib/mailgun');
+const { logAudit } = require('./lib/audit');
 const { getContactByEmail, getContactByPhone } = require('./lib/contacts');
 
 const FALLBACK_DOMAIN = 'mysparkplus.app';
-const SES_REGION = process.env.AWS_REGION || 'us-east-2';
-const ses = new SESv2Client({ region: SES_REGION });
+// Staff form-notification sends via Mailgun (lib/mailgun). SES removed (never approved out of sandbox).
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -369,31 +369,22 @@ async function handler(req, res) {
     // 2. Send notification email
     if (notifyEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notifyEmail)) {
       try {
-        let fromDomain = FALLBACK_DOMAIN;
-        try {
-          const domainRow = await db.query(
-            `SELECT domain FROM subaccount_email_domains WHERE subaccount_id = $1 AND status = 'verified' LIMIT 1`,
-            [subaccountId]
-          );
-          if (domainRow.rows.length && domainRow.rows[0].domain) fromDomain = domainRow.rows[0].domain;
-        } catch (e) { console.warn('domain lookup failed:', e.message); }
-
-        await ses.send(new SendEmailCommand({
-          FromEmailAddress: 'MySpark+ Forms <noreply@' + fromDomain + '>',
-          Destination: { ToAddresses: [notifyEmail] },
-          Content: {
-            Simple: {
-              Subject: { Data: 'New form submission: ' + formName },
-              Body: {
-                Html: { Data: buildEmailHtml(formName, submissionData, pageUrl, submittedAt) },
-                Text: { Data: buildEmailText(formName, submissionData, pageUrl, submittedAt) }
-              }
-            }
-          }
-        }));
-        notificationSent = true;
+        const slug = String(subaccountId).replace(/^sub-/, '');
+        const sendRes = await sendEmail(slug, {
+          scope: 'subaccount',
+          source: 'form-notification',
+          to: notifyEmail,
+          subject: 'New form submission: ' + formName,
+          html: buildEmailHtml(formName, submissionData, pageUrl, submittedAt),
+          text: buildEmailText(formName, submissionData, pageUrl, submittedAt),
+          fromName: 'MySpark+ Forms'
+        });
+        notificationSent = !!(sendRes && sendRes.ok);
+        if (!notificationSent) {
+          console.error('form-notification send failed:', sendRes && sendRes.error);
+        }
       } catch (e) {
-        console.error('SES send failed:', e.message);
+        console.error('form-notification send threw:', e.message);
       }
     }
 
@@ -429,28 +420,28 @@ async function handler(req, res) {
       // Don't fail the whole request; audit_log will still capture below.
     }
 
-    // 4. Audit log (compliance secondary record)
-    try {
-      const auditId = 'log_' + Math.random().toString(36).slice(2, 14);
-      await db.query(
-        `INSERT INTO audit_log
-          (id, subaccount_id, actor_type, actor_id, actor_username, action, target_type, target_id, target_subaccount_id, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
-        [
-          auditId, subaccountId, 'public', null, 'public-form',
-          'subaccount.form.submit', 'form', formId, subaccountId,
-          JSON.stringify({
-            form_name: formName,
-            submission_id: submissionId,
-            notification_sent: notificationSent,
-            notification_email: notifyEmail || null,
-            contact_action: contactAction,
-            contact_id: contactId,
-            field_count: Object.keys(submissionData).filter(k => k !== '_hp').length
-          })
-        ]
-      );
-    } catch (e) { console.warn('audit log failed:', e.message); }
+    // 4. Audit log (compliance secondary record) via canonical helper.
+    //    logAudit knows the real audit_log schema and never throws upward.
+    await logAudit({
+      req,
+      actorType: 'public',
+      actorId: null,
+      actorUsername: 'public-form',
+      action: 'subaccount.form.submit',
+      targetType: 'form_submission',
+      targetId: submissionId,
+      targetSubaccountId: subaccountId,
+      metadata: {
+        form_id: formId,
+        form_name: formName,
+        submission_id: submissionId,
+        notification_sent: notificationSent,
+        notification_email: notifyEmail || null,
+        contact_action: contactAction,
+        contact_id: contactId,
+        field_count: Object.keys(submissionData).filter(k => k !== '_hp').length
+      }
+    });
 
     // Fire automation trigger (fire-and-forget)
     try {
