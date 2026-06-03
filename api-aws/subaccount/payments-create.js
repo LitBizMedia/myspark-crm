@@ -12,6 +12,7 @@ const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
 const paymentReceipt = require('./lib/payment-receipt-email');
 const contactsLib = require('./lib/contacts');
+const couponsLib = require('./lib/coupons');
 
 // Snake_case DB row -> camelCase shape the frontend uses.
 function paymentToFrontend(row) {
@@ -275,6 +276,27 @@ async function handler(req, res) {
       }
     } catch (recErr) {
       console.warn('payment receipt send failed (non-fatal):', recErr.message);
+    }
+
+    // Log coupon redemption (non-fatal). Consolidation point for ALL in-app
+    // payments: POS, appointment, gift-card sale, etc. The frontend no longer
+    // logs usage; it only sends coupon_id on the payment (blob migration 2026-06-03).
+    // Idempotency: a duplicate payment post hits the ON CONFLICT early-return above,
+    // so this runs exactly once per real payment. Gate matches the receipt block:
+    // completed status + a coupon present.
+    try {
+      const pmt = result.rows[0];
+      if (pmt.status === 'completed' && pmt.coupon_id) {
+        await couponsLib.logRedemption(subaccountId, {
+          couponId: pmt.coupon_id,
+          contactId: pmt.contact_id || null,
+          paymentId: pmt.id,
+          amountSaved: parseFloat(pmt.coupon_discount || 0),
+          staffId: pmt.staff_id || null
+        });
+      }
+    } catch (redeemErr) {
+      console.error('coupon redemption logging failed (non-fatal):', redeemErr.message);
     }
 
     return res.status(200).json({ success: true, payment: paymentToFrontend(result.rows[0]) });
