@@ -406,7 +406,7 @@ async function handler(req, res) {
 
   // Revoke active sessions if role/active/password/is_agency_admin changed
   let sessionsRevoked = 0;
-  if (changedFields.indexOf('role') >= 0 || changedFields.indexOf('active') >= 0 || changedFields.indexOf('password') >= 0 || changedFields.indexOf('is_agency_admin') >= 0) {
+  if (changedFields.indexOf('role') >= 0 || changedFields.indexOf('active') >= 0 || changedFields.indexOf('password') >= 0 || changedFields.indexOf('is_agency_admin') >= 0 || changedFields.indexOf('email') >= 0) {
     try {
       const revoked = await db.update('sessions',
         { revoked_at: new Date().toISOString() },
