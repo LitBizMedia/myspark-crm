@@ -30,7 +30,8 @@ const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
 const { sendEmail } = require('./lib/mailgun');
 const { logAudit } = require('./lib/audit');
-const { getContactByEmail, getContactByPhone } = require('./lib/contacts');
+const { getContactByEmail, getContactByPhone, getContactById } = require('./lib/contacts');
+const tokens = require('./lib/tokens');
 
 const FALLBACK_DOMAIN = 'mysparkplus.app';
 // Staff form-notification sends via Mailgun (lib/mailgun). SES removed (never approved out of sandbox).
@@ -326,6 +327,7 @@ async function handler(req, res) {
     const pageUrl = b.page_url || '';
     const createContact = b.create_contact !== false;
     const updateContact = b.update_contact !== false;
+    const attributionToken = (b.t || b.token || '').trim();
 
     if (!subaccountId || !formId) {
       return res.status(400).json({ error: 'subaccount_id and form_id are required' });
@@ -341,8 +343,45 @@ async function handler(req, res) {
     let contactId = null;
     let contactAction = 'none';
 
-    // 1. Resolve contact via identity match cascade
-    if (createContact || updateContact) {
+    // 1a. Signed-token attribution (intake links). ATTRIBUTION ONLY.
+    //     A valid token whose subaccountId + formId match THIS submission
+    //     binds the submission to the token's contactId, skipping the
+    //     email/phone guess. Invalid, expired, or mismatched tokens are
+    //     ignored and fall through to the cascade below. The token never
+    //     creates a contact; it references one that already existed at send.
+    let tokenContact = null;
+    if (attributionToken) {
+      try {
+        const payload = await tokens.verifyToken(attributionToken);
+        if (payload
+            && payload.subaccountId === subaccountId
+            && payload.formId === formId
+            && payload.contactId) {
+          const c = await getContactById(subaccountId, payload.contactId);
+          if (c) tokenContact = c;
+          else console.warn('intake token: contactId not found, falling back to cascade');
+        } else if (payload) {
+          console.warn('intake token: subaccount/form mismatch, ignoring token');
+        }
+      } catch (e) {
+        console.warn('intake token verify failed, falling back:', e.message);
+      }
+    }
+
+    // 1. Resolve contact. Token wins when present+valid; else identity cascade.
+    if (tokenContact) {
+      contactId = tokenContact.id;
+      contactAction = 'token_matched';
+      // Still fill empty contact fields from the submission, if the form allows.
+      if (updateContact) {
+        try {
+          await updateContactFillOnly(subaccountId, tokenContact, submissionData, formName);
+          contactAction = 'token_updated';
+        } catch (e) {
+          console.error('token-path fill update failed (non-fatal):', e.message);
+        }
+      }
+    } else if (createContact || updateContact) {
       try {
         const existing = await resolveContact(subaccountId, submissionData);
         if (existing) {

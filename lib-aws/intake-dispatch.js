@@ -25,22 +25,27 @@ const db = require('./db');
 const { sendEmail } = require('./mailgun');
 const { sendSms } = require('./twilio');
 const { canSubaccountSendSms } = require('./sms-gate');
-// const tokens = require('./tokens'); // wired in the token step
+const tokens = require('./tokens');
 
 const PUBLIC_FORM_BASE = 'https://book.mysparkplus.app';
+// Default intake link lifetime. Config-overridable per send (config.linkTtlDays).
+const DEFAULT_LINK_TTL_DAYS = 30;
 
 function newIntakeId() {
   return 'intk_' + Math.random().toString(36).slice(2, 14);
 }
 
-// Build the public form URL. STUB: token signing deferred to the next step.
-// When wired, this signs { subaccountId, contactId, formId, exp } via tokens.js
-// and appends &t=<jwt> so form-public-get/form-submit can attribute the
-// submission to contactId directly.
-function buildFormLink(slug, formId, /* contactId */) {
-  // TODO(token-step): const token = await tokens.signToken({ ... });
-  //                   return base + '?t=' + encodeURIComponent(token);
-  return PUBLIC_FORM_BASE + '/' + slug + '/' + formId;
+// Build the public form URL with a signed attribution token.
+// The token carries { subaccountId, contactId, formId, exp }. It authorizes
+// ATTRIBUTION ONLY: form-submit reads contactId from it so the submission
+// attaches to the right contact. It returns no PHI. A leaked link cannot
+// expose contact data; worst case is a misattributed submission, the same
+// risk the email-match cascade already carries.
+async function buildFormLink(slug, subaccountId, formId, contactId, ttlDays) {
+  const days = (typeof ttlDays === 'number' && ttlDays > 0) ? ttlDays : DEFAULT_LINK_TTL_DAYS;
+  const exp = Math.floor(Date.now() / 1000) + days * 24 * 60 * 60;
+  const token = await tokens.signToken({ subaccountId, contactId, formId, exp });
+  return PUBLIC_FORM_BASE + '/' + slug + '/' + formId + '?t=' + encodeURIComponent(token);
 }
 
 // Look up an existing intake_sends row for this contact+form.
@@ -77,8 +82,8 @@ async function dispatchIntake(opts) {
     return { ok: true, skipped: true, reason: 'already_on_file', intake_id: existing.id };
   }
 
-  // 2. Build the link (token signing stubbed for now).
-  const link = buildFormLink(slug, formId, contactId);
+  // 2. Build the signed attribution link.
+  const link = await buildFormLink(slug, subaccountId, formId, contactId, config.linkTtlDays);
 
   // 3. Send on each enabled+allowed channel. Record what actually went out.
   const channels = { email: false, sms: false };
