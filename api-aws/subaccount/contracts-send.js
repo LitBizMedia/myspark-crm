@@ -302,7 +302,7 @@ async function handler(req, res) {
   const slug = subaccount.slug || subaccountId.replace(/^sub-/, '');
 
   // 12. Send email - first check subaccount Notifications tab gate
-  const sendGate = await shouldSend(subaccount_id, 'contract_sent', db);
+  const sendGate = await shouldSend(subaccountId, 'contract_sent', db);
   if (!sendGate.ok) {
     return res.status(200).json({
       ok: true,
