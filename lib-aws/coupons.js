@@ -77,7 +77,7 @@ function frontendToRow(subaccountId, opts) {
     status: opts.status === 'inactive' ? 'inactive' : 'active',
     discount_type: opts.discountType === 'flat' ? 'flat' : 'pct',
     discount_value: opts.discountValue != null ? Number(opts.discountValue) : 0,
-    applies_to: opts.appliesTo === 'products' ? 'products' : 'all',
+    applies_to: ['all','pos','invoices','subscriptions'].includes(opts.appliesTo) ? opts.appliesTo : 'all',
     product_ids: JSON.stringify(Array.isArray(opts.productIds) ? opts.productIds : []),
     max_uses: opts.maxUses != null && opts.maxUses !== '' ? Number(opts.maxUses) : null,
     once_per_customer: !!opts.oncePerCustomer,
