@@ -69,22 +69,13 @@ async function handler(req, res) {
         console.warn('forgot-password: subaccount_users lookup failed:', e.message);
       }
 
-      if (!userType) {
-        try {
-          const sub = await db.findOne('subaccounts',
-            { id: subId, admin_email: lowerEmail },
-            { select: 'id, name, admin_username, admin_email' }
-          );
-          if (sub && sub.admin_username) {
-            userType = 'subaccount_user';
-            userIdentifier = subId + ':' + sub.admin_username;
-            userName = sub.name || sub.admin_username || '';
-          }
-        } catch (e) {
-          console.warn('forgot-password: subaccounts lookup failed:', e.message);
-        }
-      }
-
+      // Legacy subaccounts.admin_username fallback removed (Jun 2026).
+      // All admins live in subaccount_users post May 2 migration; the
+      // primary lookup above covers them. The old fallback issued
+      // composite 'subId:username' tokens that reset-password could turn
+      // into brand-new admin rows, a provisioning path inside a reset
+      // endpoint. Cut it. Unknown emails now fall straight through to the
+      // enumeration-safe response.
       if (!userType) return safeReturn();
     }
 
