@@ -8598,15 +8598,7 @@ async function processCharge(){  // ── Gift Card payment path ──
   var posPmt={id:payId,contactId:cid||null,staffId:staffId||null,tipStaffId:tipStaffId,items,subtotal:sub,couponDiscount:couponDiscount||0,couponCode:couponCode||'',couponId:couponId||'',discountAmount:discount||0,discountType:discountType||'flat',discountNote:discountNote||'',afterDiscount:afterDiscount||sub,feeAmount:additionalFee||0,taxAmount:tax||0,taxableAmount:taxableAmount||0,tipAmount:tip,creditApplied,total,paymentMethod:pm,cardLast4:last4||'',status:'completed',notes:document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'',createdAt:now_()};
   db.payments.push(posPmt);
   _createPaymentRemote(posPmt);
-  // Log coupon usage
-  if(couponId){
-    const cpn=(db.coupons||[]).find(function(x){return x.id===couponId;});
-    if(cpn){
-      if(!cpn.usageLog)cpn.usageLog=[];
-      cpn.usageLog.push({id:uid(),contactId:cid||null,paymentId:payId,amountSaved:couponDiscount,date:now_(),staffId:staffId||null});
-      cpn.usageCount=(cpn.usageCount||0)+1;
-    }
-  }
+  // Coupon redemption logged server-side by payments-create (blob migration 2026-06-03).
   // Deduct credits from contact balance via RDS (May 2026 migration).
   // Fire-and-forget; payment has already succeeded so a failure here is
   // recoverable (admin can manually adjust). Surface error to console.
@@ -11474,15 +11466,7 @@ async function takeApptPayment(){
   if(!db.payments)db.payments=[];
   db.payments.push(pmt);
   _createPaymentRemote(pmt);
-  if(totals.couponId){
-    var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
-    if(cpn){
-      if(!cpn.usageLog)cpn.usageLog=[];
-      cpn.usageLog.push({id:uid(),contactId:ctx.contactId||null,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
-      cpn.usageCount=(cpn.usageCount||0)+1;
-      saveData();
-    }
-  }
+  // Coupon redemption logged server-side by payments-create (blob migration 2026-06-03).
   toast('Recorded '+fmt$(totals.total)+'.','success');
   if(typeof ctx.onSuccess==='function')ctx.onSuccess();
 }
@@ -11553,15 +11537,7 @@ async function _takeApptPaymentCard(ctx, totals, notes, staffId, staffName, tipS
     if(!db.payments)db.payments=[];
     db.payments.push(pmt);
     _createPaymentRemote(pmt);
-    if(totals.couponId){
-      var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
-      if(cpn){
-        if(!cpn.usageLog)cpn.usageLog=[];
-        cpn.usageLog.push({id:uid(),contactId:ctx.contactId||null,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
-        cpn.usageCount=(cpn.usageCount||0)+1;
-        saveData();
-      }
-    }
+    // Coupon redemption logged server-side by payments-create (blob migration 2026-06-03).
     toast('Charged '+fmt$(totals.total)+' to card.','success');
     _destroyApptSquareCardForm();
     if(typeof ctx.onSuccess==='function')ctx.onSuccess();
@@ -11630,15 +11606,7 @@ async function _takeApptPaymentCOF(ctx, totals, notes, staffId, staffName, tipSt
     if(!db.payments)db.payments=[];
     db.payments.push(pmt);
     _createPaymentRemote(pmt);
-    if(totals.couponId){
-      var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
-      if(cpn){
-        if(!cpn.usageLog)cpn.usageLog=[];
-        cpn.usageLog.push({id:uid(),contactId:contact.id,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
-        cpn.usageCount=(cpn.usageCount||0)+1;
-        saveData();
-      }
-    }
+    // Coupon redemption logged server-side by payments-create (blob migration 2026-06-03).
     toast('Charged '+fmt$(totals.total)+' to '+(card.brand||'card')+' '+(card.last4||''),'success');
     if(typeof ctx.onSuccess==='function')ctx.onSuccess();
   }catch(e){
@@ -11714,15 +11682,7 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
       if(!gObj.log)gObj.log=[];
       gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at payment'+(gcRemainder>0?' + '+fmt$(gcRemainder)+' '+(remMethod||''):''),date:now_(),contactId:ctx.contactId||null,paymentId:payId});
 
-      // Coupon usage logging only on completed payments
-      if(totals.couponId){
-        var cpn=(db.coupons||[]).find(function(x){return x.id===totals.couponId;});
-        if(cpn){
-          if(!cpn.usageLog)cpn.usageLog=[];
-          cpn.usageLog.push({id:uid(),contactId:ctx.contactId||null,paymentId:payId,amountSaved:totals.couponDiscount,date:now_(),staffId:staffId});
-          cpn.usageCount=(cpn.usageCount||0)+1;
-        }
-      }
+      // Coupon redemption logged server-side by payments-create (blob migration 2026-06-03).
     }
     saveData();
     if(success)toast(success,'success');
@@ -13646,6 +13606,10 @@ async function fetchFromServer(opts){
       // (calendar, drawer, payments) at 600KB instead of 5MB+.
       fetches.push(fetch(apiUrl('/api/subaccount/contact-name-map'),{credentials:'include'}));
     }
+    // Coupons moved to RDS (blob migration 2026-06-03). Pushed LAST so its index
+    // never collides with the hardcoded responses[1] name-map reference.
+    const _couponFetchIdx=fetches.length;
+    fetches.push(fetch(apiUrl('/api/subaccount/coupons-list'),{credentials:'include'}));
     const responses=await Promise.all(fetches);
     const r=responses[0];
     const rc=null;
@@ -13693,6 +13657,13 @@ async function fetchFromServer(opts){
       var preservedContacts=db.contacts;
       db={...db,...rem,settings:{...db.settings,...rem.settings}};
       if(!includeContacts){ db.contacts=preservedContacts; }
+      // Coupons from RDS (blob migration 2026-06-03). Assigned after the blob
+      // spread so it is authoritative regardless of blob contents. Non-fatal.
+      try{
+        const rcpn=responses[_couponFetchIdx];
+        if(rcpn&&rcpn.ok){ const cj=await rcpn.json(); if(cj&&Array.isArray(cj.coupons)) db.coupons=cj.coupons; }
+        else { console.warn('coupons-list fetch failed, status:',rcpn&&rcpn.status); }
+      }catch(e){ console.warn('coupons-list parse failed:',e); }
       if(result.services)db.services=result.services;
       if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
       if(result.resources)db.resources=result.resources;
@@ -33006,12 +32977,19 @@ function copyCouponCode(code, btn){
   }catch(e){toast('Could not copy code.','error');}
 }
 
-function toggleCouponStatus(id){if(!canManageCoupons()){toast('Permission denied.','error');return;}
+async function toggleCouponStatus(id){if(!canManageCoupons()){toast('Permission denied.','error');return;}
   var cpn=(db.coupons||[]).find(function(x){return x.id===id;});
   if(!cpn)return;
-  cpn.status=cpn.status==='active'?'inactive':'active';
-  saveData();renderCoupons();
-  toast('Coupon '+(cpn.status==='active'?'activated':'deactivated')+'.','success');
+  var nextStatus=cpn.status==='active'?'inactive':'active';
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/coupons-toggle'),{
+      method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:id,status:nextStatus})
+    });
+    if(!r.ok){toast('Could not update coupon.','error');return;}
+    await fetchFromServer();renderCoupons();
+    toast('Coupon '+(nextStatus==='active'?'activated':'deactivated')+'.','success');
+  }catch(e){toast('Could not update coupon.','error');}
 }
 
 function deleteCoupon(id){if(!canManageCoupons()){toast('Permission denied.','error');return;}
@@ -33023,32 +33001,60 @@ function deleteCoupon(id){if(!canManageCoupons()){toast('Permission denied.','er
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDeleteCoupon()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
-function confirmDeleteCoupon(){
+async function confirmDeleteCoupon(){
   var id=state.modal&&state.modal.id;if(!id)return;
-  db.coupons=(db.coupons||[]).filter(function(x){return x.id!==id;});
-  saveData();closeModal();renderCoupons();toast('Coupon deleted.','success');
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/coupons-delete'),{
+      method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:id})
+    });
+    if(!r.ok){toast('Could not delete coupon.','error');return;}
+    await fetchFromServer();closeModal();renderCoupons();toast('Coupon deleted.','success');
+  }catch(e){toast('Could not delete coupon.','error');}
 }
 
-function openCouponUsageLog(id){
+async function openCouponUsageLog(id){
   var cpn=(db.coupons||[]).find(function(x){return x.id===id;});if(!cpn)return;
-  var log=cpn.usageLog||[];
-  var body='<div style="font-size:13px;font-weight:600;margin-bottom:12px">'+esc(cpn.code)+' &bull; '+(cpn.usageCount||0)+' total use'+(cpn.usageCount!==1?'s':'')+'</div>';
-  if(!log.length){
-    body+='<div style="font-size:13px;color:var(--text-muted);padding:12px 0">No uses recorded yet.</div>';
-  }else{
-    body+='<div style="max-height:360px;overflow-y:auto">';
-    [...log].reverse().forEach(function(entry){
-      var c=entry.contactId?getContact(entry.contactId):null;
-      var staff=entry.staffId?getUserById(entry.staffId):null;
-      body+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">'
-        +'<div><div style="font-size:13px;font-weight:500">'+esc(c?c.name:'Walk-in')+'</div>'
-        +'<div style="font-size:11px;color:var(--text-muted)">'+fmtDate((entry.date||'').split('T')[0])+(staff?' &bull; '+esc(staff.name||staff.username):'')+'</div></div>'
-        +'<div style="font-size:13px;font-weight:700;color:var(--success-light)">-'+fmt$(entry.amountSaved||0)+'</div>'
-        +'</div>';
-    });
-    body+='</div>';
+  // Redemption history lives in coupon_redemptions (blob migration 2026-06-03);
+  // fetched on demand instead of carried in db.coupons. Open with a loading
+  // state, then populate. state.modal tracks which coupon usage is showing so a
+  // late fetch can't overwrite a modal the user already moved past.
+  state.modal={type:'coupon-usage',id:id};
+  function renderUsageBody(log){
+    var body='<div style="font-size:13px;font-weight:600;margin-bottom:12px">'+esc(cpn.code)+' &bull; '+(cpn.usageCount||0)+' total use'+(cpn.usageCount!==1?'s':'')+'</div>';
+    if(!log||!log.length){
+      body+='<div style="font-size:13px;color:var(--text-muted);padding:12px 0">No uses recorded yet.</div>';
+    }else{
+      body+='<div style="max-height:360px;overflow-y:auto">';
+      log.forEach(function(entry){
+        var nm=entry.contactId?(typeof getContactName==='function'?getContactName(entry.contactId):''):'';
+        if(!nm){ var cc=entry.contactId?getContact(entry.contactId):null; nm=cc?cc.name:''; }
+        var staff=entry.staffId?getUserById(entry.staffId):null;
+        body+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">'
+          +'<div><div style="font-size:13px;font-weight:500">'+esc(nm||'Walk-in')+'</div>'
+          +'<div style="font-size:11px;color:var(--text-muted)">'+fmtDate((entry.date||'').split('T')[0])+(staff?' &bull; '+esc(staff.name||staff.username):'')+'</div></div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--success-light)">-'+fmt$(entry.amountSaved||0)+'</div>'
+          +'</div>';
+      });
+      body+='</div>';
+    }
+    return body;
   }
-  openModal('Coupon Usage: '+esc(cpn.code),body,'<button class="btn btn-ghost" onclick="closeModal()">Close</button>');
+  openModal('Coupon Usage: '+esc(cpn.code),renderUsageBody(null).replace('No uses recorded yet.','Loading usage...'),'<button class="btn btn-ghost" onclick="closeModal()">Close</button>');
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/coupons-redemptions?id='+encodeURIComponent(id)),{credentials:'include'});
+    if(!r.ok)throw new Error('status '+r.status);
+    var data=await r.json();
+    // Guard: only write if this coupon's usage modal is still the one showing.
+    if(!state.modal||state.modal.type!=='coupon-usage'||state.modal.id!==id)return;
+    var mb=document.getElementById('modal-body');
+    if(mb)mb.innerHTML=renderUsageBody(data.usageLog||[]);
+  }catch(e){
+    if(state.modal&&state.modal.type==='coupon-usage'&&state.modal.id===id){
+      var mb2=document.getElementById('modal-body');
+      if(mb2)mb2.innerHTML='<div style="font-size:13px;color:var(--danger-light);padding:12px 0">Could not load usage history.</div>';
+    }
+  }
 }
 
 // ─── Coupon Modal ───
@@ -33143,7 +33149,7 @@ function cpnUpdatePreview(){
   }
 }
 
-function saveCoupon(){
+async function saveCoupon(){
   var code=(document.getElementById('cpn-code')&&document.getElementById('cpn-code').value||'').trim().toUpperCase();
   var val=parseFloat(document.getElementById('cpn-val')&&document.getElementById('cpn-val').value)||0;
   if(!code){toast('Coupon code required.','error');return;}
@@ -33174,15 +33180,17 @@ function saveCoupon(){
     productIds:productIds,
     updatedAt:now_()
   };
-  if(!db.coupons)db.coupons=[];
-  if(state.modal.id){
-    var existing2=db.coupons.find(function(x){return x.id===state.modal.id;});
-    if(existing2)Object.assign(existing2,data);
-  }else{
-    db.coupons.push(Object.assign({id:'cpn-'+uid(),usageCount:0,usageLog:[],createdAt:now_()},data));
-  }
-  saveData();closeModal();renderCoupons();
-  toast(state.modal.id?'Coupon updated.':'Coupon created.','success');
+  if(state.modal.id)data.id=state.modal.id;
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/coupons-upsert'),{
+      method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(data)
+    });
+    if(r.status===409){toast('That code is already in use.','error');return;}
+    if(!r.ok){toast('Could not save coupon.','error');return;}
+    await fetchFromServer();closeModal();renderCoupons();
+    toast(state.modal.id?'Coupon updated.':'Coupon created.','success');
+  }catch(e){toast('Could not save coupon.','error');}
 }
 
 // ─── POS Coupon Apply / Remove ───
