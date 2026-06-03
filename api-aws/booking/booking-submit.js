@@ -22,6 +22,7 @@
 
 const db = require('./lib/db');
 const contactsLib = require('./lib/contacts');
+const couponsLib = require('./lib/coupons');
 const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocation');
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
@@ -653,19 +654,18 @@ async function handler(req, res) {
     const couponsAllowed = !widget || widget.allow_coupons !== false;
     if (couponsAllowed && coupon_code && coupon_code.trim()) {
       const cleanCode = coupon_code.trim().toUpperCase();
-      const couponList = blob.coupons || [];
-      couponObj = couponList.find(c =>
-        c && c.code && c.code.toUpperCase() === cleanCode && c.active !== false
-      );
-      if (!couponObj) {
+      // Coupons read from the RDS table via accessor (blob migration 2026-06-03).
+      // camelCase shape: status, expiryDate, maxUses (was the drifted active/expiresAt/usageLimit).
+      couponObj = await couponsLib.getCouponByCode(subaccountId, cleanCode);
+      if (!couponObj || couponObj.status !== 'active') {
         return res.status(400).json({ error: 'Coupon code is not valid' });
       }
-      // Check expiration
-      if (couponObj.expiresAt && couponObj.expiresAt < date) {
+      // Check expiration (expiryDate is a full ISO ts; date is YYYY-MM-DD)
+      if (couponObj.expiryDate && String(couponObj.expiryDate).slice(0, 10) < date) {
         return res.status(400).json({ error: 'Coupon has expired' });
       }
       // Check usage limit
-      if (couponObj.usageLimit && couponObj.usageCount >= couponObj.usageLimit) {
+      if (couponObj.maxUses && (couponObj.usageCount || 0) >= couponObj.maxUses) {
         return res.status(400).json({ error: 'Coupon usage limit reached' });
       }
       // Compute discount
@@ -1068,28 +1068,22 @@ async function handler(req, res) {
       ]);
     }
 
-    // 14. Log coupon usage (only after payment succeeded - per policy, never on failure)
+    // 14. Log coupon usage (only after payment succeeded - per policy, never on failure).
+    // Atomic redemption insert + usage_count bump in the RDS coupons tables
+    // (blob migration 2026-06-03). Replaces the prior blob round-trip.
     if (couponObj && (chargeOccurred || !requirePayment)) {
-      const cpnList = blob.coupons || [];
-      const cpnIdx = cpnList.findIndex(c => c.id === couponObj.id);
-      if (cpnIdx >= 0) {
-        const cpn = cpnList[cpnIdx];
-        cpn.usageCount = (cpn.usageCount || 0) + 1;
-        cpn.usageLog = cpn.usageLog || [];
-        cpn.usageLog.push({
-          id: uid(),
+      try {
+        await couponsLib.logRedemption(subaccountId, {
+          couponId: couponObj.id,
           contactId: contactId,
           paymentId: paymentId,
           amountSaved: couponDiscount,
-          date: now_(),
           staffId: assignedStaffId
         });
-        cpnList[cpnIdx] = cpn;
-        const updatedBlob = { ...blob, coupons: cpnList };
-        await db.query(
-          'UPDATE subaccount_data SET data = $1 WHERE subaccount_id = $2',
-          [JSON.stringify(updatedBlob), subaccountId]
-        );
+      } catch (redeemErr) {
+        // Never fail the booking over redemption logging. The payment + appointment
+        // already succeeded; a missed usage increment is a soft error worth logging.
+        console.error('[booking-submit] coupon redemption logging failed:', redeemErr.message);
       }
     }
 
