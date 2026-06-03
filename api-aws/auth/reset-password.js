@@ -135,25 +135,15 @@ async function handler(req, res) {
           }
           userIdForRevoke = existingId;
         } else {
-          // Create new row
-          const newId = crypto.randomUUID();
-          try {
-            await db.insertOne('subaccount_users', {
-              id: newId,
-              subaccount_id: subId,
-              username: username,
-              email: rec.email,
-              display_name: username,
-              password_hash: newHash,
-              role: 'admin',
-              active: true,
-              must_change_password: false,
-              password_changed_at: nowIso
-            });
-          } catch (e) {
-            return res.status(500).json({ error: 'Failed to create user: ' + e.message });
-          }
-          userIdForRevoke = newId;
+          // Create-new-user branch removed (Jun 2026). A password reset
+          // must never provision an account. This composite path only
+          // ever fired from the legacy subaccounts.admin_username fallback
+          // in forgot-password, now cut. Any composite token still in
+          // flight can update an existing row above; if no row matches,
+          // we refuse rather than mint an admin.
+          return res.status(400).json({
+            error: 'No matching account for this reset link. Please request a new password reset.'
+          });
         }
       }
 
