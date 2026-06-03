@@ -30161,8 +30161,8 @@ function openStaffServicesModal(staffId){
 
   function leafHtml(s){
     var on=(Array.isArray(s.assigned_staff)?s.assigned_staff:[]).indexOf(staffId)>=0;
-    var grp=s.group_capable?' <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">(group, min '+(parseInt(s.group_staff_count)||2)+')</span>':'';
-    return '<label class="ss-leaf" style="display:flex;align-items:center;gap:9px;padding:6px 10px 6px 40px;cursor:pointer">'
+    var grp=s.group_capable?' <span style="font-size:11px;color:var(--text-muted)">(group, min '+(parseInt(s.group_staff_count)||2)+')</span>':'';
+    return '<label class="ss-leaf" style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">'
       +'<input type="checkbox" class="ss-svc-chk" value="'+esc(s.id)+'"'+(on?' checked':'')+' onchange="_ssLeafChanged()">'
       +'<span style="flex:1;font-size:13px;color:var(--text)">'+esc(s.name||'(unnamed)')+grp+'</span>'
       +'</label>';
@@ -30173,21 +30173,21 @@ function openStaffServicesModal(staffId){
     var leaves=groups[key].map(leafHtml).join('');
     var bid='ssb-'+i;
     return '<div class="ss-branch" data-branch="'+bid+'">'
-      +'<div style="display:flex;align-items:center;gap:7px;padding:7px 10px 7px 22px;border-top:1px solid var(--border);background:var(--bg-card-hover)">'
-        +'<span class="ss-caret" onclick="_ssToggleBranch(\''+bid+'\')" style="cursor:pointer;display:inline-flex;width:14px;justify-content:center;color:var(--text-muted);user-select:none">\u25be</span>'
+      +'<div style="display:flex;align-items:center;gap:8px;padding:4px 0 4px 18px">'
+        +'<span class="ss-caret" onclick="_ssToggleBranch(\''+bid+'\')" style="cursor:pointer;display:inline-flex;width:12px;justify-content:center;color:var(--text-dim);user-select:none;font-size:11px">\u25be</span>'
         +'<input type="checkbox" class="ss-cat-chk" data-branch="'+bid+'" onchange="_ssCatChanged(\''+bid+'\')">'
-        +'<span onclick="_ssToggleBranch(\''+bid+'\')" style="flex:1;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;text-transform:uppercase;letter-spacing:.04em">'+esc(label)+'</span>'
+        +'<span onclick="_ssToggleBranch(\''+bid+'\')" style="flex:1;font-size:13px;color:var(--text);cursor:pointer">'+esc(label)+'</span>'
       +'</div>'
-      +'<div class="ss-branch-body" data-branch="'+bid+'">'+leaves+'</div>'
+      +'<div class="ss-branch-body" data-branch="'+bid+'" style="margin-left:23px;padding-left:12px;border-left:1px dotted var(--border)">'+leaves+'</div>'
       +'</div>';
   }).join('');
 
-  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">Pick which services <strong style="color:var(--text)">'+esc(u.name||u.username)+'</strong> can be booked for.</div>'
-    +'<div style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)">'
-      +'<div style="display:flex;align-items:center;gap:7px;padding:9px 10px;background:var(--bg-card)">'
-        +'<span style="width:14px"></span>'
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Pick which services <strong style="color:var(--text)">'+esc(u.name||u.username)+'</strong> can be booked for.</div>'
+    +'<div style="max-height:380px;overflow-y:auto;padding:4px 2px">'
+      +'<div style="display:flex;align-items:center;gap:8px;padding:4px 0">'
+        +'<span style="width:12px"></span>'
         +'<input type="checkbox" id="ss-all-chk" onchange="_ssAllChanged()">'
-        +'<span style="flex:1;font-size:13px;font-weight:700;color:var(--text)">ALL</span>'
+        +'<span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">ALL</span>'
       +'</div>'
       +branches
     +'</div>';
