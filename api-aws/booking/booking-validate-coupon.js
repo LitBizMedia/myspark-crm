@@ -5,10 +5,16 @@
 //
 // CHANGED 2026-05-07: TZ-aware. Coupon expiry is checked against today in the
 // subaccount's timezone, not UTC.
+// CHANGED 2026-06-03: Reads coupons from the RDS coupons table via lib/coupons
+// (blob migration). Fixes three drifted field checks that silently disabled
+// enforcement: active (was c.active!==false, real field is status), expiry
+// (was expiresAt, real field is expiryDate), max uses (was usageLimit, real
+// field is maxUses).
 
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz } = require('./lib/timezone');
+const couponsLib = require('./lib/coupons');
 
 function r2(n) { return Math.round((parseFloat(n) || 0) * 100) / 100; }
 
@@ -52,18 +58,17 @@ async function handler(req, res) {
       }
     }
 
+    // Timezone still comes from the blob settings (TIER 3, stays in blob).
     const blobResult = await db.query(
       'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1', [subaccountId]
     );
     const blob = blobResult.rows[0]?.data || {};
-    const couponList = blob.coupons || [];
     const subTz = (blob.settings && blob.settings.timezone) || 'America/Chicago';
 
-    const coupon = couponList.find(c =>
-      c && c.code && String(c.code).toUpperCase() === cleanCode && c.active !== false
-    );
+    // Coupons now read from the RDS table (camelCase shape via accessor).
+    const coupon = await couponsLib.getCouponByCode(subaccountId, cleanCode);
 
-    if (!coupon) {
+    if (!coupon || coupon.status !== 'active') {
       return res.status(200).json({ valid: false, error: 'Coupon code is not valid' });
     }
 
@@ -71,11 +76,11 @@ async function handler(req, res) {
     // today in the subaccount's timezone (NOT UTC; that's a 5-hour error in
     // Eastern that can falsely flag a still-valid coupon as expired).
     const checkDate = date || todayInTz(subTz);
-    if (coupon.expiresAt && coupon.expiresAt < checkDate) {
+    if (coupon.expiryDate && String(coupon.expiryDate).slice(0, 10) < checkDate) {
       return res.status(200).json({ valid: false, error: 'Coupon has expired' });
     }
 
-    if (coupon.usageLimit && (coupon.usageCount || 0) >= coupon.usageLimit) {
+    if (coupon.maxUses && (coupon.usageCount || 0) >= coupon.maxUses) {
       return res.status(200).json({ valid: false, error: 'Coupon usage limit reached' });
     }
 
