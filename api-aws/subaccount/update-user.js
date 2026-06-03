@@ -25,6 +25,7 @@ const {
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const crypto = require('crypto');
+const { normalizePhone } = require('./lib/phone');
 
 const VALID_ROLES = ['admin', 'manager', 'user', 'practitioner'];
 
@@ -43,7 +44,7 @@ async function handler(req, res) {
   }
 
   const subaccountId = session.subaccount_id;
-  const { username, role, email, displayName, jobTitle, avatarFileId, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly, welcomeResend } = req.body || {};
+  const { username, role, email, displayName, jobTitle, avatarFileId, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly, welcomeResend, phone } = req.body || {};
   // Accept email as identifier when username not provided (post email-as-login migration)
   const identifier = username || email;
 
@@ -147,6 +148,15 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'valid email required' });
     }
 
+    // Phone (optional). Normalize to E.164; reject non-empty invalid.
+    let normPhoneCreate = null;
+    if (phone !== undefined && phone !== null && String(phone).trim() !== '') {
+      normPhoneCreate = normalizePhone(phone);
+      if (!normPhoneCreate) {
+        return res.status(400).json({ error: 'Enter a valid phone number.' });
+      }
+    }
+
     // Look up subaccount slug for the magic link
     let subSlug;
     try {
@@ -172,6 +182,7 @@ async function handler(req, res) {
       display_name: displayName || normEmail,
       job_title: jobTitle || null,
       avatar_file_id: avatarFileId || null,
+      phone: normPhoneCreate || null,
       password_hash: newHash,
       role: role || 'user',
       active: active !== false,
@@ -352,6 +363,19 @@ async function handler(req, res) {
   if (jobTitle !== undefined && jobTitle !== targetUser.job_title) {
     patch.job_title = jobTitle;
     changedFields.push('job_title');
+  }
+  if (phone !== undefined) {
+    let np = null;
+    if (phone !== null && String(phone).trim() !== '') {
+      np = normalizePhone(phone);
+      if (!np) {
+        return res.status(400).json({ error: 'Enter a valid phone number.' });
+      }
+    }
+    if (np !== targetUser.phone) {
+      patch.phone = np;
+      changedFields.push('phone');
+    }
   }
   if (schedule !== undefined) {
     patch.schedule = schedule ? JSON.stringify(schedule) : null;
