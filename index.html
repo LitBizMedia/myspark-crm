@@ -30127,6 +30127,101 @@ function getUserDayStatus(userId, dateStr){
 // =====================================================
 // STAFF TEAM TAB (with admin management inline)
 // =====================================================
+// =====================================================
+// STAFF -> SERVICES assignment (staff-centric bulk editor)
+// Writes assigned_staff across services in one atomic call. Excludes classes
+// (they staff via instructor_id per session). Group services are guarded
+// server-side: a removal that drops below group_staff_count is rejected whole.
+// =====================================================
+function _staffSvcUniverse(){
+  // Non-class services only. This is the "universe" the backend reconciles.
+  return (db.services||[]).filter(function(s){return s.type!=='class';});
+}
+function openStaffServicesModal(staffId){
+  var u=(allUsers()||[]).find(function(x){return x.id===staffId;});
+  if(!u){toast('Staff member not found.','error');return;}
+  var svcs=_staffSvcUniverse().slice().sort(function(a,b){return (a.name||'').localeCompare(b.name||'');});
+  if(!svcs.length){
+    openModal('Assign Services','<div style="font-size:13px;color:var(--text-muted)">No services to assign yet. Create a service first.</div>',
+      '<button class="btn btn-ghost" onclick="closeModal()">Close</button>');
+    return;
+  }
+  // Category dropdown options (non-empty categories present in the universe).
+  var cats=[];
+  svcs.forEach(function(s){ if(s.category&&cats.indexOf(s.category)<0)cats.push(s.category); });
+  cats.sort();
+  var catOpts='<option value="">Bulk-select a category...</option>'
+    +cats.map(function(ct){return '<option value="'+esc(ct)+'">'+esc(ct)+'</option>';}).join('');
+
+  var rows=svcs.map(function(s){
+    var on=(Array.isArray(s.assigned_staff)?s.assigned_staff:[]).indexOf(staffId)>=0;
+    var grp=s.group_capable?' <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">(group, min '+(parseInt(s.group_staff_count)||2)+')</span>':'';
+    return '<label class="ss-svc-row" data-cat="'+esc(s.category||'')+'" style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer">'
+      +'<input type="checkbox" class="ss-svc-chk" value="'+esc(s.id)+'"'+(on?' checked':'')+'>'
+      +'<span style="flex:1;font-size:13px;color:var(--text)">'+esc(s.name||'(unnamed)')+grp+'</span>'
+      +'</label>';
+  }).join('');
+
+  var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">Pick which services <strong style="color:var(--text)">'+esc(u.name||u.username)+'</strong> can be booked for.</div>'
+    +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">'
+    +'<button class="btn btn-ghost btn-sm" onclick="_ssSelectAll(true)">Select all</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="_ssSelectAll(false)">Select none</button>'
+    +'<select class="filter-sel" id="ss-cat-sel" onchange="_ssSelectCategory(this.value)" style="margin-left:auto">'+catOpts+'</select>'
+    +'</div>'
+    +'<div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)">'+rows+'</div>';
+
+  openModal('Assign Services',body,
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+    +'<button class="btn btn-primary" id="ss-save-btn" onclick="saveStaffServices(\''+staffId+'\')">Save</button>');
+}
+function _ssSelectAll(on){
+  Array.prototype.forEach.call(document.querySelectorAll('.ss-svc-chk'),function(chk){chk.checked=!!on;});
+}
+function _ssSelectCategory(cat){
+  if(!cat)return;
+  Array.prototype.forEach.call(document.querySelectorAll('.ss-svc-row'),function(row){
+    if(row.getAttribute('data-cat')===cat){
+      var chk=row.querySelector('.ss-svc-chk');
+      if(chk)chk.checked=true;
+    }
+  });
+  var sel=document.getElementById('ss-cat-sel');
+  if(sel)sel.value='';
+}
+async function saveStaffServices(staffId){
+  var universe=_staffSvcUniverse().map(function(s){return s.id;});
+  var wanted=Array.prototype.map.call(document.querySelectorAll('.ss-svc-chk:checked'),function(c){return c.value;});
+  var btn=document.getElementById('ss-save-btn');
+  if(btn){btn.disabled=true;btn.textContent='Saving...';}
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/staff-services-set'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({staff_id:staffId,universe_service_ids:universe,service_ids:wanted})
+    });
+    if(r.status===409){
+      var blk=await r.json();
+      var names=(blk.blocked||[]).map(function(b){return esc(b.name)+' (needs '+b.min+')';}).join(', ');
+      toast('Blocked: removing this staff would break group services below their minimum: '+names+'. Lower the group size or keep them assigned.','error');
+      if(btn){btn.disabled=false;btn.textContent='Save';}
+      return;
+    }
+    if(!r.ok){
+      var err=await r.json().catch(function(){return {};});
+      toast('Save failed: '+(err.error||('status '+r.status)),'error');
+      if(btn){btn.disabled=false;btn.textContent='Save';}
+      return;
+    }
+    var data=await r.json();
+    await fetchFromServer();
+    closeModal();
+    toast(data.changed?(data.changed+' service'+(data.changed!==1?'s':'')+' updated.'):'No changes.','success');
+  }catch(e){
+    toast('Save failed: '+(e.message||'network error'),'error');
+    if(btn){btn.disabled=false;btn.textContent='Save';}
+  }
+}
 function renderStaffTeam(){
   const el=document.getElementById('staff-team-view');if(!el)return;
   const isAdmin=state.user&&state.user.role==='admin';
@@ -30155,6 +30250,7 @@ function renderStaffTeam(){
       +(isAdminOrManager()?'<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;justify-content:center">'
         +'<button class="btn btn-ghost btn-sm" onclick="openEditUserModal(\''+u.id+'\')">Edit</button>'
         +'<button class="btn btn-ghost btn-sm" onclick="openUserSchedModal(\''+u.id+'\')">Schedule</button>'
+        +'<button class="btn btn-ghost btn-sm" onclick="openStaffServicesModal(\''+u.id+'\')">Services</button>'
         +(!isPrimaryAdmin(u.id)&&userRole()==='admin'?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\')">Remove</button>':'')
         +'</div>':'')
       +'</div>';
