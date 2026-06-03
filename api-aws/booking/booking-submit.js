@@ -754,6 +754,90 @@ async function handler(req, res) {
       }
     }
 
+    // Class bookings: secure the seat BEFORE charging.
+    // A class seat is reserved before any card charge so a patient is never
+    // billed for a seat that capacity or duplicate-enrollment rules reject.
+    // A contact row is not money, so resolving/creating it here is safe even if
+    // a later charge fails. On charge failure the participant is removed below.
+    let contactId;
+    let participantId = null;   // null for service/appointment bookings
+    let classSeatClaimed = false;
+
+    if (classSession) {
+      const cleanEmailEarly = (client_info.email || '').toLowerCase().trim();
+      let existingEarly = null;
+      if (cleanEmailEarly) {
+        existingEarly = await contactsLib.getContactByEmail(subaccountId, cleanEmailEarly);
+      }
+      if (existingEarly) {
+        contactId = existingEarly.id;
+      } else {
+        const createdEarly = await contactsLib.createContact(subaccountId, {
+          name: client_info.name,
+          email: cleanEmailEarly,
+          phone: client_info.phone || '',
+          source: 'booking_widget',
+          sms_consent_transactional: !!(client_info.sms_consent && client_info.phone),
+          sms_consent_source: 'booking_widget'
+        });
+        contactId = createdEarly.id;
+      }
+
+      participantId = uid();
+      const newParticipant = {
+        id: participantId,
+        contact_id: contactId,
+        status: 'enrolled',
+        enrolled_at: now_(),
+        source: 'booking_widget',
+        widget_id: widget_id || null
+      };
+      // Atomic claim: scheduled AND under capacity AND this contact not already
+      // actively enrolled. Cancelled rows do not block re-enrollment.
+      const claimRes = await db.query(
+        `UPDATE class_sessions
+         SET participants = COALESCE(participants, '[]'::jsonb) || $1::jsonb,
+             updated_at = NOW()
+         WHERE id = $2
+           AND subaccount_id = $3
+           AND status = 'scheduled'
+           AND (
+             SELECT COUNT(*)
+             FROM jsonb_array_elements(COALESCE(participants, '[]'::jsonb)) AS p
+             WHERE p->>'status' = 'enrolled'
+           ) < capacity
+           AND NOT EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements(COALESCE(participants, '[]'::jsonb)) AS p2
+             WHERE p2->>'contact_id' = $4
+               AND p2->>'status' = 'enrolled'
+           )
+         RETURNING id`,
+        [JSON.stringify(newParticipant), classSession.id, subaccountId, contactId]
+      );
+      if (!claimRes.rows.length) {
+        const checkRes = await db.query(
+          `SELECT status, capacity, participants FROM class_sessions
+           WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
+          [classSession.id, subaccountId]
+        );
+        if (!checkRes.rows.length) {
+          return res.status(404).json({ error: 'Class session not found' });
+        }
+        const crow = checkRes.rows[0];
+        if (crow.status === 'cancelled') {
+          return res.status(400).json({ error: 'This class session has been cancelled' });
+        }
+        const cparts = Array.isArray(crow.participants) ? crow.participants : [];
+        const alreadyIn = cparts.some(p => p && p.contact_id === contactId && p.status === 'enrolled');
+        if (alreadyIn) {
+          return res.status(409).json({ error: 'You are already enrolled in this class.' });
+        }
+        return res.status(409).json({ error: 'This class is full. Please pick another session.' });
+      }
+      classSeatClaimed = true;
+    }
+
     if (requirePayment && paymentMode !== 'none' && chargeAmount > 0) {
       if (!hasNonceForPayment) {
         return res.status(400).json({ error: 'Payment information is required for this booking' });
@@ -781,7 +865,25 @@ async function handler(req, res) {
       const chargeData = await chargeRes.json();
       if (!chargeRes.ok || chargeData.errors) {
         const errMsg = chargeData.errors?.[0]?.detail || 'Payment failed. Please check your card details.';
-        // No appointment, no contact, no payment record. Per policy, no money state changes.
+        // Charge failed. Release the class seat reserved pre-charge so the roster
+        // holds no ghost. No payment record was created. Money state unchanged.
+        if (classSeatClaimed && participantId) {
+          try {
+            await db.query(
+              `UPDATE class_sessions
+               SET participants = (
+                     SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+                     FROM jsonb_array_elements(COALESCE(participants, '[]'::jsonb)) AS elem
+                     WHERE elem->>'id' <> $1
+                   ),
+                   updated_at = NOW()
+               WHERE id = $2 AND subaccount_id = $3`,
+              [participantId, classSession.id, subaccountId]
+            );
+          } catch (releaseErr) {
+            console.error('[booking-submit] seat release after failed charge failed:', releaseErr.message);
+          }
+        }
         return res.status(402).json({ error: errMsg });
       }
       squarePaymentId = chargeData.payment?.id || '';
@@ -792,15 +894,16 @@ async function handler(req, res) {
     }
 
     // 11. Find or create contact (RDS contacts table).
-    let contactId;
+    // Class bookings already resolved the contact before charging (see above).
     const cleanEmail = (client_info.email || '').toLowerCase().trim();
-    let existing = null;
-    if (cleanEmail) {
-      existing = await contactsLib.getContactByEmail(subaccountId, cleanEmail);
-    }
-    if (existing) {
-      contactId = existing.id;
-    } else {
+    if (!contactId) {
+      let existing = null;
+      if (cleanEmail) {
+        existing = await contactsLib.getContactByEmail(subaccountId, cleanEmail);
+      }
+      if (existing) {
+        contactId = existing.id;
+      } else {
       const created = await contactsLib.createContact(subaccountId, {
         name: client_info.name,
         email: cleanEmail,
@@ -817,6 +920,7 @@ async function handler(req, res) {
         'UPDATE subaccount_data SET data = $1 WHERE subaccount_id = $2',
         [JSON.stringify(updatedBlob), subaccountId]
       );
+      }
     }
 
     // 12. Create the booking record.
@@ -827,56 +931,8 @@ async function handler(req, res) {
     // PostgreSQL's row-level write atomicity guarantees no two concurrent
     // registrations can both consume the last spot.
     let apptId = null;            // null for class bookings
-    let participantId = null;     // null for service/appointment bookings
 
-    if (classSession) {
-      participantId = uid();
-      // Match the existing participant schema used by svcEnroll and the dashboard
-      // roster: {contact_id, status, enrolled_at}. Adding extra fields (id, source)
-      // is fine - existing code ignores unknown keys.
-      const newParticipant = {
-        id: participantId,
-        contact_id: contactId,
-        status: 'enrolled',
-        enrolled_at: now_(),
-        source: 'booking_widget',
-        widget_id: widget_id || null
-      };
-      // Conditional UPDATE: only succeeds if session is scheduled AND capacity available.
-      // The WHERE clause counts current 'enrolled' participants and compares to capacity
-      // in the same statement that appends, making the check + write atomic.
-      const updateRes = await db.query(
-        `UPDATE class_sessions
-         SET participants = COALESCE(participants, '[]'::jsonb) || $1::jsonb,
-             updated_at = NOW()
-         WHERE id = $2
-           AND subaccount_id = $3
-           AND status = 'scheduled'
-           AND (
-             SELECT COUNT(*)
-             FROM jsonb_array_elements(COALESCE(participants, '[]'::jsonb)) AS p
-             WHERE p->>'status' = 'enrolled'
-           ) < capacity
-         RETURNING id`,
-        [JSON.stringify(newParticipant), classSession.id, subaccountId]
-      );
-      if (!updateRes.rows.length) {
-        // Either cancelled or full. Re-read to give the user a useful error.
-        const checkRes = await db.query(
-          `SELECT status, capacity, participants FROM class_sessions
-           WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
-          [classSession.id, subaccountId]
-        );
-        if (!checkRes.rows.length) {
-          return res.status(404).json({ error: 'Class session not found' });
-        }
-        const row = checkRes.rows[0];
-        if (row.status === 'cancelled') {
-          return res.status(400).json({ error: 'This class session has been cancelled' });
-        }
-        return res.status(409).json({ error: 'This class is full. Please pick another session.' });
-      }
-    } else {
+    if (!classSession) {
       // Service or appointment widget: standard appointment INSERT
       apptId = uid();
       const apptLocation = service ? (service.location || null) : null;
