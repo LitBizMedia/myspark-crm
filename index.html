@@ -30146,47 +30146,109 @@ function openStaffServicesModal(staffId){
       '<button class="btn btn-ghost" onclick="closeModal()">Close</button>');
     return;
   }
-  // Category dropdown options (non-empty categories present in the universe).
-  var cats=[];
-  svcs.forEach(function(s){ if(s.category&&cats.indexOf(s.category)<0)cats.push(s.category); });
-  cats.sort();
-  var catOpts='<option value="">Bulk-select a category...</option>'
-    +cats.map(function(ct){return '<option value="'+esc(ct)+'">'+esc(ct)+'</option>';}).join('');
+  // Group services by category. Uncategorized go to their own branch, sorted last.
+  var UNCAT='\u0000uncat'; // sentinel key; rendered as "Uncategorized"
+  var groups={};
+  svcs.forEach(function(s){
+    var key=(s.category&&String(s.category).trim())?s.category:UNCAT;
+    if(!groups[key])groups[key]=[];
+    groups[key].push(s);
+  });
+  var catKeys=Object.keys(groups).sort(function(a,b){
+    if(a===UNCAT)return 1; if(b===UNCAT)return -1;
+    return a.localeCompare(b);
+  });
 
-  var rows=svcs.map(function(s){
+  function leafHtml(s){
     var on=(Array.isArray(s.assigned_staff)?s.assigned_staff:[]).indexOf(staffId)>=0;
     var grp=s.group_capable?' <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">(group, min '+(parseInt(s.group_staff_count)||2)+')</span>':'';
-    return '<label class="ss-svc-row" data-cat="'+esc(s.category||'')+'" style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer">'
-      +'<input type="checkbox" class="ss-svc-chk" value="'+esc(s.id)+'"'+(on?' checked':'')+'>'
+    return '<label class="ss-leaf" style="display:flex;align-items:center;gap:9px;padding:6px 10px 6px 40px;cursor:pointer">'
+      +'<input type="checkbox" class="ss-svc-chk" value="'+esc(s.id)+'"'+(on?' checked':'')+' onchange="_ssLeafChanged()">'
       +'<span style="flex:1;font-size:13px;color:var(--text)">'+esc(s.name||'(unnamed)')+grp+'</span>'
       +'</label>';
+  }
+
+  var branches=catKeys.map(function(key,i){
+    var label=(key===UNCAT)?'Uncategorized':key;
+    var leaves=groups[key].map(leafHtml).join('');
+    var bid='ssb-'+i;
+    return '<div class="ss-branch" data-branch="'+bid+'">'
+      +'<div style="display:flex;align-items:center;gap:7px;padding:7px 10px 7px 22px;border-top:1px solid var(--border);background:var(--bg-card-hover)">'
+        +'<span class="ss-caret" onclick="_ssToggleBranch(\''+bid+'\')" style="cursor:pointer;display:inline-flex;width:14px;justify-content:center;color:var(--text-muted);user-select:none">\u25be</span>'
+        +'<input type="checkbox" class="ss-cat-chk" data-branch="'+bid+'" onchange="_ssCatChanged(\''+bid+'\')">'
+        +'<span onclick="_ssToggleBranch(\''+bid+'\')" style="flex:1;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;text-transform:uppercase;letter-spacing:.04em">'+esc(label)+'</span>'
+      +'</div>'
+      +'<div class="ss-branch-body" data-branch="'+bid+'">'+leaves+'</div>'
+      +'</div>';
   }).join('');
 
   var body='<div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">Pick which services <strong style="color:var(--text)">'+esc(u.name||u.username)+'</strong> can be booked for.</div>'
-    +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">'
-    +'<button class="btn btn-ghost btn-sm" onclick="_ssSelectAll(true)">Select all</button>'
-    +'<button class="btn btn-ghost btn-sm" onclick="_ssSelectAll(false)">Select none</button>'
-    +'<select class="filter-sel" id="ss-cat-sel" onchange="_ssSelectCategory(this.value)" style="margin-left:auto">'+catOpts+'</select>'
-    +'</div>'
-    +'<div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)">'+rows+'</div>';
+    +'<div style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)">'
+      +'<div style="display:flex;align-items:center;gap:7px;padding:9px 10px;background:var(--bg-card)">'
+        +'<span style="width:14px"></span>'
+        +'<input type="checkbox" id="ss-all-chk" onchange="_ssAllChanged()">'
+        +'<span style="flex:1;font-size:13px;font-weight:700;color:var(--text)">ALL</span>'
+      +'</div>'
+      +branches
+    +'</div>';
 
   openModal('Assign Services',body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-primary" id="ss-save-btn" onclick="saveStaffServices(\''+staffId+'\')">Save</button>');
+
+  // Initial tri-state sync after render.
+  setTimeout(_ssRecomputeTree,0);
 }
-function _ssSelectAll(on){
-  Array.prototype.forEach.call(document.querySelectorAll('.ss-svc-chk'),function(chk){chk.checked=!!on;});
+function _ssToggleBranch(bid){
+  var body=document.querySelector('.ss-branch-body[data-branch="'+bid+'"]');
+  var caret=document.querySelector('.ss-branch[data-branch="'+bid+'"] .ss-caret');
+  if(!body)return;
+  var hidden=body.style.display==='none';
+  body.style.display=hidden?'':'none';
+  if(caret)caret.textContent=hidden?'\u25be':'\u25b8';
 }
-function _ssSelectCategory(cat){
+function _ssBranchLeaves(bid){
+  var body=document.querySelector('.ss-branch-body[data-branch="'+bid+'"]');
+  return body?Array.prototype.slice.call(body.querySelectorAll('.ss-svc-chk')):[];
+}
+function _ssCatChanged(bid){
+  var cat=document.querySelector('.ss-cat-chk[data-branch="'+bid+'"]');
   if(!cat)return;
-  Array.prototype.forEach.call(document.querySelectorAll('.ss-svc-row'),function(row){
-    if(row.getAttribute('data-cat')===cat){
-      var chk=row.querySelector('.ss-svc-chk');
-      if(chk)chk.checked=true;
-    }
+  var on=cat.checked;
+  _ssBranchLeaves(bid).forEach(function(chk){chk.checked=on;});
+  _ssRecomputeTree();
+}
+function _ssAllChanged(){
+  var all=document.getElementById('ss-all-chk');
+  if(!all)return;
+  var on=all.checked;
+  Array.prototype.forEach.call(document.querySelectorAll('.ss-svc-chk'),function(chk){chk.checked=on;});
+  _ssRecomputeTree();
+}
+function _ssLeafChanged(){ _ssRecomputeTree(); }
+function _setTri(el,checked,indeterminate){
+  if(!el)return;
+  el.checked=checked;
+  el.indeterminate=!!indeterminate;
+}
+function _ssRecomputeTree(){
+  // Bottom-up: each category parent reflects its leaves; ALL reflects everything.
+  var branches=document.querySelectorAll('.ss-branch');
+  var totalLeaves=0,totalChecked=0;
+  Array.prototype.forEach.call(branches,function(br){
+    var bid=br.getAttribute('data-branch');
+    var leaves=_ssBranchLeaves(bid);
+    var checked=leaves.filter(function(c){return c.checked;}).length;
+    totalLeaves+=leaves.length; totalChecked+=checked;
+    var cat=document.querySelector('.ss-cat-chk[data-branch="'+bid+'"]');
+    if(checked===0)_setTri(cat,false,false);
+    else if(checked===leaves.length)_setTri(cat,true,false);
+    else _setTri(cat,false,true);
   });
-  var sel=document.getElementById('ss-cat-sel');
-  if(sel)sel.value='';
+  var all=document.getElementById('ss-all-chk');
+  if(totalChecked===0)_setTri(all,false,false);
+  else if(totalChecked===totalLeaves)_setTri(all,true,false);
+  else _setTri(all,false,true);
 }
 async function saveStaffServices(staffId){
   var universe=_staffSvcUniverse().map(function(s){return s.id;});
