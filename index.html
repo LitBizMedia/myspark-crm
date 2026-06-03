@@ -21442,19 +21442,36 @@ function svcEnroll(sessionId, contactId){
   }).then(function(data){
     // Defense in depth: backend signals already_enrolled if a race slipped past the client guard.
     if(data&&data.already_enrolled){toast('Already on the roster.','info');}
+    // Authoritative: replace local participants with the server's healed copy.
+    if(data&&Array.isArray(data.participants)){
+      s.participants=data.participants;
+      openRosterModal(sessionId);
+    }
   }).catch(function(){});
 }
 
 function svcCancelEnroll(sessionId, contactId){
   var s=(db.classSessions||[]).find(function(x){return x.id===sessionId;});
   if(!s)return;
-  var p=s.participants&&s.participants.find(function(x){return x.contact_id===contactId;});
-  if(p)p.status='cancelled';
+  // Optimistic: cancel ALL rows for this contact (filter, not find) so dirty
+  // data with duplicate rows reflects correctly before the server responds.
+  if(Array.isArray(s.participants)){
+    s.participants.forEach(function(x){if(x.contact_id===contactId)x.status='cancelled';});
+  }
   openRosterModal(sessionId);
   fetch(apiUrl('/api/subaccount/class-sessions-enroll'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({session_id:sessionId,contact_id:contactId,action:'cancel'})
+  }).then(function(r){
+    if(!r.ok){toast('Sync error. Refresh to verify.','error');return;}
+    return r.json();
+  }).then(function(data){
+    // Authoritative: replace local participants with the server's healed copy.
+    if(data&&Array.isArray(data.participants)){
+      s.participants=data.participants;
+      openRosterModal(sessionId);
+    }
   }).catch(function(){});
 }
 function renderApptList(){

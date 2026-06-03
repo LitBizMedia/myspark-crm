@@ -65,10 +65,21 @@ async function handler(req, res) {
         return res.status(409).json({ error: 'Class is full' });
       }
 
-      if (existing) {
-        // Was previously cancelled, re-enrolling.
-        existing.status = 'enrolled';
-        existing.enrolled_at = new Date().toISOString();
+      // Collapse any duplicate rows for this contact to a single enrolled row.
+      // Dirty data from before dedup existed could have multiple rows per
+      // contact. Keep the earliest enrolled_at so history of first signup holds.
+      const sameContact = participants.filter(p => p.contact_id === contact_id);
+      if (sameContact.length > 0) {
+        const earliest = sameContact
+          .map(p => p.enrolled_at)
+          .filter(Boolean)
+          .sort()[0] || new Date().toISOString();
+        participants = participants.filter(p => p.contact_id !== contact_id);
+        participants.push({
+          contact_id,
+          status: 'enrolled',
+          enrolled_at: earliest
+        });
       } else {
         participants.push({
           contact_id,
@@ -77,9 +88,22 @@ async function handler(req, res) {
         });
       }
     } else {
-      // cancel
-      const p = participants.find(p => p.contact_id === contact_id);
-      if (p) p.status = 'cancelled';
+      // cancel: collapse all rows for this contact to a single cancelled row.
+      // Using filter+set (not find) heals dirty data with duplicate rows, which
+      // is what silently broke Remove when a cancelled and enrolled row coexisted.
+      const sameContact = participants.filter(p => p.contact_id === contact_id);
+      if (sameContact.length > 0) {
+        const earliest = sameContact
+          .map(p => p.enrolled_at)
+          .filter(Boolean)
+          .sort()[0] || new Date().toISOString();
+        participants = participants.filter(p => p.contact_id !== contact_id);
+        participants.push({
+          contact_id,
+          status: 'cancelled',
+          enrolled_at: earliest
+        });
+      }
     }
 
     await db.query(
