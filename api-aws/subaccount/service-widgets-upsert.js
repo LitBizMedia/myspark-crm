@@ -170,19 +170,12 @@ async function handler(req, res) {
       toBool(w.require_existing_patient, false),                  // $26
       toBool(w.allow_self_cancel, true),                          // $27
       cancelWindow,                                               // $28
-      // Inert: global notification settings own all send decisions.
-      // Columns and these placeholders are removed together in the
-      // service_widgets column-drop migration (see booking plan doc).
-      true,                                                       // $29 send_confirmation_email (inert)
-      true,                                                       // $30 send_reminder_email (inert)
-      24,                                                         // $31 reminder_hours_before (inert)
-      false,                                                      // $32 send_reminder_sms (inert)
-      leadHours,                                                  // $33
-      advanceDays,                                                // $34
-      toNullableInt(w.buffer_before_override),                    // $35
-      toNullableInt(w.buffer_after_override),                     // $36
-      w.custom_domain || null,                                    // $37
-      slotInterval                                                 // $38
+      leadHours,                                                  // $29
+      advanceDays,                                                // $30
+      toNullableInt(w.buffer_before_override),                    // $31
+      toNullableInt(w.buffer_after_override),                     // $32
+      w.custom_domain || null,                                    // $33
+      slotInterval                                                 // $34
     ];
 
     await db.query(`
@@ -194,7 +187,6 @@ async function handler(req, res) {
         allow_coupons, allow_tip, tip_percentages,
         collect_phone, collect_notes, require_existing_patient,
         allow_self_cancel, cancel_window_hours,
-        send_confirmation_email, send_reminder_email, reminder_hours_before, send_reminder_sms,
         booking_lead_time_hours, booking_advance_days,
         buffer_before_override, buffer_after_override,
         custom_domain,
@@ -208,11 +200,10 @@ async function handler(req, res) {
         $21, $22, $23::jsonb,
         $24, $25, $26,
         $27, $28,
-        $29, $30, $31, $32,
-        $33, $34,
-        $35, $36,
-        $37,
-        $38,
+        $29, $30,
+        $31, $32,
+        $33,
+        $34,
         NOW(), NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -241,10 +232,6 @@ async function handler(req, res) {
         require_existing_patient = EXCLUDED.require_existing_patient,
         allow_self_cancel = EXCLUDED.allow_self_cancel,
         cancel_window_hours = EXCLUDED.cancel_window_hours,
-        send_confirmation_email = EXCLUDED.send_confirmation_email,
-        send_reminder_email = EXCLUDED.send_reminder_email,
-        reminder_hours_before = EXCLUDED.reminder_hours_before,
-        send_reminder_sms = EXCLUDED.send_reminder_sms,
         booking_lead_time_hours = EXCLUDED.booking_lead_time_hours,
         booking_advance_days = EXCLUDED.booking_advance_days,
         buffer_before_override = EXCLUDED.buffer_before_override,
