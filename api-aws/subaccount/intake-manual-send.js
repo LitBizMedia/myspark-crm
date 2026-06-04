@@ -70,6 +70,7 @@ async function handler(req, res) {
       sendEmail,
       sendSms,
       emailSubject: intake.emailSubject || '',
+      emailMessage: intake.emailMessage || '',
       emailHtml: intake.emailBody || '',
       smsBody: intake.smsBody || '',
       linkTtlDays: (typeof intake.linkTtlDays === 'number' && intake.linkTtlDays > 0)

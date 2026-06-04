@@ -27276,6 +27276,13 @@ function fbRenderFormSettings(){
     h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Send by Email</span><div class="bh-toggle'+(ik.sendEmail?' on':'')+'" onclick="fbToggleIntake(\'sendEmail\')"></div></div>';
     h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Send by SMS</span><div class="bh-toggle'+(ik.sendSms?' on':'')+'" onclick="fbToggleIntake(\'sendSms\')"></div></div>';
   }
+  // Email Message lives OUTSIDE the auto-send gate: it's used by manual sends
+  // too (the drawer "Send a form" action), which work whether or not auto-send
+  // is on. Always editable.
+  h+='<div class="fb-divider"></div>';
+  h+='<label class="fb-sl">Email Message</label>';
+  h+='<textarea class="fb-si" rows="3" placeholder="Optional. A short note included in the email, e.g. Thanks for booking! Please complete this before your visit." oninput="fbSetIntakeMsg(this.value)" style="resize:vertical;font-family:inherit">'+esc(ik.emailMessage||'')+'</textarea>';
+  h+='<div style="font-size:11px;color:var(--text-muted);margin-top:-2px;margin-bottom:8px">Included in the email when this form is sent, automatically or manually. Leave blank for a default message. The button and link are added automatically.</div>';
   return h;
 }
 
@@ -27475,7 +27482,7 @@ function fbToggleFS(key){
 // object with safe defaults if a legacy form predates the intake block.
 function _fbIntake(f){
   if(!f.settings.intake){
-    f.settings.intake={enabled:false,triggerEvent:'service_booking',serviceMode:'all',serviceIds:[],sendEmail:true,sendSms:false,emailSubject:'',emailBody:'',smsBody:'',linkTtlDays:30};
+    f.settings.intake={enabled:false,triggerEvent:'service_booking',serviceMode:'all',serviceIds:[],sendEmail:true,sendSms:false,emailSubject:'',emailMessage:'',emailBody:'',smsBody:'',linkTtlDays:30};
   }
   return f.settings.intake;
 }
@@ -27505,6 +27512,11 @@ function fbSetIntakePeriodicDays(val){
   var n=parseInt(val,10);
   _fbIntake(f).periodicDays=(n&&n>0)?n:90;
   // no re-render on each keystroke; value persists in state
+}
+function fbSetIntakeMsg(val){
+  const f=fbState.editingForm;if(!f)return;
+  _fbIntake(f).emailMessage=val;
+  // no re-render on each keystroke; preserves textarea focus
 }
 // Service tree for intake. Data-driven (reads/writes f.settings.intake), so it
 // survives the settings-panel re-render on every toggle.

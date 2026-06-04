@@ -48,6 +48,65 @@ async function buildFormLink(slug, subaccountId, formId, contactId, ttlDays) {
   return PUBLIC_FORM_BASE + '/' + slug + '?fbembed=' + encodeURIComponent(formId) + '&t=' + encodeURIComponent(token);
 }
 
+// Load the subaccount's display business name from settings, matching every
+// other subaccount email (see booking-submit: settings.businessName || slug).
+// subaccounts.name (what mailgun's getSubaccountName returns) is NOT the same
+// as the clinic-set settings.businessName, so we resolve it explicitly here.
+async function resolveBusinessName(subaccountId, slug) {
+  try {
+    const r = await db.query(
+      'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
+      [subaccountId]
+    );
+    const settings = (r.rows[0] && r.rows[0].data && r.rows[0].data.settings) || {};
+    return settings.businessName || slug || 'Our Practice';
+  } catch (e) {
+    console.error('intake-dispatch: business name load failed:', e.message);
+    return slug || 'Our Practice';
+  }
+}
+
+// Minimal HTML escaper for interpolated values.
+function escIntake(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Build a branded intake email: business header, greeting, optional custom
+// message, a clear button (token hidden behind it), and a small fallback link.
+function buildIntakeEmailHtml(opts) {
+  const biz = escIntake(opts.businessName);
+  const name = opts.contactName ? escIntake(opts.contactName.split(' ')[0]) : '';
+  const greeting = name ? ('Hi ' + name + ',') : 'Hello,';
+  const formName = escIntake(opts.formName || 'form');
+  const link = opts.link;
+  // Custom message (plain text from the form settings) -> paragraphs, line
+  // breaks preserved, HTML-escaped so it can't inject markup.
+  let messageBlock;
+  if (opts.customMessage && opts.customMessage.trim()) {
+    const safe = escIntake(opts.customMessage.trim()).replace(/\n/g, '<br>');
+    messageBlock = '<p style="color:#1a1030;font-size:15px;line-height:1.6;margin:0 0 20px">' + safe + '</p>';
+  } else {
+    messageBlock = '<p style="color:#1a1030;font-size:15px;line-height:1.6;margin:0 0 20px">'
+      + 'Please take a moment to complete the ' + formName + ' below. It only takes a few minutes.</p>';
+  }
+  return '<div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#ffffff;border:1px solid #ece9f3;border-radius:14px;overflow:hidden">'
+    + '<div style="background:#6b21ea;padding:22px 28px"><div style="color:#ffffff;font-size:18px;font-weight:700">' + biz + '</div></div>'
+    + '<div style="padding:28px">'
+    + '<p style="color:#1a1030;font-size:16px;font-weight:600;margin:0 0 14px">' + greeting + '</p>'
+    + messageBlock
+    + '<div style="text-align:center;margin:28px 0">'
+    + '<a href="' + link + '" style="display:inline-block;background:#6b21ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 34px;border-radius:10px">Complete Your Form</a>'
+    + '</div>'
+    + '<p style="color:#5a4d7a;font-size:12px;line-height:1.5;margin:24px 0 0;border-top:1px solid #ece9f3;padding-top:16px">'
+    + 'If the button does not work, copy and paste this link into your browser:<br>'
+    + '<a href="' + link + '" style="color:#6b21ea;word-break:break-all">' + link + '</a></p>'
+    + '</div>'
+    + '<div style="background:#faf9fc;padding:16px 28px;text-align:center"><div style="color:#9b92b3;font-size:12px">' + biz + '</div></div>'
+    + '</div>';
+}
+
 // Decide whether to skip this automatic send based on the form's frequency
 // policy. intake_sends is a send LOG (multiple rows per contact+form allowed).
 //   'once'     => skip if ANY prior send exists (first-time-only intake)
@@ -106,6 +165,7 @@ async function dispatchIntake(opts) {
 
   // 2. Build the signed attribution link.
   const link = await buildFormLink(slug, subaccountId, formId, contactId, config.linkTtlDays);
+  const businessName = await resolveBusinessName(subaccountId, slug);
 
   // 3. Send on each enabled+allowed channel. Record what actually went out.
   const channels = { email: false, sms: false };
@@ -117,10 +177,15 @@ async function dispatchIntake(opts) {
         scope: 'subaccount',
         source: 'intake-form',
         to: config.contactEmail,
-        subject: config.emailSubject || ('Please complete your form: ' + (config.formName || 'Intake')),
-        html: (config.emailHtml || '<p>Please complete your form.</p>')
-              + '<p><a href="' + link + '">' + link + '</a></p>',
-        fromName: config.fromName || 'MySpark+',
+        subject: config.emailSubject || ((config.formName || 'Your form') + ' from ' + businessName),
+        html: buildIntakeEmailHtml({
+          businessName,
+          contactName: config.contactName,
+          formName: config.formName,
+          customMessage: config.emailMessage || config.emailBody || '',
+          link
+        }),
+        fromName: businessName,
         contactId: contactId
       });
       channels.email = !!(r && r.ok);

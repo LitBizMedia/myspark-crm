@@ -74,6 +74,7 @@ function buildConfigForForm(form, contact) {
     sendEmail: intake.sendEmail !== false,
     sendSms: intake.sendSms !== false,
     emailSubject: intake.emailSubject || '',
+    emailMessage: intake.emailMessage || '',
     emailHtml: intake.emailBody || '',
     smsBody: intake.smsBody || '',
     sendFrequency: intake.sendFrequency || 'once',
