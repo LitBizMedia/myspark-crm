@@ -23,7 +23,12 @@ ALTER TABLE conversation_messages
 ALTER TABLE conversation_messages
   ADD CONSTRAINT conversation_messages_source_check CHECK (
     source IN ('manual','reminder','confirmation','cancellation','widget','system',
-               'reschedule','refund','contract-signed')
+               'reschedule','refund','contract-signed','intake-form')
     OR source LIKE 'cancellation-%'
     OR source LIKE 'payment-receipt-%'
   );
+
+-- 2026-06-04 (later): added 'intake-form' to the allowed set. The intake-form
+-- email sender (lib-aws/intake-dispatch.js) logs to the patient thread with
+-- source='intake-form'; it was hitting this constraint and silently failing to
+-- log (same swallowed-error pattern). This file reflects the final live state.
