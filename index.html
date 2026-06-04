@@ -6003,6 +6003,34 @@ function toggleFormCard(subId){
   renderDrawer();
 }
 
+function _renderDFormsSendBar(c){
+  // Manual send: pick a form, pick a channel, send now (force=true on the backend,
+  // bypasses the frequency guard). Visible in both empty and populated states.
+  var open=!!state.dFormSendOpen;
+  var forms=(db.forms||[]).filter(function(f){return f&&f.id;});
+  var btn='<div style="margin-bottom:12px">'
+    +'<button class="btn btn-action btn-sm" onclick="toggleFormSend()" style="font-size:12px">'
+    +(open?'Cancel':'Send a form')+'</button>';
+  if(open){
+    if(!forms.length){
+      btn+='<div style="font-size:12px;color:var(--main-text-muted);margin-top:8px">No forms exist yet. Create one in the Forms section first.</div>';
+    } else {
+      var opts=forms.map(function(f){return '<option value="'+f.id+'">'+esc(f.name||'Form')+'</option>';}).join('');
+      btn+='<div style="margin-top:10px;padding:12px;border:1px solid var(--main-border);border-radius:var(--radius);background:var(--main-card)">'
+        +'<label style="display:block;font-size:11px;font-weight:600;color:var(--main-text-muted);margin-bottom:4px">Form</label>'
+        +'<select id="dform-send-pick" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input);color:var(--main-text);margin-bottom:10px">'+opts+'</select>'
+        +'<label style="display:block;font-size:11px;font-weight:600;color:var(--main-text-muted);margin-bottom:4px">Send by</label>'
+        +'<select id="dform-send-channel" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--main-input-border);border-radius:var(--radius);background:var(--main-input);color:var(--main-text);margin-bottom:12px">'
+        +'<option value="email">Email</option><option value="sms">SMS</option><option value="both">Email and SMS</option>'
+        +'</select>'
+        +'<button class="btn btn-action btn-sm" onclick="doFormSend(\''+c.id+'\')" style="font-size:12px">Send Now</button>'
+        +'</div>';
+    }
+  }
+  btn+='</div>';
+  return btn;
+}
+
 function _renderDFormsTab(c){
   if(!Array.isArray(c._formSubs)){
     loadContactForms(c.id).then(function(){
@@ -6010,9 +6038,10 @@ function _renderDFormsTab(c){
     });
     return '<div style="padding:20px;text-align:center;color:var(--main-text-muted);font-size:13px">Loading forms\u2026</div>';
   }
+  var sendBar=_renderDFormsSendBar(c);
   var subs=c._formSubs||[];
   if(!subs.length){
-    return '<div style="padding:40px 20px;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">No forms yet</div><div style="font-size:13px;color:var(--main-text-muted);max-width:300px;margin:0 auto">Intake and onboarding form submissions for this contact will appear here.</div></div>';
+    return '<div style="padding:4px 0">'+sendBar+'<div style="padding:30px 20px;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">No forms yet</div><div style="font-size:13px;color:var(--main-text-muted);max-width:300px;margin:0 auto">Intake and onboarding form submissions for this contact will appear here.</div></div></div>';
   }
   var expanded=state.dFormsExpanded||{};
   var h='';
@@ -6057,7 +6086,44 @@ function _renderDFormsTab(c){
       +rows
       +'</div>';
   });
-  return '<div style="padding:4px 0">'+h+'</div>';
+  return '<div style="padding:4px 0">'+sendBar+h+'</div>';
+}
+
+// Toggle the manual send picker open/closed.
+function toggleFormSend(){
+  state.dFormSendOpen=!state.dFormSendOpen;
+  if(state.drawer&&state.dTab==='forms')renderDrawer();
+}
+
+// Send the chosen form to this contact via the manual-send endpoint (force=true).
+function doFormSend(contactId){
+  var formId=(document.getElementById('dform-send-pick')||{}).value;
+  var channel=(document.getElementById('dform-send-channel')||{}).value||'email';
+  if(!formId){toast('Pick a form first.','error');return;}
+  toast('Sending form\u2026','info');
+  fetch(apiUrl('/api/subaccount/intake-manual-send'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contact_id:contactId,form_id:formId,channel:channel})
+  }).then(function(r){
+    return r.json().then(function(data){return {ok:r.ok,data:data};});
+  }).then(function(res){
+    if(!res.ok){
+      toast((res.data&&res.data.error)||'Send failed.','error');
+      return;
+    }
+    toast('Form sent.','success');
+    state.dFormSendOpen=false;
+    // Force-refresh the submissions list so the new send is reflected.
+    var c=getContact(contactId);
+    if(c){
+      loadContactForms(contactId,{force:true}).then(function(){
+        if(state.drawer===contactId&&state.dTab==='forms')renderDrawer();
+      });
+    } else if(state.drawer&&state.dTab==='forms'){
+      renderDrawer();
+    }
+  }).catch(function(){toast('Send failed. Try again.','error');});
 }
 
 function _renderDSoapTab(c){
