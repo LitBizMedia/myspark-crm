@@ -44,7 +44,31 @@ async function runPurge(triggerSource) {
           trigger_source: triggerSource
         }
       });
-      return { success: true, purged: 0, cutoff: cutoffIso };
+      // audit_log had nothing to purge, but still sweep dead login-as tokens
+      let tokensPurged = 0;
+      try {
+        const tokRes = await db.query(
+          `DELETE FROM agency_login_as_tokens
+           WHERE used_at IS NOT NULL OR expires_at <= NOW()
+           RETURNING token`
+        );
+        tokensPurged = tokRes.rows.length;
+        if (tokensPurged > 0) {
+          await logAudit({
+            actorType: 'system',
+            actorUsername: 'cron-purge-audit-log',
+            action: 'system.login_as_tokens.purge',
+            metadata: {
+              tokens_purged: tokensPurged,
+              run_at: new Date().toISOString(),
+              trigger_source: triggerSource
+            }
+          });
+        }
+      } catch (te) {
+        console.error('login-as token purge error:', te);
+      }
+      return { success: true, purged: 0, tokens_purged: tokensPurged, cutoff: cutoffIso };
     }
 
     await db.query(
@@ -65,7 +89,40 @@ async function runPurge(triggerSource) {
       }
     });
 
-    return { success: true, purged: purgeCount, cutoff: cutoffIso };
+    // Also purge dead login-as tokens (consumed or expired). Single-use
+    // exchange tokens mark used_at on consume but are never deleted, so they
+    // accumulate. No other cron sweeps them. Live-unused tokens are left intact.
+    let tokensPurged = 0;
+    try {
+      const tokRes = await db.query(
+        `DELETE FROM agency_login_as_tokens
+         WHERE used_at IS NOT NULL OR expires_at <= NOW()
+         RETURNING token`
+      );
+      tokensPurged = tokRes.rows.length;
+      await logAudit({
+        actorType: 'system',
+        actorUsername: 'cron-purge-audit-log',
+        action: 'system.login_as_tokens.purge',
+        metadata: {
+          tokens_purged: tokensPurged,
+          run_at: new Date().toISOString(),
+          trigger_source: triggerSource
+        }
+      });
+    } catch (te) {
+      console.error('login-as token purge error:', te);
+      await logAudit({
+        actorType: 'system',
+        actorUsername: 'cron-purge-audit-log',
+        action: 'system.login_as_tokens.purge',
+        outcome: 'failure',
+        errorMessage: te.message,
+        metadata: { trigger_source: triggerSource }
+      });
+    }
+
+    return { success: true, purged: purgeCount, tokens_purged: tokensPurged, cutoff: cutoffIso };
 
   } catch (e) {
     console.error('purge-audit-log error:', e);

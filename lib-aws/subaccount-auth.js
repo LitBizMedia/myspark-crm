@@ -57,7 +57,8 @@ function hashToken(token) {
 async function createSession(opts) {
   const token = generateToken();
   const tokenHash = hashToken(token);
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS).toISOString();
+  const ttlMs = (opts.ttlMs != null) ? opts.ttlMs : SESSION_DURATION_MS;
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
 
   const row = {
     token_hash: tokenHash,

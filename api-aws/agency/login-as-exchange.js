@@ -144,6 +144,9 @@ async function handler(req, res) {
     // login-as, so every subsequent audit_log row attributes the action to
     // BOTH the target user (actor_*) and the agency admin (impersonated_by_*).
     // HIPAA Right of Access: the real human accountable for every PHI touch.
+    // Login-as sessions get a short 1-hour TTL, not the 30-day default, because
+    // impersonation is the highest-privilege action and deserves the shortest leash.
+    const IMPERSONATION_SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
     const sessionInfo = await createSession({
       userId:       targetUser.id,
       userType:     'subaccount',
@@ -155,7 +158,8 @@ async function handler(req, res) {
       userAgent:    getUserAgent(req),
       impersonatedByUserId:   tok.agency_user_id,
       impersonatedByUsername: tok.agency_username,
-      impersonatedByUserType: 'subaccount'  // Phase 3: LitBiz agency admin is a subaccount user
+      impersonatedByUserType: 'subaccount',  // Phase 3: LitBiz agency admin is a subaccount user
+      ttlMs: IMPERSONATION_SESSION_TTL_MS    // Short 1h leash for impersonation sessions
     });
 
     // Step 5: Deliver the session to the new tab. Two flows:
@@ -166,7 +170,7 @@ async function handler(req, res) {
     //     session stays intact.
     const flow = (req.body && req.body.flow === 'bearer') ? 'bearer' : 'cookie';
     if (flow === 'cookie') {
-      res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token));
+      res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token, { maxAgeMs: IMPERSONATION_SESSION_TTL_MS }));
     }
 
     // Step 6: Audit log success
