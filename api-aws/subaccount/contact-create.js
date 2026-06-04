@@ -115,9 +115,12 @@ async function handler(req, res) {
     // non-service businesses). Fire-and-forget; never block contact creation.
     // Dispatcher records send_failed honestly if the contact has no reachable
     // channel, which is useful signal rather than a silent skip.
+    // Awaited (not fire-and-forget): Lambda suspends the container on return,
+    // which cuts off un-awaited promises. Wrapped so a slow/failed intake send
+    // never blocks or fails contact creation.
     try {
       const slug = String(auth.subaccount_id).replace(/^sub-/, '');
-      fireIntakeForContactCreated({
+      await fireIntakeForContactCreated({
         subaccountId: auth.subaccount_id,
         slug,
         contactId: id,
@@ -127,8 +130,6 @@ async function handler(req, res) {
           name: displayName || '',
           bizName: 'MySpark+'
         }
-      }).catch(function (e) {
-        console.error('fireIntakeForContactCreated failed (non-fatal):', e.message);
       });
     } catch (intakeErr) {
       console.error('Intake trigger fire error (non-fatal):', intakeErr.message);

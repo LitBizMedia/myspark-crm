@@ -459,6 +459,22 @@ async function handler(req, res) {
       // Don't fail the whole request; audit_log will still capture below.
     }
 
+    // 3b. Fill-tracking back-link. ONLY on the token path, where we know with
+    //     certainty which intake_sends row this submission fills (the unique
+    //     subaccount+contact+form triple). Stamps the send as filled. Email-
+    //     cascade submissions cannot be tied to a specific send, so they don't
+    //     touch intake_sends. Bookkeeping only: never fails the submission.
+    if (contactAction === 'token_matched' || contactAction === 'token_updated') {
+      try {
+        await db.update('intake_sends',
+          { status: 'filled', filled_at: new Date().toISOString(), submission_id: submissionId, updated_at: new Date().toISOString() },
+          { subaccount_id: subaccountId, contact_id: contactId, form_id: formId }
+        );
+      } catch (e) {
+        console.error('intake_sends fill-stamp failed (non-fatal):', e.message);
+      }
+    }
+
     // 4. Audit log (compliance secondary record) via canonical helper.
     //    logAudit knows the real audit_log schema and never throws upward.
     await logAudit({
