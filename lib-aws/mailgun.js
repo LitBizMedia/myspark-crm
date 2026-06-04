@@ -195,6 +195,25 @@ async function logSubaccountMessage(subaccountId, conversation, fields) {
   }
 }
 
+// ─── Logging: subaccount internal scope (no contact, no thread) ───
+
+async function logSubaccountInternal(subaccountId, fields) {
+  try {
+    await db.insertOne('subaccount_email_log', {
+      subaccount_id: subaccountId,
+      recipient_email: fields.to,
+      from_email: fields.from,
+      subject: fields.subject || null,
+      source: fields.source || null,
+      provider_message_id: fields.mailgunMessageId || null,
+      status: fields.status || 'sent',
+      error_message: fields.error || null
+    });
+  } catch (e) {
+    console.error('logSubaccountInternal error:', e.message);
+  }
+}
+
 // ─── Logging: agency scope ────────────────────────────────────────
 
 async function logAgencyMessage(fields) {
@@ -205,7 +224,7 @@ async function logAgencyMessage(fields) {
       from_email: fields.from,
       subject: fields.subject || null,
       template_type: fields.templateType || null,
-      resend_email_id: fields.mailgunMessageId || null,
+      provider_message_id: fields.mailgunMessageId || null,
       status: fields.status || 'sent',
       error_message: fields.error || null
     });
@@ -431,8 +450,10 @@ async function sendEmail(slug, opts) {
           replyTo = 'reply+' + conversation.reply_token + '@reply.mysparkplus.app';
         }
       }
-    } else {
-      console.warn('lib/mailgun.js: subaccount-scope send with no contactId; message will not be threaded.');
+    } else if (!opts.internal) {
+      // Only warn when threading was expected. internal:true declares a
+      // staff notification that intentionally has no contact and no thread.
+      console.warn('lib/mailgun.js: subaccount-scope send with no contactId and internal flag not set; message will not be threaded.');
     }
   }
 
@@ -467,6 +488,10 @@ async function sendEmail(slug, opts) {
     const fields = buildLogFields(status, mailgunMessageId, error);
     if (scope === 'subaccount' && conversation) {
       return logSubaccountMessage(subaccountId, conversation, fields);
+    }
+    if (scope === 'subaccount') {
+      // Category 2: subaccount internal send (staff notification, no contact, no thread).
+      return logSubaccountInternal(subaccountId || opts.subaccountId, fields);
     }
     return logAgencyMessage(fields);
   }

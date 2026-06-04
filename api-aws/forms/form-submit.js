@@ -431,6 +431,7 @@ async function handler(req, res) {
         const slug = String(subaccountId).replace(/^sub-/, '');
         const sendRes = await sendEmail(slug, {
           scope: 'subaccount',
+          internal: true,
           source: 'form-notification',
           to: notifyEmail,
           subject: 'New form submission: ' + formName,
