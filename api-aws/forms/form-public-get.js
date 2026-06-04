@@ -62,8 +62,10 @@ async function handler(req, res) {
       return res.status(404).json({ error: 'Form not found' });
     }
 
-    // Only return active/published forms; drafts should not be embeddable
-    if (form.status === 'archived') {
+    // Only ACTIVE forms serve publicly. Draft (still being built) and archived
+    // (retired) forms return 404 so the embed/link shows nothing. Fails closed:
+    // any status other than 'active' is blocked, so a future status can't leak.
+    if (form.status !== 'active') {
       return res.status(404).json({ error: 'Form not found' });
     }
 

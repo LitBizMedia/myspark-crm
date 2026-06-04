@@ -337,6 +337,24 @@ async function handler(req, res) {
       return res.status(413).json({ error: 'Submission too large' });
     }
 
+    // Active-only gate. The form lives in the subaccount_data blob; fetch it and
+    // confirm it's accepting submissions. Draft (still being built) and archived
+    // (retired) forms are refused so a cached page or direct POST can't bank data
+    // into a form that's been taken offline. Fails closed: only 'active' passes.
+    // This runs AFTER the honeypot check (bots still get the fake success above)
+    // and BEFORE any contact creation or submission banking.
+    {
+      const gateRows = await db.query(
+        `SELECT data->'forms' AS forms FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1`,
+        [subaccountId]
+      );
+      const gateForms = (gateRows.rows[0] && gateRows.rows[0].forms) || [];
+      const gateForm = Array.isArray(gateForms) ? gateForms.find(f => f && f.id === formId) : null;
+      if (!gateForm || gateForm.status !== 'active') {
+        return res.status(403).json({ error: 'This form is no longer accepting submissions.' });
+      }
+    }
+
     const submissionId = 'fsub-' + Math.random().toString(36).slice(2, 14);
     const submittedAt = new Date().toISOString();
     let notificationSent = false;
