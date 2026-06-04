@@ -983,7 +983,7 @@ async function handler(req, res) {
     try {
       await persistClaims({
         dbClient: db,
-        appointmentId: appointmentId,
+        appointmentId: apptId,
         claims: resourceClaims
       });
     } catch (claimErr) {
