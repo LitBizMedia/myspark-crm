@@ -266,6 +266,24 @@ async function createContact(subaccountId, opts) {
   return { id: contactId };
 }
 
+// Unarchive a contact if currently archived. Pure column write, no audit.
+// Returns { changed: true, contactId } when it flipped archived->false,
+// or { changed: false } when the contact was already active or not found.
+// Callers own the audit log and only log when changed is true.
+// Used by any path where a contact has live activity (booking, enroll,
+// appointment) so an archived contact with live activity returns to active.
+async function unarchiveContact(subaccountId, contactId) {
+  if (!subaccountId || !contactId) return { changed: false };
+  const r = await db.query(
+    `UPDATE contacts
+        SET archived = false, updated_at = NOW()
+      WHERE id = $1 AND subaccount_id = $2 AND archived = true
+      RETURNING id`,
+    [contactId, subaccountId]
+  );
+  return r.rows.length ? { changed: true, contactId } : { changed: false };
+}
+
 // Look up a single contact WITH all PHI joins (notes, allergies, warnings).
 // Used by contact-open endpoint when the drawer opens. Heavier query so don't
 // use this for bulk listings; that's what contact-list is for.
@@ -408,5 +426,6 @@ module.exports = {
   createContact,
   createStubContactFromSms,
   searchContactsForPicker,
-  findOrCreateContact
+  findOrCreateContact,
+  unarchiveContact
 };

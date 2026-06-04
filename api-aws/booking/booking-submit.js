@@ -924,6 +924,20 @@ async function handler(req, res) {
       }
     }
 
+    // Unarchive on live activity: an archived contact who books, enrolls, or
+    // schedules returns to active. Side effect of this booking event; the
+    // unarchive is recorded as a flag on the booking audit row below rather
+    // than a separate audit entry. Pure no-op if the contact was already active.
+    let contactUnarchived = false;
+    if (contactId) {
+      try {
+        const ua = await contactsLib.unarchiveContact(subaccountId, contactId);
+        contactUnarchived = !!(ua && ua.changed);
+      } catch (uaErr) {
+        console.warn('[booking-submit] unarchive failed (non-fatal):', uaErr.message);
+      }
+    }
+
     // 12. Create the booking record.
     //
     // For service and appointment widgets: insert into appointments table.
@@ -1122,7 +1136,8 @@ async function handler(req, res) {
         payment_status: chargeOccurred ? 'charged' : 'no_charge',
         total: total,
         coupon_used: !!couponObj,
-        via: 'booking_widget'
+        via: 'booking_widget',
+        contact_unarchived: contactUnarchived
       }
     });
 
