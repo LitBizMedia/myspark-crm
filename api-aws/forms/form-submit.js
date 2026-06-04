@@ -342,6 +342,7 @@ async function handler(req, res) {
     let notificationSent = false;
     let contactId = null;
     let contactAction = 'none';
+    let wasTokenMatch = false;
 
     // 1a. Signed-token attribution (intake links). ATTRIBUTION ONLY.
     //     A valid token whose subaccountId + formId match THIS submission
@@ -371,12 +372,13 @@ async function handler(req, res) {
     // 1. Resolve contact. Token wins when present+valid; else identity cascade.
     if (tokenContact) {
       contactId = tokenContact.id;
-      contactAction = 'token_matched';
+      contactAction = 'matched';
+      wasTokenMatch = true; // separate signal: how we matched (token), not what happened to the contact
       // Still fill empty contact fields from the submission, if the form allows.
       if (updateContact) {
         try {
           await updateContactFillOnly(subaccountId, tokenContact, submissionData, formName);
-          contactAction = 'token_updated';
+          contactAction = 'updated';
         } catch (e) {
           console.error('token-path fill update failed (non-fatal):', e.message);
         }
@@ -429,6 +431,7 @@ async function handler(req, res) {
 
     // 3. Persist to form_submissions table (primary record). Audit log is
     //    kept as a secondary record for HIPAA/compliance reasons.
+    let submissionSaved = false;
     try {
       await db.query(
         `INSERT INTO form_submissions (
@@ -454,9 +457,13 @@ async function handler(req, res) {
           notificationSent, notifyEmail || null, null
         ]
       );
+      submissionSaved = true;
     } catch (e) {
       console.error('form_submissions insert failed:', e.message);
-      // Don't fail the whole request; audit_log will still capture below.
+      // A form that says "submitted" must have saved the answers. If the insert
+      // failed, surface a real error instead of reporting false success. Do NOT
+      // proceed to stamp intake_sends or log a successful submission.
+      return res.status(500).json({ error: 'Could not save your submission. Please try again.', detail: e.message });
     }
 
     // 3b. Fill-tracking back-link. ONLY on the token path, where we know with
@@ -464,7 +471,7 @@ async function handler(req, res) {
     //     subaccount+contact+form triple). Stamps the send as filled. Email-
     //     cascade submissions cannot be tied to a specific send, so they don't
     //     touch intake_sends. Bookkeeping only: never fails the submission.
-    if (contactAction === 'token_matched' || contactAction === 'token_updated') {
+    if (submissionSaved && wasTokenMatch) {
       try {
         await db.update('intake_sends',
           { status: 'filled', filled_at: new Date().toISOString(), submission_id: submissionId, updated_at: new Date().toISOString() },

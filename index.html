@@ -5378,7 +5378,7 @@ function renderDrawer(){
   // SOAP notes count is loaded async via the API; we cache it on c._soapCount
   // so re-renders show it without re-fetching. Documents is a placeholder.
   const soapCount=(typeof c._soapCount==='number')?c._soapCount:'\u2026';
-  const tabs=['info','payments','appointments','tasks','notes','soap','documents'];
+  const tabs=['info','payments','appointments','tasks','notes','soap','forms','documents'];
   const labels={
     info:'Info',
     payments:'Payments',
@@ -5386,6 +5386,7 @@ function renderDrawer(){
     tasks:'Tasks ('+cTasks.length+')',
     notes:'Notes ('+c.notes.length+')',
     soap:'SOAP ('+soapCount+')',
+    forms:'Forms'+(typeof c._formSubCount==='number'?' ('+c._formSubCount+')':''),
     documents:'Documents'
   };
   let body='';
@@ -5558,6 +5559,8 @@ function renderDrawer(){
     body=_renderDPaymentsTab(c,cSubs,cPays);
   }else if(state.dTab==='soap'){
     body=_renderDSoapTab(c);
+  }else if(state.dTab==='forms'){
+    body=_renderDFormsTab(c);
   }else if(state.dTab==='documents'){
     body='<div style="padding:40px 20px;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);margin-bottom:8px">Documents</div><div style="font-size:13px;color:var(--main-text-muted);max-width:300px;margin:0 auto">Patient documents, intake forms, lab results, and uploaded files. Coming soon.</div></div>';
   }
@@ -5951,6 +5954,86 @@ function amendSoapNoteRemote(noteId,content,reason){
 }
 
 // Renders the SOAP tab. Triggers async load if cached data isn't present.
+function loadContactForms(contactId, opts){
+  var c=getContact(contactId);
+  if(!c)return Promise.resolve([]);
+  if(!opts||!opts.force){
+    if(Array.isArray(c._formSubs))return Promise.resolve(c._formSubs);
+  }
+  return fetch(apiUrl('/api/forms/submissions-by-contact?contact_id='+encodeURIComponent(contactId)),{
+    credentials:'include'
+  }).then(function(r){
+    if(!r.ok)throw new Error('list failed: '+r.status);
+    return r.json();
+  }).then(function(data){
+    var subs=(data&&data.submissions)||[];
+    c._formSubs=subs;
+    c._formSubCount=subs.length;
+    return subs;
+  }).catch(function(e){
+    console.error('loadContactForms:',e);
+    c._formSubs=[];
+    c._formSubCount=0;
+    return [];
+  });
+}
+
+// Humanize a submission_data key: 'first_name' -> 'First Name'. Readable keys
+// render clean; if a custom field ever stores by raw id we map via the form
+// definition later. v1 humanizes.
+function _humanizeKey(k){
+  return String(k).replace(/_/g,' ').replace(/\b\w/g,function(ch){return ch.toUpperCase();});
+}
+
+// Render one answer value. Handles strings, the sms_consent object, arrays.
+function _renderFormValue(v){
+  if(v==null||v==='')return '<span style="color:var(--main-text-muted)">\u2013</span>';
+  if(Array.isArray(v))return esc(v.join(', '));
+  if(typeof v==='object'){
+    var parts=[];
+    for(var k in v){ if(Object.prototype.hasOwnProperty.call(v,k)) parts.push(_humanizeKey(k)+': '+(v[k]===true?'Yes':v[k]===false?'No':esc(String(v[k])))); }
+    return esc(parts.join(' \u00b7 '));
+  }
+  return esc(String(v));
+}
+
+function _renderDFormsTab(c){
+  if(!Array.isArray(c._formSubs)){
+    loadContactForms(c.id).then(function(){
+      if(state.drawer===c.id&&state.dTab==='forms')renderDrawer();
+    });
+    return '<div style="padding:20px;text-align:center;color:var(--main-text-muted);font-size:13px">Loading forms\u2026</div>';
+  }
+  var subs=c._formSubs||[];
+  if(!subs.length){
+    return '<div style="padding:40px 20px;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">No forms yet</div><div style="font-size:13px;color:var(--main-text-muted);max-width:300px;margin:0 auto">Intake and onboarding form submissions for this contact will appear here.</div></div>';
+  }
+  var h='';
+  subs.forEach(function(sub){
+    var data=sub.data||{};
+    var rows='';
+    var keys=Object.keys(data).filter(function(k){return k!=='_hp';});
+    if(!keys.length){
+      rows='<div style="font-size:13px;color:var(--main-text-muted);padding:4px 0">No fields captured.</div>';
+    } else {
+      keys.forEach(function(k){
+        rows+='<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--main-border)">'
+          +'<div style="flex:0 0 40%;font-size:12px;font-weight:600;color:var(--main-text-muted)">'+esc(_humanizeKey(k))+'</div>'
+          +'<div style="flex:1;font-size:13px;color:var(--main-text)">'+_renderFormValue(data[k])+'</div>'
+          +'</div>';
+      });
+    }
+    h+='<div class="card" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px">'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--main-text)">'+esc(sub.formName||'Form')+'</div>'
+      +'<div style="font-size:11px;color:var(--main-text-muted);white-space:nowrap">'+esc(fmtDateTime(sub.createdAt))+'</div>'
+      +'</div>'
+      +rows
+      +'</div>';
+  });
+  return '<div style="padding:4px 0">'+h+'</div>';
+}
+
 function _renderDSoapTab(c){
   // Trigger load if not yet cached. The render below will show a loading
   // state; on completion, renderDrawer() is called again with cached data.
