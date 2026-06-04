@@ -27870,12 +27870,43 @@ function fbViewSub(id){
 
   // Meta footer with technical details
   body += '<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted)">';
-  if(sub.pageUrl) body += '<div>Submitted from: '+esc(sub.pageUrl)+'</div>';
+  if(sub.pageUrl) body += '<div style="word-break:break-all">Submitted from: '+esc(sub.pageUrl)+'</div>';
   if(sub.notificationSent) body += '<div>Notification sent: '+esc(sub.notificationEmail || 'yes')+'</div>';
   if(sub.notificationError) body += '<div style="color:var(--danger)">Notification error: '+esc(sub.notificationError)+'</div>';
   body += '</div>';
 
-  openModal('Submission Details', body, '<button class="btn btn-ghost" onclick="closeModal()">Close</button>', 'modal-lg');
+  var footer = '<button class="btn btn-ghost" onclick="deleteSubmission(\''+sub.id+'\',\''+(sub.formId||'')+'\')" style="color:var(--danger)">Delete</button>'
+    + '<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
+  openModal('Submission Details', body, footer, 'modal-lg');
+}
+
+// Delete a form submission. Confirms (destructive, no undo), calls the
+// tenant-isolated delete endpoint, then reloads the current form's submissions
+// list so the row disappears. The backend reverts any linked intake_sends row
+// from 'filled' back to 'sent' automatically.
+function deleteSubmission(submissionId, formId){
+  if(!submissionId)return;
+  if(!confirm('Delete this submission permanently? This cannot be undone.'))return;
+  fetch(apiUrl('/api/forms/submission-delete'),{
+    method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({submission_id:submissionId})
+  }).then(function(r){
+    return r.json().then(function(data){return {ok:r.ok,data:data};});
+  }).then(function(res){
+    if(!res.ok){
+      toast((res.data&&res.data.error)||'Delete failed.','error');
+      return;
+    }
+    toast('Submission deleted.','success');
+    closeModal();
+    // Reload the current form's submissions list.
+    if(formId && typeof fbOpenSubs==='function'){
+      fbOpenSubs(formId);
+    }
+    // Refresh the unread/count badges too.
+    if(typeof _fetchFormSubmissionCounts==='function')_fetchFormSubmissionCounts(true);
+  }).catch(function(){toast('Delete failed. Try again.','error');});
 }
 
 function fbLinkSub(subId){
