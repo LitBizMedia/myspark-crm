@@ -9,6 +9,8 @@ const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
+const { fireIntakeForClassRegistration } = require('./lib/intake-trigger');
+const { getContactById } = require('./lib/contacts');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -119,6 +121,31 @@ async function handler(req, res) {
       targetSubaccountId:subaccountId,
       metadata:{ contact_id, action }
     });
+
+    // Class intake: fire only on a genuine enroll (not cancel). The form's
+    // sendFrequency policy decides whether to actually send, so a re-enroll of
+    // someone who already got a 'once' form won't resend. Staff enroll is a
+    // first-class trigger source: scheduled for a class => get the form,
+    // regardless of who scheduled. Awaited + wrapped; never fails the enroll.
+    if (action === 'enroll') {
+      try {
+        const slug = String(subaccountId).replace(/^sub-/, '');
+        const c = await getContactById(subaccountId, contact_id);
+        await fireIntakeForClassRegistration({
+          subaccountId,
+          slug,
+          contactId: contact_id,
+          classSessionId: session_id,
+          contact: {
+            email: (c && c.email) || '',
+            phone: (c && c.phone) || '',
+            name: (c && (c.display_name || c.name)) || ''
+          }
+        });
+      } catch (e) {
+        console.error('fireIntakeForClassRegistration (enroll) failed (non-fatal):', e.message);
+      }
+    }
 
     const enrolled_count = participants.filter(p => p.status === 'enrolled').length;
     return res.status(200).json({ success:true, participants, enrolled_count });

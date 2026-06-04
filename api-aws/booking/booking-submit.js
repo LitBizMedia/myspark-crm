@@ -27,7 +27,7 @@ const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocat
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
-const { fireIntakeForServiceBooking } = require('./lib/intake-trigger');
+const { fireIntakeForServiceBooking, fireIntakeForClassRegistration } = require('./lib/intake-trigger');
 const { logAudit } = require('./lib/audit');
 const mailgun = require('./lib/mailgun');
 const { shouldSend } = require('./lib/notifications');
@@ -1287,6 +1287,30 @@ async function handler(req, res) {
             });
           } catch (e) {
             console.error('fireIntakeForServiceBooking failed (non-fatal):', e.message);
+          }
+        }
+
+        // Class registration intake: fires for class bookings (class_session_id).
+        // Uses the session's parent class-service to find listed forms that
+        // declared triggerEvent='class_registration'. Same awaited, wrapped,
+        // policy-throttled path as service intake.
+        if (class_session_id && classSession) {
+          try {
+            await fireIntakeForClassRegistration({
+              subaccountId,
+              slug,
+              contactId,
+              classSessionId: classSession.id,
+              serviceId: classSession.service_id,
+              appointmentId: apptId,
+              contact: {
+                email: client_info.email || '',
+                phone: client_info.phone || '',
+                name: client_info.name || ''
+              }
+            });
+          } catch (e) {
+            console.error('fireIntakeForClassRegistration failed (non-fatal):', e.message);
           }
         }
       }

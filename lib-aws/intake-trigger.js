@@ -153,6 +153,59 @@ async function fireIntakeForServiceBooking(opts) {
   return { ok: true, sent: results };
 }
 
+// ── Entry: class-registration path ───────────────────────────────
+// Fires when someone is registered for a class, from ANY source: the public
+// class widget, staff enrollment, or staff scheduling. A class session has a
+// parent class-service; forms listed on that service (intake_form_ids) that
+// declared triggerEvent='class_registration' fire, subject to service scope.
+// opts: { subaccountId, slug, contactId, classSessionId, serviceId, appointmentId, contact }
+//   Pass serviceId directly if known (avoids a lookup); else we resolve it
+//   from classSessionId.
+async function fireIntakeForClassRegistration(opts) {
+  const { subaccountId, slug, contactId, classSessionId, appointmentId, contact } = opts || {};
+  let serviceId = opts && opts.serviceId;
+  if (!subaccountId || !contactId) return { ok: true, sent: [], reason: 'missing_ids' };
+
+  // Resolve the class-service from the session if not provided.
+  if (!serviceId && classSessionId) {
+    try {
+      const r = await db.query(
+        `SELECT service_id FROM class_sessions WHERE id = $1 AND subaccount_id = $2 LIMIT 1`,
+        [classSessionId, subaccountId]
+      );
+      if (r.rows.length) serviceId = r.rows[0].service_id;
+    } catch (e) {
+      console.error('intake-trigger: class session service lookup failed:', e.message);
+    }
+  }
+  if (!serviceId) return { ok: true, sent: [], reason: 'no_class_service' };
+
+  const listedIds = await getServiceIntakeFormIds(subaccountId, serviceId);
+  if (!listedIds.length) return { ok: true, sent: [], reason: 'no_intake_forms_on_class_service' };
+
+  const forms = await loadForms(subaccountId);
+  const byId = {};
+  for (const f of forms) if (f && f.id) byId[f.id] = f;
+
+  const selected = [];
+  for (const id of listedIds) {
+    const form = byId[id];
+    if (!isLiveIntakeForm(form, 'class_registration')) continue;
+    const intake = form.settings.intake;
+    const scope = Array.isArray(intake.serviceIds) ? intake.serviceIds : [];
+    const mode = intake.serviceMode || (scope.length ? 'specific' : 'all');
+    if (mode === 'specific' && scope.indexOf(serviceId) === -1) continue;
+    selected.push(form);
+  }
+  if (!selected.length) return { ok: true, sent: [], reason: 'no_matching_class_forms' };
+
+  const results = await dispatchForms(selected, {
+    subaccountId, slug, contactId, appointmentId, contact,
+    triggerEvent: 'class_registration'
+  });
+  return { ok: true, sent: results };
+}
+
 // ── Entry 2: contact-created path ────────────────────────────────
 // Fires every form whose triggerEvent='contact_created' (+ enabled + active).
 // No service involved. Serves onboarding for non-service businesses.
@@ -174,5 +227,6 @@ async function fireIntakeForContactCreated(opts) {
 
 module.exports = {
   fireIntakeForServiceBooking,
+  fireIntakeForClassRegistration,
   fireIntakeForContactCreated
 };
