@@ -12,7 +12,7 @@ const db = require('./lib/db');
 const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('./lib/agency-billing');
 const { sendError } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
-const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz, getSubTimezone } = require('./lib/timezone');
 
@@ -25,7 +25,7 @@ async function handler(req, res) {
     return sendError(res, 400, 'action must be "suspend" or "unsuspend"');
   }
 
-  const auth = await requireAgencyAdminOrAgencyAuth(req, res);
+  const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
   const actor = {
     actorType:     'agency',

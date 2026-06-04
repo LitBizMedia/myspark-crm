@@ -3,13 +3,13 @@
 // Returns all 4 tier pricing rows including limits, sorted by tier rank.
 
 const db = require('./lib/db');
-const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireAgencyAdminOrAgencyAuth(req, res);
+  const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
 
   try {

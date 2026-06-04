@@ -18,7 +18,7 @@ const pricing = require('./lib/plan-pricing');
 const { sendError } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
 const agencyEmails = require('./lib/agency-emails');
-const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 const { todayInTz, getSubTimezone } = require('./lib/timezone');
 
@@ -63,7 +63,7 @@ async function handler(req, res) {
 
   const { subaccountId, newTier, newPeriod, newHipaa, newExempt, discountPercent, discountNote, customBillingDate } = req.body || {};
 
-  const auth = await requireAgencyAdminOrAgencyAuth(req, res);
+  const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
   const actor = {
     actorType:     'agency',

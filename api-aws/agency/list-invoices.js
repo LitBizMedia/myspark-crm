@@ -8,7 +8,7 @@
 // MIGRATED: Supabase REST + PostgREST embedding → lib/db.js with explicit JOIN.
 
 const db = require('./lib/db');
-const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
 async function handler(req, res) {
@@ -16,7 +16,7 @@ async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const auth = await requireAgencyAdminOrAgencyAuth(req, res);
+  const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
 
   const q = req.query || {};

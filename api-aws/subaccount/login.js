@@ -32,10 +32,6 @@ const {
 } = require('./lib/subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 
-// Break-glass admin for the LitBiz workspace only. Set via Lambda env vars.
-const SUBACCOUNT_FALLBACK_USER  = process.env.SUBACCOUNT_FALLBACK_USER;
-const SUBACCOUNT_FALLBACK_HASH  = process.env.SUBACCOUNT_FALLBACK_HASH;
-const SUBACCOUNT_FALLBACK_SLUG  = process.env.SUBACCOUNT_FALLBACK_SLUG || 'litbiz';
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -152,56 +148,6 @@ async function handler(req, res) {
       }
     } catch (e) {
       console.error('login: user lookup failed:', e.message);
-    }
-  }
-
-  // ============================================================
-  // Break-glass admin (LitBiz workspace only)
-  // ============================================================
-  if (!user
-      && SUBACCOUNT_FALLBACK_USER
-      && SUBACCOUNT_FALLBACK_HASH
-      && slug === SUBACCOUNT_FALLBACK_SLUG
-      && normalizedUsername === SUBACCOUNT_FALLBACK_USER.toLowerCase()) {
-
-    if (verifyLegacySha256(password, SUBACCOUNT_FALLBACK_HASH)) {
-      const synthUserId = 'breakglass-' + slug;
-      const sessionInfo = await createSession({
-        userId: synthUserId,
-        userType: 'subaccount',
-        subaccountId: subaccountId || ('sub-' + slug),
-        username: SUBACCOUNT_FALLBACK_USER,
-        displayName: 'Break-Glass Admin',
-        role: 'admin',
-        ipAddress: ipAddress,
-        userAgent: userAgent
-      });
-
-      await logAudit({
-        req,
-        actorType: 'subaccount',
-        actorId: synthUserId,
-        actorUsername: SUBACCOUNT_FALLBACK_USER,
-        actorRole: 'admin',
-        action: 'subaccount.login.breakglass',
-        targetType: 'subaccount',
-        targetId: subaccountId || ('sub-' + slug),
-        targetSubaccountId: subaccountId || ('sub-' + slug),
-        metadata: { slug: slug, reason: 'env-var fallback used' }
-      });
-
-      res.setHeader('Set-Cookie', buildSessionCookie(sessionInfo.token));
-      return res.status(200).json({
-        success: true,
-        user: {
-          id: synthUserId,
-          username: SUBACCOUNT_FALLBACK_USER,
-          role: 'admin',
-          name: 'Break-Glass Admin',
-          breakglass: true
-        },
-        expires_at: sessionInfo.expiresAt
-      });
     }
   }
 

@@ -9,14 +9,14 @@
 const db = require('./lib/db');
 const { findOrCreateCustomer, saveCardOnFile } = require('./lib/agency-billing');
 const { sendError } = require('./lib/square');
-const { requireAgencyAdminOrAgencyAuth } = require('./lib/require-subaccount-auth');
+const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
 
-  const auth = await requireAgencyAdminOrAgencyAuth(req, res);
+  const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
 
   const {
