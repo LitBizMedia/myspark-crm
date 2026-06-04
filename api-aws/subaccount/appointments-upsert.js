@@ -18,6 +18,7 @@ const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const automations = require('./lib/automations');
+const { fireIntakeForServiceBooking } = require('./lib/intake-trigger');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -762,6 +763,33 @@ async function handler(req, res) {
       }
     } catch (autoErr) {
       console.error('Automation trigger fire error (non-fatal):', autoErr.message);
+    }
+
+    // Intake forms: fire for NEW service appointments booked by staff (calendar).
+    // Same trigger as the public widget, so "a service is booked" fires intake
+    // regardless of who booked it. Gated to isNew + service_id so edits and
+    // free-form (no-service) appointments don't fire. Class appointments use a
+    // different path (class-sessions-enroll) and never set service_id here.
+    try {
+      const _intakeContactId = (existing.rows[0] && existing.rows[0].contact_id) || a.contact_id || a.contactId;
+      if (isNew && a.service_id && _intakeContactId) {
+        const slug = String(subaccountId).replace(/^sub-/, '');
+        const c = await contactsLib.getContactById(subaccountId, _intakeContactId);
+        await fireIntakeForServiceBooking({
+          subaccountId,
+          slug,
+          contactId: _intakeContactId,
+          serviceId: a.service_id,
+          appointmentId: a.id,
+          contact: {
+            email: (c && c.email) || '',
+            phone: (c && c.phone) || '',
+            name: (c && (c.display_name || c.name)) || ''
+          }
+        });
+      }
+    } catch (e) {
+      console.error('fireIntakeForServiceBooking (staff appt) failed (non-fatal):', e.message);
     }
 
     return res.status(200).json({ success: true, id: a.id });

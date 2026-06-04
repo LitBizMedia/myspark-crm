@@ -17,6 +17,7 @@ const { wrap } = require('./lib/lambda-adapter');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { findOrCreateContact } = require('./lib/contacts');
+const { fireIntakeForContactCreated } = require('./lib/intake-trigger');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -62,6 +63,27 @@ async function handler(req, res) {
         has_phone: !!body.phone
       }
     });
+
+    // Intake forms: fire 'contact_created' only on a genuinely new contact
+    // (was_created). Dedup matches are existing contacts and must not fire.
+    // This covers the booking-widget contact-birth door; imports don't route here.
+    if (result.was_created && result.contact && result.contact.id) {
+      try {
+        const slug = String(subaccountId).replace(/^sub-/, '');
+        await fireIntakeForContactCreated({
+          subaccountId,
+          slug,
+          contactId: result.contact.id,
+          contact: {
+            email: result.contact.email || '',
+            phone: result.contact.phone || '',
+            name: result.contact.display_name || result.contact.name || ''
+          }
+        });
+      } catch (e) {
+        console.error('fireIntakeForContactCreated (find-or-create) failed (non-fatal):', e.message);
+      }
+    }
 
     return res.status(200).json(result);
   } catch (err) {

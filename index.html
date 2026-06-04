@@ -27177,12 +27177,33 @@ function fbRenderFormSettings(){
     h+='<label class="fb-sl">Send When</label>';
     h+='<select class="fb-si" onchange="fbSetIntakeTrigger(this.value)">';
     h+='<option value="service_booking"'+(ik.triggerEvent==='service_booking'?' selected':'')+'>A service is booked</option>';
+    h+='<option value="class_registration"'+(ik.triggerEvent==='class_registration'?' selected':'')+'>A class is registered</option>';
     h+='<option value="contact_created"'+(ik.triggerEvent==='contact_created'?' selected':'')+'>A new contact is created</option>';
     h+='</select>';
-    // Service checklist (only for service_booking)
+    // Scope tree, trigger-aware: service_booking -> individual services;
+    // class_registration -> class services. contact_created has no scope.
     if(ik.triggerEvent==='service_booking'){
       h+='<label class="fb-sl">For These Services</label>';
       h+=fbRenderIntakeServiceTree(ik);
+    } else if(ik.triggerEvent==='class_registration'){
+      h+='<label class="fb-sl">For These Classes</label>';
+      h+=fbRenderIntakeServiceTree(ik);
+    }
+    // Send frequency (booking triggers only; contact_created is inherently once)
+    if(ik.triggerEvent==='service_booking'||ik.triggerEvent==='class_registration'){
+      var freq=ik.sendFrequency||'once';
+      h+='<label class="fb-sl">How Often</label>';
+      h+='<select class="fb-si" onchange="fbSetIntakeFreq(this.value)">';
+      h+='<option value="once"'+(freq==='once'?' selected':'')+'>Once per contact (first time only)</option>';
+      h+='<option value="always"'+(freq==='always'?' selected':'')+'>Every time they book</option>';
+      h+='<option value="periodic"'+(freq==='periodic'?' selected':'')+'>Every N days</option>';
+      h+='</select>';
+      if(freq==='periodic'){
+        var pdays=(typeof ik.periodicDays==='number'&&ik.periodicDays>0)?ik.periodicDays:90;
+        h+='<label class="fb-sl">Resend After (days)</label>';
+        h+='<input class="fb-si" type="number" min="1" value="'+pdays+'" oninput="fbSetIntakePeriodicDays(this.value)">';
+        h+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Resend only if the last send was more than this many days ago.</div>';
+      }
     }
     // Channels
     h+='<label class="fb-sl">Delivery</label>';
@@ -27400,8 +27421,24 @@ function fbToggleIntake(key){
 }
 function fbSetIntakeTrigger(val){
   const f=fbState.editingForm;if(!f)return;
-  _fbIntake(f).triggerEvent=val;
+  var ik=_fbIntake(f);
+  ik.triggerEvent=val;
+  // Switching trigger type invalidates the prior service scope (different
+  // service set), so reset to 'all' to avoid stale ids from the other type.
+  ik.serviceMode='all';
+  ik.serviceIds=[];
   const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+function fbSetIntakeFreq(val){
+  const f=fbState.editingForm;if(!f)return;
+  _fbIntake(f).sendFrequency=val;
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+function fbSetIntakePeriodicDays(val){
+  const f=fbState.editingForm;if(!f)return;
+  var n=parseInt(val,10);
+  _fbIntake(f).periodicDays=(n&&n>0)?n:90;
+  // no re-render on each keystroke; value persists in state
 }
 // Service tree for intake. Data-driven (reads/writes f.settings.intake), so it
 // survives the settings-panel re-render on every toggle.
@@ -27412,9 +27449,15 @@ function fbSetIntakeTrigger(val){
 //                 honest state (none picked yet); the form won't fire until one
 //                 is chosen. Toggling All Services flips mode; checking a leaf
 //                 edits serviceIds. Each action does exactly one thing.
-var _FB_UNCAT='\u0000uncat';
-function _fbSvcGroups(){
-  var svcs=(db.services||[]).filter(function(x){return x&&x.id;});
+var _FB_UNCAT='__uncat__';
+function _fbSvcGroups(triggerEvent){
+  // Trigger-aware: class_registration scopes to class services; everything
+  // else (service_booking) scopes to individual (non-class) services.
+  var svcs=(db.services||[]).filter(function(x){
+    if(!x||!x.id)return false;
+    if(triggerEvent==='class_registration')return x.type==='class';
+    return x.type!=='class';
+  });
   var groups={};
   svcs.forEach(function(sv){
     var key=(sv.category&&String(sv.category).trim())?sv.category:_FB_UNCAT;
@@ -27433,26 +27476,44 @@ function fbToggleIntakeCat(key){
   const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
 }
 function fbRenderIntakeServiceTree(ik){
-  var groups=_fbSvcGroups();
+  var isClass=ik.triggerEvent==='class_registration';
+  var nounP=isClass?'Classes':'Services';
+  var nounS=isClass?'class':'service';
+  var groups=_fbSvcGroups(ik.triggerEvent);
   var catKeys=Object.keys(groups).sort(function(a,b){
     if(a===_FB_UNCAT)return 1; if(b===_FB_UNCAT)return -1; return a.localeCompare(b);
   });
   if(!catKeys.length){
-    return '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">No services found.</div>';
+    return '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">No '+nounP.toLowerCase()+' found.</div>';
   }
   var allMode=_fbIntakeMode(ik)==='all';
   var selIds=Array.isArray(ik.serviceIds)?ik.serviceIds:[];
   var openMap=fbState.intakeSvcCatOpen||{};
 
   var html='<div style="border:1px solid var(--border);border-radius:var(--radius);padding:6px 8px;margin-bottom:6px">';
-  // All Services master toggle
+  // Master toggle
   html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0">'
     +'<div class="bh-toggle'+(allMode?' on':'')+'" onclick="fbIntakeSvcAll()"></div>'
-    +'<span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">All Services</span>'
+    +'<span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">All '+nounP+'</span>'
     +'</div>';
 
-  // Category tree only shows in specific mode (when ALL is on, leaves are moot).
-  if(!allMode){
+  if(!allMode && isClass){
+    // Classes have no categories: render a flat checklist, no headers/expand.
+    var allLeaves=[];
+    catKeys.forEach(function(k){ allLeaves=allLeaves.concat(groups[k]); });
+    allLeaves.sort(function(a,b){return (a.name||'').localeCompare(b.name||'');});
+    html+='<div style="max-height:300px;overflow-y:auto;margin-top:4px;border-top:1px solid var(--border);padding-top:4px">';
+    allLeaves.forEach(function(sv){
+      var on=selIds.indexOf(sv.id)!==-1;
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0">'
+        +'<div class="bh-toggle'+(on?' on':'')+'" onclick="fbIntakeSvcToggle(\''+sv.id+'\')"></div>'
+        +'<span style="flex:1;font-size:13px;color:var(--text)">'+esc(sv.name||'(unnamed)')+'</span>'
+        +'</div>';
+    });
+    html+='</div>';
+  }
+  // Category tree only shows in specific mode for services (classes handled above).
+  if(!allMode && !isClass){
     html+='<div style="max-height:300px;overflow-y:auto;margin-top:4px">';
     catKeys.forEach(function(key){
       var label=(key===_FB_UNCAT)?'Uncategorized':key;
@@ -27488,11 +27549,11 @@ function fbRenderIntakeServiceTree(ik){
   html+='</div>';
 
   if(allMode){
-    html+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Sending for any service, including ones you add later. Turn off All Services to choose specific ones.</div>';
+    html+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Sending for any '+nounS+', including ones you add later. Turn off All '+nounP+' to choose specific ones.</div>';
   } else if(!selIds.length){
-    html+='<div style="font-size:11px;color:var(--danger-text,#b45309);margin-bottom:8px">No services selected. This form won\'t send until you pick at least one, or turn All Services back on.</div>';
+    html+='<div style="font-size:11px;color:var(--danger-text,#b45309);margin-bottom:8px">No '+nounP.toLowerCase()+' selected. This form won\'t send until you pick at least one, or turn All '+nounP+' back on.</div>';
   } else {
-    html+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Sending only for the '+selIds.length+' service'+(selIds.length===1?'':'s')+' checked above.</div>';
+    html+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Sending only for the '+selIds.length+' '+nounS+(selIds.length===1?'':'s')+' checked above.</div>';
   }
   return html;
 }
