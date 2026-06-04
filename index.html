@@ -13540,8 +13540,9 @@ function loadData(){
 // TIER 3 (settings/UI state, stay in blob long-term):
 //   settings, paySettings, tags, readNotifs, customFields, customFieldCategories
 // TIER 2 (still in blob today, pending migration per docs/blob-migration-roadmap.md):
-//   contacts, tasks, forms, formSubmissions, coupons, products, productCategories,
+//   contacts, tasks, forms, formSubmissions, products, productCategories,
 //   giftCards, giftCardProducts, sessionPacks, sessionPackTemplates
+// MIGRATED to RDS (no longer in blob): coupons (2026-06-03, see lib-aws/coupons.js)
 var BLOB_ALLOWLIST = [
   'settings','paySettings','tags','readNotifs','customFields','customFieldCategories',
   'tasks','forms','formSubmissions','products','productCategories',
