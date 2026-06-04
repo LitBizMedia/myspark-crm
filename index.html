@@ -26234,6 +26234,7 @@ function drawContractEnvelopeDetail(env){
       '<div style="display:flex;gap:8px">'+
         (canVoid ? '<button onclick="voidContractEnvelopeFromDrawer(\''+esc(env.id)+'\')" style="padding:9px 16px;background:none;color:var(--danger);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Void</button>' : '')+
         (env.status === 'signed' || env.status === 'voided' || env.status === 'expired' ? (env.archived ? '<button onclick="unarchiveContractFromDrawer(\''+esc(env.id)+'\')" style="padding:9px 16px;background:none;color:var(--main-text);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Unarchive</button>' : '<button onclick="archiveContractFromDrawer(\''+esc(env.id)+'\')" style="padding:9px 16px;background:none;color:var(--main-text);border:1px solid var(--main-border);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Archive</button>') : '')+
+        (env.status === 'voided' || env.status === 'draft' ? '<button onclick="deleteContractFromDrawer(\''+esc(env.id)+'\')" style="padding:9px 16px;background:none;color:var(--danger);border:1px solid var(--danger);border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Delete</button>' : '')+
       '</div>'+
       '<div style="display:flex;gap:8px">'+
         (canDownload ? '<button onclick="downloadContractPdf(\''+esc(env.id)+'\')" style="padding:9px 16px;background:var(--purple);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:13px">Download PDF</button>' : '')+
@@ -26269,6 +26270,36 @@ async function archiveContractFromDrawer(envelopeId){
       } catch(e){
         console.error(e);
         toast('Failed to archive', 'error');
+      }
+    }
+  });
+}
+
+async function deleteContractFromDrawer(envelopeId){
+  openConfirm({
+    title: 'Delete this contract permanently?',
+    message: 'This cannot be undone. Only voided and draft contracts can be deleted; signed contracts should be archived instead.',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+    onConfirm: async function(){
+      try {
+        var r = await fetch(apiUrl('/api/subaccount/contracts/delete'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ envelope_id: envelopeId })
+        });
+        var data = await r.json();
+        if(!r.ok){
+          toast(data.error || 'Failed to delete', 'error');
+          return;
+        }
+        toast('Contract deleted', 'success');
+        closeContractEnvelopeDetail();
+        renderContractsEnvelopes();
+      } catch(e){
+        console.error('deleteContractFromDrawer error:', e);
+        toast('Failed to delete', 'error');
       }
     }
   });

@@ -334,6 +334,39 @@ async function unarchiveEnvelope(subaccountId, id) {
   return r.rows.length ? envelopeToFrontend(r.rows[0]) : null;
 }
 
+// Hard-delete an envelope. GUARDED: only 'voided' or 'draft' envelopes can be
+// deleted. Signed/sent/viewed/expired are legal records and must be archived,
+// never deleted. Returns the deleted row, or null if not found, or throws
+// 'PROTECTED_STATUS' if the caller tries to delete a protected envelope.
+// Voided/draft envelopes were never signed (voidEnvelope guards to pre-sign
+// states), so there is no signed PDF to orphan; we still defensively clear any
+// S3 key if one improbably exists. No FKs reference contract_envelopes, so a
+// single-row delete is complete.
+async function deleteEnvelope(subaccountId, id) {
+  if (!subaccountId || !id) throw new Error('subaccountId and id required');
+  const cur = await db.query(
+    `SELECT status, signed_pdf_s3_key FROM contract_envelopes
+       WHERE subaccount_id = $1 AND id = $2`,
+    [subaccountId, id]
+  );
+  if (cur.rows.length === 0) return null;
+  const status = cur.rows[0].status;
+  if (status !== 'voided' && status !== 'draft') {
+    const err = new Error('PROTECTED_STATUS');
+    err.code = 'PROTECTED_STATUS';
+    err.status = status;
+    throw err;
+  }
+  const r = await db.query(
+    `DELETE FROM contract_envelopes
+       WHERE subaccount_id = $1 AND id = $2
+         AND status IN ('voided', 'draft')
+       RETURNING id, status`,
+    [subaccountId, id]
+  );
+  return r.rows.length ? r.rows[0] : null;
+}
+
 // ============================================================================
 // MODULE EXPORTS
 // ============================================================================
@@ -355,6 +388,7 @@ module.exports = {
   voidEnvelope,
   archiveEnvelope,
   unarchiveEnvelope,
+  deleteEnvelope,
 
   // Mappers (exported for any future cross-module reuse)
   templateToFrontend,
