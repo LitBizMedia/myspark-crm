@@ -214,10 +214,13 @@ async function incrementTemplateCount(subaccountId, id, field) {
 // ENVELOPE OPERATIONS
 // ============================================================================
 
-async function listEnvelopes(subaccountId, { status, contactId, limit = 100, offset = 0 } = {}) {
+async function listEnvelopes(subaccountId, { status, contactId, limit = 100, offset = 0, includeArchived = false } = {}) {
   if (!subaccountId) throw new Error('subaccountId required');
   const params = [subaccountId];
   let where = 'subaccount_id = $1';
+  if (!includeArchived) {
+    where += ' AND archived = false';
+  }
   if (status) {
     params.push(status);
     where += ` AND status = $${params.length}`;
@@ -262,12 +265,13 @@ async function getEnvelopeByTokenHash(envelopeId, tokenHash) {
 
 // Counts envelopes per status for the current subaccount.
 // Returns { sent, viewed, signed, expired, voided, draft }.
-async function getEnvelopeStatusCounts(subaccountId) {
+async function getEnvelopeStatusCounts(subaccountId, { includeArchived = false } = {}) {
   if (!subaccountId) throw new Error('subaccountId required');
+  const archFilter = includeArchived ? '' : ' AND archived = false';
   const r = await db.query(
     `SELECT status, COUNT(*)::int AS n
        FROM contract_envelopes
-       WHERE subaccount_id = $1
+       WHERE subaccount_id = $1` + archFilter + `
        GROUP BY status`,
     [subaccountId]
   );
@@ -298,6 +302,38 @@ async function voidEnvelope(subaccountId, id, voidedBy, voidReason) {
   return envelopeToFrontend(r.rows[0]);
 }
 
+// Archive an envelope: hides it from the default view but preserves it as a
+// legal record. Unlike void, archive is allowed from ANY status (you archive
+// completed/voided/expired contracts to tidy the list). Sets archived=true.
+async function archiveEnvelope(subaccountId, id, archivedBy) {
+  if (!subaccountId || !id) throw new Error('subaccountId and id required');
+  const r = await db.query(
+    `UPDATE contract_envelopes
+       SET archived = true,
+           archived_at = NOW()
+       WHERE subaccount_id = $1
+         AND id = $2
+       RETURNING *`,
+    [subaccountId, id]
+  );
+  return r.rows.length ? envelopeToFrontend(r.rows[0]) : null;
+}
+
+// Unarchive: restore an envelope to the default view.
+async function unarchiveEnvelope(subaccountId, id) {
+  if (!subaccountId || !id) throw new Error('subaccountId and id required');
+  const r = await db.query(
+    `UPDATE contract_envelopes
+       SET archived = false,
+           archived_at = NULL
+       WHERE subaccount_id = $1
+         AND id = $2
+       RETURNING *`,
+    [subaccountId, id]
+  );
+  return r.rows.length ? envelopeToFrontend(r.rows[0]) : null;
+}
+
 // ============================================================================
 // MODULE EXPORTS
 // ============================================================================
@@ -317,6 +353,8 @@ module.exports = {
   getEnvelopeByTokenHash,
   getEnvelopeStatusCounts,
   voidEnvelope,
+  archiveEnvelope,
+  unarchiveEnvelope,
 
   // Mappers (exported for any future cross-module reuse)
   templateToFrontend,
