@@ -5997,6 +5997,12 @@ function _renderFormValue(v){
   return esc(String(v));
 }
 
+function toggleFormCard(subId){
+  state.dFormsExpanded=state.dFormsExpanded||{};
+  state.dFormsExpanded[subId]=!state.dFormsExpanded[subId];
+  renderDrawer();
+}
+
 function _renderDFormsTab(c){
   if(!Array.isArray(c._formSubs)){
     loadContactForms(c.id).then(function(){
@@ -6008,26 +6014,46 @@ function _renderDFormsTab(c){
   if(!subs.length){
     return '<div style="padding:40px 20px;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:15px;font-weight:700;color:var(--main-text);margin-bottom:6px">No forms yet</div><div style="font-size:13px;color:var(--main-text-muted);max-width:300px;margin:0 auto">Intake and onboarding form submissions for this contact will appear here.</div></div>';
   }
+  var expanded=state.dFormsExpanded||{};
   var h='';
   subs.forEach(function(sub){
+    var isOpen=!!expanded[sub.id];
     var data=sub.data||{};
-    var rows='';
     var keys=Object.keys(data).filter(function(k){return k!=='_hp';});
-    if(!keys.length){
-      rows='<div style="font-size:13px;color:var(--main-text-muted);padding:4px 0">No fields captured.</div>';
-    } else {
-      keys.forEach(function(k){
-        rows+='<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--main-border)">'
-          +'<div style="flex:0 0 40%;font-size:12px;font-weight:600;color:var(--main-text-muted)">'+esc(_humanizeKey(k))+'</div>'
-          +'<div style="flex:1;font-size:13px;color:var(--main-text)">'+_renderFormValue(data[k])+'</div>'
-          +'</div>';
-      });
-    }
-    h+='<div class="card" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px">'
-      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--main-text)">'+esc(sub.formName||'Form')+'</div>'
-      +'<div style="font-size:11px;color:var(--main-text-muted);white-space:nowrap">'+esc(fmtDateTime(sub.createdAt))+'</div>'
+
+    // Collapsed header: form name, date, field count, chevron. Click toggles.
+    var caret=isOpen
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;color:var(--main-text-muted)"><polyline points="18 15 12 9 6 15"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;color:var(--main-text-muted)"><polyline points="6 9 12 15 18 9"/></svg>';
+
+    var header='<div onclick="toggleFormCard(\''+sub.id+'\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;padding:'+(isOpen?'2px 0 12px':'2px 0')+'">'
+      +'<div style="display:flex;align-items:center;gap:8px;min-width:0">'
+      +caret
+      +'<div style="min-width:0">'
+      +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--main-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(sub.formName||'Form')+'</div>'
+      +'<div style="font-size:11px;color:var(--main-text-muted)">'+keys.length+' field'+(keys.length===1?'':'s')+'</div>'
       +'</div>'
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--main-text-muted);white-space:nowrap;flex-shrink:0">'+esc(fmtDateTime(sub.createdAt))+'</div>'
+      +'</div>';
+
+    var rows='';
+    if(isOpen){
+      if(!keys.length){
+        rows='<div style="font-size:13px;color:var(--main-text-muted);padding:4px 0">No fields captured.</div>';
+      } else {
+        keys.forEach(function(k){
+          rows+='<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--main-border)">'
+            +'<div style="flex:0 0 40%;font-size:12px;font-weight:600;color:var(--main-text-muted)">'+esc(_humanizeKey(k))+'</div>'
+            +'<div style="flex:1;font-size:13px;color:var(--main-text)">'+_renderFormValue(data[k])+'</div>'
+            +'</div>';
+        });
+      }
+      rows='<div style="border-top:1px solid var(--main-border)">'+rows+'</div>';
+    }
+
+    h+='<div class="card" style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:12px 16px;margin-bottom:10px">'
+      +header
       +rows
       +'</div>';
   });
@@ -26727,7 +26753,7 @@ function fbDefaultLabel(type){
 }
 
 function fbNewForm(){
-  return{id:'form-'+uid(),name:'New Form',status:'draft',pages:[{id:'pg-'+uid(),title:'Page 1',fields:[]}],settings:{submitAction:'message',successMessage:'Thank you! We received your submission.',redirectUrl:'',createContact:true,updateContact:true,contactTags:[],notifyEmail:'',honeypot:true,workflowTrigger:null,intake:{enabled:false,triggerEvent:'manual',serviceIds:[],sendEmail:true,sendSms:true,emailSubject:'',emailBody:'',smsBody:'',linkTtlDays:30},multiStep:false,style:{primaryColor:'#6b21ea',buttonBg:'#ff4000',buttonText:'Submit',buttonTextColor:'#ffffff',bgColor:'#ffffff',fieldBg:'#f8f8f8',textColor:'#111111',labelColor:'#222222',borderColor:'#d0d0d8',borderRadius:'8',fontFamily:'DM Sans',buttonAlign:'left',buttonWidth:'auto',buttonSize:'normal'}},createdAt:now_(),updatedAt:now_()};
+  return{id:'form-'+uid(),name:'New Form',status:'draft',pages:[{id:'pg-'+uid(),title:'Page 1',fields:[]}],settings:{submitAction:'message',successMessage:'Thank you! We received your submission.',redirectUrl:'',createContact:true,updateContact:true,contactTags:[],notifyEmail:'',honeypot:true,workflowTrigger:null,intake:{enabled:false,triggerEvent:'manual',serviceMode:'all',serviceIds:[],sendEmail:true,sendSms:true,emailSubject:'',emailBody:'',smsBody:'',linkTtlDays:30},multiStep:false,style:{primaryColor:'#6b21ea',buttonBg:'#ff4000',buttonText:'Submit',buttonTextColor:'#ffffff',bgColor:'#ffffff',fieldBg:'#f8f8f8',textColor:'#111111',labelColor:'#222222',borderColor:'#d0d0d8',borderRadius:'8',fontFamily:'DM Sans',buttonAlign:'left',buttonWidth:'auto',buttonSize:'normal'}},createdAt:now_(),updatedAt:now_()};
 }
 
 // =====================================================
@@ -27139,8 +27165,30 @@ function fbRenderFormSettings(){
   h+='<div class="fb-divider"></div>';
   h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Spam Protection</span><div class="bh-toggle'+(s.honeypot?' on':'')+'" onclick="fbToggleFS(\'honeypot\')"></div></div>';
   h+='<div style="font-size:11px;color:var(--text-muted);margin-top:-4px;margin-bottom:8px">Adds a hidden honeypot field to catch bots.</div>';
-  h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Workflow Trigger</span><div class="bh-toggle on" style="opacity:.4" title="Coming soon"></div></div>';
-  h+='<div style="font-size:11px;color:var(--text-dim)">Workflow automation coming soon.</div>';
+  // --- Intake Automation: auto-send this form on a trigger ---
+  h+='<div class="fb-divider"></div>';
+  var ik=s.intake||{enabled:false,triggerEvent:'service_booking',serviceIds:[],sendEmail:true,sendSms:false};
+  h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Send Automatically</span><div class="bh-toggle'+(ik.enabled?' on':'')+'" onclick="fbToggleIntake(\'enabled\')"></div></div>';
+  if(!ik.enabled){
+    h+='<div style="font-size:11px;color:var(--text-muted);margin-top:-4px;margin-bottom:8px">When off, this form is only sent manually from a contact.</div>';
+  } else {
+    h+='<div style="font-size:11px;color:var(--text-muted);margin-top:-4px;margin-bottom:10px">Automatically send this form when the trigger below fires. Sent once per contact.</div>';
+    // Trigger picker
+    h+='<label class="fb-sl">Send When</label>';
+    h+='<select class="fb-si" onchange="fbSetIntakeTrigger(this.value)">';
+    h+='<option value="service_booking"'+(ik.triggerEvent==='service_booking'?' selected':'')+'>A service is booked</option>';
+    h+='<option value="contact_created"'+(ik.triggerEvent==='contact_created'?' selected':'')+'>A new contact is created</option>';
+    h+='</select>';
+    // Service checklist (only for service_booking)
+    if(ik.triggerEvent==='service_booking'){
+      h+='<label class="fb-sl">For These Services</label>';
+      h+=fbRenderIntakeServiceTree(ik);
+    }
+    // Channels
+    h+='<label class="fb-sl">Delivery</label>';
+    h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Send by Email</span><div class="bh-toggle'+(ik.sendEmail?' on':'')+'" onclick="fbToggleIntake(\'sendEmail\')"></div></div>';
+    h+='<div class="fb-toggle-row"><span class="fb-toggle-lbl">Send by SMS</span><div class="bh-toggle'+(ik.sendSms?' on':'')+'" onclick="fbToggleIntake(\'sendSms\')"></div></div>';
+  }
   return h;
 }
 
@@ -27333,6 +27381,140 @@ function fbUpdateFormSetting(key,val){
 function fbToggleFS(key){
   const f=fbState.editingForm;if(!f)return;
   f.settings[key]=!f.settings[key];
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+
+// Intake automation helpers. All operate on f.settings.intake, creating the
+// object with safe defaults if a legacy form predates the intake block.
+function _fbIntake(f){
+  if(!f.settings.intake){
+    f.settings.intake={enabled:false,triggerEvent:'service_booking',serviceMode:'all',serviceIds:[],sendEmail:true,sendSms:false,emailSubject:'',emailBody:'',smsBody:'',linkTtlDays:30};
+  }
+  return f.settings.intake;
+}
+function fbToggleIntake(key){
+  const f=fbState.editingForm;if(!f)return;
+  var ik=_fbIntake(f);
+  ik[key]=!ik[key];
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+function fbSetIntakeTrigger(val){
+  const f=fbState.editingForm;if(!f)return;
+  _fbIntake(f).triggerEvent=val;
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+// Service tree for intake. Data-driven (reads/writes f.settings.intake), so it
+// survives the settings-panel re-render on every toggle.
+// MODEL: intake.serviceMode is the source of truth.
+//   'all'      => sends for ANY service, including ones added later. serviceIds
+//                 ignored. Default.
+//   'specific' => sends only for services in serviceIds. Empty list is a valid,
+//                 honest state (none picked yet); the form won't fire until one
+//                 is chosen. Toggling All Services flips mode; checking a leaf
+//                 edits serviceIds. Each action does exactly one thing.
+var _FB_UNCAT='\u0000uncat';
+function _fbSvcGroups(){
+  var svcs=(db.services||[]).filter(function(x){return x&&x.id;});
+  var groups={};
+  svcs.forEach(function(sv){
+    var key=(sv.category&&String(sv.category).trim())?sv.category:_FB_UNCAT;
+    if(!groups[key])groups[key]=[];
+    groups[key].push(sv);
+  });
+  return groups;
+}
+function _fbIntakeMode(ik){
+  if(ik.serviceMode==='all'||ik.serviceMode==='specific')return ik.serviceMode;
+  return (Array.isArray(ik.serviceIds)&&ik.serviceIds.length)?'specific':'all';
+}
+function fbToggleIntakeCat(key){
+  fbState.intakeSvcCatOpen=fbState.intakeSvcCatOpen||{};
+  fbState.intakeSvcCatOpen[key]=!fbState.intakeSvcCatOpen[key];
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+function fbRenderIntakeServiceTree(ik){
+  var groups=_fbSvcGroups();
+  var catKeys=Object.keys(groups).sort(function(a,b){
+    if(a===_FB_UNCAT)return 1; if(b===_FB_UNCAT)return -1; return a.localeCompare(b);
+  });
+  if(!catKeys.length){
+    return '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">No services found.</div>';
+  }
+  var allMode=_fbIntakeMode(ik)==='all';
+  var selIds=Array.isArray(ik.serviceIds)?ik.serviceIds:[];
+  var openMap=fbState.intakeSvcCatOpen||{};
+
+  var html='<div style="border:1px solid var(--border);border-radius:var(--radius);padding:6px 8px;margin-bottom:6px">';
+  // All Services master toggle
+  html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0">'
+    +'<div class="bh-toggle'+(allMode?' on':'')+'" onclick="fbIntakeSvcAll()"></div>'
+    +'<span style="flex:1;font-size:13px;font-weight:600;color:var(--text)">All Services</span>'
+    +'</div>';
+
+  // Category tree only shows in specific mode (when ALL is on, leaves are moot).
+  if(!allMode){
+    html+='<div style="max-height:300px;overflow-y:auto;margin-top:4px">';
+    catKeys.forEach(function(key){
+      var label=(key===_FB_UNCAT)?'Uncategorized':key;
+      var leaves=groups[key];
+      var selInCat=leaves.filter(function(sv){return selIds.indexOf(sv.id)!==-1;}).length;
+      // Auto-expand a category that has selections, unless user explicitly set it.
+      var explicit=Object.prototype.hasOwnProperty.call(openMap,key);
+      var open=explicit?openMap[key]:(selInCat>0);
+      var caret=open?'\u25be':'\u25b8';
+      var count=selInCat>0?' <span style="color:var(--purple);font-weight:700">('+selInCat+')</span>':'';
+      html+='<div style="border-top:1px solid var(--border)">';
+      html+='<div onclick="fbToggleIntakeCat(\''+key.replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;gap:6px;padding:6px 2px;cursor:pointer">'
+        +'<span style="width:12px;display:inline-flex;justify-content:center;color:var(--text-dim);font-size:11px">'+caret+'</span>'
+        +'<span style="flex:1;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">'+esc(label)+count+'</span>'
+        +'<span style="font-size:11px;color:var(--text-dim)">'+leaves.length+'</span>'
+        +'</div>';
+      if(open){
+        html+='<div style="padding-bottom:4px">';
+        leaves.forEach(function(sv){
+          var on=selIds.indexOf(sv.id)!==-1;
+          var grp=sv.group_capable?' <span style="font-size:11px;color:var(--text-muted)">(group)</span>':'';
+          html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0 3px 24px">'
+            +'<div class="bh-toggle'+(on?' on':'')+'" onclick="fbIntakeSvcToggle(\''+sv.id+'\')"></div>'
+            +'<span style="flex:1;font-size:13px;color:var(--text)">'+esc(sv.name||'(unnamed)')+grp+'</span>'
+            +'</div>';
+        });
+        html+='</div>';
+      }
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+
+  if(allMode){
+    html+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Sending for any service, including ones you add later. Turn off All Services to choose specific ones.</div>';
+  } else if(!selIds.length){
+    html+='<div style="font-size:11px;color:var(--danger-text,#b45309);margin-bottom:8px">No services selected. This form won\'t send until you pick at least one, or turn All Services back on.</div>';
+  } else {
+    html+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Sending only for the '+selIds.length+' service'+(selIds.length===1?'':'s')+' checked above.</div>';
+  }
+  return html;
+}
+function fbIntakeSvcAll(){
+  const f=fbState.editingForm;if(!f)return;
+  var ik=_fbIntake(f);
+  if(_fbIntakeMode(ik)==='all'){
+    ik.serviceMode='specific';
+  } else {
+    ik.serviceMode='all';
+    ik.serviceIds=[];
+  }
+  const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
+}
+function fbIntakeSvcToggle(id){
+  const f=fbState.editingForm;if(!f)return;
+  var ik=_fbIntake(f);
+  if(_fbIntakeMode(ik)==='all')return;
+  if(!Array.isArray(ik.serviceIds))ik.serviceIds=[];
+  var i=ik.serviceIds.indexOf(id);
+  if(i===-1)ik.serviceIds.push(id); else ik.serviceIds.splice(i,1);
+  ik.serviceMode='specific';
   const sp=document.getElementById('fb-sp');if(sp)sp.innerHTML=fbRenderSettingsPanel();
 }
 

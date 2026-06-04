@@ -48,13 +48,34 @@ async function buildFormLink(slug, subaccountId, formId, contactId, ttlDays) {
   return PUBLIC_FORM_BASE + '/' + slug + '?fbembed=' + encodeURIComponent(formId) + '&t=' + encodeURIComponent(token);
 }
 
-// Look up an existing intake_sends row for this contact+form.
-async function findExistingSend(subaccountId, contactId, formId) {
-  return db.findOne('intake_sends', {
-    subaccount_id: subaccountId,
-    contact_id: contactId,
-    form_id: formId
-  });
+// Decide whether to skip this automatic send based on the form's frequency
+// policy. intake_sends is a send LOG (multiple rows per contact+form allowed).
+//   'once'     => skip if ANY prior send exists (first-time-only intake)
+//   'always'   => never skip; send on every qualifying booking
+//   'periodic' => skip only if a send exists within the last periodicDays
+// force=true (manual staff send) bypasses this entirely, checked by the caller.
+async function shouldSkipByPolicy(subaccountId, contactId, formId, config) {
+  const freq = (config && config.sendFrequency) || 'once';
+  if (freq === 'always') return { skip: false };
+  if (freq === 'periodic') {
+    var days = parseInt(config && config.periodicDays, 10);
+    if (!days || days < 1) days = 90; // safe default
+    var cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    var recent = await db.query(
+      `SELECT id FROM intake_sends
+       WHERE subaccount_id=$1 AND contact_id=$2 AND form_id=$3 AND sent_at IS NOT NULL AND sent_at > $4
+       ORDER BY sent_at DESC LIMIT 1`,
+      [subaccountId, contactId, formId, cutoff]);
+    if (recent.rows.length) return { skip: true, reason: 'within_periodic_window', intake_id: recent.rows[0].id };
+    return { skip: false };
+  }
+  // default 'once': skip if any send exists at all
+  var any = await db.query(
+    `SELECT id FROM intake_sends
+     WHERE subaccount_id=$1 AND contact_id=$2 AND form_id=$3 LIMIT 1`,
+    [subaccountId, contactId, formId]);
+  if (any.rows.length) return { skip: true, reason: 'already_on_file', intake_id: any.rows[0].id };
+  return { skip: false };
 }
 
 // Main entry point.
@@ -75,11 +96,12 @@ async function dispatchIntake(opts) {
     return { ok: false, error: 'intake config required' };
   }
 
-  // 1. On-file guard. Automatic sends fire once per contact+form.
-  //    force=true (manual staff resend) bypasses and refreshes the row.
-  const existing = await findExistingSend(subaccountId, contactId, formId);
-  if (existing && !force) {
-    return { ok: true, skipped: true, reason: 'already_on_file', intake_id: existing.id };
+  // 1. Frequency-policy guard. force=true (manual staff send) bypasses it.
+  if (!force) {
+    const decision = await shouldSkipByPolicy(subaccountId, contactId, formId, config);
+    if (decision.skip) {
+      return { ok: true, skipped: true, reason: decision.reason, intake_id: decision.intake_id };
+    }
   }
 
   // 2. Build the signed attribution link.
@@ -137,37 +159,22 @@ async function dispatchIntake(opts) {
   const status = anySent ? 'sent' : 'send_failed';
   const nowIso = new Date().toISOString();
 
-  // 4. Write or refresh the intake_sends row.
+  // 4. Append-only: every actual send is a new row in the log. No refresh path.
+  //    A force-resend also inserts a fresh row, so the log shows each send event.
   try {
-    if (existing) {
-      // force resend: refresh the existing row, never duplicate.
-      await db.update('intake_sends',
-        {
-          trigger_event: triggerEvent || existing.trigger_event,
-          appointment_id: appointmentId || existing.appointment_id,
-          status: status,
-          channels: JSON.stringify(channels),
-          sent_at: anySent ? nowIso : existing.sent_at,
-          updated_at: nowIso
-        },
-        { id: existing.id }
-      );
-      return { ok: true, intake_id: existing.id, channels, status, resent: true, errors };
-    } else {
-      const id = newIntakeId();
-      await db.insertOne('intake_sends', {
-        id,
-        subaccount_id: subaccountId,
-        contact_id: contactId,
-        form_id: formId,
-        trigger_event: triggerEvent || 'unknown',
-        appointment_id: appointmentId || null,
-        status,
-        channels: JSON.stringify(channels),
-        sent_at: anySent ? nowIso : null
-      });
-      return { ok: true, intake_id: id, channels, status, errors };
-    }
+    const id = newIntakeId();
+    await db.insertOne('intake_sends', {
+      id,
+      subaccount_id: subaccountId,
+      contact_id: contactId,
+      form_id: formId,
+      trigger_event: triggerEvent || 'unknown',
+      appointment_id: appointmentId || null,
+      status,
+      channels: JSON.stringify(channels),
+      sent_at: anySent ? nowIso : null
+    });
+    return { ok: true, intake_id: id, channels, status, errors };
   } catch (e) {
     return { ok: false, error: 'intake_sends write failed: ' + e.message, channels, send_errors: errors };
   }

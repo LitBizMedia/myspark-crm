@@ -76,6 +76,9 @@ function buildConfigForForm(form, contact) {
     emailSubject: intake.emailSubject || '',
     emailHtml: intake.emailBody || '',
     smsBody: intake.smsBody || '',
+    sendFrequency: intake.sendFrequency || 'once',
+    periodicDays: (typeof intake.periodicDays === 'number' && intake.periodicDays > 0)
+      ? intake.periodicDays : 90,
     linkTtlDays: (typeof intake.linkTtlDays === 'number' && intake.linkTtlDays > 0)
       ? intake.linkTtlDays : undefined,
     contactEmail: contact.email || '',
@@ -132,8 +135,13 @@ async function fireIntakeForServiceBooking(opts) {
   for (const id of listedIds) {
     const form = byId[id];
     if (!isLiveIntakeForm(form, 'service_booking')) continue;
-    const scope = (form.settings.intake.serviceIds) || [];
-    if (Array.isArray(scope) && scope.length && scope.indexOf(serviceId) === -1) continue;
+    // Service scope by explicit mode. Backward compat: forms saved before
+    // serviceMode existed have no flag; infer 'specific' if serviceIds is
+    // populated, else 'all'. 'all' matches any service (including future ones).
+    const intake = form.settings.intake;
+    const scope = Array.isArray(intake.serviceIds) ? intake.serviceIds : [];
+    const mode = intake.serviceMode || (scope.length ? 'specific' : 'all');
+    if (mode === 'specific' && scope.indexOf(serviceId) === -1) continue;
     selected.push(form);
   }
   if (!selected.length) return { ok: true, sent: [], reason: 'no_matching_service_forms' };
