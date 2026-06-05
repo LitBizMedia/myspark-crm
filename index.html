@@ -8652,11 +8652,13 @@ async function processCharge(){  // ── Gift Card payment path ──
     var gcNotes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
     var gcPayId=uid();
     var gcPmt={id:gcPayId,contactId:gcCid||null,staffId:gcStaffId||null,tipStaffId:gcTipStaffRaw||gcStaffId||null,items:[...state.posItems],subtotal:totals.sub,couponDiscount:totals.couponDiscount||0,couponCode:totals.couponCode||'',couponId:totals.couponId||'',discountAmount:totals.discount||0,discountType:totals.discountType||'flat',discountNote:totals.discountNote||'',afterDiscount:totals.afterDiscount||totals.sub,feeAmount:totals.additionalFee||0,taxAmount:totals.tax||0,taxableAmount:totals.taxableAmount||0,tipAmount:totals.tip,creditApplied:totals.credit||0,giftCardCode:gc.code,giftCardApplied:gcApplied,remainderMethod:gcRemMethod||'',remainderRef:gcRemRef,total:gcTotal,paymentMethod:'gift_card',status:'completed',notes:gcNotes,createdAt:now_()};
-    db.payments.push(gcPmt);
-    _createPaymentRemote(gcPmt);
-    saveData();
-    setTimeout(function(){ if(typeof fetchFromServer==='function') fetchFromServer(); }, 600);
-    // Clear cart + coupon + contact. DO NOT yet call posClearGiftCard() — that nulls gcRemCard before we tokenize.
+    // Await the gift card payment so the SERVER-SIDE deduct (same txn) confirms
+    // BEFORE we charge any remainder. If it 409s (insufficient balance, voided),
+    // gcAwaitPayment shows the error; we stop and charge nothing.
+    var gcOk=await gcAwaitPayment(gcPmt);
+    if(!gcOk){ return; }
+    // Deduct confirmed. Clear cart + coupon + contact. DO NOT yet call
+    // posClearGiftCard() — that nulls gcRemCard before we tokenize.
     state.posItems=[];state.posCoupon=null;
     renderPosItems();calcTotals();
     document.getElementById('pos-c-id').value='';document.getElementById('pos-c-inp').value='';
@@ -11841,30 +11843,38 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
   // Helper to commit GC redemption + record + coupon usage.
   // GC is only redeemed when status is 'completed'. Failed payments do not
   // consume the gift card balance - the customer can retry without losing GC.
-  function commit(extras, success){
+  async function commit(extras, success){
     var pmt=Object.assign({}, basePmt, extras||{});
     var isCompleted=pmt.status==='completed';
     if(!db.payments)db.payments=[];
+    // For COMPLETED gift card payments the server deducts the card in the same
+    // transaction as the insert. Await it so a rejection (insufficient balance,
+    // voided card) surfaces instead of a false success. Failed payments still
+    // record fire-and-forget (no deduct fires on a failed payment server-side).
+    if(isCompleted){
+      var ok=await gcAwaitPayment(pmt);
+      if(!ok){ if(typeof ctx.onError==='function')ctx.onError(); return false; }
+      if(success)toast(success,'success');
+      if(typeof ctx.onSuccess==='function')ctx.onSuccess();
+      return true;
+    }
     db.payments.push(pmt);
     _createPaymentRemote(pmt);
-
-    // Gift card balance deducted SERVER-SIDE in payments-create (same txn).
-    // Coupon redemption also logged server-side. Frontend refreshes from RDS.
     saveData();
     if(success)toast(success,'success');
-    if(isCompleted){ setTimeout(function(){ if(typeof fetchFromServer==='function') fetchFromServer(); }, 600); }
     if(typeof ctx.onSuccess==='function')ctx.onSuccess();
+    return true;
   }
 
   // No remainder needed: GC covers everything
   if(gcRemainder<=0){
-    commit({status:'completed',remainderStatus:'completed'}, 'Recorded '+fmt$(gcApplied)+' from gift card.');
+    await commit({status:'completed',remainderStatus:'completed'}, 'Recorded '+fmt$(gcApplied)+' from gift card.');
     return;
   }
 
   // Cash or Other remainder: just record, no async charge needed
   if(remMethod==='cash'||remMethod==='other'){
-    commit({status:'completed',remainderStatus:'completed'}, 'Applied '+fmt$(gcApplied)+' from gift card + '+fmt$(gcRemainder)+' '+remMethod+'.');
+    await commit({status:'completed',remainderStatus:'completed'}, 'Applied '+fmt$(gcApplied)+' from gift card + '+fmt$(gcRemainder)+' '+remMethod+'.');
     return;
   }
 
@@ -11889,19 +11899,20 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
       });
       var data=await r.json();
       if(data.error){
-        commit({status:'failed',remainderStatus:'failed',remainderError:data.error,failReason:data.error},null);
+        await commit({status:'failed',remainderStatus:'failed',remainderError:data.error,failReason:data.error},null);
         toast('Remainder charge failed: '+data.error,'error');
         return;
       }
-      commit({
+      var cofOk=await commit({
         status:'completed',
         remainderStatus:'completed',
         squarePaymentId:data.payment&&data.payment.id||'',
         cardLast4:card.last4,
         cardBrand:card.brand
       }, 'Applied '+fmt$(gcApplied)+' from gift card + '+fmt$(gcRemainder)+' to card on file.');
+      if(!cofOk){ toast('Card on file was charged '+fmt$(gcRemainder)+', but the gift card could not be applied. Verify the card balance and refund if needed.','error'); }
     }catch(e){
-      commit({status:'failed',remainderStatus:'failed',remainderError:e.message,failReason:e.message},null);
+      await commit({status:'failed',remainderStatus:'failed',remainderError:e.message,failReason:e.message},null);
       toast('COF charge error: '+e.message,'error');
     }
     return;
@@ -11934,19 +11945,20 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
       });
       var data2=await r2.json();
       if(data2.error){
-        commit({status:'failed',remainderStatus:'failed',remainderError:data2.error,failReason:data2.error},null);
+        await commit({status:'failed',remainderStatus:'failed',remainderError:data2.error,failReason:data2.error},null);
         toast('Remainder charge failed: '+data2.error,'error');
         return;
       }
       var last4=data2.payment&&data2.payment.cardDetails&&data2.payment.cardDetails.card&&data2.payment.cardDetails.card.last4||'';
       var brand=data2.payment&&data2.payment.cardDetails&&data2.payment.cardDetails.card&&data2.payment.cardDetails.card.cardBrand||'';
-      commit({
+      var cardOk=await commit({
         status:'completed',
         remainderStatus:'completed',
         squarePaymentId:data2.payment&&data2.payment.id||'',
         cardLast4:last4,
         cardBrand:brand
       }, 'Applied '+fmt$(gcApplied)+' from gift card + '+fmt$(gcRemainder)+' to card.');
+      if(!cardOk){ toast('Card was charged '+fmt$(gcRemainder)+', but the gift card could not be applied. Verify the card balance and refund if needed.','error'); }
       _destroyApptSquareCardForm();
     }catch(e){
       console.error('GC card remainder error:',e);
@@ -35715,7 +35727,7 @@ async function spProcessSale(){
 // Finalizes a session pack sale. gcInfo is optional and carries gift card
 // details when GC was used (full or partial coverage):
 //   { gcId, gcCode, gcApplied, remainderMethod, remainderRef, remainderStatus }
-function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcInfo,taxAmount,taxableAmount){
+async function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcInfo,taxAmount,taxableAmount){
   var payId=uid();
   var packId='sp-'+uid();
   var today=todayStr();
@@ -35750,8 +35762,22 @@ function spSellFinalize(tmpl,contactId,staffId,pm,ref,notes,squarePaymentId,gcIn
     if(gcInfo.remainderRef)spSalePmt.remainderRef=gcInfo.remainderRef;
     if(gcInfo.remainderStatus)spSalePmt.remainderStatus=gcInfo.remainderStatus;
   }
-  db.payments.push(spSalePmt);
-  _createPaymentRemote(spSalePmt);
+  // For gift-card-funded pack sales the server deducts the card in the same txn
+  // as the payment insert. Await it so a rejection stops BEFORE we create the
+  // pack. Non-gift-card sales post fire-and-forget as before.
+  var _spIsGc=gcInfo&&gcInfo.gcApplied&&gcInfo.gcApplied>0;
+  if(_spIsGc){
+    var _spOk=await gcAwaitPayment(spSalePmt);
+    if(!_spOk){
+      // Deduct rejected: no pack created, no money applied. Re-enable any button.
+      var _spBtn=document.getElementById('sp-sell-btn');
+      if(_spBtn){_spBtn.disabled=false;_spBtn.textContent='Process and Issue Pack';}
+      return false;
+    }
+  } else {
+    db.payments.push(spSalePmt);
+    _createPaymentRemote(spSalePmt);
+  }
   if(!db.sessionPacks)db.sessionPacks=[];
   db.sessionPacks.push({
     id:packId,templateId:tmpl.id,
