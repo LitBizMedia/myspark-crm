@@ -8642,14 +8642,12 @@ async function processCharge(){  // ── Gift Card payment path ──
     if(remainder>0&&!state.posGCRemainderMethod){toast('Choose a payment method for the remaining '+fmt$(remainder)+'.','error');return;}
     // Capture remainder method BEFORE the state reset below, otherwise the Square charge branch below reads null.
     var gcRemMethod=state.posGCRemainderMethod;
-    gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
-    if(gObj.balance<=0)gObj.status='redeemed';
-    else if(gcApplied>0)gObj.status='partial';
-    if(!gObj.log)gObj.log=[];
+    // Gift card balance is deducted SERVER-SIDE in payments-create (same txn as
+    // the payment insert). Frontend no longer mutates the card; it refreshes
+    // from RDS after the payment posts. gcApplied still rides on the payment.
     var gcCid=document.getElementById('pos-c-id')&&document.getElementById('pos-c-id').value||'';
     var gcStaffId=document.getElementById('pos-staff')&&document.getElementById('pos-staff').value||'';
     var gcTipStaffRaw=document.getElementById('pos-tip-staff')&&document.getElementById('pos-tip-staff').value;
-    gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at POS'+(remainder>0?' + '+fmt$(remainder)+' '+gcRemMethod:''),date:now_(),contactId:gcCid||null});
     var gcRemRef=gcRemMethod==='other'?(document.getElementById('gc-rem-ref')&&document.getElementById('gc-rem-ref').value||''):'';
     var gcNotes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
     var gcPayId=uid();
@@ -8657,6 +8655,7 @@ async function processCharge(){  // ── Gift Card payment path ──
     db.payments.push(gcPmt);
     _createPaymentRemote(gcPmt);
     saveData();
+    setTimeout(function(){ if(typeof fetchFromServer==='function') fetchFromServer(); }, 600);
     // Clear cart + coupon + contact. DO NOT yet call posClearGiftCard() — that nulls gcRemCard before we tokenize.
     state.posItems=[];state.posCoupon=null;
     renderPosItems();calcTotals();
@@ -11849,18 +11848,11 @@ async function _takeApptPaymentGC(ctx, totals, notes, staffId, staffName, tipSta
     db.payments.push(pmt);
     _createPaymentRemote(pmt);
 
-    if(isCompleted){
-      // Reduce GC balance, log redemption
-      gObj.balance=Math.max(0,(gObj.balance||0)-gcApplied);
-      if(gObj.balance<=0)gObj.status='redeemed';
-      else if(gcApplied>0)gObj.status='partial';
-      if(!gObj.log)gObj.log=[];
-      gObj.log.push({type:'redeem',amount:gcApplied,note:'Redeemed at payment'+(gcRemainder>0?' + '+fmt$(gcRemainder)+' '+(remMethod||''):''),date:now_(),contactId:ctx.contactId||null,paymentId:payId});
-
-      // Coupon redemption logged server-side by payments-create (blob migration 2026-06-03).
-    }
+    // Gift card balance deducted SERVER-SIDE in payments-create (same txn).
+    // Coupon redemption also logged server-side. Frontend refreshes from RDS.
     saveData();
     if(success)toast(success,'success');
+    if(isCompleted){ setTimeout(function(){ if(typeof fetchFromServer==='function') fetchFromServer(); }, 600); }
     if(typeof ctx.onSuccess==='function')ctx.onSuccess();
   }
 
@@ -13651,7 +13643,8 @@ function loadData(){
         'users','_subaccountAdmin','serviceCategories','serviceWidgets','payments',
         'subscriptions','subscriptionPlans','services','appointments','classSessions',
         'serviceAddons','serviceVariations','serviceResourceGroups','resources',
-        'subscriptionPlanCategories','serviceResources','coupons'
+        'subscriptionPlanCategories','serviceResources','coupons',
+        'giftCards','giftCardProducts'
       ];
       var DEAD_SETTINGS_KEYS = [
         'adminProfile','supabaseUrl','supabaseKey','gistId','gistToken'
@@ -13721,7 +13714,7 @@ function loadData(){
 var BLOB_ALLOWLIST = [
   'settings','paySettings','tags','readNotifs','customFields','customFieldCategories',
   'tasks','forms','formSubmissions','products','productCategories',
-  'giftCards','giftCardProducts','sessionPacks','sessionPackTemplates'
+  'sessionPacks','sessionPackTemplates'
 ];
 
 function _buildBlobPayload(){
@@ -13786,6 +13779,12 @@ async function fetchFromServer(opts){
     // never collides with the hardcoded responses[1] name-map reference.
     const _couponFetchIdx=fetches.length;
     fetches.push(fetch(apiUrl('/api/subaccount/coupons-list'),{credentials:'include'}));
+    // Gift cards + products moved to RDS (blob migration 2026-06-05). Pushed
+    // after coupons, each with its own captured index, mirroring the coupons pattern.
+    const _gcFetchIdx=fetches.length;
+    fetches.push(fetch(apiUrl('/api/subaccount/gift-cards-list'),{credentials:'include'}));
+    const _gcpFetchIdx=fetches.length;
+    fetches.push(fetch(apiUrl('/api/subaccount/gift-card-products-list'),{credentials:'include'}));
     const responses=await Promise.all(fetches);
     const r=responses[0];
     const rc=null;
@@ -13840,6 +13839,18 @@ async function fetchFromServer(opts){
         if(rcpn&&rcpn.ok){ const cj=await rcpn.json(); if(cj&&Array.isArray(cj.coupons)) db.coupons=cj.coupons; }
         else { console.warn('coupons-list fetch failed, status:',rcpn&&rcpn.status); }
       }catch(e){ console.warn('coupons-list parse failed:',e); }
+      // Gift cards from RDS (blob migration 2026-06-05). Assigned after the blob
+      // spread so RDS is authoritative regardless of blob contents. Non-fatal.
+      try{
+        const rgc=responses[_gcFetchIdx];
+        if(rgc&&rgc.ok){ const gj=await rgc.json(); if(gj&&Array.isArray(gj.giftCards)) db.giftCards=gj.giftCards; }
+        else { console.warn('gift-cards-list fetch failed, status:',rgc&&rgc.status); }
+      }catch(e){ console.warn('gift-cards-list parse failed:',e); }
+      try{
+        const rgcp=responses[_gcpFetchIdx];
+        if(rgcp&&rgcp.ok){ const pj=await rgcp.json(); if(pj&&Array.isArray(pj.giftCardProducts)) db.giftCardProducts=pj.giftCardProducts; }
+        else { console.warn('gift-card-products-list fetch failed, status:',rgcp&&rgcp.status); }
+      }catch(e){ console.warn('gift-card-products-list parse failed:',e); }
       if(result.services)db.services=result.services;
       if(result.serviceVariations)db.serviceVariations=result.serviceVariations;
       if(result.resources)db.resources=result.resources;
@@ -33998,6 +34009,7 @@ function gcRenderProducts(){
   }
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">';
   prods.forEach(function(prod){
+    if(prod.status==='archived')return; // archived = soft-deleted, hide from grid
     var isActive=prod.status==='active';
     var denomLabel=prod.customAmount?'Custom Amount':(prod.denominations||[]).map(function(d){return'$'+d;}).join(', ');
     var issuedCount=(db.giftCards||[]).filter(function(g){return g.productId===prod.id;}).length;
@@ -34029,12 +34041,27 @@ function gcRenderProducts(){
   return h;
 }
 
+// After any product write: refresh the Designs modal if open, else the main view.
+function gcRefreshAfterWrite(){
+  var modalBody=document.getElementById('gc-designs-modal-body');
+  if(modalBody){ modalBody.innerHTML=gcRenderProducts(); }
+  if(typeof renderGiftCards==='function') renderGiftCards();
+}
 function gcToggleProduct(id){if(!canManageGiftCards()){toast('Permission denied.','error');return;}
   var p=(db.giftCardProducts||[]).find(function(x){return x.id===id;});
   if(!p)return;
-  p.status=p.status==='active'?'inactive':'active';
-  saveData();renderGiftCards();
-  toast('Gift card '+(p.status==='active'?'activated':'deactivated')+'.','success');
+  var nextStatus=p.status==='active'?'inactive':'active';
+  (async function(){
+    try{
+      var r=await fetch(apiUrl('/api/subaccount/gift-card-products-upsert'),{
+        method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:id,name:p.name,status:nextStatus,bgColor1:p.bgColor1,bgColor2:p.bgColor2,bgImage:p.bgImage,bgImageS3Key:p.bgImageS3Key,denominations:p.denominations,customAmount:p.customAmount,terms:p.terms})
+      });
+      if(!r.ok){toast('Could not update gift card.','error');return;}
+      await fetchFromServer();gcRefreshAfterWrite();
+      toast('Gift card '+(nextStatus==='active'?'activated':'deactivated')+'.','success');
+    }catch(e){toast('Could not update gift card.','error');}
+  })();
 }
 
 function gcDeleteProduct(id){
@@ -34048,8 +34075,16 @@ function gcDeleteProduct(id){
 }
 function gcConfirmDeleteProduct(){
   var id=state.modal&&state.modal.id;if(!id)return;
-  db.giftCardProducts=(db.giftCardProducts||[]).filter(function(x){return x.id!==id;});
-  saveData();closeModal();renderGiftCards();toast('Gift card deleted.','success');
+  (async function(){
+    try{
+      var r=await fetch(apiUrl('/api/subaccount/gift-card-products-archive'),{
+        method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:id})
+      });
+      if(!r.ok){toast('Could not delete gift card.','error');return;}
+      await fetchFromServer();closeModal();gcRefreshAfterWrite();toast('Gift card deleted.','success');
+    }catch(e){toast('Could not delete gift card.','error');}
+  })();
 }
 
 // ── Product Modal ──
@@ -34149,15 +34184,18 @@ function saveGcProduct(){
     terms:(document.getElementById('gcp-terms')&&document.getElementById('gcp-terms').value||'').trim(),
     updatedAt:now_()
   };
-  if(!db.giftCardProducts)db.giftCardProducts=[];
-  if(state.modal.id){
-    var ex=db.giftCardProducts.find(function(x){return x.id===state.modal.id;});
-    if(ex)Object.assign(ex,data);
-  }else{
-    db.giftCardProducts.push(Object.assign({id:'gcp-'+uid(),createdAt:now_()},data));
-  }
-  saveData();closeModal();renderGiftCards();
-  toast(state.modal.id?'Gift card updated.':'Gift card created.','success');
+  if(state.modal.id)data.id=state.modal.id;
+  (async function(){
+    try{
+      var r=await fetch(apiUrl('/api/subaccount/gift-card-products-upsert'),{
+        method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(data)
+      });
+      if(!r.ok){toast('Could not save gift card.','error');return;}
+      await fetchFromServer();closeModal();gcRefreshAfterWrite();
+      toast(state.modal.id?'Gift card updated.':'Gift card created.','success');
+    }catch(e){toast('Could not save gift card.','error');}
+  })();
 }
 
 
@@ -34431,6 +34469,33 @@ async function gcProcessSale(){
   gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,'');
 }
 
+// Posts a gift-card-bearing payment and AWAITS the server, because the server
+// now performs the card issue/deduct in the same transaction. Returns true on
+// success (and refreshes db from RDS), false on rejection (shows the reason).
+// Use ONLY for gift card sale/redeem payments where the server money op is
+// authoritative. Normal payments keep using fire-and-forget _createPaymentRemote.
+async function gcAwaitPayment(pmt){
+  try{
+    var r=await fetch(apiUrl('/api/subaccount/payments-create'),{
+      method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(pmt)
+    });
+    if(!r.ok){
+      var msg='Payment could not be completed.';
+      try{ var ej=await r.json(); if(ej&&ej.error) msg=ej.error; }catch(e){}
+      toast(msg,'error');
+      return false;
+    }
+    if(!db.payments)db.payments=[];
+    db.payments.push(pmt); // optimistic; fetchFromServer reconciles below
+    await fetchFromServer();
+    return true;
+  }catch(e){
+    toast('Payment sync error. Please refresh to verify.','error');
+    return false;
+  }
+}
+
 function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squarePaymentId){
   var payId=uid();
   var code=gcGenCode();
@@ -34441,20 +34506,16 @@ function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squar
     subtotal:amt,couponDiscount:0,discountAmount:0,afterDiscount:amt,
     feeAmount:0,taxAmount:0,taxableAmount:0,tipAmount:0,creditApplied:0,
     total:amt,paymentMethod:pm,paymentRef:ref,squarePaymentId:squarePaymentId,
-    status:'completed',notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,createdAt:now_()};
-  db.payments.push(gcSalePmt);
-  _createPaymentRemote(gcSalePmt);
-  if(!db.giftCards)db.giftCards=[];
-  db.giftCards.push({id:'gc-'+uid(),code:code,productId:prodId,
-    contactId:contactId||null,recipientName:recipName||null,
-    originalAmount:amt,balance:amt,status:'active',
-    issuedById:staffId||null,soldVia:'gift-card-tab',paymentId:payId,paymentMethod:pm,
-    squarePaymentId:squarePaymentId,
-    issuedAt:now_(),log:[{type:'issued',amount:amt,note:'Sold via Gift Card tab ('+pm+')',date:now_()}]});
-  saveData();closeModal();
+    status:'completed',notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,
+    giftCardProductId:prodId,recipientName:recipName||null,soldVia:'gift-card-tab',createdAt:now_()};
+  closeModal();
   gcSellCard=null;
-  toast('Gift card sold and issued: '+code,'success');
-  switchGcTab('orders');
+  gcAwaitPayment(gcSalePmt).then(function(ok){
+    if(ok){
+      toast('Gift card sold and issued: '+code,'success');
+      switchGcTab('orders');
+    }
+  });
 }
 
 function gcRenderOrders(){
@@ -34768,7 +34829,7 @@ async function gcInitRemainderCardForm(){
 function updatePosGCTab(){
   var gcTab=document.getElementById('pm-gc');if(!gcTab)return;
   // Always show gift card tab if any active cards exist
-  var hasCards=(db.giftCards||[]).some(function(g){return g.status==='active'&&g.balance>0;});
+  var hasCards=(db.giftCards||[]).some(function(g){return (g.status==='active'||g.status==='partial')&&g.balance>0;});
   gcTab.classList.toggle('hidden',!hasCards);
 }
 
@@ -35529,11 +35590,7 @@ async function spProcessSale(){
 
     // Full coverage from gift card
     if(remainder<=0){
-      gc.balance=parseFloat((gcBalance-price).toFixed(2));
-      gc.status=gc.balance<=0?'redeemed':'partial';
-      if(gc.balance<0)gc.balance=0;
-      if(!gc.log)gc.log=[];
-      gc.log.push({type:'redeemed',amount:price,note:'Session Pack: '+tmpl.name,date:now_()});
+      // GC balance deducted server-side in payments-create (gcApplied on the payment).
       spSellFinalize(tmpl,contactId,staffId,'gift_card','',notes,'',
         {gcId:gc.id,gcCode:gc.code,gcApplied:price},
         taxAmount,taxableAmount);
@@ -35588,11 +35645,7 @@ async function spProcessSale(){
       // remMethod 'cash' - no extra processing needed
 
       // Decrement gift card
-      gc.balance=parseFloat((gcBalance-gcApplied).toFixed(2));
-      gc.status=gc.balance<=0?'redeemed':'partial';
-      if(gc.balance<0)gc.balance=0;
-      if(!gc.log)gc.log=[];
-      gc.log.push({type:'redeemed',amount:gcApplied,note:'Session Pack: '+tmpl.name+' (partial)',date:now_()});
+      // GC balance deducted server-side in payments-create (gcApplied on the payment).
 
       // Build a hybrid payment method label
       var hybridPm='gift_card+'+remMethod;

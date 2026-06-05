@@ -13,6 +13,7 @@ const automations = require('./lib/automations');
 const paymentReceipt = require('./lib/payment-receipt-email');
 const contactsLib = require('./lib/contacts');
 const couponsLib = require('./lib/coupons');
+const giftCardsLib = require('./lib/gift-cards');
 
 // Snake_case DB row -> camelCase shape the frontend uses.
 function paymentToFrontend(row) {
@@ -103,7 +104,8 @@ async function handler(req, res) {
   const tipAmount = num(p.tip_amount != null ? p.tip_amount : p.tipAmount != null ? p.tipAmount : p.tip, 0);
 
   try {
-    const result = await db.query(`
+    const result = await db.transaction(async (txClient) => {
+    const _ins = await txClient.query(`
       INSERT INTO payments (
         id, subaccount_id,
         contact_id, contact_name, staff_id, staff_name, tip_staff_id,
@@ -190,6 +192,56 @@ async function handler(req, res) {
       p.session_pack_id || p.sessionPackId || null,
       p.notes || null
     ]);
+
+      // Same-transaction gift card deduction. Only when this is a NEW completed
+      // payment carrying a gift card. If the row already existed (ON CONFLICT),
+      // _ins.rowCount is 0 and we skip — the deduct already happened on first post.
+      if (_ins.rowCount === 1) {
+        const row = _ins.rows[0];
+        const gcCode = row.gift_card_code;
+        const gcApplied = row.gift_card_applied != null ? parseFloat(row.gift_card_applied) : 0;
+        if (row.status === 'completed' && !row.is_gift_card_sale && gcCode && gcApplied > 0) {
+          const ded = await giftCardsLib._deductOnClient(txClient, subaccountId, {
+            lookupBy: 'code',
+            code: gcCode,
+            amount: gcApplied,
+            note: 'Redeemed: ' + (row.payment_method || 'payment'),
+            contactId: row.contact_id || null,
+            paymentId: row.id,
+            staffId: row.staff_id || null
+          });
+          if (!ded.ok) {
+            // Fatal: roll back the payment so we never charge a gift card we
+            // could not deduct (double-spend guard). Caller maps to an error.
+            const err = new Error('gift_card_deduct_failed:' + ded.reason);
+            err._gcReason = ded.reason;
+            throw err;
+          }
+        }
+
+        // Gift card SALE: create the new card in the SAME transaction, so the
+        // card and its sale payment commit together. The code on the payment is
+        // the NEW card's code (frontend-generated). Symmetric with the deduct.
+        if (row.status === 'completed' && row.is_gift_card_sale && gcCode) {
+          await giftCardsLib._createOnClient(txClient, subaccountId, {
+            code: gcCode,
+            originalAmount: parseFloat(row.total || 0),
+            productId: p.gift_card_product_id || p.giftCardProductId || null,
+            contactId: row.contact_id || null,
+            recipientName: p.recipient_name || p.recipientName || null,
+            recipientEmail: p.recipient_email || p.recipientEmail || null,
+            isDigital: !!(p.is_digital || p.isDigital),
+            issuedById: row.staff_id || null,
+            soldVia: p.sold_via || p.soldVia || 'gift-card-tab',
+            paymentId: row.id,
+            paymentMethod: row.payment_method || null,
+            squarePaymentId: row.square_payment_id || null,
+            note: 'Sold via ' + (row.payment_method || 'sale')
+          });
+        }
+      }
+      return _ins;
+    });
 
     if (result.rowCount === 0) {
       // Conflict: id already exists. Return existing row for idempotency.
@@ -301,6 +353,18 @@ async function handler(req, res) {
 
     return res.status(200).json({ success: true, payment: paymentToFrontend(result.rows[0]) });
   } catch (e) {
+    if (e && e._gcReason) {
+      const map = {
+        not_found: [404, 'Gift card not found'],
+        insufficient_balance: [409, 'Gift card balance is too low for that amount'],
+        card_voided: [409, 'This gift card has been voided'],
+        card_refunded: [409, 'This gift card has been refunded'],
+        bad_amount: [400, 'Invalid gift card amount']
+      };
+      const m = map[e._gcReason] || [409, 'Gift card could not be redeemed'];
+      console.warn('payments-create gift card deduct rejected:', e._gcReason);
+      return res.status(m[0]).json({ error: m[1], reason: e._gcReason });
+    }
     console.error('payments-create error:', e.message, e.stack);
     return res.status(500).json({ error: 'Failed to create payment' });
   }

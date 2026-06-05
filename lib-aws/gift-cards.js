@@ -200,6 +200,46 @@ async function statsByProduct(subaccountId) {
 //   originalAmount, balance?, issuedById, soldVia, paymentId, paymentMethod,
 //   squarePaymentId, issuedAt?, note?
 // }
+// Create a card using an existing transaction client. Inserts the card plus
+// its 'issued' log row. Used by payments-create on a gift card SALE so the card
+// and its sale payment commit together. Mirrors createCard's body.
+async function _createOnClient(client, subaccountId, opts) {
+  const id = (opts.id && /^gc-/.test(opts.id)) ? opts.id : ('gc-' + genId());
+  const original = Number(opts.originalAmount);
+  if (!(original > 0)) throw new Error('createCard: originalAmount must be > 0');
+  const balance = opts.balance != null ? Number(opts.balance) : original;
+  const code = await uniqueCode(client, subaccountId, opts.code);
+  const issuedAt = opts.issuedAt || new Date().toISOString();
+
+  const ins = await client.query(
+    `INSERT INTO gift_cards
+       (id, subaccount_id, code, product_id, contact_id, recipient_name,
+        recipient_email, is_digital, original_amount, balance, status,
+        issued_by_id, sold_via, payment_id, payment_method, square_payment_id,
+        issued_at, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13,$14,$15,$16,$16,NOW())
+     ON CONFLICT (id) DO NOTHING
+     RETURNING *`,
+    [id, subaccountId, code, opts.productId || null, opts.contactId || null,
+     opts.recipientName || null, opts.recipientEmail || null, !!opts.isDigital,
+     original, balance, opts.issuedById || null, opts.soldVia || null,
+     opts.paymentId || null, opts.paymentMethod || null,
+     opts.squarePaymentId || null, issuedAt]
+  );
+  if (ins.rowCount === 1) {
+    await client.query(
+      `INSERT INTO gift_card_log
+         (gift_card_id, subaccount_id, entry_type, amount, note, contact_id, payment_id, staff_id, created_at)
+       VALUES ($1,$2,'issued',$3,$4,$5,$6,$7,$8)`,
+      [id, subaccountId, original,
+       opts.note || ('Issued via ' + (opts.soldVia || 'sale')),
+       opts.contactId || null, opts.paymentId || null, opts.issuedById || null,
+       issuedAt]
+    );
+  }
+  return giftCardToFrontend(ins.rows[0] || null);
+}
+
 async function createCard(subaccountId, opts) {
   const id = (opts.id && /^gc-/.test(opts.id)) ? opts.id : ('gc-' + genId());
   const original = Number(opts.originalAmount);
@@ -244,42 +284,64 @@ async function createCard(subaccountId, opts) {
 //
 // opts: { giftCardId, amount, note?, contactId?, paymentId?, staffId? }
 // Returns { ok, balance, status } or { ok:false, reason }.
-async function deductBalance(subaccountId, opts) {
+// Deduct using an existing transaction client. Locks the card row, validates,
+// deducts, sets status, writes the redeem log. Throws on a real failure so the
+// caller's transaction rolls back; returns {ok:false,reason} for business
+// rejections (not found / insufficient / wrong status) WITHOUT throwing, so the
+// caller can decide whether to roll back. payments-create treats !ok as fatal
+// (throws to roll back the payment); standalone deductBalance maps it to a response.
+//
+// lookupBy: 'id' (default) or 'code'. POS/appointment/pack send the code on the
+// payment, so payments-create looks up by code.
+async function _deductOnClient(client, subaccountId, opts) {
   const amount = Number(opts.amount);
   if (!(amount > 0)) return { ok: false, reason: 'bad_amount' };
 
-  return db.transaction(async (client) => {
-    const r = await client.query(
+  let sel;
+  if (opts.lookupBy === 'code') {
+    sel = await client.query(
+      `SELECT * FROM gift_cards
+        WHERE subaccount_id = $1 AND UPPER(code) = UPPER($2) FOR UPDATE`,
+      [subaccountId, String(opts.code || '').trim()]
+    );
+  } else {
+    sel = await client.query(
       `SELECT * FROM gift_cards
         WHERE subaccount_id = $1 AND id = $2 FOR UPDATE`,
       [subaccountId, opts.giftCardId]
     );
-    const card = r.rows[0];
-    if (!card) return { ok: false, reason: 'not_found' };
-    if (card.status === 'voided' || card.status === 'refunded') {
-      return { ok: false, reason: 'card_' + card.status };
-    }
-    const bal = Number(card.balance);
-    if (bal < amount) return { ok: false, reason: 'insufficient_balance', balance: bal };
+  }
+  const card = sel.rows[0];
+  if (!card) return { ok: false, reason: 'not_found' };
+  if (card.status === 'voided' || card.status === 'refunded') {
+    return { ok: false, reason: 'card_' + card.status };
+  }
+  const bal = Number(card.balance);
+  if (bal < amount) return { ok: false, reason: 'insufficient_balance', balance: bal };
 
-    const newBal = round2(bal - amount);
-    const newStatus = newBal <= 0 ? 'redeemed' : 'partial';
+  const newBal = round2(bal - amount);
+  const newStatus = newBal <= 0 ? 'redeemed' : 'partial';
 
-    await client.query(
-      `UPDATE gift_cards SET balance = $3, status = $4, updated_at = NOW()
-        WHERE subaccount_id = $1 AND id = $2`,
-      [subaccountId, opts.giftCardId, newBal, newStatus]
-    );
-    await client.query(
-      `INSERT INTO gift_card_log
-         (gift_card_id, subaccount_id, entry_type, amount, note, contact_id, payment_id, staff_id)
-       VALUES ($1,$2,'redeem',$3,$4,$5,$6,$7)`,
-      [opts.giftCardId, subaccountId, amount,
-       opts.note || 'Redeemed', opts.contactId || null,
-       opts.paymentId || null, opts.staffId || null]
-    );
-    return { ok: true, balance: newBal, status: newStatus };
-  });
+  await client.query(
+    `UPDATE gift_cards SET balance = $3, status = $4, updated_at = NOW()
+      WHERE subaccount_id = $1 AND id = $2`,
+    [subaccountId, card.id, newBal, newStatus]
+  );
+  await client.query(
+    `INSERT INTO gift_card_log
+       (gift_card_id, subaccount_id, entry_type, amount, note, contact_id, payment_id, staff_id)
+     VALUES ($1,$2,'redeem',$3,$4,$5,$6,$7)`,
+    [card.id, subaccountId, amount,
+     opts.note || 'Redeemed', opts.contactId || null,
+     opts.paymentId || null, opts.staffId || null]
+  );
+  return { ok: true, giftCardId: card.id, balance: newBal, status: newStatus };
+}
+
+async function deductBalance(subaccountId, opts) {
+  const amount = Number(opts.amount);
+  if (!(amount > 0)) return { ok: false, reason: 'bad_amount' };
+  return db.transaction(async (client) => _deductOnClient(client, subaccountId, opts));
 }
 
 // Restore balance (refund of a prior redemption). Adds back, capped at
@@ -439,6 +501,8 @@ module.exports = {
   statsByProduct,
   createCard,
   deductBalance,
+  _deductOnClient,
+  _createOnClient,
   restoreBalance,
   addCredit,
   voidCard,

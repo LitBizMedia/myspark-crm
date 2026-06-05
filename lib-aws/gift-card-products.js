@@ -43,7 +43,7 @@ function frontendToRow(subaccountId, opts) {
   return {
     subaccount_id: subaccountId,
     name: opts.name != null ? String(opts.name) : 'Gift Card',
-    status: opts.status === 'archived' ? 'archived' : 'active',
+    status: ['active','inactive','archived'].includes(opts.status) ? opts.status : 'active',
     bg_color1: opts.bgColor1 || '#6b21ea',
     bg_color2: opts.bgColor2 || '#ff4000',
     bg_image_s3_key: opts.bgImageS3Key || null,
