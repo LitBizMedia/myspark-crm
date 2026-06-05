@@ -83,14 +83,19 @@ async function handler(req, res) {
       }
     });
 
-    // Fire cancellation email (non-fatal). Skip if appointment was already
-    // in the past (likely backdated cleanup, not a real cancellation).
+    // Fire cancellation email (non-fatal). Skip if the appointment was already
+    // in the past (likely backdated cleanup) OR if its prior status was not an
+    // active state. Cancelling a completed, no-show, or rescheduled appointment
+    // is cleanup, not a real cancellation the patient needs to hear about.
     try {
       const apptDate = appt.date ? String(appt.date).slice(0, 10) : null;
       const todayStr = new Date().toISOString().slice(0, 10);
       const isPast = apptDate && apptDate < todayStr;
 
-      if (!isPast && appt.contact_id) {
+      const SUPPRESS_EMAIL_STATUSES = ['completed', 'no_show', 'noshow', 'rescheduled'];
+      const statusSuppressed = SUPPRESS_EMAIL_STATUSES.includes(String(appt.status || '').toLowerCase());
+
+      if (!isPast && !statusSuppressed && appt.contact_id) {
         const contact = await contactsLib.getContactById(subaccountId, appt.contact_id);
         if (contact && contact.email) {
           // Look up business name + slug
