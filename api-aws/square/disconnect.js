@@ -11,7 +11,6 @@ const { deleteSquareCreds } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
 const {
   parseSessionCookie,
-  parseAgencySessionCookie,
   validateSession
 } = require('./lib/subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
@@ -45,13 +44,8 @@ async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const subToken = parseSessionCookie(req);
-  const agencyToken = parseAgencySessionCookie(req);
   let session = null;
-  if (agencyToken) {
-    session = await validateSession(agencyToken);
-    if (session && session.user_type !== 'agency') session = null;
-  }
-  if (!session && subToken) {
+  if (subToken) {
     session = await validateSession(subToken);
     if (session && session.user_type !== 'subaccount') session = null;
   }
@@ -83,7 +77,7 @@ async function handler(req, res) {
 
     await logAudit({
       req, ...actorBase,
-      action: (session.user_type === 'agency') ? 'agency.subaccount.square_disconnect' : 'subaccount.settings.square_disconnect',
+      action: 'subaccount.settings.square_disconnect',
       targetType: 'subaccount',
       targetId: subaccountId,
       targetSubaccountId: subaccountId,
@@ -95,7 +89,7 @@ async function handler(req, res) {
     console.error('disconnect.js error:', err);
     await logAudit({
       req, ...actorBase,
-      action: (session.user_type === 'agency') ? 'agency.subaccount.square_disconnect' : 'subaccount.settings.square_disconnect',
+      action: 'subaccount.settings.square_disconnect',
       targetType: 'subaccount',
       targetId: subaccountId,
       targetSubaccountId: subaccountId,

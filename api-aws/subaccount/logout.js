@@ -34,8 +34,8 @@ async function handler(req, res) {
       actorId: session.user_id,
       actorUsername: session.username,
       actorRole: session.role,
-      action: session.user_type === 'agency' ? 'agency.logout' : 'subaccount.logout',
-      targetType: session.user_type === 'agency' ? 'agency' : 'subaccount',
+      action: 'subaccount.logout',
+      targetType: 'subaccount',
       targetId: session.subaccount_id || null,
       targetSubaccountId: session.subaccount_id || null,
       metadata: { session_id: session.id }

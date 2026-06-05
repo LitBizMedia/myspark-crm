@@ -11,7 +11,6 @@
 const { sendEmail } = require('./lib/mailgun');
 const {
   parseSessionCookie,
-  parseAgencySessionCookie,
   validateSession
 } = require('./lib/subaccount-auth');
 const { checkAndIncrementUsage } = require('./lib/plan-limits');
@@ -22,15 +21,9 @@ async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Accept either subaccount or agency session
   const subToken = parseSessionCookie(req);
-  const agencyToken = parseAgencySessionCookie(req);
   let session = null;
-  if (agencyToken) {
-    session = await validateSession(agencyToken);
-    if (session && session.user_type !== 'agency') session = null;
-  }
-  if (!session && subToken) {
+  if (subToken) {
     session = await validateSession(subToken);
     if (session && session.user_type !== 'subaccount') session = null;
   }

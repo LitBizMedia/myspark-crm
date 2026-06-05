@@ -238,7 +238,6 @@ function getUserAgent(req) {
 // ============================================================
 
 const SESSION_COOKIE_NAME = 'msp_session';
-const AGENCY_SESSION_COOKIE_NAME = 'msp_agency_session';
 
 function buildCookieString(name, token, opts) {
   opts = opts || {};
@@ -296,16 +295,6 @@ function parseSessionCookie(req) {
   return null;
 }
 
-// Agency cookie
-function buildAgencySessionCookie(token, opts) {
-  return buildCookieString(AGENCY_SESSION_COOKIE_NAME, token, opts);
-}
-function buildClearAgencyCookie() {
-  return buildClearString(AGENCY_SESSION_COOKIE_NAME);
-}
-function parseAgencySessionCookie(req) {
-  return parseCookieByName(req, AGENCY_SESSION_COOKIE_NAME);
-}
 
 module.exports = {
   hashPassword,
@@ -324,10 +313,6 @@ module.exports = {
   buildSessionCookie,
   buildClearCookie,
   parseSessionCookie,
-  AGENCY_SESSION_COOKIE_NAME,
-  buildAgencySessionCookie,
-  buildClearAgencyCookie,
-  parseAgencySessionCookie,
   LOCKOUT_THRESHOLD,
   LOCKOUT_WINDOW_MS,
   LOCKOUT_DURATION_MS,

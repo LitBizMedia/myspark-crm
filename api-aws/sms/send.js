@@ -7,7 +7,6 @@
 const { sendSms } = require('./lib/twilio');
 const {
   parseSessionCookie,
-  parseAgencySessionCookie,
   validateSession
 } = require('./lib/subaccount-auth');
 const { checkAndIncrementUsage } = require('./lib/plan-limits');
@@ -18,13 +17,8 @@ async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const subToken = parseSessionCookie(req);
-  const agencyToken = parseAgencySessionCookie(req);
   let session = null;
-  if (agencyToken) {
-    session = await validateSession(agencyToken);
-    if (session && session.user_type !== 'agency') session = null;
-  }
-  if (!session && subToken) {
+  if (subToken) {
     session = await validateSession(subToken);
     if (session && session.user_type !== 'subaccount') session = null;
   }
@@ -36,12 +30,8 @@ async function handler(req, res) {
 
   if (!slug) return res.status(400).json({ error: 'slug is required' });
 
-  if (session.user_type === 'subaccount') {
-    if (session.subaccount_id !== ('sub-' + slug)) {
-      return res.status(403).json({ error: 'Slug does not match session' });
-    }
-  } else if (session.user_type !== 'agency') {
-    return res.status(403).json({ error: 'Invalid session type' });
+  if (session.subaccount_id !== ('sub-' + slug)) {
+    return res.status(403).json({ error: 'Slug does not match session' });
   }
 
   if (!to) return res.status(400).json({ error: 'to is required' });

@@ -10,7 +10,6 @@
 const { getSquareCreds, squareHost, squareHeaders, sendError } = require('./lib/square');
 const {
   parseSessionCookie,
-  parseAgencySessionCookie,
   validateSession
 } = require('./lib/subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
@@ -19,13 +18,8 @@ async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
 
   const subToken = parseSessionCookie(req);
-  const agencyToken = parseAgencySessionCookie(req);
   let session = null;
-  if (agencyToken) {
-    session = await validateSession(agencyToken);
-    if (session && session.user_type !== 'agency') session = null;
-  }
-  if (!session && subToken) {
+  if (subToken) {
     session = await validateSession(subToken);
     if (session && session.user_type !== 'subaccount') session = null;
   }
