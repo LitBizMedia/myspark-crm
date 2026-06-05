@@ -3,8 +3,7 @@
 // POST /api/auth/reset-password
 //
 // Validates a reset token and updates the user's password.
-// Uses bcrypt for subaccount users, SHA-256 for agency (compatibility with login).
-// Writes to subaccount_users for subaccount resets.
+// Uses bcrypt. Writes to subaccount_users for subaccount resets.
 //
 // MIGRATED: Supabase REST → lib/db.js for all queries.
 
@@ -68,13 +67,7 @@ async function handler(req, res) {
     const nowIso = new Date().toISOString();
     let userIdForRevoke = null;
 
-    if (rec.user_type === 'agency') {
-      // /agency portal removed (Phase 4C, May 30 2026). Stale tokens for
-      // agency users are rejected; the user must request a new reset via
-      // the LitBiz workspace path.
-      return res.status(410).json({ error: 'Reset token no longer valid for this user type.' });
-
-    } else if (rec.user_type === 'subaccount_user') {
+    if (rec.user_type === 'subaccount_user') {
       const isComposite = String(rec.user_identifier).indexOf(':') >= 0;
 
       if (!isComposite) {

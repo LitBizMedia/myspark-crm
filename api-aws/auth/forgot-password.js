@@ -24,11 +24,8 @@ async function handler(req, res) {
 
   const { email, context, slug } = req.body || {};
 
-  if (!email || !context) {
-    return res.status(400).json({ error: 'email and context required' });
-  }
-  if (['agency', 'subaccount'].indexOf(context) < 0) {
-    return res.status(400).json({ error: 'context must be agency or subaccount' });
+  if (!email) {
+    return res.status(400).json({ error: 'email required' });
   }
 
   const lowerEmail = String(email).toLowerCase();
@@ -47,37 +44,27 @@ async function handler(req, res) {
     let subaccountSlug = slug || null;
     let userName = '';
 
-    if (context === 'agency') {
-      // /agency portal removed (Phase 4C, May 30 2026). Agency users must
-      // now reset their password through the LitBiz workspace subaccount path.
-      return safeReturn();
-    } else {
-      if (!slug) return safeReturn();
-      const subId = 'sub-' + slug;
+    if (!slug) return safeReturn();
+    const subId = 'sub-' + slug;
 
-      try {
-        const u = await db.findOne('subaccount_users',
-          { subaccount_id: subId, email: lowerEmail, active: true },
-          { select: 'id, username, display_name, email' }
-        );
-        if (u) {
-          userType = 'subaccount_user';
-          userIdentifier = u.id;
-          userName = u.display_name || u.username || '';
-        }
-      } catch (e) {
-        console.warn('forgot-password: subaccount_users lookup failed:', e.message);
+    try {
+      const u = await db.findOne('subaccount_users',
+        { subaccount_id: subId, email: lowerEmail, active: true },
+        { select: 'id, username, display_name, email' }
+      );
+      if (u) {
+        userType = 'subaccount_user';
+        userIdentifier = u.id;
+        userName = u.display_name || u.username || '';
       }
-
-      // Legacy subaccounts.admin_username fallback removed (Jun 2026).
-      // All admins live in subaccount_users post May 2 migration; the
-      // primary lookup above covers them. The old fallback issued
-      // composite 'subId:username' tokens that reset-password could turn
-      // into brand-new admin rows, a provisioning path inside a reset
-      // endpoint. Cut it. Unknown emails now fall straight through to the
-      // enumeration-safe response.
-      if (!userType) return safeReturn();
+    } catch (e) {
+      console.warn('forgot-password: subaccount_users lookup failed:', e.message);
     }
+
+    // All admins live in subaccount_users post May 2 migration; the lookup
+    // above covers them. Unknown emails fall through to the enumeration-safe
+    // response. (Legacy subaccounts.admin_username fallback removed Jun 2026.)
+    if (!userType) return safeReturn();
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MINUTES * 60000).toISOString();
@@ -96,7 +83,7 @@ async function handler(req, res) {
       return safeReturn();
     }
 
-    const resetPath = (context === 'agency') ? '/agency' : '/' + slug;
+    const resetPath = '/' + slug;
     const resetLink = APP_URL + resetPath + '?reset=' + token;
 
     const html = '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#1a1030">'
