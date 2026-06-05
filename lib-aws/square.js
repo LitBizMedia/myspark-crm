@@ -17,6 +17,41 @@
 
 const db = require('./db');
 const secrets = require('./secrets');
+const { KMSClient, EncryptCommand, DecryptCommand } = require('@aws-sdk/client-kms');
+
+// ============================================================
+// Per-subaccount Square token encryption (KMS, direct encrypt)
+// Ciphertext stored with marker prefix so reads transparently
+// handle both legacy plaintext and encrypted values.
+const SQ_KMS_KEY_ARN = process.env.SQUARE_KMS_KEY_ARN || null;
+const SQ_MARKER = 'kms:v1:';
+const SQ_ENC_CONTEXT = { app: 'myspark', purpose: 'square-creds' };
+let _kms;
+function sqKms() { if (!_kms) _kms = new KMSClient({}); return _kms; }
+
+async function sqEncrypt(plaintext) {
+  if (plaintext === null || plaintext === undefined || plaintext === '') return plaintext;
+  if (typeof plaintext === 'string' && plaintext.startsWith(SQ_MARKER)) return plaintext; // already encrypted
+  if (!SQ_KMS_KEY_ARN) throw new Error('SQUARE_KMS_KEY_ARN not set');
+  const out = await sqKms().send(new EncryptCommand({
+    KeyId: SQ_KMS_KEY_ARN,
+    Plaintext: Buffer.from(String(plaintext), 'utf8'),
+    EncryptionContext: SQ_ENC_CONTEXT
+  }));
+  return SQ_MARKER + Buffer.from(out.CiphertextBlob).toString('base64');
+}
+
+async function sqDecrypt(value) {
+  if (value === null || value === undefined || value === '') return value;
+  if (typeof value !== 'string' || !value.startsWith(SQ_MARKER)) return value; // legacy plaintext
+  const b64 = value.slice(SQ_MARKER.length);
+  const out = await sqKms().send(new DecryptCommand({
+    CiphertextBlob: Buffer.from(b64, 'base64'),
+    EncryptionContext: SQ_ENC_CONTEXT
+  }));
+  return Buffer.from(out.Plaintext).toString('utf8');
+}
+
 
 const SQUARE_SECRET_NAME = 'myspark/integrations/square';
 
@@ -66,9 +101,13 @@ async function getSquareCreds(slug) {
   if (!slug || typeof slug !== 'string') return null;
   const subaccountId = 'sub-' + slug;
   try {
-    return await db.findOne('square_credentials', { subaccount_id: subaccountId });
+    const row = await db.findOne('square_credentials', { subaccount_id: subaccountId });
+    if (!row) return null;
+    if (row.access_token)  row.access_token  = await sqDecrypt(row.access_token);
+    if (row.refresh_token) row.refresh_token = await sqDecrypt(row.refresh_token);
+    return row;
   } catch (err) {
-    console.error('getSquareCreds: query failed:', err.message);
+    console.error('getSquareCreds: query/decrypt failed:', err.message);
     return null;
   }
 }
@@ -78,10 +117,12 @@ async function upsertSquareCreds(slug, fields) {
   if (!slug) throw new Error('slug is required');
   if (!fields || !fields.accessToken) throw new Error('accessToken is required');
   const subaccountId = 'sub-' + slug;
+  const encAccess  = await sqEncrypt(fields.accessToken);
+  const encRefresh = fields.refreshToken ? await sqEncrypt(fields.refreshToken) : null;
   const row = {
     subaccount_id: subaccountId,
-    access_token:  fields.accessToken,
-    refresh_token: fields.refreshToken || null,
+    access_token:  encAccess,
+    refresh_token: encRefresh,
     merchant_id:   fields.merchantId || null,
     location_id:   fields.locationId || null,
     sandbox:       !!fields.sandbox,
@@ -194,6 +235,8 @@ module.exports = {
   getSquareCreds,
   upsertSquareCreds,
   deleteSquareCreds,
+  sqEncrypt,
+  sqDecrypt,
   refreshAccessToken,
   // Application-level OAuth credential helpers
   getSquareEnv,
