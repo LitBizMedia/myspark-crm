@@ -8,7 +8,10 @@ node_modules/
 # AWS migration artifacts
 index.html.bak*
 .lambda-builds/
-.lambda-deps/
+# Lambda deps: ignore the heavy node_modules, but TRACK the manifests
+.lambda-deps/*
+!.lambda-deps/package.json
+!.lambda-deps/package-lock.json
 .work-*/
 
 # Deploy scripts (one-time use, not part of source tree)
@@ -24,8 +27,6 @@ deploy-path-a.sh
 *.bak.final2
 
 # Local Lambda build artifacts
-.lambda-builds/
-.lambda-deps/
 
 # Patch scripts
 patch-supabase-*.py
