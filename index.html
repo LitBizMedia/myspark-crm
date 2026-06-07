@@ -34120,7 +34120,7 @@ function openGcProductModal(id){if(!canManageGiftCards()){toast('Permission deni
     +'</div>'
     +'<div class="form-group"><label>Background Image <span style="font-weight:400;color:var(--text-muted)">(overrides gradient - 800x400px, max 2MB)</span></label>'
     +'<input id="gcp-bgimg" type="hidden" value="'+esc(prod&&prod.bgImage||'')+'">'
-    +'<input id="gcp-bgimg-file" type="file" accept="image/*" onchange="gcHandleBgUpload(this)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-family:Lato,sans-serif;font-size:13px;cursor:pointer">'
+    +'<input id="gcp-bgimg-file" type="file" accept="image/png,image/jpeg,image/jpg" onchange="gcHandleBgUpload(this)" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px 12px;font-family:Lato,sans-serif;font-size:13px;cursor:pointer">'
     +'<div id="gcp-bgimg-cur" style="font-size:11px;color:var(--success-light);margin-top:4px;display:'+( prod&&prod.bgImage?'block':'none')+'">'+( prod&&prod.bgImage?'Current image loaded. Upload a new one to replace.':'')+'</div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Tip: Use a dark or vibrant image. Text always shows with a dark overlay for readability.</div></div>'
     +'<div id="gcp-preview" style="width:100%;height:110px;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;position:relative;background:linear-gradient(135deg,'+(prod&&prod.bgColor1||'#6b21ea')+','+(prod&&prod.bgColor2||'#ff4000')+')">'
@@ -34230,6 +34230,8 @@ function gcOpenSell(prodId){
     +'<div class="ss-wrap"><input class="ss-inp" id="gc-sell-c-inp" type="text" placeholder="Search contacts..." oninput="gcSellCSearch(this.value)" onclick="gcSellCSearch(this.value)" autocomplete="off"><input type="hidden" id="gc-sell-c-id"><div class="ss-drop hidden" id="gc-sell-c-drop"></div></div></div>'
     +'<div class="form-group"><label>Recipient Name <span style="font-weight:400;color:var(--text-muted)">(printed on card)</span></label>'
     +'<input id="gc-sell-recip" type="text" placeholder="e.g. Jane Smith"></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="gc-sell-digital" onchange="gcToggleDigital()" style="width:auto;margin:0"> Send digitally to recipient</label>'
+    +'<div id="gc-sell-email-wrap" class="hidden" style="margin-top:8px"><input id="gc-sell-recip-email" type="email" placeholder="recipient@example.com" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none"><div style="font-size:11px;color:var(--text-muted);margin-top:4px">The recipient gets an email with the code and balance.</div></div></div>'
     +'<div class="form-group"><label>Payment Method</label>'
     +'<div class="pay-tabs" style="margin-bottom:10px">'
     +'<button class="pay-tab active" id="gc-pm-card" onclick="gcSellSetPM(\'card\')">Card</button>'
@@ -34387,6 +34389,13 @@ async function gcProcessSale(){
   if(amt<=0){toast('Enter an amount.','error');return;}
   var contactId=document.getElementById('gc-sell-c-id')&&document.getElementById('gc-sell-c-id').value||'';
   var recipName=(document.getElementById('gc-sell-recip')&&document.getElementById('gc-sell-recip').value||'').trim();
+  // Digital delivery requires a valid recipient email (blocks before any charge).
+  var _gcDigital=document.getElementById('gc-sell-digital')&&document.getElementById('gc-sell-digital').checked;
+  var _gcEmail=(document.getElementById('gc-sell-recip-email')&&document.getElementById('gc-sell-recip-email').value||'').trim();
+  if(_gcDigital){
+    if(!_gcEmail){toast('Enter a recipient email to send digitally.','error');return;}
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(_gcEmail)){toast('Enter a valid recipient email.','error');return;}
+  }
   var staffId=document.getElementById('gc-sell-staff')&&document.getElementById('gc-sell-staff').value||'';
   var pm=state.gcSellPM||'card';
   var ref=(document.getElementById('gc-sell-ref')&&document.getElementById('gc-sell-ref').value||'').trim();
@@ -34508,6 +34517,11 @@ async function gcAwaitPayment(pmt){
   }
 }
 
+function gcToggleDigital(){
+  var on=document.getElementById('gc-sell-digital')&&document.getElementById('gc-sell-digital').checked;
+  var wrap=document.getElementById('gc-sell-email-wrap');
+  if(wrap)wrap.classList.toggle('hidden',!on);
+}
 function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squarePaymentId){
   var payId=uid();
   var code=gcGenCode();
@@ -34520,6 +34534,11 @@ function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squar
     total:amt,paymentMethod:pm,paymentRef:ref,squarePaymentId:squarePaymentId,
     status:'completed',notes:'Gift card sale',isGiftCardSale:true,giftCardCode:code,
     giftCardProductId:prodId,recipientName:recipName||null,soldVia:'gift-card-tab',createdAt:now_()};
+  // Digital delivery: read the toggle + email before the modal closes.
+  var _gcDigital=document.getElementById('gc-sell-digital')&&document.getElementById('gc-sell-digital').checked;
+  var _gcEmail=(document.getElementById('gc-sell-recip-email')&&document.getElementById('gc-sell-recip-email').value||'').trim();
+  gcSalePmt.isDigital=!!_gcDigital;
+  gcSalePmt.recipientEmail=_gcEmail||null;
   closeModal();
   gcSellCard=null;
   gcAwaitPayment(gcSalePmt).then(function(ok){
@@ -34848,20 +34867,50 @@ function updatePosGCTab(){
 // updatePosGCTab called directly where needed
 
 
-function gcHandleBgUpload(input){
+// Resize an image file to 800x400 (cover/center-crop), re-encode JPEG @0.85,
+// return a data: URL. Matches how the card renders (center/cover) and keeps the
+// payload tiny (~80-150KB), well under the backend 2MB guard. Mirrors
+// _resizeAvatarToSquare but for the gift card 2:1 aspect.
+function _resizeGcBgImage(file,w,h){
+  return new Promise(function(resolve,reject){
+    var url=URL.createObjectURL(file);
+    var img=new Image();
+    img.onload=function(){
+      try{
+        var targetRatio=w/h, srcRatio=img.width/img.height, sx,sy,sw,sh;
+        if(srcRatio>targetRatio){ sh=img.height; sw=Math.round(img.height*targetRatio); sx=Math.round((img.width-sw)/2); sy=0; }
+        else { sw=img.width; sh=Math.round(img.width/targetRatio); sx=0; sy=Math.round((img.height-sh)/2); }
+        var canvas=document.createElement('canvas');
+        canvas.width=w;canvas.height=h;
+        var ctx=canvas.getContext('2d');
+        ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg',0.85));
+      }catch(e){URL.revokeObjectURL(url);reject(e);}
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);reject(new Error('Could not read image'));};
+    img.src=url;
+  });
+}
+async function gcHandleBgUpload(input){
   var file=input.files&&input.files[0];
   if(!file)return;
-  if(file.size>2*1024*1024){toast('Image too large. Max 2MB.','error');input.value='';return;}
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var dataUrl=e.target.result;
+  var allowed=['image/png','image/jpeg','image/jpg'];
+  if(allowed.indexOf(file.type)<0){toast('Use a PNG or JPG image.','error');input.value='';return;}
+  if(file.size>10*1024*1024){toast('Image too large. Pick something under 10MB.','error');input.value='';return;}
+  var cur=document.getElementById('gcp-bgimg-cur');
+  if(cur){cur.textContent='Processing image...';cur.style.display='block';}
+  try{
+    var dataUrl=await _resizeGcBgImage(file,800,400);
     var hid=document.getElementById('gcp-bgimg');
     if(hid)hid.value=dataUrl;
-    var cur=document.getElementById('gcp-bgimg-cur');
-    if(cur){cur.textContent='Image loaded: '+file.name;cur.style.display='block';}
+    if(cur){cur.textContent='Image ready (resized to 800x400). Save to apply.';cur.style.display='block';}
     gcUpdatePreview();
-  };
-  reader.readAsDataURL(file);
+  }catch(e){
+    if(cur){cur.textContent='';cur.style.display='none';}
+    toast('Could not process image: '+e.message,'error');
+    input.value='';
+  }
 }
 
 

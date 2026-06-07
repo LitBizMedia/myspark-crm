@@ -14,6 +14,7 @@ const paymentReceipt = require('./lib/payment-receipt-email');
 const contactsLib = require('./lib/contacts');
 const couponsLib = require('./lib/coupons');
 const giftCardsLib = require('./lib/gift-cards');
+const gcPurchaseEmail = require('./lib/gift-card-purchase-email');
 
 // Snake_case DB row -> camelCase shape the frontend uses.
 function paymentToFrontend(row) {
@@ -328,6 +329,65 @@ async function handler(req, res) {
       }
     } catch (recErr) {
       console.warn('payment receipt send failed (non-fatal):', recErr.message);
+    }
+
+    // Deliver a DIGITAL gift card to its recipient (non-fatal). Separate from
+    // the receipt block because a gift card sale may have NO buyer contact, and
+    // the recipient email lives on the card, not the contact. Standalone sender
+    // is reused by the future public gift card catalog. Gate inside the lib.
+    try {
+      const pmt = result.rows[0];
+      if (pmt.status === 'completed' && pmt.is_gift_card_sale && pmt.gift_card_code) {
+        // The digital flag + recipient live on the CARD (gift_cards), not the
+        // payment row. Fetch the card just created in this txn by payment_id.
+        const cardRes = await db.query(
+          `SELECT code, balance, is_digital, recipient_email, recipient_name, product_id
+             FROM gift_cards WHERE payment_id=$1 AND subaccount_id=$2 LIMIT 1`,
+          [pmt.id, subaccountId]
+        );
+        const card = cardRes.rows[0];
+        if (card && card.is_digital) {
+          // Recipient email is authoritative; fall back to buyer contact email.
+          let buyerEmail = '', buyerName = '';
+          if (pmt.contact_id) {
+            try {
+              const c = await contactsLib.getContactById(subaccountId, pmt.contact_id);
+              if (c) { buyerEmail = c.email || ''; buyerName = c.name || c.first_name || ''; }
+            } catch (e) { /* skip */ }
+          }
+          let businessName = 'MySpark+', productName = 'Gift Card', terms = '';
+          try {
+            const sdRow = await db.findOne('subaccount_data', { subaccount_id: subaccountId });
+            const settings = (sdRow && sdRow.data && sdRow.data.settings) || {};
+            businessName = settings.businessName || settings.business_name || businessName;
+          } catch (e) { /* default */ }
+          try {
+            if (card.product_id) {
+              const pr = await db.query(
+                'SELECT name, terms FROM gift_card_products WHERE id=$1 AND subaccount_id=$2 LIMIT 1',
+                [card.product_id, subaccountId]
+              );
+              if (pr.rows[0]) { productName = pr.rows[0].name || productName; terms = pr.rows[0].terms || ''; }
+            }
+          } catch (e) { /* skip */ }
+          const slug = subaccountId.replace(/^sub-/, '');
+          await gcPurchaseEmail.sendGiftCardPurchase({
+            subaccountId,
+            slug,
+            code: card.code,
+            balance: card.balance,
+            recipientName: card.recipient_name || null,
+            recipientEmail: card.recipient_email || null,
+            buyerEmail,
+            buyerName,
+            productName,
+            terms,
+            businessName
+          });
+        }
+      }
+    } catch (gcErr) {
+      console.warn('gift card purchase email failed (non-fatal):', gcErr.message);
     }
 
     // Log coupon redemption (non-fatal). Consolidation point for ALL in-app
