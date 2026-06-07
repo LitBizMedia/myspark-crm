@@ -37,22 +37,46 @@ function buildHtml(opts) {
   var balance = fmt$(opts.balance);
   var productName = escHtml(opts.productName || 'Gift Card');
   var terms = opts.terms ? escHtml(opts.terms) : '';
+  var bgImage = opts.bgImage ? escHtml(opts.bgImage) : '';
+  var c1 = escHtml(opts.bgColor1 || '#6b21ea');
+  var c2 = escHtml(opts.bgColor2 || '#ff4000');
 
   var termsBlock = terms
     ? '<tr><td style="padding:16px 0 0 0;color:#5a4d7a;font-size:12px;line-height:1.5">' + terms + '</td></tr>'
     : '';
+
+  // Card visual: if the product has an image, the image is the hero (squared at
+  // the bottom) sitting flush on a SOLID DARK info block that guarantees the
+  // code/balance are readable over any image. No image -> product-color gradient
+  // panel as the standalone card. Solid dark (not gradient) for the info block
+  // so text contrast never depends on the uploaded art.
+  var INFO_BG = '#1a1030'; // deep neutral; max contrast for white text
+  var cardBlock;
+  if (bgImage) {
+    cardBlock =
+      '<img src="' + bgImage + '" alt="' + productName + '" width="520" style="display:block;width:100%;max-width:520px;height:auto;border-radius:14px 14px 0 0">' +
+      '<div style="background:' + INFO_BG + ';border-radius:0 0 14px 14px;padding:24px;text-align:center;color:#fff">' +
+        '<div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.75)">' + productName + '</div>' +
+        '<div style="font-size:38px;font-weight:800;margin:8px 0;color:#fff">' + balance + '</div>' +
+        '<div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:6px">Gift card code</div>' +
+        '<div style="font-family:monospace;font-size:22px;font-weight:700;letter-spacing:.12em;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:10px 14px;display:inline-block">' + code + '</div>' +
+      '</div>';
+  } else {
+    cardBlock =
+      '<div style="background:linear-gradient(135deg,' + c1 + ',' + c2 + ');border-radius:14px;padding:28px 24px;text-align:center;color:#fff">' +
+        '<div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">' + productName + '</div>' +
+        '<div style="font-size:40px;font-weight:800;margin:10px 0">' + balance + '</div>' +
+        '<div style="font-size:12px;opacity:.85;margin-bottom:6px">Gift card code</div>' +
+        '<div style="font-family:monospace;font-size:22px;font-weight:700;letter-spacing:.12em;background:rgba(255,255,255,.18);border-radius:8px;padding:10px 14px;display:inline-block">' + code + '</div>' +
+      '</div>';
+  }
 
   return (
     '<div style="max-width:520px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#1a1030">' +
       '<div style="padding:24px 0;text-align:center">' +
         '<div style="font-size:20px;font-weight:700;color:#1a1030">' + businessName + '</div>' +
       '</div>' +
-      '<div style="background:linear-gradient(135deg,#6b21ea,#ff4000);border-radius:14px;padding:28px 24px;text-align:center;color:#fff">' +
-        '<div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">' + productName + '</div>' +
-        '<div style="font-size:40px;font-weight:800;margin:10px 0">' + balance + '</div>' +
-        '<div style="font-size:12px;opacity:.85;margin-bottom:6px">Gift card code</div>' +
-        '<div style="font-family:monospace;font-size:22px;font-weight:700;letter-spacing:.12em;background:rgba(255,255,255,.18);border-radius:8px;padding:10px 14px;display:inline-block">' + code + '</div>' +
-      '</div>' +
+      cardBlock +
       '<table style="width:100%;border-collapse:collapse;margin-top:20px">' +
         '<tr><td style="padding:4px 0;font-size:15px">Hi ' + recipName + ',</td></tr>' +
         '<tr><td style="padding:8px 0;font-size:15px;line-height:1.5">You have a gift card from ' + businessName + ' worth <strong>' + balance + '</strong>. Present the code above when you book or check out.</td></tr>' +
@@ -104,7 +128,10 @@ async function sendGiftCardPurchase(opts) {
     code: opts.code,
     balance: opts.balance,
     productName: opts.productName,
-    terms: opts.terms
+    terms: opts.terms,
+    bgImage: opts.bgImage,
+    bgColor1: opts.bgColor1,
+    bgColor2: opts.bgColor2
   });
   const text = buildText({
     businessName: opts.businessName,

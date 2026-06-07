@@ -15,6 +15,7 @@ const contactsLib = require('./lib/contacts');
 const couponsLib = require('./lib/coupons');
 const giftCardsLib = require('./lib/gift-cards');
 const gcPurchaseEmail = require('./lib/gift-card-purchase-email');
+const ART_CDN = 'https://dh460epvdorz0.cloudfront.net/';
 
 // Snake_case DB row -> camelCase shape the frontend uses.
 function paymentToFrontend(row) {
@@ -356,6 +357,7 @@ async function handler(req, res) {
             } catch (e) { /* skip */ }
           }
           let businessName = 'MySpark+', productName = 'Gift Card', terms = '';
+          let bgColor1 = '#6b21ea', bgColor2 = '#ff4000', bgImage = '';
           try {
             const sdRow = await db.findOne('subaccount_data', { subaccount_id: subaccountId });
             const settings = (sdRow && sdRow.data && sdRow.data.settings) || {};
@@ -364,10 +366,16 @@ async function handler(req, res) {
           try {
             if (card.product_id) {
               const pr = await db.query(
-                'SELECT name, terms FROM gift_card_products WHERE id=$1 AND subaccount_id=$2 LIMIT 1',
+                'SELECT name, terms, bg_color1, bg_color2, bg_image_s3_key FROM gift_card_products WHERE id=$1 AND subaccount_id=$2 LIMIT 1',
                 [card.product_id, subaccountId]
               );
-              if (pr.rows[0]) { productName = pr.rows[0].name || productName; terms = pr.rows[0].terms || ''; }
+              if (pr.rows[0]) {
+                productName = pr.rows[0].name || productName;
+                terms = pr.rows[0].terms || '';
+                bgColor1 = pr.rows[0].bg_color1 || bgColor1;
+                bgColor2 = pr.rows[0].bg_color2 || bgColor2;
+                if (pr.rows[0].bg_image_s3_key) bgImage = ART_CDN + pr.rows[0].bg_image_s3_key;
+              }
             }
           } catch (e) { /* skip */ }
           const slug = subaccountId.replace(/^sub-/, '');
@@ -382,7 +390,10 @@ async function handler(req, res) {
             buyerName,
             productName,
             terms,
-            businessName
+            businessName,
+            bgImage,
+            bgColor1,
+            bgColor2
           });
         }
       }
