@@ -4362,6 +4362,7 @@ var _pollTimer=null;
 // conversations stop threshold so all poll systems agree. Activity or tab
 // focus resumes immediately via resetIdleTimer + the visibilitychange handler.
 var _idlePollStopMs=10*60*1000;
+var _pollActivityBound=false;
 // Dedicated contacts poll (5 min). Heavy poll above skips contacts because the
 // payload is 3MB+ for large workspaces. This catches cross-tab/cross-user
 // contact changes with acceptable lag.
@@ -4382,6 +4383,18 @@ function _contactsPollTick(){
   });
 }
 function startBackgroundPoll(){
+  // Bind activity listeners once so the poll idle-stop works for ALL accounts,
+  // not just HIPAA ones. The HIPAA idle-logout tracker (initIdleTimeout) only
+  // arms for HIPAA-addon subaccounts; the poll must not depend on it or
+  // non-HIPAA accounts would freeze polling after _idlePollStopMs. Both write
+  // the same idleState.lastActivityAt field, so the future server-side session
+  // timeout work can share this single source of truth.
+  if(!_pollActivityBound){
+    _pollActivityBound=true;
+    ['mousemove','mousedown','keydown','touchstart','scroll'].forEach(function(ev){
+      document.addEventListener(ev, function(){ idleState.lastActivityAt=Date.now(); }, { passive:true });
+    });
+  }
   if(_pollTimer)clearInterval(_pollTimer);
   _pollTimer=setInterval(_pollTick, _pollIntervalMs);
   if(_contactsPollTimer)clearInterval(_contactsPollTimer);
