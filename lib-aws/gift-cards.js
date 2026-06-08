@@ -210,15 +210,23 @@ async function statsByProduct(subaccountId) {
 // An explicit opts.recipientContactId wins. Reads committed contact data
 // (separate connection is fine; the contact already exists).
 async function _resolveRecipientContactId(subaccountId, opts) {
-  if (opts.recipientContactId) return opts.recipientContactId;
-  if (!opts.recipientEmail) return null;
-  try {
-    const c = await getContactByEmail(subaccountId, opts.recipientEmail);
-    return c ? c.id : null;
-  } catch (e) {
-    console.warn('gift-cards: recipient contact match failed (non-fatal):', e.message);
-    return null;
+  if (opts.recipientContactId) return opts.recipientContactId; // explicit wins
+  if (opts.recipientEmail) {
+    // Named recipient with an email: match-only against existing contacts.
+    try {
+      const c = await getContactByEmail(subaccountId, opts.recipientEmail);
+      return c ? c.id : null;
+    } catch (e) {
+      console.warn('gift-cards: recipient contact match failed (non-fatal):', e.message);
+      return null;
+    }
   }
+  // No recipient email. If no recipient NAME either, this is a self-purchase:
+  // link the buyer as the recipient so it shows in their drawer as held/received.
+  // If a name was given but no email, the recipient is a distinct, unmatchable
+  // person -> leave null (do NOT link the buyer).
+  if (!opts.recipientName && opts.contactId) return opts.contactId;
+  return null;
 }
 
 async function _createOnClient(client, subaccountId, opts) {

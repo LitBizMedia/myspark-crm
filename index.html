@@ -5802,28 +5802,55 @@ function _dPayPacks(c){
 }
 function setDPayPackFilter(f){state.dPayPackFilter=f;renderDrawer();}
 
-// Gift Cards: only cards where this contact is the RECIPIENT (gc.contactId
-// matches). Cards bought by this contact for someone else don't appear
-// here; those live on the Gift Cards admin tab.
+// Gift Cards in the contact drawer. Two sections, no overlap:
+//  - Received: cards where this contact is the linked recipient
+//    (recipientContactId === id). Includes self-purchases (buyer == recipient)
+//    and gifts sent to them. These are cards they can spend.
+//  - Purchased for others: cards they bought (contactId === id) for a DIFFERENT
+//    recipient. Shown so their buying history is visible from their drawer.
+function _dGiftCardRow(g){
+  const statusColor=g.status==='active'?'var(--success-light)':g.status==='partial'?'var(--warning-light)':g.status==='redeemed'?'#94a3b8':g.status==='refunded'?'var(--danger-light)':'#94a3b8';
+  return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+    +'<div style="font-family:monospace;font-size:13px;font-weight:700;color:var(--text);letter-spacing:.05em">'+esc(g.code||'')+'</div>'
+    +'<span style="display:inline-block;padding:2px 9px;border-radius:11px;font-size:10px;font-weight:700;text-transform:uppercase;background:'+statusColor+'22;color:'+statusColor+';border:1px solid '+statusColor+'55">'+(g.status||'active')+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">'
+    +'<div style="color:var(--text-muted)">Original: '+fmt$(g.originalAmount||0)+(g.issuedAt?' \u00b7 Issued '+fmtDate(g.issuedAt.split('T')[0]):'')+'</div>'
+    +'<div style="font-family:Exo 2,sans-serif;font-weight:700;color:var(--orange);font-size:14px">'+fmt$(g.balance||0)+' left</div>'
+    +'</div></div>';
+}
+function _dContactName(id){
+  if(!id)return '';
+  const ct=(db.contacts||[]).find(function(x){return x.id===id;});
+  return ct?(ct.name||ct.displayName||''):'';
+}
 function _dPayGiftCards(c){
-  const cards=(db.giftCards||[]).filter(function(g){return g.contactId===c.id;})
+  const all=(db.giftCards||[]);
+  const received=all.filter(function(g){return g.recipientContactId===c.id;})
+    .sort(function(a,b){return(b.issuedAt||'').localeCompare(a.issuedAt||'');});
+  const purchased=all.filter(function(g){return g.contactId===c.id && g.recipientContactId!==c.id;})
     .sort(function(a,b){return(b.issuedAt||'').localeCompare(a.issuedAt||'');});
 
-  if(!cards.length){
-    return '<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No gift cards have been issued to this contact.</div>';
+  if(!received.length && !purchased.length){
+    return '<div style="font-size:13px;color:var(--text-muted);padding:6px 0">No gift cards linked to this contact.</div>';
   }
-  let h='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Gift cards issued to '+esc(c.name)+' as the recipient.</div>';
-  cards.forEach(function(g){
-    const statusColor=g.status==='active'?'var(--success-light)':g.status==='partial'?'var(--warning-light)':g.status==='redeemed'?'#94a3b8':g.status==='refunded'?'var(--danger-light)':'#94a3b8';
-    h+='<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
-      +'<div style="font-family:monospace;font-size:13px;font-weight:700;color:var(--text);letter-spacing:.05em">'+esc(g.code||'')+'</div>'
-      +'<span style="display:inline-block;padding:2px 9px;border-radius:11px;font-size:10px;font-weight:700;text-transform:uppercase;background:'+statusColor+'22;color:'+statusColor+';border:1px solid '+statusColor+'55">'+(g.status||'active')+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">'
-      +'<div style="color:var(--text-muted)">Original: '+fmt$(g.originalAmount||0)+(g.issuedAt?' \u00b7 Issued '+fmtDate(g.issuedAt.split('T')[0]):'')+'</div>'
-      +'<div style="font-family:Exo 2,sans-serif;font-weight:700;color:var(--orange);font-size:14px">'+fmt$(g.balance||0)+' left</div>'
-      +'</div></div>';
-  });
+  let h='';
+  if(received.length){
+    h+='<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Gift Cards Received</div>';
+    received.forEach(function(g){
+      let from='';
+      if(g.contactId && g.contactId!==c.id){ const bn=_dContactName(g.contactId); from='<div style="font-size:11px;color:var(--text-muted);margin-top:4px">From '+(bn?esc(bn):'a guest')+'</div>'; }
+      h+=_dGiftCardRow(g).replace('</div></div>', '</div>'+from+'</div>');
+    });
+  }
+  if(purchased.length){
+    h+='<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px">Gift Cards Purchased For Others</div>';
+    purchased.forEach(function(g){
+      const rn=_dContactName(g.recipientContactId)||g.recipientName||'';
+      let forwhom = rn?'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">For '+esc(rn)+'</div>':'';
+      h+=_dGiftCardRow(g).replace('</div></div>', '</div>'+forwhom+'</div>');
+    });
+  }
   return h;
 }
 
