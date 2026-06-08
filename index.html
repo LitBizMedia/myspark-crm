@@ -41,7 +41,7 @@
 
   /* Semantic palette */
   --success:#10b981;--success-light:#34d399;--success-dim:rgba(52,211,153,.12);--success-text:#059669;
-  --warning:#f59e0b;--warning-light:#fbbf24;--warning-dim:rgba(245,158,11,.12);--warning-text:#92400e;
+  --warning:#f59e0b;--warning-light:#fbbf24;--warning-dim:rgba(245,158,11,.12);--warning-text:#92400e;--warning-text-strong:#713f12;
   --danger:#ef4444;--danger-light:#f87171;--danger-dim:rgba(239,68,68,.12);--danger-text:#dc2626;
   --info:#3b82f6;--info-dim:rgba(59,130,246,.12);--info-text:#1e40af;
 
@@ -912,6 +912,9 @@ body:not(.agency-admin) #sb-agency-tools{display:none!important}
 .surface-light .info-item label{margin-bottom:3px}
 .surface-light .sec-row{border-bottom:1px solid var(--divider);padding-bottom:6px;margin-bottom:10px}
 .surface-light .sec-row .sec-label{border-bottom:none;padding-bottom:0}
+/* Warn-box readable on light surfaces */
+.surface-light .warn-box{color:var(--warning-text-strong)}
+.surface-light .warn-box strong{color:var(--warning-text-strong)}
 
 /* Collapsed subnav. Replaces pay-panel-tab / cal-panel-tab /
    forms-panel-tab / at-tab (NOT .pay-tab, that's a segmented control). */
@@ -6399,13 +6402,13 @@ function openSoapNoteModal(contactId,noteId){
     +'<textarea id="soap-assessment" style="'+taS+'" placeholder="Diagnosis, clinical reasoning">'+esc(existing&&existing.assessment||SOAP_TEMPLATES[tmplKey].assessment)+'</textarea></div>'
     +'<div class="form-group"><label>Plan <span style="font-weight:400;color:var(--text-muted)">(treatment + next steps)</span></label>'
     +'<textarea id="soap-plan" style="'+taS+'" placeholder="Treatment plan, follow-up, education">'+esc(existing&&existing.plan||SOAP_TEMPLATES[tmplKey].plan)+'</textarea></div>'
-    +'<div style="background:rgba(255,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--radius);padding:9px 12px;font-size:11px;color:var(--warning-light);margin-top:6px">Notes auto-lock 24 hours after creation. Sign & lock now to finalize as a legal record.</div>';
+    +'<div style="background:rgba(255,191,36,.12);border:1px solid rgba(251,191,36,.4);border-radius:var(--radius);padding:9px 12px;font-size:11px;color:var(--warning-text-strong);margin-top:6px">Notes auto-lock 24 hours after creation. Sign & lock now to finalize as a legal record.</div>';
 
   openModal(noteId?'Edit SOAP Note':'New SOAP Note',body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-purple" onclick="saveSoapNote(false)">Save Draft</button>'
     +'<button class="btn btn-primary" onclick="saveSoapNote(true)">Save & Sign</button>',
-    'modal-xl');
+    'modal-xl surface-light');
 }
 
 // Apply template starter text. Only runs in create mode (disabled on edit
