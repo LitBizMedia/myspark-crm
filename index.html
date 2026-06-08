@@ -908,6 +908,11 @@ body:not(.agency-admin) #sb-agency-tools{display:none!important}
 .surface-light .task-sm{background:var(--main-bg);border-color:var(--main-border);color:var(--main-text)}
 .surface-light .canc{background:var(--main-bg);color:var(--main-text-muted)}
 .surface-light .tsk-done{color:var(--main-text-muted)}
+/* Drawer info: breathing room + full-width section dividers */
+.surface-light .info-grid{gap:14px 8px}
+.surface-light .info-item label{margin-bottom:3px}
+.surface-light .sec-row{border-bottom:1px solid var(--divider);padding-bottom:6px;margin-bottom:10px}
+.surface-light .sec-row .sec-label{border-bottom:none;padding-bottom:0}
 
 /* Collapsed subnav. Replaces pay-panel-tab / cal-panel-tab /
    forms-panel-tab / at-tab (NOT .pay-tab, that's a segmented control). */
@@ -5466,19 +5471,51 @@ function renderDrawer(){
     body='<div class="sec-label">Contact Details</div><div class="info-grid">'
       +'<div class="info-item"><label>Email</label><span>'+(c.email?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':_ns)+'</span></div>'
       +'<div class="info-item"><label>Phone</label><span>'+(c.phone?'<a href="tel:'+esc(c.phone)+'">'+esc(fmtPhoneDisplay(c.phone))+'</a>':_ns)+'</span></div>'
+      +'<div class="info-item"><label>Company</label><span>'+(c.company?esc(c.company):_ns)+'</span></div>'
+      +'<div class="info-item"><label>Title</label><span>'+(c.title?esc(c.title):_ns)+'</span></div>'
+      +(function(){
+        var hasStruct=c.address_line1||c.address_line2||c.city||c.state||c.postal_code;
+        if(hasStruct){
+          var lines=[];
+          if(c.address_line1)lines.push(esc(c.address_line1));
+          if(c.address_line2)lines.push(esc(c.address_line2));
+          var cityLine=[c.city,c.state].filter(Boolean).join(', ');
+          if(c.postal_code)cityLine=(cityLine?cityLine+' ':'')+c.postal_code;
+          if(cityLine)lines.push(esc(cityLine));
+          return '<div class="info-item" style="grid-column:1/-1"><label>Address</label><span style="white-space:pre-line">'+lines.join('\n')+'</span></div>';
+        }
+        if(c.address){
+          return '<div class="info-item" style="grid-column:1/-1"><label>Address</label><span>'+esc(c.address)+'</span></div>';
+        }
+        return '<div class="info-item" style="grid-column:1/-1"><label>Address</label><span>'+_ns+'</span></div>';
+      })()
+      +'<div class="info-item"><label>Timezone</label><span>'+(c.timezone?esc(_contactTzLabel(c.timezone)):_ns)+'</span></div>'
       +'<div class="info-item"><label>Date of Birth</label><span>'+(c.date_of_birth?fmtDate(c.date_of_birth):_ns)+'</span></div>'
       +'<div class="info-item"><label>Gender</label><span>'+(c.gender?esc(c.gender):_ns)+'</span></div>'
       +'<div class="info-item"><label>Pronouns</label><span>'+(c.pronouns?esc(c.pronouns):_ns)+'</span></div>'
       +'<div class="info-item"><label>Preferred Language</label><span>'+(c.preferred_language?esc(c.preferred_language):_ns)+'</span></div>'
-      +'<div class="info-item"><label>Company</label><span>'+(c.company?esc(c.company):_ns)+'</span></div>'
-      +'<div class="info-item"><label>Title</label><span>'+(c.title?esc(c.title):_ns)+'</span></div>'
       +'<div class="info-item"><label>Website</label><span>'+(c.website?'<a href="'+esc(c.website)+'" target="_blank">'+esc(c.website)+'</a>':_ns)+'</span></div>'
-      +'<div class="info-item"><label>Source</label><span>'+(c.source?esc(c.source):_ns)+'</span></div>'
-      +'<div class="info-item"><label>Status</label><span><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span>'+c.status+'</span></div>'
-      +'<div class="info-item"><label>Timezone</label><span>'+(c.timezone?esc(_contactTzLabel(c.timezone)):_ns)+'</span></div>'
       +'<div class="info-item"><label>Added</label><span>'+fmtDate((c.createdAt||'').split('T')[0])+'</span></div>'
+      +'<div class="info-item"><label>Source</label><span>'+(c.source?esc(c.source):_ns)+'</span></div>'
       +'</div>'
 
+
+      +(function(){
+        // Emergency contact section. Always shown so staff can see what's missing.
+        var name = c.emergency_contact_name ? '<strong>'+esc(c.emergency_contact_name)+'</strong>' : _ns;
+        var rel = c.emergency_contact_relationship ? ' <span style="color:var(--text-muted)">('+esc(c.emergency_contact_relationship)+')</span>' : '';
+        // Phone stays clickable (staff may need to call in emergency) but styled
+        // to match the dark drawer surface, not blue link. Small phone icon for affordance.
+        var phoneIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-1px;margin-right:4px;opacity:.7"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/></svg>';
+        var phone = c.emergency_contact_phone
+          ? '<a href="tel:'+esc(c.emergency_contact_phone)+'" style="color:var(--text);text-decoration:none">'+phoneIcon+esc(fmtPhoneDisplay(c.emergency_contact_phone))+'</a>'
+          : _ns;
+        return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
+      })()
+      +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
+      +renderContactWarningsSection(c.id)
+      +renderContactAllergiesSection(c.id)
+      +cfRenderDrawerSections(c.id)
       +(function(){
         // Communication consent display. ALWAYS shown so staff know whether
         // a patient has consented before sending SMS. Empty = "Not recorded"
@@ -5523,43 +5560,7 @@ function renderDrawer(){
           +badge(mkState, 'Marketing SMS: ' + (mkState==='yes'?'Yes':mkState==='no'?'No':'Not recorded'))
           +'</div>'
           +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:14px">'+meta+'</div>';
-      })()
-
-      +(function(){
-        // Address display: prefer the new structured fields. Fall back to the
-        // legacy single-line `address` field for contacts that haven't been
-        // edited since the field split.
-        var hasStruct=c.address_line1||c.address_line2||c.city||c.state||c.postal_code;
-        if(hasStruct){
-          var lines=[];
-          if(c.address_line1)lines.push(esc(c.address_line1));
-          if(c.address_line2)lines.push(esc(c.address_line2));
-          var cityLine=[c.city,c.state].filter(Boolean).join(', ');
-          if(c.postal_code)cityLine=(cityLine?cityLine+' ':'')+c.postal_code;
-          if(cityLine)lines.push(esc(cityLine));
-          return '<div class="info-item" style="margin-bottom:12px"><label>Address</label><span style="white-space:pre-line">'+lines.join('\n')+'</span></div>';
-        }
-        if(c.address){
-          return '<div class="info-item" style="margin-bottom:12px"><label>Address</label><span>'+esc(c.address)+'</span></div>';
-        }
-        return '';
-      })()
-      +(function(){
-        // Emergency contact section. Always shown so staff can see what's missing.
-        var name = c.emergency_contact_name ? '<strong>'+esc(c.emergency_contact_name)+'</strong>' : _ns;
-        var rel = c.emergency_contact_relationship ? ' <span style="color:var(--text-muted)">('+esc(c.emergency_contact_relationship)+')</span>' : '';
-        // Phone stays clickable (staff may need to call in emergency) but styled
-        // to match the dark drawer surface, not blue link. Small phone icon for affordance.
-        var phoneIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-1px;margin-right:4px;opacity:.7"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 15z"/></svg>';
-        var phone = c.emergency_contact_phone
-          ? '<a href="tel:'+esc(c.emergency_contact_phone)+'" style="color:var(--text);text-decoration:none">'+phoneIcon+esc(fmtPhoneDisplay(c.emergency_contact_phone))+'</a>'
-          : _ns;
-        return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
-      })()
-      +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
-      +renderContactWarningsSection(c.id)
-      +renderContactAllergiesSection(c.id)
-      +cfRenderDrawerSections(c.id);
+      })();
   }else if(state.dTab==='notes'){
     const notes=[...c.notes].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Notes ('+notes.length+')</div><button class="btn btn-purple btn-sm" onclick="openNoteModal(\''+c.id+'\',null)">+ Add</button></div>'
@@ -5593,7 +5594,7 @@ function renderDrawer(){
       +'<button class="chip'+(state.dApptTab==='upcoming'?' active':'')+'" onclick="setDApptTab(\'upcoming\')">Upcoming ('+up.length+')</button>'
       +'<button class="chip'+(state.dApptTab==='past'?' active':'')+'" onclick="setDApptTab(\'past\')">Past ('+past.length+')</button>'
       +'</div>'
-      +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">+ Book</button>'
+      +'<button class="btn btn-purple btn-sm" onclick="openApptModal(\''+c.id+'\',null)">+ Book</button>'
       +'</div>';
     // Active list with truncation: show first 10 unless user expanded
     const active=state.dApptTab==='past'?past:up;
@@ -5633,7 +5634,7 @@ function renderDrawer(){
     body='<div style="padding:40px 20px;text-align:center"><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700;color:var(--main-text);margin-bottom:8px">Documents</div><div style="font-size:13px;color:var(--main-text-muted);max-width:300px;margin:0 auto">Patient documents, intake forms, lab results, and uploaded files. Coming soon.</div></div>';
   }
   document.getElementById('drawer-content').innerHTML=
-    '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'</div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Archive</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
+    '<div class="drawer-head"><div class="drawer-av" style="background:'+col+'">'+initials(c.name)+'</div><div style="flex:1;min-width:0"><div class="drawer-name">'+esc(c.name)+'<span class="status-dot '+(c.status==='inactive'?'inactive':'')+'" title="'+(c.status==='inactive'?'Inactive':'Active')+'" style="margin-left:8px;width:9px;height:9px;vertical-align:middle"></span></div><div class="drawer-sub"><span class="type-badge type-'+c.type+'" style="margin-right:5px">'+c.type+'</span>'+esc(c.company||'')+(c.company&&c.title?' \u00b7 ':'')+esc(c.title||'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" onclick="openContactModal(\''+c.id+'\')">Edit</button><button class="btn btn-ghost btn-sm" onclick="confirmDelContact(\''+c.id+'\')">Archive</button><button class="btn btn-icon btn-sm" onclick="closeDrawer()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>'
     +renderContactWarningBanner(c.id)
     +'<div class="drawer-tabs">'+tabs.map(t=>'<button class="drawer-tab'+(state.dTab===t?' active':'')+'" onclick="switchDTab(\''+t+'\')">'+labels[t]+'</button>').join('')+'</div>'
     +'<div class="drawer-body" id="drawer-tab-body">'+body+'</div>';
@@ -6103,9 +6104,11 @@ function _renderDFormsSendBar(c){
   // bypasses the frequency guard). Visible in both empty and populated states.
   var open=!!state.dFormSendOpen;
   var forms=(db.forms||[]).filter(function(f){return f&&f.id;});
-  var btn='<div style="margin-bottom:12px">'
-    +'<button class="btn btn-action btn-sm" onclick="toggleFormSend()" style="font-size:12px">'
-    +(open?'Cancel':'Send a form')+'</button>';
+  var btn='<div style="margin-bottom:12px"><div class="d-sticky-sub" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--text)">Forms</div>'
+    +'<button class="btn '+(open?'btn-ghost':'btn-purple')+' btn-sm" onclick="toggleFormSend()" style="font-size:12px">'
+    +(open?'Cancel':'+ Send Form')+'</button>'
+    +'</div>';
   if(open){
     if(!forms.length){
       btn+='<div style="font-size:12px;color:var(--main-text-muted);margin-top:8px">No forms exist yet. Create one in the Forms section first.</div>';
@@ -6264,7 +6267,7 @@ function _renderDSoapTab(c){
   var countLabel=q?'SOAP Notes ('+notes.length+' of '+allNotes.length+')':'SOAP Notes ('+allNotes.length+')';
   var header='<div class="d-sticky-sub" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
     +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--text)">'+countLabel+'</div>'
-    +'<button class="btn btn-primary btn-sm" onclick="openSoapNoteModal(\''+c.id+'\',null)">+ New SOAP Note</button>'
+    +'<button class="btn btn-purple btn-sm" onclick="openSoapNoteModal(\''+c.id+'\',null)">+ New SOAP Note</button>'
     +'</div>';
 
   if(!allNotes.length){
@@ -7223,7 +7226,7 @@ function openRescheduledInfoModal(originalId){
   }
 
   var footer = '<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
-    + (next ? '<button class="btn btn-primary" onclick="closeModal();setTimeout(function(){openApptModal(null,\''+next.id+'\');},50)">Open new appointment</button>' : '');
+    + (next ? '<button class="btn btn-purple" onclick="closeModal();setTimeout(function(){openApptModal(null,\''+next.id+'\');},50)">Open new appointment</button>' : '');
 
   openModal('Rescheduled Appointment', body, footer);
 }
@@ -19023,7 +19026,7 @@ function _renderSubPlansModalBody(){
   let body='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">'
     +'<div style="font-size:13px;color:var(--text-muted)">'+plans.length+' total plan'+(plans.length===1?'':'s')+'</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="openPlanCategoriesModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Manage Categories</button>'
-    +'<button class="btn btn-primary btn-sm" onclick="openPlanEditModal(null)">+ New Plan</button></div>'
+    +'<button class="btn btn-purple btn-sm" onclick="openPlanEditModal(null)">+ New Plan</button></div>'
     +'</div>'
     +statusChips
     +(cats.length||hasUncat?catChips:'')
@@ -19627,7 +19630,7 @@ function renderServiceCal(){
     +'<div style="display:flex;gap:8px">'
     +'<button class="btn btn-ghost btn-sm" onclick="openCategoriesModal()">Manage Categories</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="openResourcesModal()">Manage Resources</button>'
-    +'<button class="btn btn-primary" onclick="openServiceModal(null,\'individual\')">+ Add Service</button>'
+    +'<button class="btn btn-purple" onclick="openServiceModal(null,\'individual\')">+ Add Service</button>'
     +'</div></div>';
 
   // Filter bar: type pill toggle + category dropdown + staff dropdown + status dropdown + clear
@@ -20223,7 +20226,7 @@ function _renderResourcesModalContent(){
   }
 
   var addBtn='<div style="border-top:1px solid var(--main-border);padding-top:14px;display:flex;justify-content:flex-end">'
-    +'<button class="btn btn-primary btn-sm" onclick="_openEditResource(null)">+ Add Resource</button>'
+    +'<button class="btn btn-purple btn-sm" onclick="_openEditResource(null)">+ Add Resource</button>'
     +'</div>';
 
   el.innerHTML=intro+rows+addBtn;
@@ -23429,7 +23432,7 @@ function _renderAutomationsUI(){
     + '<div style="font-family:\'Syne\',sans-serif;font-size:24px;font-weight:700;color:var(--main-text)">Automations</div>'
     + '<div style="font-size:13px;color:var(--main-text-muted);margin-top:4px">Trigger emails, SMS, and tag changes when events happen.</div>'
     + '</div>'
-    + '<button class="btn btn-action" onclick="openAutomationEditor(null)">+ New Automation</button>'
+    + '<button class="btn btn-purple" onclick="openAutomationEditor(null)">+ New Automation</button>'
     + '</div>';
 
   if (list.length === 0) {
@@ -23974,7 +23977,7 @@ function _renderJourneysUI(){
         }).join('')
       + '</select>'
       + '<button style="' + manageBtnStyle + '" onclick="openJourneySettingsModal(\'' + active.id + '\')" title="Journey settings">' + gearIcon + '</button>'
-      + '<button class="btn btn-primary btn-sm" onclick="openCreateJourneyModal()">+ New Journey</button>'
+      + '<button class="btn btn-purple btn-sm" onclick="openCreateJourneyModal()">+ New Journey</button>'
       + '<select style="' + jrnStaffSelStyle + '" onchange="_journeyApplyStaffFilter(this.value, \'' + active.id + '\')">' + jrnStaffOpts + '</select>'
       + '</div>';
   }
@@ -29306,7 +29309,7 @@ function _renderSvcWidgetsTab(){
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
     +'<div><div style="font-size:14px;font-weight:700">Booking Widgets</div>'
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Embeddable booking widgets for your website</div></div>'
-    +'<button class="btn btn-primary" onclick="openServiceWidgetModal(null)">+ Create Widget</button>'
+    +'<button class="btn btn-purple" onclick="openServiceWidgetModal(null)">+ Create Widget</button>'
     +'</div>';
   if(!widgets.length){
     h+='<div style="text-align:center;padding:48px;border:1px dashed var(--main-border);border-radius:8px;color:var(--text-muted)">'
@@ -37642,7 +37645,7 @@ function agencyLoginAs(slug,name){
     +'<div style="margin-top:10px;padding:10px 12px;background:rgba(255,64,0,.08);border:1px solid rgba(255,64,0,.2);border-radius:6px;font-size:12px;color:#ffb199">Use only for legitimate support. Client data access is sensitive.</div>';
   openModal('Log in as '+esc(name||slug)+'?', body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="agencyConfirmLoginAs(\''+esc(slug)+'\')">Open Workspace</button>');
+    +'<button class="btn btn-purple" onclick="agencyConfirmLoginAs(\''+esc(slug)+'\')">Open Workspace</button>');
 }
 
 async function agencyConfirmLoginAs(slug){
