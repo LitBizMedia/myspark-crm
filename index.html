@@ -1654,7 +1654,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-manage-btn.active{background:var(--purple-dim);border-color:var(--purple-border);color:var(--purple-light)}
 .cal-body-outer{display:block}
 .svc-ms-wrap{position:relative}
-.svc-ms-display{min-height:38px;border:1px solid var(--main-border);border-radius:6px;padding:5px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:var(--main-bg)}
+.svc-ms-display{min-height:38px;border:1px solid var(--main-input-border);border-radius:6px;padding:5px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:var(--main-input)}
 .svc-ms-chips{display:flex;flex-wrap:wrap;gap:4px;flex:1;min-height:22px}
 .svc-ms-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;color:#fff;white-space:nowrap}
 .svc-ms-arrow{color:var(--text-muted);font-size:11px;flex-shrink:0;margin-left:4px}
@@ -20656,7 +20656,7 @@ function renderServiceIndividualFields(s){
     +'<div class="svc-ms-display" onclick="svcMsOpen(event)">'
     +'<div class="svc-ms-chips" id="svc-ms-chips-area">'
     +(_selStaff.length?_selStaff.map(function(uid){var u=users.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();svcMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join(''):'<span style="color:var(--text-muted);font-size:12px">Select staff...</span>')
-    +'</div><span class="svc-ms-arrow">&#9660;</span></div>'
+    +'</div><span class="svc-ms-arrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg></span></div>'
     +'<div class="svc-ms-dd hidden" id="svc-ms-dd">'
     +'<input type="text" class="svc-ms-search" placeholder="Search staff..." oninput="svcMsFilter(this)">'
     +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
@@ -30160,7 +30160,7 @@ function openAppointmentWidgetModal(w,isNew){
       ?'<div class="svc-ms-wrap" id="swg-staff-ms">'
         +'<div class="svc-ms-display" onclick="swgStaffMsOpen(event)">'
         +'<div class="svc-ms-chips" id="swg-staff-chips">'+initialStaffChips+'</div>'
-        +'<span class="svc-ms-arrow">&#9660;</span></div>'
+        +'<span class="svc-ms-arrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg></span></div>'
         +'<div class="svc-ms-dd hidden" id="swg-staff-dd">'
         +'<input type="text" class="svc-ms-search" placeholder="Search providers..." oninput="swgStaffMsFilter(this)">'
         +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
