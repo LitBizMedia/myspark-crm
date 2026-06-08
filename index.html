@@ -852,6 +852,53 @@ body:not(.agency-admin) #sb-agency-tools{display:none!important}
   border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--warning-light);margin-bottom:12px}
 .warn-box strong{color:#fde68a}
 
+/* ============================================================
+   MASTER LIGHT-SURFACE SYSTEM (June 8 2026)
+   Pass 1: inert until a surface opts in via .surface-light or
+   migrates a bar to .subnav-tab. Promote to global .modal/.drawer
+   in pass 2 after launch. See MySpark-Design-Tokens.docx.
+   ============================================================ */
+
+/* New tokens */
+:root{
+  --divider:rgba(107,33,234,.18);          /* stronger than --main-border for section separation */
+  --subnav-bar:#f2f0f8;                      /* faint tint strip for tab bars on light */
+  --subnav-tab-hover:var(--main-text);       /* hover target for inactive tabs */
+}
+
+/* Reusable light-surface remap. Apply to a shell to flip every
+   var()-driven child to the light palette. Mirrors the .panel remap. */
+.surface-light{
+  background:var(--main-card);
+  color:var(--main-text);
+  --text:var(--main-text);
+  --text-muted:var(--main-text-muted);
+  --text-dim:#9b8fc4;
+  --bg-card:var(--main-card);
+  --bg-card-hover:var(--main-card-hover);
+  --bg-input:var(--main-input);
+  --bg-panel:var(--main-card);
+  --border:var(--main-border);
+}
+/* Shell holdouts the token remap can't reach (raw hex in base rules) */
+.surface-light .modal-title{color:var(--main-text)}
+.surface-light .modal-head{border-bottom-color:var(--divider)}
+.surface-light .modal-foot{border-top-color:var(--divider)}
+.surface-light .form-group input,
+.surface-light .form-group select,
+.surface-light .form-group textarea{border:1px solid var(--main-input-border)}
+
+/* Collapsed subnav. Replaces pay-panel-tab / cal-panel-tab /
+   forms-panel-tab / at-tab (NOT .pay-tab, that's a segmented control). */
+.subnav-bar{display:flex;background:var(--subnav-bar);border-bottom:1px solid var(--divider);flex-shrink:0;padding:0}
+.subnav-tab{padding:13px 18px;font-size:13px;font-weight:600;color:var(--main-text-muted);
+  cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;
+  background:none;border-top:none;border-left:none;border-right:none;
+  font-family:Lato,sans-serif;white-space:nowrap}
+.subnav-tab:hover{color:var(--subnav-tab-hover)}
+.subnav-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
+
+
 /* TAG SELECTOR */
 .tag-sel-wrap{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
 .tag-opt{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;
