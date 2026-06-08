@@ -889,6 +889,25 @@ body:not(.agency-admin) #sb-agency-tools{display:none!important}
 .surface-light .form-group textarea{border:1px solid var(--main-input-border)}
 .surface-light .btn-icon{color:var(--main-text-muted);border-color:var(--divider)}
 .surface-light .btn-icon:hover{background:var(--main-card-hover);color:var(--main-text)}
+/* Drawer header on light */
+.surface-light .drawer-head{border-bottom-color:var(--divider)}
+.surface-light .drawer-name{color:var(--main-text)}
+.surface-light .drawer-sub{color:var(--main-text-muted)}
+.surface-light .drawer-tabs{background:var(--subnav-bar);border-bottom-color:var(--divider)}
+.surface-light .drawer-tab{color:var(--main-text-muted)}
+.surface-light .drawer-tab:hover{color:var(--main-text)}
+.surface-light .drawer-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
+/* Drawer body on light */
+.surface-light .d-sticky-sub{background:var(--main-card)}
+.surface-light .sec-label{color:var(--main-text-muted);border-bottom-color:var(--divider)}
+.surface-light .info-item label{color:var(--main-text-muted)}
+.surface-light .info-item a:hover{color:var(--purple)}
+.surface-light .note-item{background:var(--main-bg);border-color:var(--main-border)}
+.surface-light .note-date{color:var(--main-text-muted)}
+.surface-light .appt-row-sm{background:var(--main-bg);border-color:var(--main-border)}
+.surface-light .task-sm{background:var(--main-bg);border-color:var(--main-border);color:var(--main-text)}
+.surface-light .canc{background:var(--main-bg);color:var(--main-text-muted)}
+.surface-light .tsk-done{color:var(--main-text-muted)}
 
 /* Collapsed subnav. Replaces pay-panel-tab / cal-panel-tab /
    forms-panel-tab / at-tab (NOT .pay-tab, that's a segmented control). */
@@ -2855,7 +2874,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
 <!-- DRAWER -->
 <div id="drawer-overlay" onclick="closeDrawer()"></div>
-<div id="contact-drawer"><div id="drawer-content"></div></div>
+<div id="contact-drawer" class="surface-light"><div id="drawer-content"></div></div>
 
 <!-- MODAL -->
 <div id="modal-overlay" onclick="onModalBg(event)">
@@ -5538,7 +5557,6 @@ function renderDrawer(){
         return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
       })()
       +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
-      +'<button class="btn btn-primary btn-sm" onclick="openApptModal(\''+c.id+'\',null)">Book Appointment</button>'
       +renderContactWarningsSection(c.id)
       +renderContactAllergiesSection(c.id)
       +cfRenderDrawerSections(c.id);
@@ -31694,7 +31712,7 @@ function renderCardsTab(contact){
   let h='<div class="sec-label" style="margin-bottom:12px">Payment Methods</div>';
   if(cards.length){
     h+=cards.map(function(c){
-      return '<div class="card-on-file" style="margin-bottom:8px">'+
+      return '<div class="card-on-file on-light" style="margin-bottom:8px">'+
         '<div class="card-brand-icon">'+esc(c.brand?c.brand.slice(0,4):'CARD')+'</div>'+
         '<div class="card-details">'+
           '<div class="card-number">'+esc(c.brand||'Card')+' ending in '+esc(c.last4||'****')+'</div>'+
