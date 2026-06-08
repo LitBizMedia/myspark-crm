@@ -34305,13 +34305,17 @@ function gcSellCSearch(v){
   });
 }
 
-function gcSellSelC(id,name){
+async function gcSellSelC(id,name){
   var ci=document.getElementById('gc-sell-c-id');if(ci)ci.value=id;
   var ni=document.getElementById('gc-sell-c-inp');if(ni)ni.value=name;
   var dd=document.getElementById('gc-sell-c-drop');if(dd)dd.classList.add('hidden');
   var ri=document.getElementById('gc-sell-recip');if(ri&&!ri.value)ri.value=name;
   state.gcSellCOFIndex=0;
-  setTimeout(updateGcCofTab,30);
+  // Load the FULL contact so squareCards are present; the picker returns the
+  // slim shape which omits heavy fields. Then enable/render the COF tab.
+  updateGcCofTab(); // immediate pass (likely no cards yet, harmless)
+  try{ await ensureContactFull(id); }catch(e){ console.warn('GC sell: contact load failed', e); }
+  updateGcCofTab(); // re-run now that squareCards are loaded
 }
 
 // Toggle the CoF tab on/off based on whether the selected contact has any
@@ -34369,7 +34373,10 @@ async function gcInitSellCardForm(){
     var cfgRes=await fetch(apiUrl('/api/square/config'),{credentials:'include'});
     var cfg=await cfgRes.json();
     if(!cfg.appId){if(errEl)errEl.textContent='Square not configured.';return;}
-    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded.';return;}
+    // SDK script can still be loading when the modal opens; poll briefly.
+    var _sqWait=0;
+    while(!window.Square && _sqWait<20){ await new Promise(function(r){setTimeout(r,150);}); _sqWait++; }
+    if(!window.Square){if(errEl)errEl.textContent='Square SDK not loaded. Click Card to retry.';return;}
     var payments=window.Square.payments(cfg.appId,'production');
     gcSellCard=await payments.card();
     await gcSellCard.attach('#gc-sq-card-container');
