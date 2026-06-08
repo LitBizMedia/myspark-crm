@@ -4356,8 +4356,12 @@ setInterval(_tickSyncLabel, 10000);
 // tab is focused. Skips when a modal is open or the tab is hidden, to avoid
 // disrupting active user input. After refresh, re-renders the current view
 // so other users' changes appear without a manual reload.
-var _pollIntervalMs=30000;
+var _pollIntervalMs=60000;
 var _pollTimer=null;
+// Stop polling after this much idle time (no mouse/keyboard). Matches the
+// conversations stop threshold so all poll systems agree. Activity or tab
+// focus resumes immediately via resetIdleTimer + the visibilitychange handler.
+var _idlePollStopMs=10*60*1000;
 // Dedicated contacts poll (5 min). Heavy poll above skips contacts because the
 // payload is 3MB+ for large workspaces. This catches cross-tab/cross-user
 // contact changes with acceptable lag.
@@ -4366,6 +4370,7 @@ var _contactsPollTimer=null;
 function _contactsPollTick(){
   // Reuse the same defenses as _pollTick.
   if(document.hidden)return;
+  if(idleState&&idleState.lastActivityAt&&(Date.now()-idleState.lastActivityAt>_idlePollStopMs))return;
   var overlay=document.getElementById('modal-overlay');
   if(overlay&&overlay.classList.contains('open'))return;
   var dot=document.getElementById('sync-dot');
@@ -4385,6 +4390,9 @@ function startBackgroundPoll(){
 function _pollTick(){
   // Don't poll if tab is in background - saves Lambda invocations
   if(document.hidden)return;
+  // Don't poll if the user has been idle too long - they walked away. Activity
+  // or tab focus resets idleState.lastActivityAt and resumes polling.
+  if(idleState&&idleState.lastActivityAt&&(Date.now()-idleState.lastActivityAt>_idlePollStopMs))return;
   // Don't poll if a modal is open - avoid disrupting active user input
   var overlay=document.getElementById('modal-overlay');
   if(overlay&&overlay.classList.contains('open'))return;
@@ -14057,7 +14065,7 @@ async function fetchFromServer(opts){
 // Default: 30 minutes idle, then 60-second warning, then forced logout.
 var IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 var IDLE_WARNING_MS = 60 * 1000;      // 60 second warning
-var idleState = { timer: null, warningTimer: null, warningOpen: false };
+var idleState = { timer: null, warningTimer: null, warningOpen: false, lastActivityAt: Date.now() };
 
 function initIdleTimeout(){
   if(idleState._initialized)return;
@@ -14073,6 +14081,7 @@ function resetIdleTimer(){
   // If the warning modal is open, only an explicit "Stay logged in" click resets.
   // Other activity is ignored to prevent ghost mouse movements from extending the session.
   if(idleState.warningOpen)return;
+  idleState.lastActivityAt = Date.now();
   if(idleState.timer)clearTimeout(idleState.timer);
   if(idleState.warningTimer)clearTimeout(idleState.warningTimer);
   idleState.timer = setTimeout(showIdleWarning, IDLE_TIMEOUT_MS);
