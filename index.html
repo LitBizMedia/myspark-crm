@@ -34226,12 +34226,17 @@ function gcOpenSell(prodId){
     +(denomBtns?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="gc-sell-denom-row">'+denomBtns+'</div>':'')
     +'<input id="gc-sell-amt" type="number" min="1" step="0.01" placeholder="Enter amount" oninput="gcSellClearDenoms()" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none">'
     +'</div>'
-    +'<div class="form-group"><label>Customer <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
+    +'<div class="form-group"><label>Customer</label>'
     +'<div class="ss-wrap"><input class="ss-inp" id="gc-sell-c-inp" type="text" placeholder="Search contacts..." oninput="gcSellCSearch(this.value)" onclick="gcSellCSearch(this.value)" autocomplete="off"><input type="hidden" id="gc-sell-c-id"><div class="ss-drop hidden" id="gc-sell-c-drop"></div></div></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="gc-sell-forother" onchange="gcToggleForOther()" style="width:auto;margin:0"> This card is for someone else</label></div>'
+    +'<div id="gc-sell-recip-block" class="hidden">'
     +'<div class="form-group"><label>Recipient Name <span style="font-weight:400;color:var(--text-muted)">(printed on card)</span></label>'
     +'<input id="gc-sell-recip" type="text" placeholder="e.g. Jane Smith"></div>'
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="gc-sell-digital" onchange="gcToggleDigital()" style="width:auto;margin:0"> Send digitally to recipient</label>'
-    +'<div id="gc-sell-email-wrap" class="hidden" style="margin-top:8px"><input id="gc-sell-recip-email" type="email" placeholder="recipient@example.com" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none"><div style="font-size:11px;color:var(--text-muted);margin-top:4px">The recipient gets an email with the code and balance.</div></div></div>'
+    +'<div class="form-group"><label>Recipient Email <span style="font-weight:400;color:var(--text-muted)">(links to contact if it matches)</span></label>'
+    +'<input id="gc-sell-recip-email" type="email" placeholder="recipient@example.com" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none"></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="gc-sell-digital" style="width:auto;margin:0"> Send digitally to recipient</label>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">When checked, the recipient gets an email with the code and balance. Requires a recipient email.</div></div>'
+    +'</div>'
     +'<div class="form-group"><label>Payment Method</label>'
     +'<div class="pay-tabs" style="margin-bottom:10px">'
     +'<button class="pay-tab active" id="gc-pm-card" onclick="gcSellSetPM(\'card\')">Card</button>'
@@ -34309,7 +34314,8 @@ async function gcSellSelC(id,name){
   var ci=document.getElementById('gc-sell-c-id');if(ci)ci.value=id;
   var ni=document.getElementById('gc-sell-c-inp');if(ni)ni.value=name;
   var dd=document.getElementById('gc-sell-c-drop');if(dd)dd.classList.add('hidden');
-  var ri=document.getElementById('gc-sell-recip');if(ri&&!ri.value)ri.value=name;
+  // Do NOT autofill recipient from the buyer; recipient is a deliberate,
+  // separate entry (prevents accidentally sending a card to the buyer).
   state.gcSellCOFIndex=0;
   // Load the FULL contact so squareCards are present; the picker returns the
   // slim shape which omits heavy fields. Then enable/render the COF tab.
@@ -34524,10 +34530,16 @@ async function gcAwaitPayment(pmt){
   }
 }
 
-function gcToggleDigital(){
-  var on=document.getElementById('gc-sell-digital')&&document.getElementById('gc-sell-digital').checked;
-  var wrap=document.getElementById('gc-sell-email-wrap');
-  if(wrap)wrap.classList.toggle('hidden',!on);
+function gcToggleForOther(){
+  var on=document.getElementById('gc-sell-forother')&&document.getElementById('gc-sell-forother').checked;
+  var block=document.getElementById('gc-sell-recip-block');
+  if(block)block.classList.toggle('hidden',!on);
+  if(!on){
+    // Clear recipient fields when toggled off so a hidden value can't ride along.
+    var rn=document.getElementById('gc-sell-recip'); if(rn)rn.value='';
+    var re=document.getElementById('gc-sell-recip-email'); if(re)re.value='';
+    var dg=document.getElementById('gc-sell-digital'); if(dg)dg.checked=false;
+  }
 }
 function gcSellFinalize(prodId,prod,amt,contactId,recipName,staffId,pm,ref,squarePaymentId){
   var payId=uid();

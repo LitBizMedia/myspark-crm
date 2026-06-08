@@ -22,6 +22,7 @@
 //   const card = await gc.findByCode(subaccountId, 'Y2WF-4XML-9FQY');
 
 const db = require('./db');
+const { getContactByEmail } = require('./contacts');
 
 // ---------------------------------------------------------------------------
 // Mappers
@@ -39,6 +40,7 @@ function giftCardToFrontend(row) {
     contactId: row.contact_id || null,
     recipientName: row.recipient_name || null,
     recipientEmail: row.recipient_email || null,
+    recipientContactId: row.recipient_contact_id || null,
     isDigital: !!row.is_digital,
     originalAmount: row.original_amount != null ? Number(row.original_amount) : 0,
     balance: row.balance != null ? Number(row.balance) : 0,
@@ -203,6 +205,22 @@ async function statsByProduct(subaccountId) {
 // Create a card using an existing transaction client. Inserts the card plus
 // its 'issued' log row. Used by payments-create on a gift card SALE so the card
 // and its sale payment commit together. Mirrors createCard's body.
+// Resolve the recipient-as-contact link. MATCH-ONLY: link to an existing
+// contact when the recipient email matches one in this subaccount; never create.
+// An explicit opts.recipientContactId wins. Reads committed contact data
+// (separate connection is fine; the contact already exists).
+async function _resolveRecipientContactId(subaccountId, opts) {
+  if (opts.recipientContactId) return opts.recipientContactId;
+  if (!opts.recipientEmail) return null;
+  try {
+    const c = await getContactByEmail(subaccountId, opts.recipientEmail);
+    return c ? c.id : null;
+  } catch (e) {
+    console.warn('gift-cards: recipient contact match failed (non-fatal):', e.message);
+    return null;
+  }
+}
+
 async function _createOnClient(client, subaccountId, opts) {
   const id = (opts.id && /^gc-/.test(opts.id)) ? opts.id : ('gc-' + genId());
   const original = Number(opts.originalAmount);
@@ -210,18 +228,19 @@ async function _createOnClient(client, subaccountId, opts) {
   const balance = opts.balance != null ? Number(opts.balance) : original;
   const code = await uniqueCode(client, subaccountId, opts.code);
   const issuedAt = opts.issuedAt || new Date().toISOString();
+  const recipientContactId = await _resolveRecipientContactId(subaccountId, opts);
 
   const ins = await client.query(
     `INSERT INTO gift_cards
        (id, subaccount_id, code, product_id, contact_id, recipient_name,
-        recipient_email, is_digital, original_amount, balance, status,
+        recipient_email, recipient_contact_id, is_digital, original_amount, balance, status,
         issued_by_id, sold_via, payment_id, payment_method, square_payment_id,
         issued_at, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13,$14,$15,$16,$16,NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active',$12,$13,$14,$15,$16,$17,$17,NOW())
      ON CONFLICT (id) DO NOTHING
      RETURNING *`,
     [id, subaccountId, code, opts.productId || null, opts.contactId || null,
-     opts.recipientName || null, opts.recipientEmail || null, !!opts.isDigital,
+     opts.recipientName || null, opts.recipientEmail || null, recipientContactId, !!opts.isDigital,
      original, balance, opts.issuedById || null, opts.soldVia || null,
      opts.paymentId || null, opts.paymentMethod || null,
      opts.squarePaymentId || null, issuedAt]
@@ -249,17 +268,18 @@ async function createCard(subaccountId, opts) {
   return db.transaction(async (client) => {
     const code = await uniqueCode(client, subaccountId, opts.code);
     const issuedAt = opts.issuedAt || new Date().toISOString();
+    const recipientContactId = await _resolveRecipientContactId(subaccountId, opts);
 
     const ins = await client.query(
       `INSERT INTO gift_cards
          (id, subaccount_id, code, product_id, contact_id, recipient_name,
-          recipient_email, is_digital, original_amount, balance, status,
+          recipient_email, recipient_contact_id, is_digital, original_amount, balance, status,
           issued_by_id, sold_via, payment_id, payment_method, square_payment_id,
           issued_at, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13,$14,$15,$16,$16,NOW())
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active',$12,$13,$14,$15,$16,$17,$17,NOW())
        RETURNING *`,
       [id, subaccountId, code, opts.productId || null, opts.contactId || null,
-       opts.recipientName || null, opts.recipientEmail || null, !!opts.isDigital,
+       opts.recipientName || null, opts.recipientEmail || null, recipientContactId, !!opts.isDigital,
        original, balance, opts.issuedById || null, opts.soldVia || null,
        opts.paymentId || null, opts.paymentMethod || null,
        opts.squarePaymentId || null, issuedAt]
