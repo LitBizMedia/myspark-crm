@@ -898,7 +898,8 @@ body:not(.agency-admin) #sb-agency-tools{display:none!important}
 .surface-light .drawer-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
 /* Drawer body on light */
 .surface-light .d-sticky-sub{background:var(--main-card)}
-.surface-light .sec-label{color:var(--main-text-muted);border-bottom-color:var(--divider)}
+.surface-light .sec-label{color:var(--main-text);font-size:11px;font-weight:800;letter-spacing:.06em;border-bottom-color:var(--divider);margin-top:28px}
+.surface-light .sec-label:first-child{margin-top:0}
 .surface-light .info-item label{color:var(--main-text-muted)}
 .surface-light .info-item a:hover{color:var(--purple)}
 .surface-light .note-item{background:var(--main-bg);border-color:var(--main-border)}
@@ -1161,6 +1162,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .conv-composer-card{width:100%;max-width:560px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:var(--bg-panel);border:1px solid var(--purple-border);border-radius:var(--radius-lg);overflow:hidden}
 .conv-composer-card .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
 .conv-composer-card .modal-title{font-size:16px;font-weight:700;color:#fff}
+.surface-light.conv-composer-card .modal-title{color:var(--main-text)}
 .conv-composer-close{background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center}
 .conv-composer-close:hover{background:var(--bg-card-hover);color:var(--text)}
 .conv-composer-close svg{width:18px;height:18px}
@@ -2430,7 +2432,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       </div>
 
       <div id="conv-composer-modal" class="conv-composer-overlay hidden" onclick="convComposerBackdropClick(event)">
-        <div class="conv-composer-card" onclick="event.stopPropagation()">
+        <div class="conv-composer-card surface-light" onclick="event.stopPropagation()">
           <div class="modal-head">
             <div class="modal-title">New Message</div>
             <button class="conv-composer-close" onclick="convCloseComposer()" aria-label="Close composer">
@@ -5512,7 +5514,7 @@ function renderDrawer(){
         var phone = c.emergency_contact_phone
           ? '<a href="tel:'+esc(c.emergency_contact_phone)+'" style="color:var(--text);text-decoration:none">'+phoneIcon+esc(fmtPhoneDisplay(c.emergency_contact_phone))+'</a>'
           : _ns;
-        return '<div class="sec-label" style="margin-top:14px">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
+        return '<div class="sec-label">Emergency Contact</div><div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+name+rel+'<br>'+phone+'</div>';
       })()
       +'<div class="sec-label">Tags</div><div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">'+(tags||'<span style="font-size:13px;color:var(--text-muted)">No tags</span>')+'</div>'
       +renderContactWarningsSection(c.id)
@@ -5556,7 +5558,7 @@ function renderDrawer(){
         if(!hasConsentData){
           meta = 'No consent on file. Capture via form submission, conversation, or manual update.';
         }
-        return '<div class="sec-label" style="margin-top:14px">SMS Consent</div>'
+        return '<div class="sec-label">SMS Consent</div>'
           +'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px">'
           +badge(txState, 'Transactional SMS: ' + (txState==='yes'?'Yes':txState==='no'?'No':'Not recorded'))
           +badge(mkState, 'Marketing SMS: ' + (mkState==='yes'?'Yes':mkState==='no'?'No':'Not recorded'))
@@ -6408,7 +6410,7 @@ function openSoapNoteModal(contactId,noteId){
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
     +'<button class="btn btn-purple" onclick="saveSoapNote(false)">Save Draft</button>'
     +'<button class="btn btn-primary" onclick="saveSoapNote(true)">Save & Sign</button>',
-    'modal-xl surface-light');
+    'modal-xl');
 }
 
 // Apply template starter text. Only runs in create mode (disabled on edit
@@ -9123,7 +9125,7 @@ function openModal(title,bodyHTML,footHTML,size){
   document.getElementById('modal-title').textContent=title;
   document.getElementById('modal-body').innerHTML=bodyHTML;
   document.getElementById('modal-foot').innerHTML=footHTML;
-  document.getElementById('modal-box').className='modal'+(size?' '+size:'');
+  document.getElementById('modal-box').className='modal surface-light'+(size?' '+size:'');
   document.getElementById('modal-overlay').classList.add('open');
 }
 function closeModal(){
@@ -10625,7 +10627,7 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
     detailFooter = hardDeleteBtn + cancelBtn + rescheduleBtn + '<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
   }
 
-  openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg surface-light');
+  openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
   setTimeout(function(){
     if (typeof renderApptAddonsSection === 'function') renderApptAddonsSection();
     if (typeof _apptGroupRerender === 'function') _apptGroupRerender();
@@ -12943,7 +12945,7 @@ function _rollbackAppt(rb){
 function _showApptConflictRecovery(message, data, isNew, editingId){
   state.modal={type:'appt-conflict'};
   document.getElementById('modal-title').textContent='Scheduling Conflict';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">'+message+'</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Dismiss</button><button class="btn btn-primary" onclick="_reopenWithOverride(\''+(editingId||'')+'\')">Reopen and Override</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -12960,7 +12962,7 @@ function delAppt(id){
   const a=db.appointments.find(x=>x.id===id);
   state.modal={type:'del-appt',id:id};
   document.getElementById('modal-title').textContent='Cancel Appointment';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Cancel <strong>'+(a?esc(a.title):'this appointment')+'</strong>? The patient will receive a cancellation email if notifications are enabled.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-action" onclick="confirmDelAppt()">Yes, cancel it</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -12992,7 +12994,7 @@ function hardDelAppt(id){
   if(!a)return;
   state.modal={type:'hard-del-appt',id:id};
   document.getElementById('modal-title').textContent='Permanently Delete Appointment';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box" style="border-color:var(--danger);background:var(--danger-dim);color:var(--danger-text)">Permanently delete <strong>'+esc(a.title)+'</strong>? This cannot be undone. The patient will NOT be notified. No email will be sent. Use this only for test data, mistaken bookings, or data removal requests.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-danger" onclick="confirmHardDelAppt()">Yes, permanently delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -13069,7 +13071,7 @@ function delTask(id){
   }
   state.modal={type:'del-task',id:id};
   document.getElementById('modal-title').textContent='Delete Task';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+(t?esc(t.title):'this task')+'</strong>? This cannot be undone.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelTask()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -13127,7 +13129,7 @@ async function saveNote(){
 function delNote(cid,nid){
   state.modal={type:'del-note',data:{cid,nid}};
   document.getElementById('modal-title').textContent='Delete Note';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete this note? This cannot be undone.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelNote()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -13500,7 +13502,7 @@ function delUser(id){
   const u=db.users.find(x=>x.id===id);
   state.modal={type:'del-user',id:id};
   document.getElementById('modal-title').textContent='Remove User';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove <strong>'+(u?esc(u.name||u.username):'this user')+'</strong>? This cannot be undone.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelUser()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -13553,7 +13555,7 @@ function delTag(id){
   const t=db.tags.find(x=>x.id===id);
   state.modal={type:'del-tag',id:id};
   document.getElementById('modal-title').textContent='Remove Tag';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove tag <strong>'+(t?esc(t.name):'this tag')+'</strong>? It will be removed from all contacts.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelTag()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -16029,7 +16031,7 @@ async function saveTpl(type){
 async function resetTpl(type){
   state.modal={type:'reset-tpl',extra:type};
   document.getElementById('modal-title').textContent='Reset Template';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Reset to default? Your custom version will be lost.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmResetTpl()">Reset</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -17179,7 +17181,7 @@ function addProductCategory(){
 function removeProductCategory(name){
   state.modal={type:'del-cat',data:name};
   document.getElementById('modal-title').textContent='Remove Category';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove category <strong>'+esc(name)+'</strong>? Products using this category will keep it but it will no longer appear in the list.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="_backToProductsModal()">Cancel</button><button class="btn btn-danger" onclick="confirmRemoveProductCategory()">Remove</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -17269,13 +17271,13 @@ function openProductModal(id){
     +'<div class="form-group"><label>Category</label><select id="prd-cat" class="filter-sel" style="width:100%;height:42px"><option value="">No category</option>'+catOpts+'</select><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Add or remove categories from the Manage Categories section in Manage Products.</div></div>'
     +'<div class="form-group"><label>Description</label><textarea id="prd-desc" rows="3">'+esc(p&&p.description||'')+'</textarea></div>'
     +'<div class="divider"></div>'
-    +'<div class="inv-track-row"><div class="bh-toggle'+(p&&p.trackInventory?' on':'')+'" id="prd-inv-toggle" onclick="toggleInvTrack()" style="flex-shrink:0"></div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:#ffffff">Track Inventory</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:1px">Enable for physical products to monitor stock levels</div></div></div>'
+    +'<div class="inv-track-row"><div class="bh-toggle'+(p&&p.trackInventory?' on':'')+'" id="prd-inv-toggle" onclick="toggleInvTrack()" style="flex-shrink:0"></div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--text)">Track Inventory</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Enable for physical products to monitor stock levels</div></div></div>'
     +'<div id="prd-inv-fields" style="'+(p&&p.trackInventory?'':'display:none')+'">'
     +'<div class="form-row-3"><div class="form-group"><label>SKU</label><input id="prd-sku" type="text" value="'+esc(p&&p.sku||'')+'" placeholder="ABC-001"></div><div class="form-group"><label>Qty on Hand</label><input id="prd-stock" type="number" value="'+(p&&p.stockQty||0)+'" min="0" step="1"></div><div class="form-group"><label>Low Stock Alert</label><input id="prd-lowstock" type="number" value="'+(p&&p.lowStockThreshold||5)+'" min="0" step="1"></div></div>'
     +'</div>'
     +'<div class="divider"></div>'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:#ffffff">Pricing</div>'
+    +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text)">Pricing</div>'
     +'<button class="btn btn-purple btn-sm" onclick="addProductVariation()">+ Add Variation</button>'
     +'</div>'
     +'<div id="prd-pricing-section">'+renderProductPricingSection()+'</div>';
@@ -17399,7 +17401,7 @@ function delProduct(id){
   const p=db.products.find(x=>x.id===id);
   state.modal={type:'del-product',id:id};
   document.getElementById('modal-title').textContent='Delete Product';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+(p?esc(p.name):'this product')+'</strong>? This cannot be undone.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="_backToProductsModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDelProduct()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -18994,7 +18996,7 @@ function _renderSubPlansModalBody(){
     const catBadge=cat?'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--purple-dim);color:var(--purple-light)">'+esc(cat.name)+'</span>':'<span style="font-size:10px;color:var(--text-dim)">Uncategorized</span>';
     const taxBadge=p.taxable===false?'<span style="font-size:10px;color:var(--text-muted);padding:2px 6px;border:1px solid var(--border);border-radius:4px">non-taxable</span>':'';
     const statusDot=p.active?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success-light)"></span>':'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-dim)"></span>';
-    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:3px solid '+(p.active?'#34d399':'var(--text-dim)')+';border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px;'+(p.active?'':'opacity:.7')+'">'
+    return '<div style="background:var(--main-bg);border:1px solid var(--main-border);border-left:3px solid '+(p.active?'var(--success-light)':'var(--text-dim)')+';border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px;'+(p.active?'':'opacity:.7')+'">'
       +'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+catBadge+taxBadge+'<span style="margin-left:auto">'+statusDot+'</span></div>'
       +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;line-height:1.3">'+esc(p.name)+'</div>'
       +(p.description?'<div style="font-size:12px;color:var(--text-muted);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+esc(p.description)+'</div>':'<div style="font-size:12px;color:var(--text-dim);font-style:italic">No description</div>')
@@ -20311,7 +20313,7 @@ function _confirmDeleteResource(resId){
   var name=r?r.name:'this resource';
   state.modal={type:'del-res',id:resId};
   document.getElementById('modal-title').textContent='Delete Resource';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+esc(name)+'</strong>? Existing appointments using this resource will keep their claim, but new bookings cannot use it.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal();setTimeout(function(){_openEditResource(\''+resId+'\')},50)">Cancel</button>'
     +'<button class="btn btn-danger" onclick="_doDeleteResource(\''+resId+'\')">Delete</button>';
@@ -20393,12 +20395,12 @@ function openServiceModal(id, prefType){
   // Sessions tab only appears when editing a class (existing class has sessions to manage).
   var showSessionsTab=defaultType==='class'&&!!s;
 
-  var tabsBar='<div class="pay-panel-tabs" style="margin:-22px -24px 18px">'
-    +'<button class="pay-panel-tab active" id="svc-tab-details" onclick="switchSvcTab(\'details\')">Details</button>'
-    +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-variations" onclick="switchSvcTab(\'variations\')">Pricing</button>':'')
-    +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-addons" onclick="switchSvcTab(\'addons\')">Add-ons</button>':'')
-    +(showSubTabs?'<button class="pay-panel-tab" id="svc-tab-resources" onclick="switchSvcTab(\'resources\')">Resources</button>':'')
-    +(showSessionsTab?'<button class="pay-panel-tab" id="svc-tab-sessions" onclick="switchSvcTab(\'sessions\')">Upcoming Sessions</button>':'')
+  var tabsBar='<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:18px">'
+    +'<button class="svc-detail-tab active" id="svc-tab-details" onclick="switchSvcTab(\'details\')">Details</button>'
+    +(showSubTabs?'<button class="svc-detail-tab" id="svc-tab-variations" onclick="switchSvcTab(\'variations\')">Pricing</button>':'')
+    +(showSubTabs?'<button class="svc-detail-tab" id="svc-tab-addons" onclick="switchSvcTab(\'addons\')">Add-ons</button>':'')
+    +(showSubTabs?'<button class="svc-detail-tab" id="svc-tab-resources" onclick="switchSvcTab(\'resources\')">Resources</button>':'')
+    +(showSessionsTab?'<button class="svc-detail-tab" id="svc-tab-sessions" onclick="switchSvcTab(\'sessions\')">Upcoming Sessions</button>':'')
     +'</div>';
 
   var detailsPane='<div id="svc-pane-details" class="svc-pane">'
@@ -21112,7 +21114,7 @@ function confirmDeleteAddon(serviceId,addonId){
   var name=a?a.name:'this add-on';
   state.modal={type:'del-addon',id:addonId};
   document.getElementById('modal-title').textContent='Delete Add-on';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+esc(name)+'</strong>? This cannot be undone. Existing appointments that use this add-on will keep their snapshot.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal();setTimeout(function(){openServiceModal(\''+serviceId+'\');setTimeout(function(){switchSvcTab(\'addons\');},80);},50)">Cancel</button>'
     +'<button class="btn btn-danger" onclick="_doDeleteAddon(\''+serviceId+'\',\''+addonId+'\')">Delete</button>';
@@ -27985,7 +27987,7 @@ function fbViewSub(id){
   if(sub.contactId){
     const cn = getContact(sub.contactId);
     if(cn){
-      body += '<div style="background:var(--bg-input);padding:10px;border-radius:var(--radius);margin-bottom:14px;font-size:12px"><strong>Linked to contact:</strong> <a href="#" onclick="closeModal();openDrawer(\''+esc(sub.contactId)+'\');return false" style="color:#fff;font-weight:700;text-decoration:underline">'+esc(cn.name)+'</a>'+(sub.contactAction?' <span style="color:var(--text-muted);margin-left:4px">('+esc(sub.contactAction)+')</span>':'')+'</div>';
+      body += '<div style="background:var(--bg-input);padding:10px;border-radius:var(--radius);margin-bottom:14px;font-size:12px"><strong>Linked to contact:</strong> <a href="#" onclick="closeModal();openDrawer(\''+esc(sub.contactId)+'\');return false" style="color:var(--purple);font-weight:700;text-decoration:underline">'+esc(cn.name)+'</a>'+(sub.contactAction?' <span style="color:var(--text-muted);margin-left:4px">('+esc(sub.contactAction)+')</span>':'')+'</div>';
     }
   }
 
@@ -31631,7 +31633,7 @@ function connectSquare(){
 function disconnectSquare(){
   state.modal={type:'disconnect-square'};
   document.getElementById('modal-title').textContent='Disconnect Square';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Disconnect Square? Card on file features will stop working until you reconnect.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDisconnectSquare()">Disconnect</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -31826,7 +31828,7 @@ function removeCardFromContact(contactId,cardId){
   const label=card?(card.brand||'Card')+(card.last4?' ending in '+card.last4:''):'this card';
   state.modal={type:'remove-card',data:{contactId,cardId}};
   document.getElementById('modal-title').textContent='Remove Card';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Remove <strong>'+esc(label)+'</strong> from '+esc(c.name)+'? This cannot be undone.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmRemoveCard()">Remove Card</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -31866,7 +31868,7 @@ async function openAddCardModal(contactId){
   if(!contact||!contact.squareCustomerId){toast('No Square customer linked.','error');return}
   state.modal={type:'add-card',id:contactId};
   document.getElementById('modal-title').textContent='Add Card on File';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Enter card details for '+esc(contact.name)+'. Card will be saved securely in Square.</div>'+
     '<div id="sq-card-container" class="sq-card-form"></div>'+
@@ -32042,7 +32044,7 @@ async function chargeCardOnFile(){
   const notes=document.getElementById('pos-notes')&&document.getElementById('pos-notes').value||'';
   state.modal={type:'charge-cof',data:{contact,card,amountCents,total,staffId,staff,notes,totals:t,items:[...state.posItems]}};
   document.getElementById('modal-title').textContent='Confirm Charge';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div style="margin-bottom:16px">'+
       '<div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Customer</div>'+
@@ -32290,7 +32292,7 @@ function bulkArchive(){
   const action=state.cShowArchived?'restore':'archive';
   state.modal={type:'bulk-archive'};
   document.getElementById('modal-title').textContent=state.cShowArchived?'Restore Contacts':'Archive Contacts';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div class="warn-box">You are about to '+action+' <strong>'+n+' contact'+(n===1?'':'s')+'</strong>.'+(action==='archive'?' They can be restored from the archive later.':'')+'</div>';
   document.getElementById('modal-foot').innerHTML=
@@ -32351,7 +32353,7 @@ async function confirmBulkArchive(action){
 function openBulkTypeModal(){
   const n=state.cSelected.size;
   document.getElementById('modal-title').textContent='Change Type for '+n+' Contact'+(n===1?'':'s');
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div class="form-group"><label>New Type</label><select id="bulk-type-sel" class="filter-sel" style="width:100%;height:38px"><option value="lead">Lead</option><option value="client">Client</option><option value="partner">Partner</option><option value="employee">Employee</option><option value="lapsed">Lapsed</option></select></div>';
   document.getElementById('modal-foot').innerHTML=
@@ -32403,7 +32405,7 @@ async function bulkChangeType(type){
 function openBulkStatusModal(){
   const n=state.cSelected.size;
   document.getElementById('modal-title').textContent='Change Status for '+n+' Contact'+(n===1?'':'s');
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div class="form-group"><label>New Status</label><select id="bulk-status-sel" class="filter-sel" style="width:100%;height:38px"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>';
   document.getElementById('modal-foot').innerHTML=
@@ -32452,7 +32454,7 @@ function openBulkTagModal(){
   const n=state.cSelected.size;
   const tagOpts=db.tags.map(function(t){return'<option value="'+t.id+'">'+esc(t.name)+'</option>'}).join('');
   document.getElementById('modal-title').textContent='Add Tag to '+n+' Contact'+(n===1?'':'s');
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div class="form-group"><label>Tag to Add</label><select id="bulk-tag-sel" class="filter-sel" style="width:100%;height:38px">'+tagOpts+'</select></div>';
   document.getElementById('modal-foot').innerHTML=
@@ -32542,7 +32544,7 @@ function bulkDeletePermanent(){
   if(!n)return;
   state.modal={type:'bulk-delete-perm'};
   document.getElementById('modal-title').textContent='Delete Permanently';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div class="warn-box"><strong style="color:#dc2626">PERMANENTLY DELETE '+n+' contact'+(n===1?'':'s')+'?</strong><br><br>This action cannot be undone. All associated notes, warnings, allergies, and credit history will also be deleted. Appointments and payments will remain but with the contact link removed.</div>';
   document.getElementById('modal-foot').innerHTML=
@@ -32614,7 +32616,7 @@ function deleteOnePermanent(id){
   if(!c) return;
   state.modal={type:'del-perm',id:id};
   document.getElementById('modal-title').textContent='Delete Permanently';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div class="warn-box"><strong style="color:#dc2626">PERMANENTLY DELETE '+esc(c.name)+'?</strong><br><br>This cannot be undone. All notes, warnings, allergies, and credit history will be deleted.</div>';
   document.getElementById('modal-foot').innerHTML=
@@ -33746,7 +33748,7 @@ function deleteCoupon(id){if(!canManageCoupons()){toast('Permission denied.','er
   var cpn=(db.coupons||[]).find(function(x){return x.id===id;});
   state.modal={type:'del-coupon',id:id};
   document.getElementById('modal-title').textContent='Delete Coupon';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete coupon <strong>'+esc(cpn?cpn.code:'this coupon')+'</strong>? Usage history will be lost. This cannot be undone.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="confirmDeleteCoupon()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -34180,7 +34182,7 @@ function gcDeleteProduct(id){
   var p=(db.giftCardProducts||[]).find(function(x){return x.id===id;});
   state.modal={type:'del-gcprod',id:id};
   document.getElementById('modal-title').textContent='Delete Gift Card';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+esc(p?p.name:'this gift card')+'</strong>? Already issued cards will remain valid. This cannot be undone.</div>';
   document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="gcConfirmDeleteProduct()">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
@@ -38661,7 +38663,7 @@ function agencyDeleteSub(id,name,slug){
   if(role!=='super_admin'){toast('Only super_admin can permanently delete subaccounts.','error');return;}
   state.modal={type:'del-agency-sub',id:id};
   document.getElementById('modal-title').textContent='Delete Subaccount';
-  document.getElementById('modal-box').className='modal';
+  document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
     '<div class="warn-box" style="margin-bottom:14px"><strong>Permanently delete '+esc(name)+'?</strong><br>'
     +'All contacts, payments, appointments, notes, forms, and data for this subaccount will be removed. '
