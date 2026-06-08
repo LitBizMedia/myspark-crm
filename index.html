@@ -2903,6 +2903,7 @@ async function _contactApi(path, body){
   }
 }
 function contactCreate(data){ return _contactApi('contact-create', data); }
+function contactFindOrCreate(data){ return _contactApi('contact-find-or-create', data); }
 function contactUpdate(id, fields){ return _contactApi('contact-update', Object.assign({id:id}, fields||{})); }
 function contactArchive(id, unarchive){ return _contactApi('contact-archive', {id:id, unarchive: !!unarchive}); }
 function contactDelete(id){ return _contactApi('contact-delete', {id:id}); }
@@ -34296,18 +34297,78 @@ function gcSellCSearch(v){
   dd.innerHTML='<div class="ss-empty">Searching...</div>';
   dd.classList.remove('hidden');
   _contactPickerSearch(v, {limit:8}, function(matches, truncated){
+    var html='';
     if(!matches.length){
-      dd.innerHTML='<div class="ss-empty">No contacts found</div>';
+      html='<div class="ss-empty">No contacts found</div>';
     } else {
-      var html = matches.map(function(c){
+      html = matches.map(function(c){
         return '<div class="ss-opt" onclick="gcSellSelC(\''+c.id+'\',\''+esc(c.name)+'\')">'+esc(c.name)+(c.company?' \u00b7 '+esc(c.company):'')+'</div>';
       }).join('');
       if(truncated) html += '<div class="ss-empty" style="font-style:italic">Refine search for more results</div>';
-      dd.innerHTML = html;
     }
+    html += '<div class="ss-opt" style="border-top:1px solid var(--border);color:var(--purple-light);font-weight:600" onclick="gcSellOpenAddContact()">+ Add new contact</div>';
+    dd.innerHTML = html;
     dd.classList.remove('hidden');
-    setTimeout(function(){document.addEventListener('click',function f(){dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
+    setTimeout(function(){document.addEventListener('click',function f(){if(state.gcAddContactOpen)return;dd.classList.add('hidden');document.removeEventListener('click',f);},{capture:true});},10);
   });
+}
+
+// Inline add-contact on the buyer picker. Uses find-or-create (dedup-safe):
+// an email/phone that already exists links to that contact instead of
+// duplicating. Requires email OR phone (find-or-create's dedup keys); name
+// alone can't be deduped. On success, selects the contact as the buyer.
+function gcSellOpenAddContact(){
+  var dd=document.getElementById('gc-sell-c-drop'); if(!dd)return;
+  var typed=(document.getElementById('gc-sell-c-inp')&&document.getElementById('gc-sell-c-inp').value||'').trim();
+  // Suppress the capture-phase outside-click closer while the form is open
+  // (it fires before inner clicks reach the drop, which was closing the form
+  // when clicking field-to-field). Re-enabled when the form leaves.
+  state.gcAddContactOpen=true;
+  // Let the form size to content (the search list caps at 200px via CSS).
+  dd.style.maxHeight='none';
+  var inpCss='width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:8px 10px;font-family:Lato,sans-serif;font-size:13px;outline:none;margin-bottom:6px';
+  dd.innerHTML='<div style="padding:10px 12px">'
+    +'<div style="font-size:11px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">New Contact</div>'
+    +'<input id="gc-newc-name" type="text" placeholder="Name" value="'+esc(typed)+'" style="'+inpCss+'">'
+    +'<input id="gc-newc-email" type="email" placeholder="Email" style="'+inpCss+'">'
+    +'<input id="gc-newc-phone" type="tel" placeholder="Phone" style="'+inpCss+'">'
+    +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:8px">Enter an email or phone (used to avoid duplicates).</div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button type="button" class="btn btn-ghost" style="flex:1;padding:7px" onclick="gcSellCloseAddContact()">Cancel</button>'
+    +'<button type="button" class="btn btn-action" style="flex:1;padding:7px" id="gc-newc-save" onclick="gcSellSaveNewContact()">Add</button>'
+    +'</div></div>';
+  dd.classList.remove('hidden');
+  var nameEl=document.getElementById('gc-newc-name'); if(nameEl){nameEl.focus();nameEl.select();}
+}
+
+function gcSellCloseAddContact(){
+  state.gcAddContactOpen=false;
+  var dd=document.getElementById('gc-sell-c-drop'); if(dd)dd.style.maxHeight='';
+  gcSellCSearch(document.getElementById('gc-sell-c-inp')?document.getElementById('gc-sell-c-inp').value:'');
+}
+
+async function gcSellSaveNewContact(){
+  var name=(document.getElementById('gc-newc-name')&&document.getElementById('gc-newc-name').value||'').trim();
+  var email=(document.getElementById('gc-newc-email')&&document.getElementById('gc-newc-email').value||'').trim();
+  var phone=(document.getElementById('gc-newc-phone')&&document.getElementById('gc-newc-phone').value||'').trim();
+  if(!email&&!phone){toast('Enter an email or phone to add a contact.','error');return;}
+  if(email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){toast('Enter a valid email.','error');return;}
+  var btn=document.getElementById('gc-newc-save');
+  if(btn){btn.disabled=true;btn.textContent='Adding...';}
+  try{
+    var resp=await contactFindOrCreate({name:name||null, email:email||null, phone:phone||null, source:'manual'});
+    var c=resp&&resp.contact;
+    if(!c||!c.id)throw new Error('No contact returned');
+    var cname=c.display_name||c.name||name||'Contact';
+    state.gcAddContactOpen=false;
+    var _dd=document.getElementById('gc-sell-c-drop'); if(_dd)_dd.style.maxHeight='';
+    if(typeof fetchFromServer==='function'){ try{ await fetchFromServer(); }catch(e){} }
+    await gcSellSelC(c.id, cname);
+    toast(resp.was_created?'Contact added.':'Linked existing contact.','success');
+  }catch(e){
+    toast('Could not add contact: '+e.message,'error');
+    if(btn){btn.disabled=false;btn.textContent='Add';}
+  }
 }
 
 async function gcSellSelC(id,name){
