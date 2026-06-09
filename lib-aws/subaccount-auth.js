@@ -94,6 +94,29 @@ async function createSession(opts) {
   };
 }
 
+// Effective idle-logout window in MINUTES for a subaccount. 0 = Never.
+// Universal default: unset -> 15 for everyone. Only an explicit admin-saved
+// value (db.settings.idleTimeoutMinutes) changes it (0 = Never, >0 = minutes).
+// FAIL-SAFE: any read error -> 15 (enforce), never skip. HIPAA status is NOT
+// read here; it only affects the Never-warning copy in the settings UI.
+async function getServerIdleTimeoutMin(subaccountId) {
+  if (!subaccountId) return 15;
+  try {
+    const d = await db.query(
+      'SELECT data FROM subaccount_data WHERE subaccount_id = $1 LIMIT 1',
+      [subaccountId]
+    );
+    const settings = d.rows[0] && d.rows[0].data && d.rows[0].data.settings;
+    const v = settings && settings.idleTimeoutMinutes;
+    if (v === 0) return 0;
+    if (typeof v === 'number' && v > 0) return v;
+  } catch (e) {
+    console.error('[auth] idle settings read failed, failing safe to 15:', e.message);
+    return 15;
+  }
+  return 15;
+}
+
 async function validateSession(token) {
   if (!token) return null;
   const tokenHash = hashToken(token);
@@ -109,6 +132,23 @@ async function validateSession(token) {
   if (!session) return null;
   if (session.revoked_at) return null;
   if (new Date(session.expires_at) < new Date()) return null;
+
+  // Idle enforcement. Compare against the PRIOR last_used_at from the row we
+  // already fetched; the touch below updates it for next time. Revoke on breach
+  // so the token is dead server-side, not just cleared client-side.
+  if (session.last_used_at) {
+    const windowMin = await getServerIdleTimeoutMin(session.subaccount_id);
+    if (windowMin > 0) {
+      const idleMs = Date.now() - new Date(session.last_used_at).getTime();
+      if (idleMs > windowMin * 60 * 1000) {
+        db.update('sessions',
+          { revoked_at: new Date().toISOString(), revoked_reason: 'idle_timeout' },
+          { id: session.id }
+        ).catch(function(){});
+        return null;
+      }
+    }
+  }
 
   // Touch last_used_at (best-effort, don't block on this)
   db.update('sessions', { last_used_at: new Date().toISOString() }, { id: session.id })
