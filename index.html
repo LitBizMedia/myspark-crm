@@ -4842,10 +4842,62 @@ async function saveIdleTimeout(){
   if(!sel) return;
   var minutes = parseInt(sel.value, 10);
   if(minutes === 0){
-    // Step two will intercept here with the confirmation modal.
-    if(typeof confirmIdleNever === 'function'){ confirmIdleNever(); return; }
+    // Never requires explicit consent via the confirmation modal.
+    confirmIdleNever();
+    return;
   }
   _idleTimeoutDoSave(minutes, false);
+}
+
+// Confirmation modal for switching to Never. Copy branches on HIPAA status:
+// stern + required acceptance checkbox for HIPAA accounts (real PHI risk),
+// calm single-confirm for non-HIPAA. On confirm, saves with warningAccepted.
+// On cancel, reverts the dropdown to the previously-effective value.
+function confirmIdleNever(){
+  var isHipaa = state.hipaaEnabled !== false; // true unless explicitly verified non-HIPAA
+  var prior = getEffectiveIdleTimeoutMin();   // value to restore on cancel
+  // If prior was already Never, restoring to '0' is fine; pick 15 as the sane
+  // revert target only when prior is 0 so cancel does not leave Never selected.
+  var revertTo = (prior === 0) ? 15 : prior;
+
+  var body, foot;
+  if(isHipaa){
+    body = '<div style="line-height:1.7">'
+      + '<p style="margin:0 0 12px;font-weight:700;color:var(--danger-text)">This workspace handles patient data.</p>'
+      + '<p style="margin:0 0 12px">Turning off automatic logout means an unattended screen can leave patient information (PHI) exposed to anyone with physical access. Automatic logoff is a HIPAA Security Rule safeguard.</p>'
+      + '<p style="margin:0 0 14px">Choosing Never disables that safeguard for every user in this workspace. This decision is recorded in your audit log and reported to your agency.</p>'
+      + '<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;background:var(--danger-dim);border:1px solid var(--danger);border-radius:var(--radius)">'
+      + '<input type="checkbox" id="idle-never-accept" onchange="document.getElementById(\'idle-never-confirm\').disabled=!this.checked" style="margin-top:3px">'
+      + '<span style="font-size:13px;color:var(--main-text)">I understand the risk and accept responsibility for disabling automatic logout on a workspace that handles patient data.</span>'
+      + '</label>'
+      + '</div>';
+    foot = '<button class="btn btn-ghost" onclick="_idleNeverCancel(' + revertTo + ')">Cancel</button>'
+      + '<button class="btn btn-action" id="idle-never-confirm" disabled onclick="_idleNeverConfirm()">Turn off logout</button>';
+  } else {
+    body = '<div style="line-height:1.7">'
+      + '<p style="margin:0 0 12px">This account is not flagged as handling patient data, so automatic logout is optional for you.</p>'
+      + '<p style="margin:0">Choosing Never keeps users signed in until they log out manually (or the 30-day session cap). You can turn automatic logout back on anytime.</p>'
+      + '</div>';
+    foot = '<button class="btn btn-ghost" onclick="_idleNeverCancel(' + revertTo + ')">Cancel</button>'
+      + '<button class="btn btn-action" id="idle-never-confirm" onclick="_idleNeverConfirm()">Set to Never</button>';
+  }
+  openModal('Turn off automatic logout?', body, foot);
+}
+
+function _idleNeverCancel(revertTo){
+  var sel = document.getElementById('idle-timeout-select');
+  if(sel){ sel.value = String(revertTo); _idleTimeoutUpdateCaption(); }
+  closeModal();
+}
+
+async function _idleNeverConfirm(){
+  closeModal();
+  var ok = await _idleTimeoutDoSave(0, true);
+  if(!ok){
+    // Save failed; reflect reality by re-reading effective value into the select.
+    var sel = document.getElementById('idle-timeout-select');
+    if(sel){ sel.value = String(getEffectiveIdleTimeoutMin()); _idleTimeoutUpdateCaption(); }
+  }
 }
 
 // Performs the actual endpoint call. warningAccepted is required server-side
