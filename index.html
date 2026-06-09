@@ -29349,9 +29349,10 @@ document.addEventListener('DOMContentLoaded',async function(){
   loadData();
   applyFallbackCredentials();
   if(fbCheckEmbedMode()){hideAuthLoading();return;}
-  // Pre-fetch server data in the background so db.users is populated
-  // by the time the user submits the login form.
-  fetchFromServer().then(function(){});
+  // NOTE: no eager pre-fetch here. It fired before the session check below
+  // and 401'd on cold-cookie boots (post-login, hard refresh), spamming the
+  // console. The session-success path below calls fetchFromServer() after
+  // confirming auth, so the data load still happens, just gated correctly.
   // Check for agency login-as token in URL. The new flow exchanges this
   // token server-side for a real subaccount session cookie BEFORE any other
   // API call. The cookie OVERWRITES any pre-existing subaccount session from
