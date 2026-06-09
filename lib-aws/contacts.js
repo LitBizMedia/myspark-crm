@@ -417,6 +417,35 @@ async function searchContactsForPicker(subaccountId, query, limit) {
   return { matches, truncated };
 }
 
+
+// Set SMS consent flags on a contact. Canonical consent writer.
+// Used by the inbound STOP/START webhook, the marketing opt-in flow, and the
+// contact drawer toggle. One home for the consent write so the rule lives in
+// one place. patch: { transactional?: bool, marketing?: bool, source: string }.
+// COALESCE means only the flags present in patch change; the rest hold.
+// Scoped to subaccount. Returns { changed, contactId }.
+async function setSmsConsent(subaccountId, contactId, patch) {
+  if (!subaccountId || !contactId || !patch) return { changed: false };
+  const hasT = typeof patch.transactional === 'boolean';
+  const hasM = typeof patch.marketing === 'boolean';
+  if (!hasT && !hasM) return { changed: false };
+  const r = await db.query(
+    `UPDATE contacts SET
+       sms_consent_transactional = COALESCE($3, sms_consent_transactional),
+       sms_consent_marketing     = COALESCE($4, sms_consent_marketing),
+       sms_consent_source        = $5,
+       sms_consent_updated_at    = NOW(),
+       updated_at                = NOW()
+     WHERE id = $1 AND subaccount_id = $2
+     RETURNING id`,
+    [contactId, subaccountId,
+     hasT ? patch.transactional : null,
+     hasM ? patch.marketing : null,
+     patch.source || 'system']
+  );
+  return r.rows.length ? { changed: true, contactId } : { changed: false };
+}
+
 module.exports = {
   getContactById,
   getContactByIdWithPHI,
@@ -427,5 +456,6 @@ module.exports = {
   createStubContactFromSms,
   searchContactsForPicker,
   findOrCreateContact,
-  unarchiveContact
+  unarchiveContact,
+  setSmsConsent
 };
