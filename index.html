@@ -2872,6 +2872,27 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
               </div>
             </div>
           </div>
+
+          <div class="s-card full" id="idle-timeout-card" style="display:none">
+            <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Session Security</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Automatically sign users out after a period of inactivity. Protects patient data on unattended screens. Applies to everyone in this workspace.</div>
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+              <div class="form-group" style="margin:0;max-width:240px">
+                <label>Automatic logout after</label>
+                <select id="idle-timeout-select" onchange="_idleTimeoutUpdateCaption()">
+                  <option value="10">10 minutes</option>
+                  <option value="15">15 minutes</option>
+                  <option value="20">20 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="0">Never</option>
+                </select>
+              </div>
+              <button class="btn btn-action" id="idle-timeout-save" onclick="saveIdleTimeout()">Save</button>
+              <div id="idle-timeout-status" style="font-size:12px;color:var(--main-text-muted);display:flex;align-items:center;gap:6px;min-height:18px"></div>
+            </div>
+            <div id="idle-timeout-caption" style="font-size:12px;color:var(--warning-text-strong);margin-top:12px;line-height:1.6;display:none"></div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -4780,6 +4801,88 @@ function getEffectiveIdleTimeoutMin(){
   if(v === 0) return 0;
   if(typeof v === 'number' && v > 0) return v;
   return (state.hipaaEnabled === false) ? 0 : 15;
+}
+
+// --- Session Security: idle-logout control (admin-only) ---
+// Renders the General-tab card. Admin-only, mirroring the Activity Log gate.
+// Populates the dropdown from the effective value and shows the Never caption.
+function renderIdleTimeout(){
+  var card = document.getElementById('idle-timeout-card');
+  if(!card) return;
+  var isAdmin = state.user && state.user.role === 'admin';
+  card.style.display = isAdmin ? '' : 'none';
+  if(!isAdmin) return;
+  var sel = document.getElementById('idle-timeout-select');
+  if(sel){
+    var cur = getEffectiveIdleTimeoutMin(); // minutes, 0 = Never
+    sel.value = String(cur);
+  }
+  _idleTimeoutUpdateCaption();
+}
+
+// Shows the explanatory/warning caption under the control. The Never caption is
+// always visible (before any click) so the user reads the cost up front.
+function _idleTimeoutUpdateCaption(){
+  var sel = document.getElementById('idle-timeout-select');
+  var cap = document.getElementById('idle-timeout-caption');
+  if(!sel || !cap) return;
+  if(sel.value === '0'){
+    cap.style.display = '';
+    cap.textContent = 'Never means no automatic logout. Sessions stay signed in until manual logout or the 30-day cap. Not recommended for workspaces that handle patient data.';
+  } else {
+    cap.style.display = 'none';
+    cap.textContent = '';
+  }
+}
+
+// Save handler. Non-Never values save directly. Never is handled in step two
+// (confirmation modal); for now it routes through the same call with the
+// consent flag, which the modal will supply. STEP ONE: non-Never only.
+async function saveIdleTimeout(){
+  var sel = document.getElementById('idle-timeout-select');
+  if(!sel) return;
+  var minutes = parseInt(sel.value, 10);
+  if(minutes === 0){
+    // Step two will intercept here with the confirmation modal.
+    if(typeof confirmIdleNever === 'function'){ confirmIdleNever(); return; }
+  }
+  _idleTimeoutDoSave(minutes, false);
+}
+
+// Performs the actual endpoint call. warningAccepted is required server-side
+// when minutes === 0; non-Never sends false.
+async function _idleTimeoutDoSave(minutes, warningAccepted){
+  var statusEl = document.getElementById('idle-timeout-status');
+  var btn = document.getElementById('idle-timeout-save');
+  if(btn) btn.disabled = true;
+  if(statusEl){ statusEl.textContent = 'Saving...'; statusEl.style.color = 'var(--main-text-muted)'; }
+  try{
+    var r = await fetch(apiUrl('/api/subaccount/idle-timeout-set'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ minutes: minutes, warningAccepted: !!warningAccepted })
+    });
+    if(!r.ok){
+      var err = {};
+      try{ err = await r.json(); }catch(e){}
+      if(statusEl){ statusEl.textContent = err.error || 'Save failed.'; statusEl.style.color = 'var(--danger-text)'; }
+      if(btn) btn.disabled = false;
+      return false;
+    }
+    var data = await r.json();
+    // Keep local state in sync so getEffectiveIdleTimeoutMin reflects it now.
+    if(!db.settings) db.settings = {};
+    db.settings.idleTimeoutMinutes = data.idleTimeoutMinutes;
+    if(statusEl){ statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--success-text)'; }
+    _idleTimeoutUpdateCaption();
+    if(btn) btn.disabled = false;
+    return true;
+  }catch(e){
+    if(statusEl){ statusEl.textContent = 'Network error.'; statusEl.style.color = 'var(--danger-text)'; }
+    if(btn) btn.disabled = false;
+    return false;
+  }
 }
 
 function handleLogout(){
@@ -14978,6 +15081,7 @@ function renderCustomizationTab(){
 // =====================================================
 function renderSettings(){
   renderUserList();renderTagMgr();renderBH();renderBlackoutList();cfRenderSettings();renderTimezoneSelect();renderBusinessInfo();renderBusinessLogo();
+  renderIdleTimeout();
   // Activity Log tab visible only for admins
   var actBtn=document.getElementById('stab-activity');
   if(actBtn){
