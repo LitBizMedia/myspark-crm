@@ -4766,6 +4766,22 @@ async function getSubaccountHipaaStatus(){
   }
 }
 
+// Effective idle-logout window in MINUTES, or 0 for Never (no idle logout).
+// Single source of truth for the configurable session timeout. Read by the
+// client idle timer and mirrored server-side for enforcement.
+// Resolution order:
+//   1. Admin-saved value in db.settings.idleTimeoutMinutes wins (0 = Never).
+//   2. If unset, derive from HIPAA status using the SAME fail-safe as init:
+//      only an EXPLICIT verified non-HIPAA account (state.hipaaEnabled===false)
+//      defaults to Never. Anything else (HIPAA, booting, unverified) -> 15 min.
+//      This guarantees an account that may handle PHI never silently gets Never.
+function getEffectiveIdleTimeoutMin(){
+  var v = db.settings && db.settings.idleTimeoutMinutes;
+  if(v === 0) return 0;
+  if(typeof v === 'number' && v > 0) return v;
+  return (state.hipaaEnabled === false) ? 0 : 15;
+}
+
 function handleLogout(){
   // Audit BEFORE clearing session/state (need state.user for actor info)
   logSubaccountAudit('subaccount.user.logout');
