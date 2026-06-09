@@ -31,6 +31,18 @@ async function handler(req, res) {
   try {
     const b = req.body || {};
     const id = b.id;
+
+    // Marketing SMS consent cannot be manufactured by a staff click. It requires
+    // prior express written consent (a form checkbox, double opt-in, or imported
+    // proof). Staff may turn marketing OFF (honoring an opt-out is always allowed)
+    // and may set transactional either way (oral consent covers transactional),
+    // but a bare edit may not flip marketing ON. Strip that one field, apply the
+    // rest, and tell the frontend why.
+    let marketingOnRefused = false;
+    if (b.sms_consent_marketing === true) {
+      marketingOnRefused = true;
+      delete b.sms_consent_marketing;
+    }
     if (!id) return res.status(400).json({ error: 'id is required' });
 
     const sets = [];
@@ -73,7 +85,7 @@ async function handler(req, res) {
       params.push(new Date().toISOString());
       p++;
       sets.push(`sms_consent_source = $${p}`);
-      params.push('manual');
+      params.push('staff_manual');
       p++;
       changedFields.push('sms_consent_updated_at', 'sms_consent_source');
     }
@@ -108,7 +120,7 @@ async function handler(req, res) {
       action: 'subaccount.contact.update',
       targetType: 'contact', targetId: id,
       targetSubaccountId: auth.subaccount_id,
-      metadata: { changed_fields: changedFields }
+      metadata: { changed_fields: changedFields, marketing_on_refused: marketingOnRefused }
     });
 
     // Fire contact_tagged for each newly-added tag (fire-and-forget)
@@ -130,7 +142,14 @@ async function handler(req, res) {
       console.error('Automation trigger fire error (non-fatal):', autoErr.message);
     }
 
-    return res.status(200).json({ success: true, id });
+    return res.status(200).json({
+      success: true,
+      id,
+      marketing_on_refused: marketingOnRefused,
+      marketing_on_refused_reason: marketingOnRefused
+        ? 'Marketing SMS consent must be captured through a form or documented opt-in, not set manually.'
+        : undefined
+    });
   } catch (e) {
     console.error('contact-update error:', e.message);
     return res.status(500).json({ error: 'Failed to update contact' });
