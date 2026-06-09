@@ -2017,7 +2017,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
 <!-- AUTH -->
 <div id="auth-loading" style="position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:1000">
-  <div style="text-align:center">
+  <div class="text-center">
     <div style="width:40px;height:40px;border:3px solid rgba(107,33,234,.2);border-top-color:var(--purple);border-radius:50%;margin:0 auto 14px;animation:authSpin 0.8s linear infinite"></div>
     <div style="font-family:Exo 2,sans-serif;font-size:13px;color:var(--text-muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase">Loading</div>
   </div>
@@ -2120,7 +2120,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
   <div id="main-wrap">
     <div id="top-bar">
       <div class="top-bar-title" id="top-bar-title">Dashboard</div>
-      <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-lbl" style="font-size:11px">–</span></div>
+      <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-lbl" class="fs-11">–</span></div>
       <button class="btn btn-icon btn-sm" id="top-refresh-btn" onclick="topRefresh()" title="Refresh current view">
         <svg id="top-refresh-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       </button>
@@ -2247,7 +2247,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div id="bulk-bar" class="bulk-bar hidden">
           <span class="bulk-count" id="bulk-count"></span>
           <span id="bulk-select-all-wrap" class="hidden"></span>
-          <div style="flex:1"></div>
+          <div class="flex-1"></div>
           <button class="btn btn-ghost btn-sm" onclick="bulkExportCSV()">Export CSV</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulkTagModal()">Add Tag</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulkStatusModal()">Change Status</button>
@@ -2599,7 +2599,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                   </select>
                 </div>
                 <div id="pos-product-price-row" class="hidden" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">
-                  <div style="flex:1"><label style="font-size:11px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px">Price</label>
+                  <div class="flex-1"><label style="font-size:11px;font-weight:600;color:var(--main-text-muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px">Price</label>
                   <input id="pos-prod-price" type="number" class="price-f" placeholder="0.00" min="0" step="0.01" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none"></div>
                   <button class="btn btn-purple btn-sm" onclick="posAddProductItem()">Add</button>
                 </div>
@@ -2920,12 +2920,12 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             <div class="s-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Business Schedule</div>
             <div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">Your timezone, weekly hours, and blackout dates. Controls calendar display, booking availability, and patient-facing scheduling.</div>
 
-            <div style="margin-bottom:24px">
+            <div class="mb-24">
               <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Timezone</div>
               <div class="form-group" style="max-width:320px;margin:0"><select id="biz-timezone" onchange="saveTimezone()"><option value="">Select timezone...</option></select></div>
             </div>
 
-            <div style="margin-bottom:24px">
+            <div class="mb-24">
               <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Weekly Hours</div>
               <div id="bh-grid"></div>
               <div id="bh-save-status" class="biz-save-status" style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:12px;min-height:18px"></div>
@@ -4777,7 +4777,7 @@ document.getElementById('login-form').addEventListener('submit',async function(e
 
 function openForgotPassword(context){
   var body='<div class="form-group"><label>Your Email Address</label>'
-    +'<input id="fp-email" type="email" placeholder="you@example.com" style="width:100%"></div>'
+    +'<input id="fp-email" type="email" placeholder="you@example.com" class="w-full"></div>'
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Enter the email associated with your account. A reset link will be sent if a match is found.</div>';
   openModal('Reset Password',body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
@@ -4802,10 +4802,10 @@ async function submitForgotPassword(context){
 
 function openResetPasswordModal(token){
   var body='<div class="form-group"><label>New Password</label>'
-    +'<input id="rp-pass" type="password" placeholder="New password" style="width:100%">'
+    +'<input id="rp-pass" type="password" placeholder="New password" class="w-full">'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Min 8 chars, one uppercase, one number, one special character.</div></div>'
     +'<div class="form-group"><label>Confirm Password</label>'
-    +'<input id="rp-pass2" type="password" placeholder="Confirm password" style="width:100%"></div>';
+    +'<input id="rp-pass2" type="password" placeholder="Confirm password" class="w-full"></div>';
   openModal('Set New Password',body,
     '<button class="btn btn-primary" onclick="submitResetPassword(\''+token+'\')" style="width:100%">Set Password</button>',
     'modal-sm');
@@ -4932,7 +4932,7 @@ function confirmIdleNever(){
 
   var body, foot;
   if(isHipaa){
-    body = '<div style="line-height:1.7">'
+    body = '<div class="lh-17">'
       + '<p style="margin:0 0 12px;font-weight:700;color:var(--danger-text)">This workspace handles patient data.</p>'
       + '<p style="margin:0 0 12px">Turning off automatic logout means an unattended screen can leave patient information (PHI) exposed to anyone with physical access. Automatic logoff is a HIPAA Security Rule safeguard.</p>'
       + '<p style="margin:0 0 14px">Choosing Never disables that safeguard for every user in this workspace. This decision is recorded in your audit log and reported to your agency.</p>'
@@ -4944,7 +4944,7 @@ function confirmIdleNever(){
     foot = '<button class="btn btn-ghost" onclick="_idleNeverCancel(' + revertTo + ')">Cancel</button>'
       + '<button class="btn btn-action" id="idle-never-confirm" disabled onclick="_idleNeverConfirm()">Turn off logout</button>';
   } else {
-    body = '<div style="line-height:1.7">'
+    body = '<div class="lh-17">'
       + '<p style="margin:0 0 12px">Automatic logout protects anything sensitive on an unattended screen: client contact details, card-on-file notes, intake forms, health waivers, appointment history.</p>'
       + '<p style="margin:0 0 12px">Before you turn it off, ask yourself: does anyone walk past your front desk, or share a device with you? If a screen is left unlocked, automatic logout is what keeps a stranger from seeing your clients\' information.</p>'
       + '<p style="margin:0">We recommend keeping it on. If you turn it off, sessions stay signed in until manual logout or the 30-day cap. You can turn it back on anytime.</p>'
@@ -5171,7 +5171,7 @@ function renderDash(){
         +'<div class="dash-appt-title">'+esc(a.title)+'</div>'
         +'<div class="dash-appt-sub">'+(c?esc(c.name)+' \u00b7 ':'')+(a.duration||60)+' min'+(staffName?' \u00b7 '+esc(staffName):'')+(a.location?' \u00b7 '+esc(a.location):'')+'</div>'
         +'</div>'
-        +(payPill?'<div style="flex-shrink:0">'+payPill+'</div>':'')
+        +(payPill?'<div class="flex-shrink-0">'+payPill+'</div>':'')
         +'</div>';
     }).join('');
   }
@@ -5562,7 +5562,7 @@ async function renderContacts(){
     } else {
       rowActions='<button class="icon-btn-xs" onclick="openContactModal(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
     }
-    return'<tr onclick="openDrawer(\''+c.id+'\')"'+(c.archived?' style="opacity:.65"':'')+'>'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600;display:flex;align-items:center">'+esc(c.name)+_contactRowWarningBadge(c)+'</div></div></td>'+'<td style="font-size:13px">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(fmtPhoneDisplay(c.phone))+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()" style="white-space:nowrap">'+rowActions+'</td></tr>';
+    return'<tr onclick="openDrawer(\''+c.id+'\')"'+(c.archived?' style="opacity:.65"':'')+'>'+'<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" id="cb-'+c.id+'" '+(state.cSelected.has(c.id)?'checked':'')+' onclick="toggleSelectContact(\''+c.id+'\',event)"></td>'+'<td><div class="ct-name-cell"><div class="ct-avatar" style="background:'+col_+'">'+initials(c.name)+'</div><div style="font-size:13px;font-weight:600;display:flex;align-items:center">'+esc(c.name)+_contactRowWarningBadge(c)+'</div></div></td>'+'<td class="fs-13">'+esc(c.company||'')+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(fmtPhoneDisplay(c.phone))+'</td>'+'<td style="font-size:12px;color:var(--text-muted)">'+esc(c.email||'')+'</td>'+'<td><div class="ct-tags">'+tags+'</div></td>'+'<td><span class="type-badge type-'+c.type+'">'+c.type+'</span></td>'+'<td><span class="status-dot '+(c.status==='inactive'?'inactive':'')+'"></span></td>'+'<td onclick="event.stopPropagation()" style="white-space:nowrap">'+rowActions+'</td></tr>';
   }).join('');
   renderPg('contacts-pg',state.cPage,state.cTotalPages,'cPg');
   updateBulkBar();
@@ -5850,7 +5850,7 @@ function renderDrawer(){
           rsFromHTML = '<div style="font-size:10px;color:var(--main-text-muted);font-style:italic;margin-top:2px">Rescheduled from '+esc(origAppt.date)+(origAppt.time?' at '+esc(fmtTime(origAppt.time)):'')+'</div>';
         }
       }
-      return'<div class="appt-row-sm '+a.status+'"><div style="flex:1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+rsFromHTML+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px">'+apptStatusBadge(a.status)+''+payPill+'</div></div><div style="position:relative"><button class="icon-btn-xs" onclick="toggleApptRowMenu(event,\''+c.id+'\',\''+a.id+'\')" aria-label="More actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></button></div></div>';
+      return'<div class="appt-row-sm '+a.status+'"><div class="flex-1"><div class="appt-sm-title">'+esc(a.title)+'</div><div class="appt-sm-meta">'+a.date+(a.time?' '+fmtTime(a.time):'')+(a.duration?' \u00b7 '+a.duration+' min':'')+'</div>'+rsFromHTML+(u?'<div style="font-size:10px;color:'+uc+';font-weight:600;margin-top:2px">'+esc(u.name||u.username)+'</div>':'')+'<div style="display:flex;gap:6px;align-items:center;margin-top:4px">'+apptStatusBadge(a.status)+''+payPill+'</div></div><div style="position:relative"><button class="icon-btn-xs" onclick="toggleApptRowMenu(event,\''+c.id+'\',\''+a.id+'\')" aria-label="More actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></button></div></div>';
     }).join('');
     // Sub-tab pill row + Book button on the right. Sticky so chips stay
     // visible while the list scrolls (esp. helpful on small screens after
@@ -5884,10 +5884,10 @@ function renderDrawer(){
     const tHTML=arr=>arr.map(function(t){
       var canDel=_canDeleteTask(t);
       var delBtn=canDel?'<button class="icon-btn-xs" onclick="delTask(\''+t.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>':'';
-      return '<div class="task-sm"><div class="tch-sm '+t.status+'" onclick="cycleTask(\''+t.id+'\')">'+(t.status==='done'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div><div style="flex:1"><div class="'+(t.status==='done'?'tsk-done':'')+'" style="font-size:13px;font-weight:500">'+esc(t.title)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px"><span class="pri-badge p'+t.priority[0]+'">'+t.priority+'</span>'+(t.dueDate?' \u00b7 Due '+fmtDate(t.dueDate):'')+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openTaskModal(\''+c.id+'\',\''+t.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+delBtn+'</div></div>';
+      return '<div class="task-sm"><div class="tch-sm '+t.status+'" onclick="cycleTask(\''+t.id+'\')">'+(t.status==='done'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div><div class="flex-1"><div class="'+(t.status==='done'?'tsk-done':'')+'" style="font-size:13px;font-weight:500">'+esc(t.title)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px"><span class="pri-badge p'+t.priority[0]+'">'+t.priority+'</span>'+(t.dueDate?' \u00b7 Due '+fmtDate(t.dueDate):'')+'</div></div><div style="display:flex;gap:4px"><button class="icon-btn-xs" onclick="openTaskModal(\''+c.id+'\',\''+t.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+delBtn+'</div></div>';
     }).join('');
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Open ('+open.length+')</div><button class="btn btn-purple btn-sm" onclick="openTaskModal(\''+c.id+'\',null)">+ Add</button></div>'
-      +'<div style="margin-top:8px">'+(open.length?tHTML(open):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No open tasks.</div>')+'</div>'
+      +'<div class="mt-8">'+(open.length?tHTML(open):'<div style="color:var(--text-muted);font-size:13px;padding:6px 0">No open tasks.</div>')+'</div>'
       +(done.length?'<div class="sec-label" style="margin-top:14px">Done ('+done.length+')</div>'+tHTML(done):'');
   }else if(state.dTab==='payments'){
     if(!state.dPayTab)state.dPayTab='overview';
@@ -6075,7 +6075,7 @@ function _dPaySubscriptions(c,cSubs){
       ? '<span style="text-decoration:line-through;color:var(--text-muted);margin-right:4px">'+fmt$(sticker)+'</span><span style="color:var(--success-light)">'+fmt$(total)+'</span>'
       : fmt$(total);
     h+='<div class="appt-row-sm" style="cursor:pointer;border-left-color:'+borderColor+'" onclick="openSubDetail(\''+s.id+'\')">'
-      +'<div style="flex:1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+failBadge+'</div>'
+      +'<div class="flex-1"><div class="appt-sm-title">'+esc(s.planName||'Subscription')+failBadge+'</div>'
       +'<div class="appt-sm-meta">'+fmtDate(s.startDate)+' \u00b7 '+priceText+'/'+cycle+'</div>'
       +'<span class="sub-cycle-badge">'+cycle+'</span></div>'
       +'</div>';
@@ -6370,7 +6370,7 @@ function _renderDFormsSendBar(c){
   // bypasses the frequency guard). Visible in both empty and populated states.
   var open=!!state.dFormSendOpen;
   var forms=(db.forms||[]).filter(function(f){return f&&f.id;});
-  var btn='<div style="margin-bottom:12px"><div class="d-sticky-sub" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+  var btn='<div class="mb-12"><div class="d-sticky-sub" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
     +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--text)">Forms</div>'
     +'<button class="btn '+(open?'btn-ghost':'btn-purple')+' btn-sm" onclick="toggleFormSend()" style="font-size:12px">'
     +(open?'Cancel':'+ Send Form')+'</button>'
@@ -6798,7 +6798,7 @@ function _soapVitalsDisplayHTML(vitals,opts){
   return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">'
     +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:6px">Vital Signs</div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:6px 14px">'
-    +pairs.map(function(p){return '<div style="font-size:13px"><span style="color:var(--text-muted);font-weight:600;margin-right:5px">'+esc(p[0])+':</span><span style="color:var(--text);font-weight:700">'+esc(p[1])+'</span></div>';}).join('')
+    +pairs.map(function(p){return '<div class="fs-13"><span style="color:var(--text-muted);font-weight:600;margin-right:5px">'+esc(p[0])+':</span><span style="color:var(--text);font-weight:700">'+esc(p[1])+'</span></div>';}).join('')
     +'</div></div>';
 }
 
@@ -6897,7 +6897,7 @@ function viewSoapNote(noteId){
 
   var amdHTML='';
   if(n.amendments&&n.amendments.length){
-    amdHTML='<div style="margin-top:14px"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">Amendments ('+n.amendments.length+')</div>';
+    amdHTML='<div class="mt-14"><div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">Amendments ('+n.amendments.length+')</div>';
     n.amendments.forEach(function(a){
       var aDate=a.createdAt?fmtDateTime(a.createdAt):'';
       var aAuthor=a.authorId?getUserById(a.authorId):null;
@@ -8956,8 +8956,8 @@ async function reviewCharge(){
     methodTxt=state.posPM+(useSquare?' (Square)':'');
   }
   const body='<div style="background:var(--bg-card);border-radius:var(--radius);padding:16px;margin-bottom:14px">'
-    +(c?'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600;color:var(--text)">'+esc(c.name)+'</div></div>':'')
-    +'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'
+    +(c?'<div class="mb-10"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:2px">Customer</div><div style="font-size:14px;font-weight:600;color:var(--text)">'+esc(c.name)+'</div></div>':'')
+    +'<div class="mb-10"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px">Items</div>'
     +state.posItems.map(i=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;color:var(--text)"><span>'+esc(i.desc)+'</span><span>'+fmt$(i.price)+'</span></div>').join('')
     +'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:8px">'+breakdown+'</div>'
@@ -9263,7 +9263,7 @@ function renderBlackoutList(){
   future.sort((a,b)=>a.date.localeCompare(b.date));
   el.innerHTML=future.map(function(b){
     return '<div class="ov-item"><span class="ov-date">'+fmtDate(b.date)+'</span>'
-      +(b.reason?'<span style="font-size:12px;color:var(--text-muted);flex:1">'+esc(b.reason)+'</span>':'<span style="flex:1"></span>')
+      +(b.reason?'<span style="font-size:12px;color:var(--text-muted);flex:1">'+esc(b.reason)+'</span>':'<span class="flex-1"></span>')
       +'<button class="icon-btn-xs" onclick="rmBlackoutDate(\''+esc(b.date)+'\')" style="margin-left:auto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
   }).join('');
 }
@@ -9560,7 +9560,7 @@ function openContactModal(id){
         }
       }
       return '<div class="form-group" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-        +'<label style="margin-bottom:6px">SMS Consent (A2P Compliance)</label>'
+        +'<label class="mb-6">SMS Consent (A2P Compliance)</label>'
         +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">'
         +'Toggling here records this as a manual consent capture. Use only when the patient has given consent in person or by phone.'
         +'</div>'
@@ -9783,7 +9783,7 @@ function svcSsFilter(inputId, hiddenId, ddId, v){
       var priceDisplay = _svcPriceDisplay(s);
       if (priceDisplay) meta.push(priceDisplay);
       return '<div class="ss-opt" onclick="svcSsSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\''+s.id+'\',\''+nameEsc+'\')">'
-        + '<div style="font-weight:600">' + esc(s.name) + '</div>'
+        + '<div class="fw-600">' + esc(s.name) + '</div>'
         + (meta.length ? '<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">' + meta.join(' \u00b7 ') + '</div>' : '')
         + '</div>';
     }).join('');
@@ -9880,7 +9880,7 @@ function renderApptAddonsSection(){
     var price = parseFloat(a.price) || 0;
     html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;font-size:12px;border-radius:4px">'
       + '<input type="checkbox"' + checked + ' onchange="toggleApptAddon(\'' + a.id + '\', this.checked)">'
-      + '<div style="flex:1">'
+      + '<div class="flex-1">'
       + '<div style="font-weight:600;color:var(--main-text)">' + esc(a.name) + '</div>'
       + (a.description ? '<div style="font-size:11px;color:var(--main-text-muted);margin-top:1px">' + esc(a.description) + '</div>' : '')
       + '</div>'
@@ -10127,7 +10127,7 @@ function _apptGroupClientFilter(v){
       var html = matches.map(function(c){
         var meta = c.email || c.company || '';
         return '<div class="ss-opt" onclick="_apptGroupClientPick(\''+c.id+'\')">'
-          + '<div style="font-weight:600">' + esc(c.name||'Unknown') + '</div>'
+          + '<div class="fw-600">' + esc(c.name||'Unknown') + '</div>'
           + (meta ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(meta) + '</div>' : '')
           + '</div>';
       }).join('');
@@ -10179,7 +10179,7 @@ function _apptGroupStaffFilter(v){
       return '<div class="ss-opt" onclick="_apptGroupStaffPick(\''+u.id+'\')">'
         + '<div style="display:flex;align-items:center;gap:8px">'
         + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+col+'"></span>'
-        + '<span style="font-weight:600">' + esc(nm) + '</span>'
+        + '<span class="fw-600">' + esc(nm) + '</span>'
         + '</div></div>';
     }).join('');
   }
@@ -11336,7 +11336,7 @@ function _renderPaymentForm(ctx){
       +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:12px">Record Payment</div>'
 
       // Method chips
-      +'<div style="margin-bottom:14px">'
+      +'<div class="mb-14">'
       +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">METHOD</label>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
       +'<button type="button" id="apt-pm-cash" class="chip active" onclick="apptSetPM(\'cash\')">Cash</button>'
@@ -11376,7 +11376,7 @@ function _renderPaymentForm(ctx){
       +'<div id="apt-pay-gc-fields" style="display:none;margin-bottom:12px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:12px">'
       +'<label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">GIFT CARD CODE</label>'
       +'<div id="apt-pay-gc-entry" style="display:flex;gap:6px">'
-      +'<input id="apt-pay-gc-code" type="text" placeholder="Enter code" style="flex:1">'
+      +'<input id="apt-pay-gc-code" type="text" placeholder="Enter code" class="flex-1">'
       +'<button type="button" class="btn btn-ghost btn-sm" onclick="apptApplyGC()">Apply</button>'
       +'</div>'
       +'<div id="apt-pay-gc-error" style="color:var(--danger-light);font-size:11px;margin-top:6px;display:none"></div>'
@@ -12536,7 +12536,7 @@ function renderApptConflictPanel(){
     const checked=apptOverrides[c.type]?'checked':'';
     return '<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;cursor:pointer;border-top:1px solid rgba(245,158,11,.2)">'
       +'<input type="checkbox" '+checked+' onchange="toggleApptOverride(\''+c.type+'\', this.checked)" style="margin-top:3px;flex-shrink:0;cursor:pointer">'
-      +'<span style="flex:1"><strong>'+c.label+':</strong> '+c.message+'</span>'
+      +'<span class="flex-1"><strong>'+c.label+':</strong> '+c.message+'</span>'
       +'</label>';
   }).join('');
 
@@ -13469,7 +13469,7 @@ function buildSchedSection(standalone){
       +_timeInputHTML('sle-'+dk,lE,!(ds.on&&hasL))
       +'</div></div>';
   }).join('');
-  const ov='<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:7px">Date Overrides</div><div id="ov-list">'+renderOvList()+'</div>'
+  const ov='<div class="mt-12"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:7px">Date Overrides</div><div id="ov-list">'+renderOvList()+'</div>'
     +'<div style="display:flex;gap:7px;align-items:flex-end;margin-top:8px">'
     +'<div class="form-group" style="margin:0;flex:1 1 0;min-width:120px">'
       +'<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:block;margin-bottom:3px">Date</label>'
@@ -14351,7 +14351,7 @@ function showIdleWarning(){
   div.id = 'idle-warn-modal';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
   div.innerHTML = '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;max-width:440px;width:90%;text-align:center">'
-    +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:14px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+    +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" xmlns="http://www.w3.org/2000/svg" class="mb-14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
     +'<div style="font-family:Exo 2,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;color:var(--text)">Are you still there?</div>'
     +'<div style="font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">For your security, you will be signed out in <span id="idle-countdown" style="color:#f59e0b;font-weight:700">60</span> seconds due to inactivity.</div>'
     +'<button class="btn btn-primary" onclick="dismissIdleWarning()" style="width:100%">Stay signed in</button>'
@@ -16157,7 +16157,7 @@ function renderEmailTemplatesSection(){
       var saved=_tplCache[t.type];
       var isCustom=!!saved&&!saved.is_default;
       return'<div class="tpl-row'+((_tplActive===t.type)?' active':'')+'" onclick="openTplEditor(\''+t.type+'\')">'
-        +'<div style="flex:1"><div class="tpl-row-name">'+t.name+(isCustom?'<span style="margin-left:8px;font-size:10px;font-weight:700;background:#6b21ea22;color:var(--purple);border-radius:3px;padding:1px 6px">Custom</span>':'')+'</div>'
+        +'<div class="flex-1"><div class="tpl-row-name">'+t.name+(isCustom?'<span style="margin-left:8px;font-size:10px;font-weight:700;background:#6b21ea22;color:var(--purple);border-radius:3px;padding:1px 6px">Custom</span>':'')+'</div>'
         +'<div class="tpl-row-sub">'+t.desc+'</div></div>'
         +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="9 18 15 12 9 6"/></svg>'
         +'</div>';
@@ -17380,11 +17380,11 @@ function renderNotifs(){
   let html='';
   if(unread.length){
     html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;border-bottom:1px solid var(--border)"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.7)">Unread ('+unread.length+')</span><button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 9px;color:rgba(255,255,255,.85);border-color:rgba(255,255,255,.25)" onclick="markAllRead()">Mark all read</button></div>';
-    html+=unread.map(n=>'<div class="notif-item" onclick="handleNotifClick(\''+n.kind+'\',\''+n.id+'\')"><div class="notif-icon '+n.cls+'">'+n.icon+'</div><div style="flex:1"><div class="notif-text">'+esc(n.text)+'</div><div class="notif-sub">'+n.sub+'</div></div><button class="icon-btn-xs" onclick="markNotifRead(\''+n.key+'\',event)" title="Mark read" style="flex-shrink:0"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg></button></div>').join('');
+    html+=unread.map(n=>'<div class="notif-item" onclick="handleNotifClick(\''+n.kind+'\',\''+n.id+'\')"><div class="notif-icon '+n.cls+'">'+n.icon+'</div><div class="flex-1"><div class="notif-text">'+esc(n.text)+'</div><div class="notif-sub">'+n.sub+'</div></div><button class="icon-btn-xs" onclick="markNotifRead(\''+n.key+'\',event)" title="Mark read" style="flex-shrink:0"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><polyline points="20 6 9 17 4 12"/></svg></button></div>').join('');
   }
   if(read.length){
     html+='<div style="padding:7px 14px;border-bottom:1px solid var(--border);border-top:1px solid var(--border)"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim)">Read ('+read.length+')</span></div>';
-    html+=read.map(n=>'<div class="notif-item notif-read-item"><div class="notif-icon '+n.cls+'" style="opacity:.4">'+n.icon+'</div><div style="flex:1"><div class="notif-text">'+esc(n.text)+'</div><div class="notif-sub">'+n.sub+'</div></div><button class="icon-btn-xs" onclick="markNotifUnread(\''+n.key+'\',event)" title="Mark unread" style="flex-shrink:0;opacity:.5"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></button></div>').join('');
+    html+=read.map(n=>'<div class="notif-item notif-read-item"><div class="notif-icon '+n.cls+'" style="opacity:.4">'+n.icon+'</div><div class="flex-1"><div class="notif-text">'+esc(n.text)+'</div><div class="notif-sub">'+n.sub+'</div></div><button class="icon-btn-xs" onclick="markNotifUnread(\''+n.key+'\',event)" title="Mark unread" style="flex-shrink:0;opacity:.5"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></button></div>').join('');
   }
   el.innerHTML=html;
 }
@@ -17513,7 +17513,7 @@ function renderProducts(){
     return'<div class="prod-card">'
       +'<div class="prod-head"><div><div class="prod-name">'+esc(p.name)+'</div>'+(p.category?'<div class="prod-cat-badge">'+esc(p.category)+'</div>':'')+'</div><div class="prod-status-dot'+(p.active?' on':'')+'"></div></div>'
       +(p.description?'<div class="prod-desc-text">'+esc(p.description.slice(0,90))+(p.description.length>90?'\u2026':'')+'</div>':'')
-      +(p.trackInventory?'<div style="margin-bottom:6px">'+invBadge(p)+(p.sku?'<span style="font-size:10px;color:var(--text-muted);margin-left:6px">SKU: '+esc(p.sku)+'</span>':'')+'</div>':'')
+      +(p.trackInventory?'<div class="mb-6">'+invBadge(p)+(p.sku?'<span style="font-size:10px;color:var(--text-muted);margin-left:6px">SKU: '+esc(p.sku)+'</span>':'')+'</div>':'')
       +pricingHtml
       +'<div class="prod-foot"><button class="btn btn-purple btn-sm" onclick="openProductModal(\''+p.id+'\')">Edit</button><button class="btn btn-danger btn-sm" onclick="delProduct(\''+p.id+'\')">Delete</button></div>'
       +'</div>';
@@ -17535,7 +17535,7 @@ function openProductModal(id){
     +'<div class="form-group"><label>Category</label><select id="prd-cat" class="filter-sel" style="width:100%;height:42px"><option value="">No category</option>'+catOpts+'</select><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Add or remove categories from the Manage Categories section in Manage Products.</div></div>'
     +'<div class="form-group"><label>Description</label><textarea id="prd-desc" rows="3">'+esc(p&&p.description||'')+'</textarea></div>'
     +'<div class="divider"></div>'
-    +'<div class="inv-track-row"><div class="bh-toggle'+(p&&p.trackInventory?' on':'')+'" id="prd-inv-toggle" onclick="toggleInvTrack()" style="flex-shrink:0"></div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--text)">Track Inventory</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Enable for physical products to monitor stock levels</div></div></div>'
+    +'<div class="inv-track-row"><div class="bh-toggle'+(p&&p.trackInventory?' on':'')+'" id="prd-inv-toggle" onclick="toggleInvTrack()" style="flex-shrink:0"></div><div class="flex-1"><div style="font-size:13px;font-weight:600;color:var(--text)">Track Inventory</div><div style="font-size:11px;color:var(--text-muted);margin-top:1px">Enable for physical products to monitor stock levels</div></div></div>'
     +'<div id="prd-inv-fields" style="'+(p&&p.trackInventory?'':'display:none')+'">'
     +'<div class="form-row-3"><div class="form-group"><label>SKU</label><input id="prd-sku" type="text" value="'+esc(p&&p.sku||'')+'" placeholder="ABC-001"></div><div class="form-group"><label>Qty on Hand</label><input id="prd-stock" type="number" value="'+(p&&p.stockQty||0)+'" min="0" step="1"></div><div class="form-group"><label>Low Stock Alert</label><input id="prd-lowstock" type="number" value="'+(p&&p.lowStockThreshold||5)+'" min="0" step="1"></div></div>'
     +'</div>'
@@ -18338,8 +18338,8 @@ function _renderSubDetailDetails(s,c){
     +'</div>'
     +'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Card on File</div><div style="font-size:12px">'+(card?(esc(card.brand||'Card')+' \u00b7\u00b7\u00b7\u00b7 '+esc(card.last4||'')):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
-    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Owner</div><div style="font-size:12px">'+(owner?esc(owner.name||owner.username):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Card on File</div><div class="fs-12">'+(card?(esc(card.brand||'Card')+' \u00b7\u00b7\u00b7\u00b7 '+esc(card.last4||'')):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
+    +'<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">Owner</div><div class="fs-12">'+(owner?esc(owner.name||owner.username):'<span style="color:var(--text-dim)">None</span>')+'</div></div>'
     +'</div>'
     +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px">Items</div>'
     +(s.items&&s.items.length?s.items.map(function(i){
@@ -18365,7 +18365,7 @@ function _renderSubDetailDetails(s,c){
     +(breakdown.taxEnabled&&breakdown.tax>0?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text-muted)"><span>'+esc(breakdown.taxLabel)+' ('+breakdown.taxRate+'%)</span><span>'+fmt$(breakdown.tax)+'</span></div>':'')
     +'<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border)"><span>Total per cycle</span><span style="font-family:Exo 2,sans-serif;color:var(--orange)">'+fmt$(breakdown.total)+'</span></div>'
     +'</div>'
-    +(s.notes?'<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(s.notes)+'</div></div>':'')
+    +(s.notes?'<div class="mt-10"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">Notes</div><div style="font-size:13px;color:var(--text-muted)">'+esc(s.notes)+'</div></div>':'')
     +'</div>';
   return html;
 }
@@ -18585,13 +18585,13 @@ function _renderCardPickerInner(c){
     // processing (or click Add card). Without the select, the contact cannot
     // be enrolled at all when no card exists, which blocks legitimate manual
     // billing workflows.
-    return '<div style="display:flex;align-items:center;gap:6px"><select id="sf-card" style="flex:1" onchange="_subEditCardId=this.value"><option value="" selected>No card (manual processing)</option></select>'+addBtn+'</div>'
+    return '<div style="display:flex;align-items:center;gap:6px"><select id="sf-card" class="flex-1" onchange="_subEditCardId=this.value"><option value="" selected>No card (manual processing)</option></select>'+addBtn+'</div>'
       +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px">No card on file. Add one to enable automatic billing, or leave as manual processing.</div>';
   }
   const cardOpts='<option value="">No card (manual processing)</option>'+cards.map(function(cd){
     return '<option value="'+cd.id+'"'+(sel===cd.id?' selected':'')+'>'+esc(cd.brand||'Card')+' ending in '+esc(cd.last4||'****')+(cd.expMonth?' ('+cd.expMonth+'/'+cd.expYear+')':'')+'</option>';
   }).join('');
-  return '<div style="display:flex;align-items:center;gap:6px"><select id="sf-card" style="flex:1" onchange="_subEditCardId=this.value">'+cardOpts+'</select>'+addBtn+'</div>';
+  return '<div style="display:flex;align-items:center;gap:6px"><select id="sf-card" class="flex-1" onchange="_subEditCardId=this.value">'+cardOpts+'</select>'+addBtn+'</div>';
 }
 
 function _renderSubModalBody(s){
@@ -18670,10 +18670,10 @@ function _renderItemRow(it,idx){
   // Price field
   let priceSection;
   if(isCatalog){
-    priceSection='<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price</div>'
+    priceSection='<div class="flex-1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price</div>'
       +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--orange);padding:7px 0">'+(it.price?fmt$(it.price):'-')+'</div></div>';
   }else{
-    priceSection='<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price</div>'
+    priceSection='<div class="flex-1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px">Price</div>'
       +'<input type="number" id="itm-price-'+idx+'" min="0.01" step="0.01" value="'+(it.price||'')+'" placeholder="0.00" style="'+inpStyle+'" oninput="_subEditItems['+idx+'].price=parseFloat(this.value)||0;_rerenderSummary()"></div>';
   }
 
@@ -19298,7 +19298,7 @@ function _renderSubPlansModalBody(){
     +'</div>'
     +statusChips
     +(cats.length||hasUncat?catChips:'')
-    +'<div style="margin-top:14px">';
+    +'<div class="mt-14">';
 
   if(!plans.length){
     body+='<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px">No plans yet. Click <strong>+ New Plan</strong> to create your first one.</div>';
@@ -19350,7 +19350,7 @@ function _renderPlanEditModalBody(p){
 
   const body='<div class="form-row">'
     +'<div class="form-group"><label>Plan Name *</label><input id="pe-name" type="text" value="'+esc(p&&p.name||'')+'" placeholder="e.g. SEO Retainer"></div>'
-    +'<div class="form-group"><label>Category</label><div style="display:flex;gap:6px"><select id="pe-cat" style="flex:1">'+catOpts+'</select>'+(canManagePlans()?'<button type="button" class="btn btn-ghost btn-sm" onclick="openPlanCategoriesModal(true)" title="Manage categories">+</button>':'')+'</div></div>'
+    +'<div class="form-group"><label>Category</label><div style="display:flex;gap:6px"><select id="pe-cat" class="flex-1">'+catOpts+'</select>'+(canManagePlans()?'<button type="button" class="btn btn-ghost btn-sm" onclick="openPlanCategoriesModal(true)" title="Manage categories">+</button>':'')+'</div></div>'
     +'</div>'
     +'<div class="form-group"><label>Description</label><textarea id="pe-desc" rows="3" placeholder="What does this plan include? Free text shown to staff and on receipts.">'+esc(p&&p.description||'')+'</textarea></div>'
     +'<div class="form-row">'
@@ -19690,7 +19690,7 @@ function renderClassesList(){
   if(subEl)subEl.textContent=classes.length+' class'+(classes.length!==1?'es':'');
 
   if(classes.length===0){
-    body.innerHTML='<div class="empty-state" style="padding:40px;text-align:center;color:var(--main-text-muted)"><div style="font-size:14px;font-weight:600;margin-bottom:4px">No classes yet.</div><div style="font-size:12px">Click New Class to create one.</div></div>';
+    body.innerHTML='<div class="empty-state" style="padding:40px;text-align:center;color:var(--main-text-muted)"><div style="font-size:14px;font-weight:600;margin-bottom:4px">No classes yet.</div><div class="fs-12">Click New Class to create one.</div></div>';
     return;
   }
 
@@ -19787,7 +19787,7 @@ function openClassDetail(serviceId){
       +'</div>';
   }).join(''):'<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">No upcoming sessions.</div>';
 
-  var hdr='<div style="margin-bottom:16px">'
+  var hdr='<div class="mb-16">'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
     +'<div style="font-size:13px;color:var(--text-muted)">'+esc(instrName)+'</div>'
     +'<div style="font-size:12px;color:var(--text);background:var(--purple-dim);border-radius:var(--radius);padding:4px 10px">'+esc(summary)+'</div>'
@@ -20805,7 +20805,7 @@ function renderSvcAvailabilityFields(s){
 
   return '<details style="margin-top:14px;border:1px solid var(--border);border-radius:var(--radius);padding:12px"'+(enabled?' open':'')+'>'
     + '<summary style="cursor:pointer;font-weight:600;color:var(--text)">Custom availability</summary>'
-    + '<div style="margin-top:12px">'
+    + '<div class="mt-12">'
     +   '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">'
     +     '<input type="checkbox" id="svc-av-enabled" onchange="_toggleSvcAvMaster(this.checked)"'+(enabled?' checked':'')+'>'
     +     '<span>Use custom hours for this service (otherwise uses business hours)</span>'
@@ -20920,7 +20920,7 @@ function renderServiceIndividualFields(s){
     +'<div class="svc-ms-display" onclick="svcMsOpen(event)">'
     +'<div class="svc-ms-chips" id="svc-ms-chips-area">'
     +(_selStaff.length?_selStaff.map(function(uid){var u=users.find(function(x){return x.id===uid;});var col=u?u.color||'#6b21ea':'#6b21ea';var nm=u?esc(u.name||u.username):'?';return'<span class="svc-ms-chip" style="background:'+col+';color:'+chipTextColor(col)+'">'+nm+'<span onclick="event.stopPropagation();svcMsRemove(\''+uid+'\')" style="cursor:pointer;margin-left:3px;opacity:.75">x</span></span>';}).join(''):'<span style="color:var(--text-muted);font-size:12px">Select staff...</span>')
-    +'</div><span class="svc-ms-arrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg></span></div>'
+    +'</div><span class="svc-ms-arrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="flex-shrink-0"><polyline points="6 9 12 15 18 9"/></svg></span></div>'
     +'<div class="svc-ms-dd hidden" id="svc-ms-dd">'
     +'<input type="text" class="svc-ms-search" placeholder="Search staff..." oninput="svcMsFilter(this)">'
     +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
@@ -21944,7 +21944,7 @@ function openRosterModal(sessionId){
     +'<div style="margin-left:auto;font-size:12px;font-weight:700;color:'+(enrolled>=cap?'#ef4444':enrolled>=cap*.8?'#fbbf24':'#4ade80')+'">'+enrolled+'/'+cap+' enrolled</div>'
     +'</div>'
     +(enrolled<cap?'<div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-start">'
-      +'<div style="flex:1">'+ssHTML('roster-add-cw','roster-add-ci','roster-add-cv','roster-add-dd','Search contact...','')+'</div>'
+      +'<div class="flex-1">'+ssHTML('roster-add-cw','roster-add-ci','roster-add-cv','roster-add-dd','Search contact...','')+'</div>'
       +'<button class="btn btn-primary btn-sm" onclick="svcEnroll(\''+sessionId+'\',document.getElementById(\'roster-add-cv\').value)">Enroll</button>'
       +'</div>':'')
     +(rows?'<div style="max-height:46vh;overflow-y:auto">'+rows+'</div>':'<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">No participants yet.</div>')
@@ -22075,7 +22075,7 @@ function renderApptList(){
         +'<button class="icon-btn-xs" title="Delete" onclick="event.stopPropagation();delAppt(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div>'
         +'</div>';
     });
-    html+='<div style="margin-bottom:16px"></div>';
+    html+='<div class="mb-16"></div>';
   });
   el.innerHTML=html;
 }
@@ -23138,7 +23138,7 @@ function _convSmsBlockerBanner(){
   var reason = _convSmsBlockerReason();
   if(!reason) return '';
   return '<div style="background:rgba(247,184,1,0.10);border:1px solid rgba(247,184,1,0.35);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;padding:10px 14px;font-size:12px;color:#a16207;display:flex;align-items:center;gap:8px">' +
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" xmlns="http://www.w3.org/2000/svg" class="flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
     '<span>' + esc(reason) + '</span>' +
   '</div>';
 }
@@ -23808,7 +23808,7 @@ function _renderAutoTriggerConfig(){
   if (_autoTriggerNeedsDays(t)) {
     var field = _autoTriggerDaysField(t);
     var label = _autoTriggerDaysLabel(t);
-    html += '<div style="margin-top:12px">'
+    html += '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(label) + '</label>'
       + '<input type="number" min="0" value="' + esc(cfg[field] != null ? cfg[field] : '') + '" onchange="_autoSetTriggerCfg(\'' + field + '\', this.value)" class="msp-input" style="width:120px">'
       + '</div>';
@@ -23818,13 +23818,13 @@ function _renderAutoTriggerConfig(){
     var opts = '<option value="">Any service</option>' + services.map(function(s){
       return '<option value="' + esc(s.id) + '"' + (cfg.service_id === s.id ? ' selected' : '') + '>' + esc(s.name || s.title || 'Untitled') + '</option>';
     }).join('');
-    html += '<div style="margin-top:12px">'
+    html += '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Filter by service (optional)</label>'
       + '<select onchange="_autoSetTriggerCfg(\'service_id\', this.value)" class="msp-input" style="width:100%">' + opts + '</select>'
       + '</div>';
   }
   if (t === 'appointment_booked') {
-    html += '<div style="margin-top:12px">'
+    html += '<div class="mt-12">'
       + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">'
       + '<input type="checkbox" ' + (cfg.only_first_booking ? 'checked' : '') + ' onchange="_autoSetTriggerCfg(\'only_first_booking\', this.checked)">'
       + 'Only fire on first-ever booking for this contact</label></div>';
@@ -23834,14 +23834,14 @@ function _renderAutoTriggerConfig(){
     var fromOpts = statusOpts.map(function(s){ return '<option value="' + esc(s) + '"' + (cfg.from_status === s ? ' selected' : '') + '>' + (s ? esc(s) : 'Any') + '</option>'; }).join('');
     var toOpts = statusOpts.map(function(s){ return '<option value="' + esc(s) + '"' + (cfg.to_status === s ? ' selected' : '') + '>' + (s ? esc(s) : 'Any') + '</option>'; }).join('');
     html += '<div style="margin-top:12px;display:flex;gap:12px">'
-      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">From status</label>'
+      + '<div class="flex-1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">From status</label>'
       + '<select onchange="_autoSetTriggerCfg(\'from_status\', this.value)" class="msp-input" style="width:100%">' + fromOpts + '</select></div>'
-      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">To status</label>'
+      + '<div class="flex-1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">To status</label>'
       + '<select onchange="_autoSetTriggerCfg(\'to_status\', this.value)" class="msp-input" style="width:100%">' + toOpts + '</select></div>'
       + '</div>';
   }
   if (t === 'payment_received') {
-    html += '<div style="margin-top:12px">'
+    html += '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Minimum amount (optional)</label>'
       + '<input type="number" min="0" step="0.01" value="' + esc(cfg.min_amount != null ? cfg.min_amount : '') + '" onchange="_autoSetTriggerCfg(\'min_amount\', this.value === \'\' ? null : parseFloat(this.value))" class="msp-input" style="width:140px" placeholder="$0.00">'
       + '</div>';
@@ -23851,13 +23851,13 @@ function _renderAutoTriggerConfig(){
     var fopts = '<option value="">Any form</option>' + forms.map(function(f){
       return '<option value="' + esc(f.id) + '"' + (cfg.form_id === f.id ? ' selected' : '') + '>' + esc(f.name || 'Untitled form') + '</option>';
     }).join('');
-    html += '<div style="margin-top:12px">'
+    html += '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Filter by form (optional)</label>'
       + '<select onchange="_autoSetTriggerCfg(\'form_id\', this.value)" class="msp-input" style="width:100%">' + fopts + '</select>'
       + '</div>';
   }
   if (t === 'contact_tagged') {
-    html += '<div style="margin-top:12px">'
+    html += '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Filter by tag (optional)</label>'
       + '<input type="text" value="' + esc(cfg.tag || '') + '" oninput="_autoSetTriggerCfg(\'tag\', this.value)" class="msp-input" style="width:100%" placeholder="VIP, Lead, New patient...">'
       + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Leave blank to fire on any tag added</div>'
@@ -23868,7 +23868,7 @@ function _renderAutoTriggerConfig(){
     var copts = '<option value="">Any class</option>' + classSvcs.map(function(s){
       return '<option value="' + esc(s.id) + '"' + (cfg.class_service_id === s.id ? ' selected' : '') + '>' + esc(s.name || 'Untitled class') + '</option>';
     }).join('');
-    html += '<div style="margin-top:12px">'
+    html += '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Filter by class (optional)</label>'
       + '<select onchange="_autoSetTriggerCfg(\'class_service_id\', this.value)" class="msp-input" style="width:100%">' + copts + '</select>'
       + '</div>';
@@ -23905,11 +23905,11 @@ function _renderAutoActionConfig(){
     var chips = vars.map(function(v){
       return '<button type="button" onclick="_autoInsertVar(\'auto-body\',\'' + v + '\')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px">{{' + esc(v) + '}}</button>';
     }).join(' ');
-    return '<div style="margin-top:12px">'
+    return '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Subject</label>'
       + '<input type="text" id="auto-subject" value="' + esc(cfg.subject || '') + '" oninput="_autoEdit.action_config.subject = this.value" class="msp-input" style="width:100%" placeholder="e.g. Happy Birthday {{contact.first_name}}!">'
       + '</div>'
-      + '<div style="margin-top:12px">'
+      + '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Body (HTML supported)</label>'
       + '<div style="margin-bottom:6px;padding:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:4px">'
       + '<div style="font-size:11px;color:var(--text-muted);margin-right:6px;align-self:center;font-weight:600">Insert variable:</div>' + chips
@@ -23922,7 +23922,7 @@ function _renderAutoActionConfig(){
     var chips2 = vars2.map(function(v){
       return '<button type="button" onclick="_autoInsertVar(\'auto-sms-body\',\'' + v + '\')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px">{{' + esc(v) + '}}</button>';
     }).join(' ');
-    return '<div style="margin-top:12px">'
+    return '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">SMS Body</label>'
       + '<div style="margin-bottom:6px;padding:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:4px">'
       + '<div style="font-size:11px;color:var(--text-muted);margin-right:6px;align-self:center;font-weight:600">Insert variable:</div>' + chips2
@@ -23933,7 +23933,7 @@ function _renderAutoActionConfig(){
   }
   if (a === 'add_tag' || a === 'remove_tag') {
     var labelTag = (a === 'add_tag') ? 'Tag to add' : 'Tag to remove';
-    return '<div style="margin-top:12px">'
+    return '<div class="mt-12">'
       + '<label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + labelTag + '</label>'
       + '<input type="text" value="' + esc(cfg.tag || '') + '" oninput="_autoEdit.action_config.tag = this.value" class="msp-input" style="width:100%" placeholder="VIP, Welcomed, Onboarded...">'
       + '</div>';
@@ -23996,7 +23996,7 @@ function _renderAutoEditor(){
   var idempotencyHTML = idempotencyOpts.map(function(o){
     var checked = (e.idempotency_rule === o.v) ? 'checked' : '';
     return '<label style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid ' + (e.idempotency_rule === o.v ? 'var(--purple)' : 'var(--border)') + ';border-radius:var(--radius);cursor:pointer;margin-bottom:6px;background:' + (e.idempotency_rule === o.v ? 'var(--purple-dim)' : 'transparent') + '">'
-      + '<input type="radio" name="auto-idem" value="' + o.v + '" ' + checked + ' onchange="_autoEdit.idempotency_rule = this.value; _renderAutoEditor()" style="margin-top:2px">'
+      + '<input type="radio" name="auto-idem" value="' + o.v + '" ' + checked + ' onchange="_autoEdit.idempotency_rule = this.value; _renderAutoEditor()" class="mt-2">'
       + '<div><div style="font-size:13px;font-weight:600;color:var(--text)">' + esc(o.label) + '</div>'
       + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + esc(o.help) + '</div></div>'
       + '</label>';
@@ -24049,8 +24049,8 @@ function _renderAutoEditor(){
     + '<div>'
     + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Advanced</div>'
     + '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--text);cursor:pointer">'
-    + '<input type="checkbox" ' + (e.is_transactional ? 'checked' : '') + ' onchange="_autoEdit.is_transactional = this.checked" style="margin-top:2px">'
-    + '<div><div style="font-weight:600">This is a transactional message</div>'
+    + '<input type="checkbox" ' + (e.is_transactional ? 'checked' : '') + ' onchange="_autoEdit.is_transactional = this.checked" class="mt-2">'
+    + '<div><div class="fw-600">This is a transactional message</div>'
     + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Transactional messages bypass marketing consent. Use only for receipts, appointment confirmations, and critical operational messages. NEVER use for promotional content.</div></div>'
     + '</label>'
     + '</div>'
@@ -24060,7 +24060,7 @@ function _renderAutoEditor(){
       + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Test send</div>'
       + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Send a test to a specific contact (bypasses idempotency and consent checks for testing purposes only).</div>'
       + '<div style="display:flex;gap:8px;align-items:flex-end">'
-      + '<div style="flex:1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">Contact ID</label>'
+      + '<div class="flex-1"><label style="display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">Contact ID</label>'
       + '<input type="text" id="auto-test-contact" class="msp-input" style="width:100%" placeholder="Paste contact ID"></div>'
       + '<button class="btn btn-ghost" onclick="_autoTestSend()">Send test</button>'
       + '</div></div>') : '')
@@ -24987,15 +24987,15 @@ function openCardModal(cardId, stageId){
     + '<div id="cm-lead-fields"' + (showRawLead ? '' : ' style="display:none"') + ' style="grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px;border-left:3px solid var(--purple-dim);background:transparent">'
     + '  <div style="grid-column:1 / -1;font-size:11px;color:var(--text-muted);margin-bottom:-2px;letter-spacing:0.3px;text-transform:uppercase;font-weight:600">Or capture a raw lead</div>'
     + '  <div class="form-group" style="margin:0">'
-    + '    <label style="font-size:11px">Name</label>'
+    + '    <label class="fs-11">Name</label>'
     + '    <input id="cm-lead-name" type="text" maxlength="200" value="' + esc(card && card.lead_name || '') + '">'
     + '  </div>'
     + '  <div class="form-group" style="margin:0">'
-    + '    <label style="font-size:11px">Email</label>'
+    + '    <label class="fs-11">Email</label>'
     + '    <input id="cm-lead-email" type="email" maxlength="200" value="' + esc(card && card.lead_email || '') + '">'
     + '  </div>'
     + '  <div class="form-group" style="margin:0;grid-column:1 / -1">'
-    + '    <label style="font-size:11px">Phone</label>'
+    + '    <label class="fs-11">Phone</label>'
     + '    <input id="cm-lead-phone" type="tel" maxlength="40" value="' + esc(card && card.lead_phone || '') + '">'
     + '  </div>'
     + '</div>'
@@ -26099,7 +26099,7 @@ function drawContractsEnvelopesList(){
 
     var archivedBadge = e.archived ? ' <span style="display:inline-block;padding:1px 6px;background:var(--main-border);color:var(--main-text-muted);border-radius:999px;font-size:10px;margin-left:4px">archived</span>' : '';
     html += '<div onclick="openContractEnvelopeDetail(\''+esc(e.id)+'\')" style="display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1fr 1fr;gap:12px;padding:12px 16px;border-top:1px solid var(--main-border);font-size:13px;cursor:pointer;align-items:center;color:var(--main-text)" onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'">';
-    html += '<div><div style="font-weight:600">'+esc(e.recipientName||'—')+archivedBadge+'</div><div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(e.recipientEmail||'')+'</div></div>';
+    html += '<div><div class="fw-600">'+esc(e.recipientName||'—')+archivedBadge+'</div><div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(e.recipientEmail||'')+'</div></div>';
     html += '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e.title||'')+'</div>';
     html += '<div>'+contractStatusBadge(e.status)+'</div>';
     html += '<div style="color:var(--main-text-muted);font-size:12px">'+esc(sent)+'</div>';
@@ -26275,7 +26275,7 @@ function _renderSendContractMatches(matches, truncated){
     var click = disabled ? '' : 'onclick="pickSendContractContact(\''+esc(c.id)+'\')"';
     var hover = disabled ? '' : 'onmouseover="this.style.background=\'var(--main-card-hover)\'" onmouseout="this.style.background=\'transparent\'"';
     html += '<div '+click+' '+hover+' style="'+rowStyle+'">';
-    html += '<div style="font-weight:600">'+esc(name)+'</div>';
+    html += '<div class="fw-600">'+esc(name)+'</div>';
     html += '<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">'+esc(c.email || 'No email')+(c.phone ? ' · '+esc(c.phone) : '')+'</div>';
     if(disabled) html += '<div style="font-size:10px;color:var(--danger);margin-top:2px">Cannot send: no email on file</div>';
     html += '</div>';
@@ -26294,7 +26294,7 @@ function pickSendContractContact(contactId){
   var chip = document.getElementById('sc-contact-picked');
   var name = c.display_name || ((c.first_name||'') + ' ' + (c.last_name||'')).trim() || 'Unnamed';
   chip.innerHTML =
-    '<div><div style="font-weight:600">'+esc(name)+'</div><div style="font-size:11px;color:var(--main-text-muted)">'+esc(c.email||'')+'</div></div>'+
+    '<div><div class="fw-600">'+esc(name)+'</div><div style="font-size:11px;color:var(--main-text-muted)">'+esc(c.email||'')+'</div></div>'+
     '<button onclick="clearSendContractContact()" style="background:none;border:none;color:var(--main-text-muted);font-size:18px;cursor:pointer;padding:0 4px">&times;</button>';
   chip.style.display = 'flex';
 
@@ -26585,13 +26585,13 @@ function drawContractEnvelopeDetail(env){
       '</div>'+
 
       (timeline.length > 0 ?
-        '<div style="margin-bottom:24px">'+
+        '<div class="mb-24">'+
           '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:10px">Timeline</div>'+
           '<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);overflow:hidden">'+
             timeline.map(function(t, i){
               return '<div style="padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--main-text)'+(i > 0 ? ';border-top:1px solid var(--main-border)' : '')+'">'+
                 '<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:var(--purple-dim);color:var(--purple);border-radius:50%;font-size:11px;font-weight:700">'+t.icon+'</span>'+
-                '<span style="flex:1">'+esc(t.label)+'</span>'+
+                '<span class="flex-1">'+esc(t.label)+'</span>'+
                 '<span style="font-size:12px;color:var(--main-text-muted)">'+esc(fmtContractDateTime(t.ts))+'</span>'+
               '</div>';
             }).join('')+
@@ -26600,7 +26600,7 @@ function drawContractEnvelopeDetail(env){
       : '')+
 
       (env.signedAt ?
-        '<div style="margin-bottom:24px">'+
+        '<div class="mb-24">'+
           '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:6px">Signature Evidence</div>'+
           '<div style="background:var(--success-dim);border:1px solid var(--success);border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--main-text)">'+
             '<div><strong>Signed name:</strong> '+esc(env.signedTypedName||'')+'</div>'+
@@ -26863,15 +26863,15 @@ function openContractEditorModal(t){
       '</div>'+
       '<div style="padding:20px 24px;overflow:hidden;flex:1;display:flex;gap:20px;min-height:0">'+
         '<div style="flex:1.2;display:flex;flex-direction:column;overflow-y:auto;min-width:0">'+
-        '<div style="margin-bottom:16px">'+
+        '<div class="mb-16">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Template Name</label>'+
           '<input id="contract-tmpl-name" type="text" placeholder="e.g. Treatment Consent Form" value="'+esc(t.name||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
         '</div>'+
-        '<div style="margin-bottom:16px">'+
+        '<div class="mb-16">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Description <span style="color:var(--main-text-muted);font-weight:400">(internal only)</span></label>'+
           '<input id="contract-tmpl-description" type="text" placeholder="Brief description for admins" value="'+esc(t.description||'')+'" style="width:100%;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:14px">'+
         '</div>'+
-        '<div style="margin-bottom:16px">'+
+        '<div class="mb-16">'+
           '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
             '<label style="font-size:12px;font-weight:600;color:var(--main-text)">Document Body</label>'+
             '<div style="position:relative">'+
@@ -26920,7 +26920,7 @@ function openContractEditorModal(t){
           '<span style="color:var(--main-text-muted);font-size:12px;line-height:1.5">Recipient receives a 6-digit code to enter before viewing the document. Recommended for HIPAA-sensitive consent forms. Most documents do not need this.</span></span>'+
           '</label>'+
         '</div>'+
-        '<div style="margin-bottom:8px">'+
+        '<div class="mb-8">'+
           '<label style="display:block;font-size:12px;font-weight:600;color:var(--main-text);margin-bottom:6px">Agreement statement</label>'+
           '<textarea id="contract-tmpl-agree" placeholder="Shown above the signature field" style="width:100%;min-height:60px;padding:9px 12px;background:var(--main-input);border:1px solid var(--main-input-border);border-radius:var(--radius);color:var(--main-text);font-size:13px;font-family:Lato,sans-serif;resize:vertical">'+esc(t.defaultAgreeText||'')+'</textarea>'+
         '</div>'+
@@ -28283,7 +28283,7 @@ function fbViewSub(id){
     } else {
       display = esc(String(v));
     }
-    body += '<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">'+esc(label)+'</div><div style="font-size:14px">'+display+'</div></div>';
+    body += '<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px">'+esc(label)+'</div><div class="fs-14">'+display+'</div></div>';
   });
 
   body += '</div>';
@@ -29541,7 +29541,7 @@ function renderStaffReporting(){
       +'<td style="color:var(--success-light)">$'+r.tips.toFixed(2)+'</td>'
       +'</tr>';
   });
-  h+='<tr class="rpt-total-row"><td colspan="4" style="font-weight:700">Totals</td><td>$'+totalSales.toFixed(2)+'</td>'+(taxOn?'<td>$'+totalTax.toFixed(2)+'</td>':'')+'<td style="color:var(--success-light)">$'+totalTips.toFixed(2)+'</td></tr>';
+  h+='<tr class="rpt-total-row"><td colspan="4" class="fw-700">Totals</td><td>$'+totalSales.toFixed(2)+'</td>'+(taxOn?'<td>$'+totalTax.toFixed(2)+'</td>':'')+'<td style="color:var(--success-light)">$'+totalTips.toFixed(2)+'</td></tr>';
   h+='</tbody></table></div>';
   el.innerHTML=h;
 }
@@ -29582,7 +29582,7 @@ function _renderSvcWidgetsTab(){
   if(!widgets.length){
     h+='<div style="text-align:center;padding:48px;border:1px dashed var(--main-border);border-radius:8px;color:var(--text-muted)">'
       +'<div style="font-size:13px;font-weight:600;margin-bottom:6px">No widgets yet</div>'
-      +'<div style="font-size:12px">Create your first booking widget to generate an embed code for your website.</div>'
+      +'<div class="fs-12">Create your first booking widget to generate an embed code for your website.</div>'
       +'</div>';
     return h;
   }
@@ -29997,7 +29997,7 @@ function swgAddRender(filter){
       html+='<label class="swg-svc-add-row">'
         +'<input type="checkbox" class="swg-add-chk" value="'+esc(s.id)+'" onchange="_swgUpdateAddFootCount()">'
         +'<span class="dot" style="background:'+esc(col)+'"></span>'
-        +'<span style="flex:1">'+esc(s.name)+'</span>'
+        +'<span class="flex-1">'+esc(s.name)+'</span>'
         +'</label>';
     });
   });
@@ -30100,19 +30100,19 @@ function openWidgetTypePicker(){
     +'<div style="font-size:13px;color:var(--text-muted);text-transform:none;line-height:1.5">Pick the kind of widget. The type is locked once the widget is created.</div>'
     +'<div onclick="closeModal();openNewWidgetOfType(\'service\')" style="cursor:pointer;background:var(--bg-card);border:2px solid var(--main-border);border-radius:8px;padding:14px;display:flex;gap:12px;align-items:flex-start;transition:border-color .15s" onmouseover="this.style.borderColor=\'#a78bfa\'" onmouseout="this.style.borderColor=\'var(--main-border)\'">'
     +'<div style="font-size:24px;line-height:1;flex-shrink:0">📅</div>'
-    +'<div style="flex:1">'
+    +'<div class="flex-1">'
     +'<div style="font-size:14px;font-weight:600;color:var(--text);text-transform:none;margin-bottom:4px">Service Calendar</div>'
     +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.4">Patients pick a service first, then a provider. Best for spas, salons, and clinics offering specific services.</div>'
     +'</div></div>'
     +'<div onclick="closeModal();openNewWidgetOfType(\'appointment\')" style="cursor:pointer;background:var(--bg-card);border:2px solid var(--main-border);border-radius:8px;padding:14px;display:flex;gap:12px;align-items:flex-start;transition:border-color .15s" onmouseover="this.style.borderColor=\'#a78bfa\'" onmouseout="this.style.borderColor=\'var(--main-border)\'">'
     +'<div style="font-size:24px;line-height:1;flex-shrink:0">👤</div>'
-    +'<div style="flex:1">'
+    +'<div class="flex-1">'
     +'<div style="font-size:14px;font-weight:600;color:var(--text);text-transform:none;margin-bottom:4px">Appointment Calendar</div>'
     +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.4">Patients pick a provider first, then an appointment type. Best for consultations, follow-ups, and one-on-one meetings.</div>'
     +'</div></div>'
     +'<div onclick="closeModal();openNewWidgetOfType(\'class\')" style="cursor:pointer;background:var(--bg-card);border:2px solid var(--main-border);border-radius:8px;padding:14px;display:flex;gap:12px;align-items:flex-start;transition:border-color .15s" onmouseover="this.style.borderColor=\'#a78bfa\'" onmouseout="this.style.borderColor=\'var(--main-border)\'">'
     +'<div style="font-size:24px;line-height:1;flex-shrink:0">🧘</div>'
-    +'<div style="flex:1">'
+    +'<div class="flex-1">'
     +'<div style="font-size:14px;font-weight:600;color:var(--text);text-transform:none;margin-bottom:4px">Class Calendar</div>'
     +'<div style="font-size:12px;color:var(--text-muted);text-transform:none;font-weight:400;line-height:1.4">Patients browse upcoming class sessions and register. Best for group fitness, workshops, and recurring sessions.</div>'
     +'</div></div>'
@@ -30424,7 +30424,7 @@ function openAppointmentWidgetModal(w,isNew){
       ?'<div class="svc-ms-wrap" id="swg-staff-ms">'
         +'<div class="svc-ms-display" onclick="swgStaffMsOpen(event)">'
         +'<div class="svc-ms-chips" id="swg-staff-chips">'+initialStaffChips+'</div>'
-        +'<span class="svc-ms-arrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg></span></div>'
+        +'<span class="svc-ms-arrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="flex-shrink-0"><polyline points="6 9 12 15 18 9"/></svg></span></div>'
         +'<div class="svc-ms-dd hidden" id="swg-staff-dd">'
         +'<input type="text" class="svc-ms-search" placeholder="Search providers..." oninput="swgStaffMsFilter(this)">'
         +'<div class="svc-ms-options">'+staffMsOpts+'</div>'
@@ -31414,7 +31414,7 @@ function renderContactAllergiesSection(contactId){
       + detailsHTML
       + '</div>';
   }).join('');
-  return header + '<div style="margin-top:8px">' + items + '</div>';
+  return header + '<div class="mt-8">' + items + '</div>';
 }
 
 function openAllergyModal(contactId, allergyId){
@@ -31561,7 +31561,7 @@ function renderContactWarningsSection(contactId){
       + '</div>'
       + '</div>';
   }).join('');
-  return header + '<div style="margin-top:8px">' + items + '</div>';
+  return header + '<div class="mt-8">' + items + '</div>';
 }
 
 // Add/edit modal
@@ -32310,11 +32310,11 @@ async function chargeCardOnFile(){
   document.getElementById('modal-title').textContent='Confirm Charge';
   document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML=
-    '<div style="margin-bottom:16px">'+
+    '<div class="mb-16">'+
       '<div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Customer</div>'+
       '<div style="font-size:14px;font-weight:600">'+esc(contact.name)+'</div>'+
     '</div>'+
-    '<div style="margin-bottom:16px">'+
+    '<div class="mb-16">'+
       '<div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Card</div>'+
       '<div style="font-size:14px;font-weight:600">'+esc(card.brand||'Card')+' ending in '+esc(card.last4||'****')+'</div>'+
     '</div>'+
@@ -33412,13 +33412,13 @@ function txnRenderTable(){
     return '<tr onclick="txnOpenDetail(\''+t.id+'\')" style="cursor:pointer">'
       +'<td style="font-size:12px;line-height:1.5">'+dtLabel+'</td>'
       +'<td><span style="font-size:12px;font-weight:600;color:'+staffColor+'">'+staffName+'</span></td>'
-      +'<td style="font-size:12px">'+(contactName?esc(contactName):'<span style="color:var(--main-text-muted)">Walk-in</span>')+'</td>'
-      +'<td style="font-size:12px">'+itemLabel+'</td>'
+      +'<td class="fs-12">'+(contactName?esc(contactName):'<span style="color:var(--main-text-muted)">Walk-in</span>')+'</td>'
+      +'<td class="fs-12">'+itemLabel+'</td>'
       +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.subtotal)+'</td>'
       +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(t.afterDiscount)+'</td>'
       +'<td style="text-align:right;font-size:13px">'+(t.taxAmount>0?fmt$(t.taxAmount):'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
       +'<td style="text-align:right;font-size:13px">'+(t.tipAmount>0?fmt$(t.tipAmount):'<span style="color:var(--main-text-muted)">\u2013</span>')+'</td>'
-      +'<td style="font-size:12px">'+methodLabel+'</td>'
+      +'<td class="fs-12">'+methodLabel+'</td>'
       +'<td>'+statusBadge+'</td>'
       +'<td onclick="event.stopPropagation()"><button class="icon-btn-xs" onclick="txnOpenDetail(\''+t.id+'\')" title="View details"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></td>'
       +'</tr>';
@@ -33483,14 +33483,14 @@ function openMarkPaidModal(paymentId){
     +'<p style="margin-top:4px;color:var(--text-muted);font-size:12px">'+esc(p.notes||'Manual processing payment')+'</p>'
     +'</div>'
     +'<div class="form-group" style="margin-top:14px"><label>Collection Method *</label>'
-    +'<select id="mp-method" style="width:100%">'
+    +'<select id="mp-method" class="w-full">'
     +'<option value="cash">Cash</option>'
     +'<option value="check">Check</option>'
     +'<option value="card">Card (manual entry)</option>'
     +'<option value="other">Other</option>'
     +'</select></div>'
     +'<div class="form-group" style="margin-top:10px"><label>Reference (optional)</label>'
-    +'<input id="mp-ref" type="text" placeholder="Check number, card last 4, txn ID..." maxlength="100" style="width:100%"></div>';
+    +'<input id="mp-ref" type="text" placeholder="Check number, card last 4, txn ID..." maxlength="100" class="w-full"></div>';
 
   state.modal = {type:'mark-paid', id: paymentId};
   openModal('Mark Payment Received', body,
@@ -34132,7 +34132,7 @@ function openCouponModal(id){if(!canManageCoupons()){toast('Permission denied.',
     +'<div class="form-group">'
     +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">'
     +'<input type="checkbox" id="cpn-prod-limit-chk" '+(cpn&&cpn.productIds&&cpn.productIds.length?'checked':'')+' onchange="document.getElementById(\'cpn-prod-list\').style.display=this.checked?\'block\':\'none\'" style="accent-color:var(--purple);width:15px;height:15px">'
-    +'<span style="font-size:13px">Limit to selected products</span></label>'
+    +'<span class="fs-13">Limit to selected products</span></label>'
     +'<div id="cpn-prod-list" style="display:'+(cpn&&cpn.productIds&&cpn.productIds.length?'block':'none')+';max-height:180px;overflow-y:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">'
     +(prodOpts||'<div style="font-size:12px;color:var(--text-muted)">No active products. Add products first.</div>')
     +'</div></div>';
@@ -34587,7 +34587,7 @@ function gcOpenSell(prodId){
   var denomBtns=(prod.denominations||[]).map(function(d){
     return '<button class="chip" onclick="gcSellSelDenom('+d+')" id="gc-sell-denom-'+d+'">$'+d+'</button>';
   }).join('');
-  var body='<div style="margin-bottom:14px">'
+  var body='<div class="mb-14">'
     +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Amount</div>'
     +(denomBtns?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="gc-sell-denom-row">'+denomBtns+'</div>':'')
     +'<input id="gc-sell-amt" type="number" min="1" step="0.01" placeholder="Enter amount" oninput="gcSellClearDenoms()" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-family:Lato,sans-serif;font-size:14px;outline:none">'
@@ -35039,9 +35039,9 @@ function gcRenderOrdersTable(){
     var sc=statusColors[g.status]||statusColors.active;
     h+='<tr onclick="gcOpenOrderDetail(\''+g.id+'\')" style="cursor:pointer">'
       +'<td onclick="event.stopPropagation()"><span style="display:inline-flex;align-items:center;gap:6px"><span style="font-family:monospace;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--main-text)">'+esc(g.code)+'</span><button class="icon-btn-xs" onclick="copyGcCode(\''+esc(g.code)+'\',this)" title="Copy code" style="padding:3px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></span></td>'
-      +'<td style="font-size:12px">'+esc(prod?prod.name:'Gift Card')+'</td>'
-      +'<td style="font-size:12px">'+(contact?esc(contact.name):'<span style="color:var(--main-text-muted)">No contact</span>')+'</td>'
-      +'<td style="font-size:12px">'+(issuedBy?esc(issuedBy.name||issuedBy.username):'<span style="color:var(--main-text-muted)">Staff</span>')+'</td>'
+      +'<td class="fs-12">'+esc(prod?prod.name:'Gift Card')+'</td>'
+      +'<td class="fs-12">'+(contact?esc(contact.name):'<span style="color:var(--main-text-muted)">No contact</span>')+'</td>'
+      +'<td class="fs-12">'+(issuedBy?esc(issuedBy.name||issuedBy.username):'<span style="color:var(--main-text-muted)">Staff</span>')+'</td>'
       +'<td style="font-size:12px;color:var(--main-text-muted)">'+fmtDate((g.issuedAt||'').split('T')[0])+'</td>'
       +'<td style="text-align:right;font-size:13px;font-weight:600">'+fmt$(g.originalAmount||0)+'</td>'
       +'<td style="text-align:right;font-size:13px;font-weight:700;color:'+(g.balance>0?'var(--orange)':'var(--main-text-muted)')+'">'+fmt$(g.balance||0)+'</td>'
@@ -35465,11 +35465,11 @@ function spRenderTemplates(){
     var expTxt=t.expiresMonths?t.expiresMonths+' mo':'Never';
     var isActive=t.status!=='inactive';
     h+='<tr>'
-      +'<td style="font-weight:600">'+esc(t.name)+'</td>'
-      +'<td style="font-size:12px">'+esc(sessTxt)+'</td>'
+      +'<td class="fw-600">'+esc(t.name)+'</td>'
+      +'<td class="fs-12">'+esc(sessTxt)+'</td>'
       +'<td style="font-weight:600;color:var(--orange)">'+fmt$(t.price)+'</td>'
       +'<td style="font-size:12px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(svcTxt)+'</td>'
-      +'<td style="font-size:12px">'+expTxt+'</td>'
+      +'<td class="fs-12">'+expTxt+'</td>'
       +'<td><span class="status-badge '+(isActive?'sb-active':'sb-inactive')+'">'+(isActive?'Active':'Inactive')+'</span></td>'
       +'<td style="text-align:right;white-space:nowrap">'
       +(isAdminOrManager()?'<button class="btn btn-ghost btn-sm" onclick="spOpenSell(\''+t.id+'\')">Sell</button> ':'')
@@ -35739,10 +35739,10 @@ function spRenderClientPacksTable(){
     var stCls={active:'sb-active',exhausted:'sb-inactive',expired:'sb-overdue',cancelled:'sb-inactive'}[p.status]||'sb-inactive';
     h+='<tr>'
       +'<td><span style="cursor:pointer;color:var(--purple-light)" onclick="'+(c?'openDrawer(\''+c.id+'\')':'')+'">'+esc(cName)+'</span></td>'
-      +'<td style="font-weight:600">'+esc(pName)+'</td>'
+      +'<td class="fw-600">'+esc(pName)+'</td>'
       +'<td><span style="font-weight:700;color:'+(remaining>0?'var(--orange)':'var(--main-text-muted)')+'">'+remaining+'</span><span style="color:var(--main-text-muted);font-size:12px"> / '+p.sessionsTotal+'</span></td>'
-      +'<td style="font-size:12px">'+fmtDate(p.purchaseDate||p.createdAt)+'</td>'
-      +'<td style="font-size:12px">'+(p.expiresDate?fmtDate(p.expiresDate):'Never')+'</td>'
+      +'<td class="fs-12">'+fmtDate(p.purchaseDate||p.createdAt)+'</td>'
+      +'<td class="fs-12">'+(p.expiresDate?fmtDate(p.expiresDate):'Never')+'</td>'
       +'<td><span class="status-badge '+stCls+'">'+p.status+'</span></td>'
       +'<td style="text-align:right;white-space:nowrap">'
       +(p.status==='active'?'<button class="btn btn-ghost btn-sm" onclick="spUseSession(\''+p.id+'\')">Use Session</button> ':'')
@@ -36547,7 +36547,7 @@ function renderPastDueBanner(pastDue,suspended){
   var fgCol=pdCount>0?'#fca5a5':'#94a3b8';
   el.innerHTML='<div onclick="filterAccountsToPastDue()" style="cursor:'+(pdCount>0?'pointer':'default')+';background:'+bgCol+';border:1px solid '+bdCol+';border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:'+fgCol+';display:flex;align-items:center;gap:10px">'
     +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
-    +'<div style="flex:1">'+msg+'</div>'
+    +'<div class="flex-1">'+msg+'</div>'
     +'</div>';
 }
 
@@ -36569,7 +36569,7 @@ function filterAccountsToPastDue(){
 function renderAgencyPhoneTab(){
   var el=document.getElementById('agency-tab-content');
   if(!el)return;
-  el.innerHTML='<div style="margin-bottom:18px">'
+  el.innerHTML='<div class="mb-18">'
     +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Phone</div>'
     +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">SMS provisioning and campaign approvals</div>'
     +'</div>'
@@ -36584,7 +36584,7 @@ function renderAgencyPhoneTab(){
 function renderAgencyEmailTab(){
   var el=document.getElementById('agency-tab-content');
   if(!el)return;
-  el.innerHTML='<div style="margin-bottom:18px">'
+  el.innerHTML='<div class="mb-18">'
     +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800">Email</div>'
     +'<div style="font-size:13px;color:var(--text-muted);margin-top:3px">Domain verification status and sending insights</div>'
     +'</div>'
@@ -36603,7 +36603,7 @@ var billingState={summary:null,invoicesLoaded:false,invoiceFilter:{status:'',fro
 function renderAgencyBillingTab(){
   var el=document.getElementById('agency-tab-content');
   if(!el)return;
-  el.innerHTML='<div style="margin-bottom:18px">'
+  el.innerHTML='<div class="mb-18">'
     +'<div style="font-family:Exo 2,sans-serif;font-size:22px;font-weight:800;color:var(--main-text)">Subaccount Billing</div>'
     +'<div style="font-size:13px;color:var(--main-text-muted);margin-top:3px">SaaS revenue, recent charges, and plan management for your subaccounts.</div>'
     +'</div>'
@@ -37236,7 +37236,7 @@ async function saveManagePlan(subId){
       '<div style="font-size:14px;color:var(--text);line-height:1.7">'
       +'<p>Upgrading <strong>'+esc(extra.subName||subId)+'</strong> from '
       +PLAN_TIER_LABELS[oldTier]+' to '+PLAN_TIER_LABELS[tier]+'.</p>'
-      +'<p style="margin-top:10px">A prorated charge of approximately <strong style="color:var(--orange)">$'+proratedEst+'</strong> will be applied now for the remaining '+daysLeft+' days of the current period.</p>'
+      +'<p class="mt-10">A prorated charge of approximately <strong style="color:var(--orange)">$'+proratedEst+'</strong> will be applied now for the remaining '+daysLeft+' days of the current period.</p>'
       +(nextDate?'<p style="margin-top:6px;font-size:12px;color:var(--text-muted)">Next full charge on '+nextDate+' at $'+newPrice+(period==='annual'?'/yr':'/mo')+'.</p>':'')
       +'</div>',
       '<button class="btn btn-ghost" onclick="openManagePlanModal(\''+subId+'\',\''+esc(subName||'')+'\')">Go Back</button>'
@@ -37520,7 +37520,7 @@ async function agencyLoadSmsRequests(){
         +'</div>'
         +'<div style="display:flex;flex-direction:column;gap:10px">'+pending.map(function(r){
           return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 12px rgba(107,33,234,.07)">'
-            +'<div style="flex:1">'
+            +'<div class="flex-1">'
             +'<div style="font-weight:700;font-size:14px;margin-bottom:3px;color:var(--main-text)">'+esc(r.subaccount_name||r.subaccount_id)+'</div>'
             +'<div style="font-size:12px;color:var(--main-text-muted)">'+esc(r.legal_business_name)+' &middot; '+esc(r.contact_name)+' &middot; '+esc(r.contact_phone)+'</div>'
             +'</div>'
@@ -37540,7 +37540,7 @@ async function agencyLoadSmsRequests(){
         +'<div style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;margin-bottom:14px;color:var(--main-text)">SMS Numbers</div>'
         +'<div style="display:flex;flex-direction:column;gap:10px">'+provisioned.map(function(s){
           return'<div style="background:var(--main-card);border:1px solid var(--main-border);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 12px rgba(107,33,234,.07)">'
-            +'<div style="flex:1">'
+            +'<div class="flex-1">'
             +'<div style="font-weight:700;font-size:14px;margin-bottom:3px;color:var(--main-text)">'+esc(s.subaccount_id)+'</div>'
             +'<div style="font-size:12px;color:var(--main-text-muted);font-family:monospace">'+esc(s.twilio_number||'No number')+'</div>'
             +'</div>'
@@ -37620,7 +37620,7 @@ function _smsRenderSubmissionModal(r){
       +'</div>';
   };
   var section = function(title, rows){
-    return '<div style="margin-bottom:18px">'
+    return '<div class="mb-18">'
       +'<div style="font-family:Exo 2,sans-serif;font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding-bottom:6px;border-bottom:2px solid var(--purple)">'+title+'</div>'
       + rows
       +'</div>';
@@ -39407,11 +39407,11 @@ function openMediaPreview(fileId) {
   var isImg = mediaIsImage(file.type, file.name);
   var preview = isImg && file.url
     ? '<img src="' + esc(file.url) + '" style="max-width:100%;max-height:60vh;border-radius:var(--radius);display:block;margin:0 auto">'
-    : '<div style="padding:48px 20px;text-align:center;background:var(--main-bg);border-radius:var(--radius);color:var(--main-text-muted)"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="margin:0 auto 12px;display:block"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><div style="font-size:14px">' + esc(mediaFileExt(file.name).toUpperCase() || 'File') + ' file</div></div>';
+    : '<div style="padding:48px 20px;text-align:center;background:var(--main-bg);border-radius:var(--radius);color:var(--main-text-muted)"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" style="margin:0 auto 12px;display:block"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><div class="fs-14">' + esc(mediaFileExt(file.name).toUpperCase() || 'File') + ' file</div></div>';
   var body = preview +
     '<div style="margin-top:14px;font-size:13px;color:var(--main-text-muted)">' +
     '<div><strong style="color:var(--main-text)">' + esc(file.name) + '</strong></div>' +
-    '<div style="margin-top:4px">Folder: ' + esc(file.folder) + ' · ' + mediaFmtSize(file.size) + ' · ' + fmtDateOnly(file.createdAt) + '</div>' +
+    '<div class="mt-4">Folder: ' + esc(file.folder) + ' · ' + mediaFmtSize(file.size) + ' · ' + fmtDateOnly(file.createdAt) + '</div>' +
     '</div>';
   var deleteFooter = canMediaWrite()
     ? '<button class="btn btn-danger" onclick="confirmDeleteMedia(\'' + esc(file.id) + '\')">Delete</button>'
@@ -39761,7 +39761,7 @@ function renderTaxSectionPolicy(){
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:10px">Section Policy</div>'
 
     // Quick-set strip
-    +'<div style="margin-bottom:14px">'
+    +'<div class="mb-14">'
     +'<div style="font-size:11px;color:var(--main-text-muted);margin-bottom:6px">Set all sections at once:</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
     +qsBtn('all','Tax everything')
@@ -40142,7 +40142,7 @@ function _auResultsHTML(){
       var resetBtn = '<button class="btn btn-sm" ' + (noEmail ? 'disabled title="No email on file" ' : '') + 'onclick="_atUserAction(\'send_reset\',\'' + u.id + '\',\'' + nm + '\')">Send Reset</button>';
       var unflagBtn = u.eulaAccepted ? '<button class="btn btn-sm" onclick="_atUserAction(\'unflag\',\'' + u.id + '\',\'' + nm + '\')">Unflag</button>' : '';
       main += '<tr>';
-      main +=   '<td style="font-weight:600">' + esc(u.name) + '</td>';
+      main +=   '<td class="fw-600">' + esc(u.name) + '</td>';
       main +=   '<td style="color:var(--main-text-muted)">' + (esc(u.email) || '<span style="opacity:.5">no email</span>') + '</td>';
       main +=   '<td style="color:var(--main-text-muted)">' + esc(u.subaccountName||u.subaccountSlug) + '</td>';
       main +=   '<td style="color:var(--main-text-muted)">' + esc(roleLabel(u.role)) + '</td>';
@@ -40625,7 +40625,7 @@ function _agencyPlaybookHTML(){
      html:'<p>LitBiz Media designs custom digital and operational systems for healthcare professionals who are underserved by cookie-cutter solutions. By recognizing patterns others miss, we create calm, efficient, and future-ready experiences that feel refreshing to work within. Healthcare professionals do not need more marketing. They need systems that respect how complex their reality actually is.</p>'},
     {id:'mission', title:'Mission and Values',
      html:'<p style="font-weight:700;margin-bottom:6px">Our Mission</p>'
-        + '<p style="margin-bottom:14px">Our mission is to reimagine the digital and operational experience for healthcare professionals by designing marketing systems that honor the complexity of their work. We identify what others overlook, then quietly build solutions that reduce friction, create clarity, and allow care providers to focus on what truly matters.</p>'
+        + '<p class="mb-14">Our mission is to reimagine the digital and operational experience for healthcare professionals by designing marketing systems that honor the complexity of their work. We identify what others overlook, then quietly build solutions that reduce friction, create clarity, and allow care providers to focus on what truly matters.</p>'
         + '<p style="font-weight:700;margin-bottom:6px">Our Values</p>'
         + '<ul><li>Excellence in service</li><li>Complete transparency</li><li>Passion for every project</li><li>Commitment to results</li><li>Integrity in every action</li></ul>'},
     {id:'contacts', title:'Key Contacts',
@@ -41113,7 +41113,7 @@ async function importRunPreview(){
   // Show loading state in the preview area
   var prevWrap=document.getElementById('import-review');
   if(prevWrap){
-    prevWrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--main-text-muted)"><div style="font-size:14px;margin-bottom:8px">Checking for duplicates...</div><div style="font-size:12px">Looking up '+emailsToCheck.length+' email'+(emailsToCheck.length===1?'':'s')+' against existing contacts</div></div>';
+    prevWrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--main-text-muted)"><div style="font-size:14px;margin-bottom:8px">Checking for duplicates...</div><div class="fs-12">Looking up '+emailsToCheck.length+' email'+(emailsToCheck.length===1?'':'s')+' against existing contacts</div></div>';
   }
 
   var emailIndex={};
@@ -41266,7 +41266,7 @@ function _importBanner(state){
       failBtn='<button class="btn btn-ghost" style="margin-left:8px;padding:4px 10px;font-size:12px" onclick="_importDownloadFailures()">Download failed rows</button>';
     }
     el.innerHTML='<div style="display:flex;align-items:center;gap:12px">'
-      +'<div style="flex:1"><strong>Import complete.</strong> '+state.imported+' imported, '
+      +'<div class="flex-1"><strong>Import complete.</strong> '+state.imported+' imported, '
       +state.overwritten+' overwritten, '+state.failed+' failed.</div>'
       +failBtn
       +'<button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="_importBannerDismiss()">Dismiss</button>'
@@ -41275,7 +41275,7 @@ function _importBanner(state){
   }
   var pct=state.total?Math.floor((state.processed/state.total)*100):0;
   el.innerHTML='<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">'
-    +'<div style="flex:1"><strong>Importing contacts.</strong> '
+    +'<div class="flex-1"><strong>Importing contacts.</strong> '
     +state.processed+' of '+state.total+' ('+pct+'%)</div>'
     +'<div style="font-size:11px;color:var(--text-muted)">Keep tab open</div></div>'
     +'<div style="height:6px;background:var(--bg-input);border-radius:3px;overflow:hidden">'
