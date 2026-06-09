@@ -32,7 +32,7 @@ async function handler(req, res) {
       try {
         const { json: cardJson } = await agencySquareCall(
           'GET',
-          '/v2/cards?customer_id=' + customer.id + '&include_disabled=false'
+          '/v2/cards?customer_id=' + customer.id
         );
         const cards = cardJson.cards || [];
         if (cards.length) {

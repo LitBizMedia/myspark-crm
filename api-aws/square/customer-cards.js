@@ -42,7 +42,7 @@ async function handler(req, res) {
   const headers = squareHeaders(creds.access_token);
 
   try {
-    const url = 'https://' + host + '/v2/cards?customer_id=' + encodeURIComponent(customerId) + '&include_disabled=false';
+    const url = 'https://' + host + '/v2/cards?customer_id=' + encodeURIComponent(customerId);
     const r = await fetch(url, { headers: headers });
     const data = await r.json();
     if (!r.ok) {
