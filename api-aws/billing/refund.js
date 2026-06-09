@@ -13,6 +13,7 @@ const { sendError, squareHost, squareHeaders } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
 const { requireAgencyAdmin } = require('./lib/require-subaccount-auth');
 const { wrap } = require('./lib/lambda-adapter');
+const { isValidUuid } = require('./lib/validators');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
@@ -28,6 +29,13 @@ async function handler(req, res) {
     actorUsername: auth.username,
     actorRole:     auth.role
   };
+
+  // Reject malformed invoiceId before it reaches Postgres. A bad UUID throws
+  // 22P02 and surfaces as a 500, while a valid-but-missing ID returns 404;
+  // that status difference is an enumeration signal. Normalize to a clean 400.
+  if (!isValidUuid(invoiceId)) {
+    return sendError(res, 400, 'Invalid invoiceId');
+  }
 
   try {
     // Load invoice
