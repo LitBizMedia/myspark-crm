@@ -4875,11 +4875,12 @@ function confirmIdleNever(){
       + '<button class="btn btn-action" id="idle-never-confirm" disabled onclick="_idleNeverConfirm()">Turn off logout</button>';
   } else {
     body = '<div style="line-height:1.7">'
-      + '<p style="margin:0 0 12px">This account is not flagged as handling patient data, so automatic logout is optional for you.</p>'
-      + '<p style="margin:0">Choosing Never keeps users signed in until they log out manually (or the 30-day session cap). You can turn automatic logout back on anytime.</p>'
+      + '<p style="margin:0 0 12px">Automatic logout protects anything sensitive on an unattended screen: client contact details, card-on-file notes, intake forms, health waivers, appointment history.</p>'
+      + '<p style="margin:0 0 12px">Before you turn it off, ask yourself: does anyone walk past your front desk, or share a device with you? If a screen is left unlocked, automatic logout is what keeps a stranger from seeing your clients\' information.</p>'
+      + '<p style="margin:0">We recommend keeping it on. If you turn it off, sessions stay signed in until manual logout or the 30-day cap. You can turn it back on anytime.</p>'
       + '</div>';
     foot = '<button class="btn btn-ghost" onclick="_idleNeverCancel(' + revertTo + ')">Cancel</button>'
-      + '<button class="btn btn-action" id="idle-never-confirm" onclick="_idleNeverConfirm()">Set to Never</button>';
+      + '<button class="btn btn-action" id="idle-never-confirm" onclick="_idleNeverConfirm()">Turn it off anyway</button>';
   }
   openModal('Turn off automatic logout?', body, foot);
 }
