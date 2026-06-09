@@ -9742,7 +9742,7 @@ function _apptWarningBadgeHTML(a){
   if(warn){
     return '<span title="'+title+'" style="margin-left:4px;font-size:11px;line-height:1;color:var(--warning);font-weight:700">\u26a0</span>';
   }
-  return '<span title="'+title+'" style="margin-left:4px;font-size:9px;line-height:1;color:#3b82f6;font-weight:700">\u25cf</span>';
+  return '<span title="'+title+'" style="margin-left:4px;font-size:9px;line-height:1;color:var(--info);font-weight:700">\u25cf</span>';
 }
 
 // APPOINTMENT MODAL
@@ -17008,7 +17008,7 @@ function _emailRenderStatusBanner(mode, record, graceDays){
 function _emailAuthSection(isLive, records, dnsResults){
   if(!records.length) return '';
   var pill = isLive
-    ? '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,.14);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Live</span>'
+    ? '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,.14);color:var(--success-text);border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Live</span>'
     : '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(107,33,234,.10);color:var(--purple);border:1px solid rgba(107,33,234,.25);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Recommended</span>';
 
   var head='<thead><tr>'
@@ -17037,7 +17037,7 @@ function _emailSection(title, verified, helpText, records, dnsResults){
   if(!records.length) return '';
   var pill='';
   if(verified === true){
-    pill='<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,.14);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Verified</span>';
+    pill='<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,.14);color:var(--success-text);border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Verified</span>';
   } else if(verified === false){
     pill='<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(247,184,1,.12);color:#a16207;border:1px solid rgba(247,184,1,.3);border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Pending</span>';
   }
@@ -17083,7 +17083,7 @@ function _emailRecordRow(rec, dnsResults){
   if(!dns){
     statusPill='<span style="display:inline-block;background:var(--main-bg);color:var(--main-text-muted);border:1px solid var(--main-border);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Not Checked</span>';
   } else if(dns.status==='live'){
-    statusPill='<span style="display:inline-block;background:rgba(52,211,153,.14);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Live</span>';
+    statusPill='<span style="display:inline-block;background:rgba(52,211,153,.14);color:var(--success-text);border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Live</span>';
   } else if(dns.status==='not_found'){
     statusPill='<span style="display:inline-block;background:rgba(247,184,1,.12);color:#a16207;border:1px solid rgba(247,184,1,.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em" title="DNS record not found yet">Pending</span>';
   } else if(dns.status==='mismatch'){
@@ -19972,7 +19972,7 @@ function _svcRow(s){
     :'<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(34,197,94,.15);color:#22c55e;font-weight:600">Service</span>';
   var statusDot=s.active!==false
     ?'<span title="Active" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:8px;vertical-align:middle"></span>'
-    :'<span title="Inactive" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#9ca3af;margin-right:8px;vertical-align:middle"></span>';
+    :'<span title="Inactive" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-placeholder);margin-right:8px;vertical-align:middle"></span>';
 
   return'<div class="svc-list-row" onclick="openServiceDetail(\''+s.id+'\')" '
     +'style="display:grid;grid-template-columns:3fr 90px 1.5fr 1.5fr 1fr 90px;gap:14px;padding:12px 16px;border-bottom:1px solid var(--main-border);cursor:pointer;align-items:center;border-left:3px solid '+col+';transition:background .1s">'
@@ -23017,7 +23017,7 @@ function convRenderThread(opts){
     var sourceLbl = m.source && m.source !== 'manual' ? esc(m.source) : '';
     var statusLbl = m.status && m.status !== 'sent' && m.status !== 'delivered' ? esc(m.status) : '';
     var senderLbl = m.direction === 'outbound' && m.sentByUserName ? esc(m.sentByUserName) : '';
-    var channelLbl = m.channel === 'sms' ? '<span style="display:inline-block;background:rgba(52,211,153,.14);color:#059669;border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-right:4px">SMS</span>' : '';
+    var channelLbl = m.channel === 'sms' ? '<span style="display:inline-block;background:rgba(52,211,153,.14);color:var(--success-text);border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-right:4px">SMS</span>' : '';
     var metaParts = [];
     if(channelLbl) metaParts.push(channelLbl);
     if(sourceLbl) metaParts.push('<span class="conv-msg-source">' + sourceLbl + '</span>');
@@ -25955,7 +25955,7 @@ function refreshContractPreview(){
   var ctx = buildContractSampleContext();
   var rendered = substituteContractTokens(rawHtml, ctx);
   if(!rendered.trim()){
-    previewEl.innerHTML = '<div style="color:#9ca3af;font-style:italic;font-size:13px">Preview will appear here as you type.</div>';
+    previewEl.innerHTML = '<div style="color:var(--text-placeholder);font-style:italic;font-size:13px">Preview will appear here as you type.</div>';
     return;
   }
   previewEl.innerHTML = rendered;
@@ -26197,7 +26197,7 @@ function openSendContractModal(){
             '<div style="font-family:Exo 2,sans-serif;font-size:12px;font-weight:700;color:var(--main-text);letter-spacing:.04em;text-transform:uppercase">Preview</div>'+
             '<div style="font-size:10px;color:var(--main-text-muted)">Real data</div>'+
           '</div>'+
-          '<div id="sc-preview" style="flex:1;overflow-y:auto;padding:24px;background:#fff;color:var(--main-text);font-family:Lato,sans-serif;font-size:13px;line-height:1.6"><div style="color:#9ca3af;font-style:italic">Select a template and recipient to see the preview.</div></div>'+
+          '<div id="sc-preview" style="flex:1;overflow-y:auto;padding:24px;background:#fff;color:var(--main-text);font-family:Lato,sans-serif;font-size:13px;line-height:1.6"><div style="color:var(--text-placeholder);font-style:italic">Select a template and recipient to see the preview.</div></div>'+
         '</div>'+
       '</div>'+
       '<div style="padding:14px 24px;border-top:1px solid var(--main-border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0">'+
@@ -26421,27 +26421,27 @@ function refreshSendContractPreview(){
   var pre = document.getElementById('sc-preview');
   if(!pre) return;
   if(!sendContractState.templateId){
-    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Select a template to see the preview.</div>';
+    pre.innerHTML = '<div style="color:var(--text-placeholder);font-style:italic">Select a template to see the preview.</div>';
     return;
   }
   var tmpl = contractTemplates.find(function(t){ return t.id === sendContractState.templateId; });
   if(!tmpl){
-    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Template not found.</div>';
+    pre.innerHTML = '<div style="color:var(--text-placeholder);font-style:italic">Template not found.</div>';
     return;
   }
   if(!sendContractState.contactId){
-    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Pick a recipient to see the preview with their info.</div>';
+    pre.innerHTML = '<div style="color:var(--text-placeholder);font-style:italic">Pick a recipient to see the preview with their info.</div>';
     return;
   }
   var ctx = buildSendContractRealContext();
   if(!ctx){
-    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Could not build preview.</div>';
+    pre.innerHTML = '<div style="color:var(--text-placeholder);font-style:italic">Could not build preview.</div>';
     return;
   }
   // Reuse the existing substituteContractTokens function (defined in template editor section)
   var html = substituteContractTokens(tmpl.bodyHtml || '', ctx);
   if(!html.trim()){
-    pre.innerHTML = '<div style="color:#9ca3af;font-style:italic">Template body is empty.</div>';
+    pre.innerHTML = '<div style="color:var(--text-placeholder);font-style:italic">Template body is empty.</div>';
     return;
   }
   pre.innerHTML = html;
@@ -26621,7 +26621,7 @@ function drawContractEnvelopeDetail(env){
       '<div>'+
         '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--main-text-muted);margin-bottom:6px">Document</div>'+
         '<div style="background:#fff;border:1px solid var(--main-border);border-radius:var(--radius);padding:20px;color:var(--main-text);font-family:Lato,sans-serif;font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto">'+
-          (env.bodyHtml || '<div style="color:#9ca3af;font-style:italic">No body content</div>')+
+          (env.bodyHtml || '<div style="color:var(--text-placeholder);font-style:italic">No body content</div>')+
         '</div>'+
         '<div style="font-size:11px;color:var(--main-text-muted);margin-top:6px">Agreement text: <span style="font-style:italic">"'+esc(env.agreeText||'')+'"</span></div>'+
       '</div>'+
@@ -30272,7 +30272,7 @@ function openClassWidgetEditor(w,isNew){
   var body='<div style="display:flex;flex-direction:column;gap:14px">'
     // Heads up if no class services exist
     +(classServices.length===0
-      ?'<div style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:6px;padding:10px 12px;font-size:12px;text-transform:none;line-height:1.5">No class services yet. Create a service with type "Class" first, then come back to build the widget.</div>'
+      ?'<div style="background:#fef3c7;color:var(--warning-text);border:1px solid #fde68a;border-radius:6px;padding:10px 12px;font-size:12px;text-transform:none;line-height:1.5">No class services yet. Create a service with type "Class" first, then come back to build the widget.</div>'
       :'')
 
     +'<div class="form-group"><label>Widget Name *</label><input id="swg-name" type="text" value="'+esc(w?w.name:'')+'" placeholder="e.g. Group Yoga Sessions"></div>'
