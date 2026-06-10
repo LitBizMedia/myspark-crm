@@ -36825,7 +36825,7 @@ async function openPlanPricingModal(){
 
   openModal('Plan Pricing & Limits', body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-action" onclick="savePlanPricing()">Save Pricing</button>',
+    +'<button class="btn btn-action" onclick="withBtnLock(this,()=>savePlanPricing())">Save Pricing</button>',
     'modal-lg');
 }
 
@@ -38894,37 +38894,6 @@ async function agencyConfirmDeleteSub(id,expectedSlug){
 // =====================================================
 // AGENCY SETTINGS PANEL
 // =====================================================
-async function savePlanPricing(){
-  var tiers=['starter','professional','business','enterprise'];
-  var valid=true;
-  tiers.forEach(function(t){
-    var m=parseInt(document.getElementById('price-'+t+'-monthly')&&document.getElementById('price-'+t+'-monthly').value)||0;
-    var a=parseInt(document.getElementById('price-'+t+'-annual')&&document.getElementById('price-'+t+'-annual').value)||0;
-    if(m<=0||a<=0){valid=false;}
-    PLAN_PRICES[t]={monthly:m,annual:a};
-  });
-  var hm=parseInt(document.getElementById('price-hipaa-monthly')&&document.getElementById('price-hipaa-monthly').value)||50;
-  var ha=parseInt(document.getElementById('price-hipaa-annual')&&document.getElementById('price-hipaa-annual').value)||500;
-  HIPAA_ADDON_PRICES.monthly=hm;
-  HIPAA_ADDON_PRICES.annual=ha;
-  if(!valid){toast('All prices must be greater than 0.','error');return;}
-  var rows=tiers.map(function(t){
-    return {id:t,tier:t,monthly_cents:PLAN_PRICES[t].monthly*100,annual_cents:PLAN_PRICES[t].annual*100,
-      hipaa_monthly_cents:hm*100,hipaa_annual_cents:ha*100};
-  });
-  try{
-    var r=await fetch(apiUrl('/api/agency/plan-pricing-update'),{
-      method:'POST',
-      credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({rows:rows})
-    });
-    if(!r.ok){var t2=await r.text();toast('Could not save to database: '+t2,'error');return;}
-    toast('Plan pricing updated.','success');
-  }catch(e){toast('Error saving pricing: '+e.message,'error');}
-}
-
-
 // =====================================================
 // HIPAA AUDIT LOG VIEWER (agency-side)
 // =====================================================
