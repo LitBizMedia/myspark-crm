@@ -16,6 +16,7 @@
 const { sendEmail } = require('./mailgun');
 const db = require('./db');
 const { shouldSend } = require('./notifications');
+const { sendPatientSms } = require('./patient-sms');
 
 // Load contact + business name + timezone for a subscription event send.
 // Returns null if the contact has no email (skip silently). Otherwise returns
@@ -172,6 +173,35 @@ function buildContent(eventType, opts) {
   }
 }
 
+// SMS bodies: HIPAA-minimal (no plan name, which could carry meaning), amount
+// via fmt$, business-name prefixed, action-oriented. Footer is the dispatcher's
+// job. trial_ending is intentionally absent: it lives in a separate sender
+// (template subscription-trial-reminder), not this file.
+function buildSmsBody(eventType, opts) {
+  const biz = opts.businessName || 'MySpark+';
+  const amount = fmt$(opts.amount || 0);
+  const nextDate = opts.nextDate ? fmtDate(opts.nextDate, opts.timezone) : '';
+  switch (eventType) {
+    case 'enrollment':
+      return biz + ": you're enrolled in your subscription. Welcome! Details are in your email.";
+    case 'upcoming_charge':
+      return biz + ': a reminder that your subscription payment of ' + amount
+        + (nextDate ? ' is scheduled for ' + nextDate : ' is coming up') + '.';
+    case 'payment_failed':
+      return biz + ": we couldn't process your subscription payment. Please update your payment method to avoid interruption. Give us a call.";
+    case 'suspended':
+      return biz + ': your subscription has been suspended due to a payment issue. Give us a call to sort it out.';
+    case 'paused':
+      return biz + ": your subscription has been paused. We'll let you know when it resumes.";
+    case 'resumed':
+      return biz + ': your subscription has resumed. Thanks for staying with us.';
+    case 'cancelled':
+      return biz + ": your subscription has been cancelled. We're sorry to see you go. Reach out anytime.";
+    default:
+      return null;
+  }
+}
+
 function buildHtml(eventType, opts) {
   const content = buildContent(eventType, opts);
   if (!content) return null;
@@ -217,11 +247,35 @@ async function sendRecurringBillingEmail(eventType, opts) {
   if (!opts || !opts.subaccountId) return { ok: false, error: 'no subaccountId' };
   const typeKey = EVENT_TO_TYPE_KEY[eventType];
   if (!typeKey) return { ok: false, error: 'unknown eventType: ' + eventType };
-  if (!opts.recipientEmail) return { ok: true, skipped: true, reason: 'no recipient email' };
-
-  // Gate via Notifications tab
+  // Gate once, split per channel so email and SMS fire independently.
   const gate = await shouldSend(opts.subaccountId, typeKey, db);
   if (!gate.ok) return { ok: true, skipped: true, reason: gate.reason || 'disabled' };
+  const emailEnabled = !!gate.email_enabled;
+  const smsEnabled = !!gate.sms_enabled;
+
+  // SMS branch: independent of email, fires on the channel flag + a contact.
+  if (smsEnabled && opts.contactId) {
+    try {
+      const smsBody = buildSmsBody(eventType, opts);
+      if (smsBody) {
+        await sendPatientSms({
+          subaccountId: opts.subaccountId,
+          subaccountSlug: opts.subaccountSlug,
+          typeKey: typeKey,
+          contactId: opts.contactId,
+          body: smsBody,
+          source: 'recurring-' + eventType
+        });
+      }
+    } catch (e) {
+      console.warn('recurring SMS failed for contact', opts.contactId, '(' + eventType + '):', e.message);
+    }
+  }
+
+  // Email branch: only when channel on and we have an address.
+  if (!emailEnabled || !opts.recipientEmail) {
+    return { ok: true, skipped: !emailEnabled ? 'email_off' : 'no_email', smsAttempted: smsEnabled && !!opts.contactId };
+  }
 
   const html = buildHtml(eventType, opts);
   if (!html) return { ok: false, error: 'no html for event' };
