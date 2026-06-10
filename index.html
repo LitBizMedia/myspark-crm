@@ -5933,19 +5933,15 @@ function _renderDPaymentsTab(c,cSubs,cPays){
   const tab=state.dPayTab||'overview';
   const subTabs='<div class="d-sticky-sub task-chip-row" style="margin-bottom:14px;gap:6px">'
     +'<button class="chip'+(tab==='overview'?' active':'')+'" onclick="setDPayTab(\'overview\')">Overview</button>'
-    +'<button class="chip'+(tab==='transactions'?' active':'')+'" onclick="setDPayTab(\'transactions\')">Transactions</button>'
     +'<button class="chip'+(tab==='subscriptions'?' active':'')+'" onclick="setDPayTab(\'subscriptions\')">Subscriptions</button>'
     +'<button class="chip'+(tab==='packs'?' active':'')+'" onclick="setDPayTab(\'packs\')">Session Packs</button>'
     +'<button class="chip'+(tab==='giftcards'?' active':'')+'" onclick="setDPayTab(\'giftcards\')">Gift Cards</button>'
-    +'<button class="chip'+(tab==='cards'?' active':'')+'" onclick="setDPayTab(\'cards\')">Saved Cards</button>'
     +'</div>';
   let inner='';
   if(tab==='overview')inner=_dPayOverview(c,cSubs,cPays);
-  else if(tab==='transactions')inner=_dPayTransactions(c,cPays);
   else if(tab==='subscriptions')inner=_dPaySubscriptions(c,cSubs);
   else if(tab==='packs')inner=_dPayPacks(c);
   else if(tab==='giftcards')inner=_dPayGiftCards(c);
-  else if(tab==='cards')inner=renderCardsTab(c);
   return subTabs+inner;
 }
 
@@ -5992,6 +5988,15 @@ function _dPayOverview(c,cSubs,cPays){
         +'</div>';
     });
   }
+
+  // Saved Cards (moved from its own tab June 2026).
+  h+='<div style="height:1px;background:var(--divider);margin:20px 0"></div>';
+  h+=renderCardsTab(c);
+
+  // Transactions (moved from its own tab June 2026), paginated 10/page.
+  h+='<div style="height:1px;background:var(--divider);margin:20px 0"></div>';
+  h+='<div class="sec-label" style="margin-bottom:12px">Transactions</div>';
+  h+=_dPayTransactions(c,cPays);
   return h;
 }
 
@@ -6023,8 +6028,15 @@ function _dPayTransactions(c,cPays){
     return h;
   }
 
+  const PER=10;
+  const totalPages=Math.max(1,Math.ceil(filtered.length/PER));
+  let page=state.dPayTxnPage||1;
+  if(page>totalPages)page=totalPages;
+  if(page<1)page=1;
+  const pageRows=filtered.slice((page-1)*PER,page*PER);
+
   // Compact row: description, date, amount, status pill if not completed
-  filtered.forEach(function(p){
+  pageRows.forEach(function(p){
     const isVoided=p.status==='voided';
     const isFailed=p.status==='failed';
     const isRefunded=p.status==='refunded'||p.status==='partial_refund';
@@ -6040,9 +6052,19 @@ function _dPayTransactions(c,cPays){
       +'<div style="font-size:11px;color:var(--text-muted)">'+dateStr+(p.paymentMethod?' \u00b7 '+esc(p.paymentMethod):'')+'</div></div>'
       +'<div style="font-family:Exo 2,sans-serif;font-size:14px;font-weight:700;color:var(--main-text);flex-shrink:0;margin-left:10px">'+fmt$(p.total)+'</div></div>';
   });
+
+  if(totalPages>1){
+    const prevDis=page<=1, nextDis=page>=totalPages;
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">';
+    h+='<button onclick="setDPayTxnPage('+(page-1)+')" '+(prevDis?'disabled':'')+' style="padding:5px 12px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-sm);color:var(--main-text);font-size:12px;cursor:'+(prevDis?'not-allowed':'pointer')+';opacity:'+(prevDis?'.5':'1')+'">\u2039 Prev</button>';
+    h+='<span style="font-size:12px;color:var(--text-muted)">Page '+page+' of '+totalPages+'</span>';
+    h+='<button onclick="setDPayTxnPage('+(page+1)+')" '+(nextDis?'disabled':'')+' style="padding:5px 12px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-sm);color:var(--main-text);font-size:12px;cursor:'+(nextDis?'not-allowed':'pointer')+';opacity:'+(nextDis?'.5':'1')+'">Next \u203a</button>';
+    h+='</div>';
+  }
   return h;
 }
-function setDPayDateRange(r){state.dPayDateRange=r;renderDrawer();}
+function setDPayDateRange(r){state.dPayDateRange=r;state.dPayTxnPage=1;renderDrawer();}
+function setDPayTxnPage(n){state.dPayTxnPage=n;renderDrawer();}
 
 // Subscriptions: lifecycle chips (Active/Paused/Suspended/Cancelled), default Active.
 // Click a sub row to open its detail modal.
@@ -32087,7 +32109,7 @@ async function pullSquareCards(contactId, opts){
     }
     if(opts.toast)toast(cards.length?(cards.length+' card'+(cards.length===1?'':'s')+' loaded from Square.'):'No saved cards in Square for this contact.','success');
     // Re-render the cards tab if it is the one showing.
-    if(state.drawer===contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
+    if(state.drawer===contactId&&state.dTab==='payments'&&state.dPayTab==='overview'){
       renderDrawer();
     }
   }catch(e){
@@ -32144,7 +32166,7 @@ async function confirmRemoveCard(){
       _contactFullFetchCache[d.contactId].t = Date.now();
     }
     closeModal();
-    if(state.drawer===d.contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
+    if(state.drawer===d.contactId&&state.dTab==='payments'&&state.dPayTab==='overview'){
       renderDrawer();
     }
     toast('Card removed.','success');
@@ -32256,7 +32278,7 @@ async function submitAddCard(){
       return;
     }
     toast('Card saved successfully.','success');
-    if(state.drawer===contactId&&state.dTab==='payments'&&state.dPayTab==='cards'){
+    if(state.drawer===contactId&&state.dTab==='payments'&&state.dPayTab==='overview'){
       renderDrawer();
     }
     updatePosCoFTab();
