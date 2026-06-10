@@ -9586,6 +9586,9 @@ function openContactModal(id){
     +(function(){
       var tx = c && c.sms_consent_transactional ? ' checked' : '';
       var mk = c && c.sms_consent_marketing ? ' checked' : '';
+      // Marketing-on cannot be set manually (written consent required). Allow
+      // unchecking an existing yes (honor opt-out), but block ticking it on.
+      var mkDisabled = (c && c.sms_consent_marketing) ? '' : ' disabled';
       var meta = '';
       if(c && c.sms_consent_updated_at){
         var d = new Date(c.sms_consent_updated_at);
@@ -9597,11 +9600,12 @@ function openContactModal(id){
       return '<div class="form-group" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
         +'<label class="mb-6">SMS Consent (A2P Compliance)</label>'
         +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">'
-        +'Toggling here records this as a manual consent capture. Use only when the patient has given consent in person or by phone.'
+        +'Transactional consent may be captured here when the patient agrees in person or by phone. Marketing consent must be captured through a form and cannot be set manually.'
         +'</div>'
         +'<div style="display:flex;flex-direction:column;gap:8px">'
         +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500"><input type="checkbox" id="cf-consent-tx"'+tx+' style="width:16px;height:16px;cursor:pointer">Transactional SMS (appointment reminders, account notifications)</label>'
-        +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500"><input type="checkbox" id="cf-consent-mk"'+mk+' style="width:16px;height:16px;cursor:pointer">Marketing SMS (promotions, broadcasts, offers)</label>'
+        +'<label style="display:flex;align-items:center;gap:8px;font-weight:500;'+(mkDisabled?'opacity:.55':'cursor:pointer')+'"><input type="checkbox" id="cf-consent-mk"'+mk+mkDisabled+' style="width:16px;height:16px;'+(mkDisabled?'':'cursor:pointer')+'">Marketing SMS (promotions, broadcasts, offers)</label>'
+        +(mkDisabled?'<div style="font-size:11px;color:var(--text-muted);margin-left:24px;margin-top:-2px">Captured via a form, not here.</div>':'')
         +'</div>'
         +(meta ? '<div style="font-size:11px;color:var(--text-muted);margin-top:8px">'+meta+'</div>' : '')
         +'</div>';
@@ -9665,7 +9669,9 @@ async function saveContact(){
   if(_mkEl){
     var _mkNew = !!_mkEl.checked;
     var _mkOld = !!(c && c.sms_consent_marketing);
-    if(_mkNew !== _mkOld) data.sms_consent_marketing = _mkNew;
+    // Only ever send marketing OFF from this modal. Marketing-on requires a
+    // documented form opt-in; the backend refuses it and so do we here.
+    if(_mkNew !== _mkOld && _mkNew === false) data.sms_consent_marketing = false;
   }
   const isNew=!state.modal.id;
   try{
