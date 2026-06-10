@@ -349,6 +349,8 @@ body:not(.agency-admin) #sb-agency-tools{display:none!important}
 .dash-card-fixed .dash-scroll-list{flex:1;overflow-y:auto}
 .dash-card-activity{display:flex;flex-direction:column;height:280px}
 .dash-card-activity .dash-scroll-list{flex:1;overflow-y:auto}
+#dash-revenue-card #dash-revenue-svg{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+#dash-revenue-card #dash-revenue-svg svg{width:100%;height:100%}
 @media (max-width:900px){.dash-grid{grid-template-columns:1fr}}
 .dash-card{background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);padding:18px;box-shadow:0 2px 12px rgba(107,33,234,.07)}
 .dash-card-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
@@ -2224,6 +2226,13 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
             </div>
           </div>
           <div class="dash-grid-col">
+            <div class="dash-card dash-card-fixed" id="dash-revenue-card" style="display:none;">
+              <div class="dash-card-title-row">
+                <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>Revenue (30 Days)</div>
+                <div id="dash-revenue-total" style="font-size:var(--fs-13);font-weight:var(--fw-700);color:var(--main-text);"></div>
+              </div>
+              <div id="dash-revenue-svg"></div>
+            </div>
             <div class="dash-card dash-card-fixed dash-card-flex" id="dash-journeys-card">
               <div class="dash-card-title-row">
                 <div class="dash-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="7" rx="1"/></svg>Journeys</div>
@@ -5142,6 +5151,92 @@ function setDashScope(s){
   renderDash();
 }
 
+function renderDashRevenue(){
+  var card=document.getElementById('dash-revenue-card');
+  if(!card)return;
+  var role=userRole();
+  var isAdminish=role==='admin'||role==='manager';
+  if(!isAdminish){card.style.display='none';return;}
+  card.style.display='';
+
+  // Build 30-day daily revenue series (today back through 29 days ago).
+  var payments=db.payments||[];
+  var days=[];
+  var i, d, key;
+  var base=new Date();
+  base.setHours(0,0,0,0);
+  for(i=29;i>=0;i--){
+    d=new Date(base);
+    d.setDate(d.getDate()-i);
+    key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    days.push({key:key,date:d,total:0});
+  }
+  var idx={};
+  for(i=0;i<days.length;i++)idx[days[i].key]=i;
+
+  var grand=0;
+  payments.forEach(function(p){
+    if(p.status==='voided'||p.status==='failed')return;
+    var dk=(p.createdAt||'').split('T')[0];
+    if(idx[dk]===undefined)return;
+    var amt=parseFloat(p.afterDiscount||p.subtotal||0);
+    if(isNaN(amt))amt=0;
+    days[idx[dk]].total+=amt;
+    grand+=amt;
+  });
+
+  var totalEl=document.getElementById('dash-revenue-total');
+  if(totalEl)totalEl.textContent=fmt$(grand);
+
+  // SVG line chart, hand-rolled, tokenized.
+  var W=560, H=180, padL=8, padR=8, padT=14, padB=22;
+  var plotW=W-padL-padR, plotH=H-padT-padB;
+  var maxV=0;
+  for(i=0;i<days.length;i++)if(days[i].total>maxV)maxV=days[i].total;
+  var niceMax=maxV<=0?100:maxV;
+
+  function x(i2){return padL+(days.length===1?plotW/2:(i2/(days.length-1))*plotW);}
+  function y(v){return padT+plotH-(v/niceMax)*plotH;}
+
+  var pts=[];
+  for(i=0;i<days.length;i++)pts.push(x(i).toFixed(1)+','+y(days[i].total).toFixed(1));
+  var linePath=pts.join(' ');
+
+  // Area fill under the line.
+  var areaPath='M'+x(0).toFixed(1)+','+(padT+plotH).toFixed(1)+' L'+pts.join(' L')+' L'+x(days.length-1).toFixed(1)+','+(padT+plotH).toFixed(1)+' Z';
+
+  // Find max-value day for the labeled dot.
+  var maxI=0;
+  for(i=0;i<days.length;i++)if(days[i].total>days[maxI].total)maxI=days[i].total>0?i:maxI;
+
+  var lastI=days.length-1;
+
+  function dayLabel(dt){return (dt.getMonth()+1)+'/'+dt.getDate();}
+
+  var svg=''
+    +'<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:block;">'
+    +'<line x1="'+padL+'" y1="'+(padT+plotH).toFixed(1)+'" x2="'+(W-padR)+'" y2="'+(padT+plotH).toFixed(1)+'" stroke="var(--main-border)" stroke-width="1"/>'
+    +'<path d="'+areaPath+'" fill="var(--purple)" fill-opacity="0.08"/>'
+    +'<polyline points="'+linePath+'" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+
+  if(maxV>0){
+    svg+='<circle cx="'+x(maxI).toFixed(1)+'" cy="'+y(days[maxI].total).toFixed(1)+'" r="3.5" fill="var(--purple)"/>'
+      +'<text x="'+x(maxI).toFixed(1)+'" y="'+(y(days[maxI].total)-7).toFixed(1)+'" text-anchor="middle" font-size="10" font-weight="700" fill="var(--main-text)">'+fmt$(days[maxI].total)+'</text>';
+  }
+
+  // Last-day dot + value.
+  svg+='<circle cx="'+x(lastI).toFixed(1)+'" cy="'+y(days[lastI].total).toFixed(1)+'" r="3" fill="var(--purple)" stroke="var(--main-card)" stroke-width="1.5"/>';
+
+  // X-axis end labels only (start, today) to stay clean.
+  svg+='<text x="'+padL+'" y="'+(H-6)+'" text-anchor="start" font-size="10" fill="var(--main-text-muted)">'+dayLabel(days[0].date)+'</text>'
+    +'<text x="'+(W-padR)+'" y="'+(H-6)+'" text-anchor="end" font-size="10" fill="var(--main-text-muted)">'+dayLabel(days[lastI].date)+'</text>';
+
+  svg+='</svg>';
+
+  var mount=document.getElementById('dash-revenue-svg');
+  if(mount)mount.innerHTML=svg;
+}
+
 function renderDash(){
   renderDashWeek&&setTimeout(renderDashWeek,0);
   const h=nowHM().h;
@@ -5168,6 +5263,7 @@ function renderDash(){
 
   // Journeys snapshot widget
   if (typeof _renderDashJourneys === 'function') _renderDashJourneys();
+  if (typeof renderDashRevenue === 'function') renderDashRevenue();
 
   // Birthdays this week
   if (typeof _renderDashBirthdays === 'function') _renderDashBirthdays();
