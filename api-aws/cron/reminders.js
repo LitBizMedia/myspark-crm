@@ -19,6 +19,7 @@ const { wrap } = require('./lib/lambda-adapter');
 const { apptTimestampInTz } = require('./lib/timezone');
 const { canSubaccountSendSms } = require('./lib/sms-gate');
 const { shouldSend } = require('./lib/notifications');
+const { sendPatientSms } = require('./lib/patient-sms');
 const reminderEmail = require('./lib/reminder-email');
 
 async function getCronSecret() {
@@ -276,37 +277,37 @@ async function runReminders() {
       }
     }
 
-    if (smsEnabled && contact.phone) {
-      // TODO (future-ready): also check contact-level sms_opt_out flag once
-      // the contacts schema gains that field. Twilio handles STOP at the
-      // carrier level today, but a contact-side flag prevents wasted send
-      // attempts and gives staff visibility into who has opted out.
-      const gate = await canSubaccountSendSms(appt.subaccount_id, db);
-      if (gate.ok) {
-        try {
-          const smsBody = 'Reminder: your ' + appt.title + ' is tomorrow'
-            + (timeStr ? ' at ' + timeStr : '') + '. Reply STOP to opt out.';
-          const result = await sendSms(slug, {
-            to: contact.phone,
-            body: smsBody,
-            templateType: 'appt-reminder',
-            contactId: contact.id,
-            purpose: 'transactional'
-          });
-          if (result.ok) {
-            smsSentFlag = true;
-            smsSent++;
-          } else {
-            smsFailed++;
-            console.error('SMS reminder send failed:', (result && result.error) || 'unknown');
-          }
-        } catch (e) {
+    if (smsEnabled && contact.id) {
+      // Migrated to the patient-SMS dispatcher (June 10, 2026). The dispatcher
+      // owns the workspace gate, consent, phone resolution, and first-message
+      // footer, replacing this cron's old direct sendSms + hardcoded footer.
+      // Explicit date (not "tomorrow") because reminder timing is configurable.
+      const lbl = appt.title || 'Appointment';
+      const smsBody = bizName + ': reminder, your appointment, ' + lbl + ', is '
+        + dateStr + (timeStr ? ' at ' + timeStr : '')
+        + '. Need to reschedule? Give us a call.';
+      try {
+        const r = await sendPatientSms({
+          subaccountId: appt.subaccount_id,
+          subaccountSlug: slug,
+          typeKey: 'appointment_reminder',
+          contactId: contact.id,
+          body: smsBody,
+          source: 'reminder'
+        });
+        if (r && r.sent) {
+          smsSentFlag = true;
+          smsSent++;
+        } else if (r && r.failed) {
           smsFailed++;
-          console.error('SMS reminder error:', e.message);
+          console.error('SMS reminder failed for ' + appt.subaccount_id + ': ' + (r.reason || 'unknown'));
+        } else {
+          // skipped (gate off, no consent, no phone) is expected and benign
+          console.log('SMS reminder skipped for ' + appt.subaccount_id + ': ' + ((r && r.reason) || 'skipped'));
         }
-      } else {
-        // Gate denied is expected when a tenant is not A2P-live. Logged for visibility.
-        console.log('SMS gate denied for ' + appt.subaccount_id + ': ' + gate.reason + (gate.status ? ' (status=' + gate.status + ')' : ''));
+      } catch (e) {
+        smsFailed++;
+        console.error('SMS reminder error:', e.message);
       }
     }
 
