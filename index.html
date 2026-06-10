@@ -2975,7 +2975,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
                   <option value="0">Never</option>
                 </select>
               </div>
-              <button class="btn btn-action" id="idle-timeout-save" onclick="saveIdleTimeout()">Save</button>
+              <button class="btn btn-action" id="idle-timeout-save" onclick="withBtnLock(this,()=>saveIdleTimeout())">Save</button>
               <div id="idle-timeout-status" style="font-size:12px;color:var(--main-text-muted);display:flex;align-items:center;gap:6px;min-height:18px"></div>
             </div>
             <div id="idle-timeout-caption" style="font-size:12px;color:var(--warning-text-strong);margin-top:12px;line-height:1.6;display:none"></div>
@@ -13480,7 +13480,7 @@ let userOvs=[];
 function openUserModal(){
   editSched=JSON.parse(JSON.stringify(DEF_SCHED));userOvs=[];
   state.modal={type:'user',id:null};
-  openModal('Add User',buildUserBody(),'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser()">Add User</button>','modal-xl');
+  openModal('Add User',buildUserBody(),'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="withBtnLock(this,()=>saveUser())">Add User</button>','modal-xl');
 }
 
 function openUserSchedModal(uid){
@@ -13488,7 +13488,7 @@ function openUserSchedModal(uid){
   editSched=JSON.parse(JSON.stringify(u.schedule||DEF_SCHED));
   userOvs=JSON.parse(JSON.stringify(u.dateOverrides||[]));
   state.modal={type:'usersched',id:uid};
-  openModal('Edit Schedule: '+(u.name||u.username),buildSchedSection(true),'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUserSched()">Save Schedule</button>','modal-lg');
+  openModal('Edit Schedule: '+(u.name||u.username),buildSchedSection(true),'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="withBtnLock(this,()=>saveUserSched())">Save Schedule</button>','modal-lg');
 }
 
 function buildUserBody(){
@@ -14696,8 +14696,8 @@ function openProfileModal(forced){
   var newPwPlaceholder=forced?'New password':'Leave blank to keep current';
   var title=forced?'Set Your Password':'My Profile';
   var footer=forced
-    ? '<button class="btn btn-primary" onclick="saveProfile()">Save Password</button>'
-    : '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>';
+    ? '<button class="btn btn-primary" onclick="withBtnLock(this,()=>saveProfile())">Save Password</button>'
+    : '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="withBtnLock(this,()=>saveProfile())">Save Changes</button>';
   const curPhone=(u&&u.phone)||'';
   const curEmail=(u&&u.email)||'';
   const b=banner
@@ -14864,7 +14864,7 @@ function openEditUserModal(userId){
     +'<div class="form-group"><label>Profile Photo</label><div style="display:flex;align-items:center;gap:12px"><div id="eu-avatar-preview">'+avatarHtml({avatarUrl:(u.avatarUrl||''),name:u.name,username:u.username,color:(u.color||USER_COLORS[0])},56)+'</div><div style="display:flex;flex-direction:column;gap:4px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'eu-avatar-input\').click()">Upload Photo</button><button type="button" class="btn btn-ghost btn-sm" id="eu-avatar-remove" onclick="removeUserAvatar()" style="'+((u.avatarFileId)?'':'display:none')+'">Remove Photo</button></div></div><input type="file" id="eu-avatar-input" accept="image/png,image/jpeg,image/jpg" style="display:none" onchange="uploadUserAvatar(event)"><div id="eu-avatar-status" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +(isAdmin?'':'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;margin:8px 0 0;font-size:12px;color:var(--text);line-height:1.5"><strong>Password:</strong> <span style="color:var(--text-muted)">Use the Send Password Reset Link button above to email the user a secure link. They set their own password.</span></div>');
-  openModal('Edit: '+(u.name||u.username),b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEditUser()">Save Changes</button>','modal-lg');
+  openModal('Edit: '+(u.name||u.username),b,'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="withBtnLock(this,()=>saveEditUser())">Save Changes</button>','modal-lg');
 }
 
 function _setEuAvatarStatus(msg,kind){
@@ -16270,7 +16270,7 @@ function openTplEditor(type){
     +'<div class="var-picker" style="padding:6px 8px;background:var(--main-bg);border:1px solid var(--main-border);border-top:none;border-bottom:none">'+TPL_VARS.map(function(v){return'<span class="var-chip" onclick="tplInsertVar(\''+v+'\')">'+v+'</span>';}).join('')+'</div>'
     +'<div id="tpl-body-editor" class="tpl-body" contenteditable="true" oninput="updateTplPreview()" onpaste="tplOnPaste(event)">'+bodyHtml+'</div>'
     +'<div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">'
-    +'<button class="btn btn-primary" onclick="saveTpl(\''+type+'\')"  >Save Template</button>'
+    +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>saveTpl(\''+type+'\'))"  >Save Template</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="resetTpl(\''+type+'\')"  >Reset to Default</button>'
     +'<button class="btn btn-ghost btn-sm" onclick="closeTplEditor()">Cancel</button>'
     +'</div>'
@@ -30165,7 +30165,7 @@ function openServiceWidgetEditor(w,isNew){
   var existing=w&&w.id;
   var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveServiceWidget('+(existing?'\''+w.id+'\'':'null')+')">Save</button>';
+    +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>saveServiceWidget('+(existing?'\''+w.id+'\'':'null')+'))">Save</button>';
   openModal(existing?'Edit Service Widget':'New Service Widget',body,footer,'modal-lg');
 
   // Render the ordered list now that DOM exists
@@ -30242,7 +30242,7 @@ function openClassWidgetEditor(w,isNew){
   var existing=w&&w.id;
   var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveClassWidget('+(existing?'\''+w.id+'\'':'null')+')">Save</button>';
+    +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>saveClassWidget('+(existing?'\''+w.id+'\'':'null')+'))">Save</button>';
   openModal(existing?'Edit Class Widget':'New Class Widget',body,footer,'modal-lg');
 }
 
@@ -30272,7 +30272,7 @@ function saveClassWidget(id){
     confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
   };
   Object.assign(w, _swgPolicyToPayload());
-  fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
+  return fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(w)
@@ -30436,7 +30436,7 @@ function openAppointmentWidgetModal(w,isNew){
   var existing=w&&w.id;
   var footer=(existing?'<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="deleteServiceWidget(\''+w.id+'\')">Delete</button>':'')
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveAppointmentWidget('+(existing?'\''+w.id+'\'':'null')+')">Save</button>';
+    +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>saveAppointmentWidget('+(existing?'\''+w.id+'\'':'null')+'))">Save</button>';
   openModal(existing?'Edit Appointment Widget':'New Appointment Widget',body,footer,'modal-lg');
 }
 
@@ -30499,7 +30499,7 @@ function openAppointmentTypeEditor(idx){
   // so the outer widget editor stays in the DOM behind it.
   openSecondaryModal(isEdit?'Edit Appointment Type':'New Appointment Type',html,
     '<button class="btn btn-ghost" onclick="closeSecondaryModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveApptType('+(isEdit?idx:-1)+')">Save</button>');
+    +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>saveApptType('+(isEdit?idx:-1)+'))">Save</button>');
 }
 
 function saveApptType(idx){
@@ -30609,7 +30609,7 @@ function saveAppointmentWidget(id){
     confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
   };
   Object.assign(w, _swgPolicyToPayload());
-  fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
+  return fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(w)
@@ -30785,7 +30785,7 @@ function saveServiceWidget(id){
     confirm_message:((document.getElementById('swg-confirm-msg')||{}).value||'').trim()||null
   };
   Object.assign(w, _swgPolicyToPayload());
-  fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
+  return fetch(apiUrl('/api/subaccount/service-widgets-upsert'),{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(w)
@@ -31375,7 +31375,7 @@ function openAllergyModal(contactId, allergyId){
     + '<div class="form-group"><label>Notes</label>'
     + '<input id="af-notes" type="text" placeholder="Optional context" value="'+esc(existing&&existing.notes||'')+'"></div>';
   openModal(existing?'Edit Allergy':'Add Allergy', body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveAllergy()">Save</button>');
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="withBtnLock(this,()=>saveAllergy())">Save</button>');
 }
 
 async function saveAllergy(){
@@ -31519,7 +31519,7 @@ function openWarningModal(contactId, warningId){
     + '<input id="wf-text" type="text" maxlength="200" placeholder="e.g. Allergic to penicillin" value="'+esc(selText)+'"></div>'
     + '<div style="font-size:11px;color:var(--text-muted);margin-top:-6px">Examples: medication allergies, billing issues, behavioral notes</div>';
   openModal(existing?'Edit Warning':'Add Warning', body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveWarning()">Save</button>');
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="withBtnLock(this,()=>saveWarning())">Save</button>');
 }
 
 async function saveWarning(){
@@ -34359,12 +34359,12 @@ function gcDeleteProduct(id){
   document.getElementById('modal-title').textContent='Delete Gift Card';
   document.getElementById('modal-box').className='modal surface-light';
   document.getElementById('modal-body').innerHTML='<div class="warn-box">Delete <strong>'+esc(p?p.name:'this gift card')+'</strong>? Already issued cards will remain valid. This cannot be undone.</div>';
-  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="gcConfirmDeleteProduct()">Delete</button>';
+  document.getElementById('modal-foot').innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="withBtnLock(this,()=>gcConfirmDeleteProduct())">Delete</button>';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function gcConfirmDeleteProduct(){
   var id=state.modal&&state.modal.id;if(!id)return;
-  (async function(){
+  return (async function(){
     try{
       var r=await fetch(apiUrl('/api/subaccount/gift-card-products-archive'),{
         method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
@@ -34419,7 +34419,7 @@ function openGcProductModal(id){if(!canManageGiftCards()){toast('Permission deni
     +'<div class="form-group"><label>Terms &amp; Conditions <span style="font-weight:400;color:var(--text-muted)">(optional, shown at checkout)</span></label>'
     +'<textarea id="gcp-terms" rows="2" placeholder="Valid for all services. No cash value.">'+esc(prod&&prod.terms||'')+'</textarea></div>';
   openModal(prod?'Edit Gift Card':'New Gift Card', body,
-    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveGcProduct()">Save</button>',
+    '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="withBtnLock(this,()=>saveGcProduct())">Save</button>',
     'modal-lg');
   setTimeout(function(){
     var nameInp=document.getElementById('gcp-name');
@@ -34474,7 +34474,7 @@ function saveGcProduct(){
     updatedAt:now_()
   };
   if(state.modal.id)data.id=state.modal.id;
-  (async function(){
+  return (async function(){
     try{
       var r=await fetch(apiUrl('/api/subaccount/gift-card-products-upsert'),{
         method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
@@ -35450,7 +35450,7 @@ function openPackTemplateModal(id){
     +taxableEditorControl('sessionPacks','<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="spt-taxable" type="checkbox"'+((t&&t.taxable!==false)||!t?' checked':'')+'>Charge tax on this pack</label></div>');
   openModal((isNew?'New Pack Template':'Edit Pack Template'),body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="savePackTemplate('+(isNew?'null':"'"+id+"'")+')">'+( isNew?'Create Template':'Save Changes')+'</button>',
+    +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>savePackTemplate('+(isNew?'null':"'"+id+"'")+'))">'+( isNew?'Create Template':'Save Changes')+'</button>',
     'modal-lg');
   spRenderComboChips();
 }
@@ -37063,7 +37063,7 @@ async function openManagePlanModal(subId,subName){
 
   openModal('Manage Plan: '+esc(subName),body,
     '<button class="btn btn-ghost" onclick="closeModal()">Close</button>'
-    +'<button class="btn btn-primary" onclick="saveManagePlan(\''+subId+'\')">Save Plan</button>',
+    +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>saveManagePlan(\''+subId+'\'))">Save Plan</button>',
     'modal-lg');
   setTimeout(renderMpCardPane,300);
 }
@@ -37949,7 +37949,7 @@ function openCreateSubaccountModal(){
     +'</div>';
   openModal('New Subaccount',body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-action" onclick="createSubaccount()">Create Subaccount</button>',
+    +'<button class="btn btn-action" onclick="withBtnLock(this,()=>createSubaccount())">Create Subaccount</button>',
     'modal-lg');
   setTimeout(initSubaccountCardForm,300);
   setTimeout(function(){
@@ -38221,7 +38221,7 @@ async function renderMpCardPane(){
   html += '</div>';
 
   // Save button
-  html += '<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="saveMpCardSimple(\''+esc(subId)+'\',\''+esc(subName)+'\')">Save Card</button>';
+  html += '<button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="withBtnLock(this,()=>saveMpCardSimple(\''+esc(subId)+'\',\''+esc(subName)+'\'))">Save Card</button>';
 
   pane.innerHTML = html;
 
@@ -38679,7 +38679,7 @@ async function openEditSubaccountModal(id,name,slug,plan){
   state.modal={type:'edit-sub',id:id,extra:{slug:slug,origAdminUser:adminUser}};
   openModal('Edit: '+esc(name),body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
-    +'<button class="btn btn-primary" onclick="saveEditSubaccount(\''+id+'\')">Save Changes</button>',
+    +'<button class="btn btn-primary" onclick="withBtnLock(this,()=>saveEditSubaccount(\''+id+'\'))">Save Changes</button>',
     'modal-lg');
 }
 
