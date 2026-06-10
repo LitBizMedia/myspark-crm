@@ -19,6 +19,7 @@ const sanitize = require('./lib/html-sanitize');
 const templateVars = require('./lib/template-vars');
 const mailgun = require('./lib/mailgun');
 const { shouldSend } = require('./lib/notifications');
+const { sendPatientSms } = require('./lib/patient-sms');
 
 const SIGNING_BASE_URL = 'https://sign.mysparkplus.app';
 
@@ -325,6 +326,28 @@ async function handler(req, res) {
   } catch (e) {
     console.error('contracts-send: mailgun threw:', e);
     sendResult = { ok: false, error: e.message };
+  }
+
+  // Additive SMS nudge (never load-bearing). Email is the system of record for
+  // contract delivery; its failure voids the envelope below. SMS is a courtesy
+  // link, fired only on a SUCCESSFUL email send, gated by the same contract_sent
+  // type's SMS channel. Non-fatal: an SMS failure never voids a contract. No
+  // document title in the body (could carry meaning); the signing link is the payload.
+  if (sendResult && sendResult.ok && sendGate.sms_enabled && contact_id) {
+    try {
+      const bizName = (context && (context.business_name || context.businessName)) || 'MySpark+';
+      const smsBody = bizName + ': you have a document ready to sign. Sign here: ' + signingUrl;
+      await sendPatientSms({
+        subaccountId: subaccountId,
+        subaccountSlug: slug,
+        typeKey: 'contract_sent',
+        contactId: contact_id,
+        body: smsBody,
+        source: 'contract-sent'
+      });
+    } catch (smsErr) {
+      console.warn('contract_sent SMS nudge failed (non-fatal):', smsErr.message);
+    }
   }
 
   if (!sendResult || !sendResult.ok) {

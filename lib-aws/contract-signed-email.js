@@ -9,6 +9,7 @@
 const { sendEmail } = require('./mailgun');
 const db = require('./db');
 const { shouldSend } = require('./notifications');
+const { sendPatientSms } = require('./patient-sms');
 
 function escHtml(s) {
   if (s == null) return '';
@@ -73,10 +74,37 @@ function buildHtml(opts) {
  */
 async function sendContractSignedEmail(opts) {
   if (!opts.subaccountId) return { ok: false, error: 'no subaccountId' };
-  if (!opts.recipientEmail) return { ok: true, skipped: true, reason: 'no recipient email' };
 
+  // Gate once, split per channel so email and SMS fire independently. A signed
+  // confirmation is a notification (not a delivery), so independence is fine here.
   const gate = await shouldSend(opts.subaccountId, 'contract_signed', db);
   if (!gate.ok) return { ok: true, skipped: true, reason: gate.reason || 'contract_signed disabled' };
+  const emailEnabled = !!gate.email_enabled;
+  const smsEnabled = !!gate.sms_enabled;
+
+  // SMS branch: independent, fires on the channel flag + a contact. No document
+  // title (could carry meaning); confirms receipt, points to email for the copy.
+  if (smsEnabled && opts.contactId) {
+    try {
+      const biz = opts.businessName || 'MySpark+';
+      const smsBody = biz + ': thanks, we received your signed document. A copy is in your email.';
+      await sendPatientSms({
+        subaccountId: opts.subaccountId,
+        subaccountSlug: opts.subaccountSlug,
+        typeKey: 'contract_signed',
+        contactId: opts.contactId,
+        body: smsBody,
+        source: 'contract-signed'
+      });
+    } catch (e) {
+      console.warn('contract signed SMS failed for contact', opts.contactId, ':', e.message);
+    }
+  }
+
+  // Email branch: only when channel on and we have an address.
+  if (!emailEnabled || !opts.recipientEmail) {
+    return { ok: true, skipped: !emailEnabled ? 'email_off' : 'no_email', smsAttempted: smsEnabled && !!opts.contactId };
+  }
 
   const hasPdfAttachment = !!(opts.pdfBuffer && opts.pdfBuffer.length);
   const html = buildHtml({
