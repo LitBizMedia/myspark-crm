@@ -11,6 +11,7 @@
 const { sendEmail } = require('./mailgun');
 const db = require('./db');
 const { shouldSend } = require('./notifications');
+const { sendPatientSms } = require('./patient-sms');
 
 function fmtDate(d) {
   if (!d) return '';
@@ -92,12 +93,46 @@ function buildHtml(opts) {
  * @param {string} [opts.rebookUrl]
  * @param {string} [opts.source]            'staff' | 'patient_self_serve'
  */
+// Short, label-agnostic cancellation SMS. Footer is the dispatcher's job.
+function buildCancelSmsBody(opts) {
+  const biz = opts.businessName || 'MySpark+';
+  const lbl = opts.appointmentTitle || 'Appointment';
+  const dateStr = opts.dateStr || fmtDate(opts.appointmentDate);
+  const timeStr = opts.timeStr || fmtTime(opts.appointmentTime);
+  return biz + ': your appointment, ' + lbl + ', on ' + dateStr
+    + (timeStr ? ' at ' + timeStr : '') + ' has been cancelled. Questions? Give us a call.';
+}
+
 async function sendCancellationEmail(opts) {
   if (!opts.subaccountId) return { ok: false, error: 'no subaccountId' };
-  if (!opts.recipientEmail) return { ok: true, skipped: true, reason: 'no recipient email' };
 
+  // Gate once, split per channel so email and SMS fire independently.
   const gate = await shouldSend(opts.subaccountId, 'appointment_cancellation', db);
   if (!gate.ok) return { ok: true, skipped: true, reason: gate.reason || 'appointment_cancellation disabled' };
+  const emailEnabled = !!gate.email_enabled;
+  const smsEnabled = !!gate.sms_enabled;
+
+  // SMS branch: independent of email. Fires when the channel is on and we have
+  // a contact_id. Dispatcher resolves phone + consent + footer.
+  if (smsEnabled && opts.contactId) {
+    try {
+      await sendPatientSms({
+        subaccountId: opts.subaccountId,
+        subaccountSlug: opts.subaccountSlug,
+        typeKey: 'appointment_cancellation',
+        contactId: opts.contactId,
+        body: buildCancelSmsBody(opts),
+        source: 'cancellation-' + (opts.source || 'staff')
+      });
+    } catch (e) {
+      console.warn('cancellation SMS failed for contact', opts.contactId, ':', e.message);
+    }
+  }
+
+  // Email branch: only when channel on and we have an address.
+  if (!emailEnabled || !opts.recipientEmail) {
+    return { ok: true, skipped: !emailEnabled ? 'email_off' : 'no_email', smsAttempted: smsEnabled && !!opts.contactId };
+  }
 
   const html = buildHtml(opts);
   const subject = buildSubject(opts);
