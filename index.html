@@ -32116,6 +32116,24 @@ async function confirmRemoveCard(){
   if(!c)return;
   const newCards=(c.squareCards||[]).filter(function(x){return x.id!==d.cardId});
   try{
+    // Disable the card in Square FIRST. Square has no hard delete; DisableCard
+    // is the canonical removal. The backend guard refuses (409) if the card
+    // backs an active subscription. Only after Square confirms do we update
+    // local state, so the UI never lies about a card being gone.
+    const dcRes=await fetch(apiUrl('/api/square/disable-card'),{credentials:'include',
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({slug:state.subaccountSlug,customerId:c.squareCustomerId||'',cardId:d.cardId})});
+    const dcData=await dcRes.json().catch(function(){return{};});
+    if(dcRes.status===409&&dcData.blocked){
+      const subs=(dcData.subscriptions||[]).map(function(s){return (s.plan||'Subscription')+' ('+s.status+')';}).join(', ');
+      closeModal();
+      toast('Cannot remove this card: it pays for '+(subs||'an active subscription')+'. Switch the card on that subscription first, then remove this card.','error');
+      return;
+    }
+    if(!dcRes.ok){
+      toast('Card removal failed: '+(dcData.error||('Square error '+dcRes.status)),'error');
+      return;
+    }
     await contactUpdate(d.contactId, {square_cards: newCards});
     // Sync ALL local state to the new card list. Without this the drawer
     // and any subscription/POS modal will render stale data until the
