@@ -1660,17 +1660,18 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 .cal-mc-name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--main-text)}
 .cal-mc-role{font-size:10px;color:var(--main-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* MANAGE VIEW PANEL */
-.cal-manage-panel{width:280px;position:fixed;top:0;right:0;height:100vh;background:var(--bg-panel);border-left:1px solid var(--border);overflow-y:auto;z-index:200;box-shadow:-4px 0 20px rgba(0,0,0,.35);display:flex;flex-direction:column;color:rgba(255,255,255,.85)}
-.cal-manage-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0}
+.cal-manage-panel{width:280px;position:fixed;top:0;right:0;height:100vh;background:var(--main-card);border-left:1px solid var(--main-border);overflow-y:auto;z-index:200;box-shadow:-4px 0 20px rgba(0,0,0,.35);display:flex;flex-direction:column;color:var(--main-text)}
+.cal-manage-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--divider);flex-shrink:0}
 .cal-manage-head-title{font-family:Exo 2,sans-serif;font-size:14px;font-weight:700}
-.cal-manage-section{padding:12px 16px;border-bottom:1px solid var(--border)}
-.cal-manage-section-hd{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.6);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.cal-manage-section{padding:12px 16px;border-bottom:1px solid var(--divider)}
+.cal-manage-section-hd{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--main-text-muted);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
 .cal-staff-row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-radius:6px;cursor:pointer;transition:background .1s}
-.cal-staff-row:hover{background:var(--bg-card)}
+.cal-staff-row:hover{background:var(--main-card-hover)}
 .cal-sf-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .cal-sf-name{font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cal-sf-role{font-size:10px;color:var(--text-muted);flex-shrink:0}
+.cal-sf-role{font-size:10px;color:var(--main-text-muted);flex-shrink:0}
 .cal-sf-cb{accent-color:var(--purple);width:14px;height:14px;cursor:pointer;flex-shrink:0}
+.cal-manage-panel .icon-btn-xs{color:var(--main-text-muted)}
 .cal-manage-btn{padding:6px 12px;font-size:12px;font-weight:600;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius);color:var(--main-text);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:Lato,sans-serif;transition:all .12s;white-space:nowrap}
 .cal-manage-btn:hover{background:var(--main-card-hover);border-color:var(--purple-border);color:var(--main-text)}
 .cal-manage-btn.active{background:var(--purple-dim);border-color:var(--purple-border);color:var(--purple-light)}
@@ -31713,18 +31714,18 @@ function renderCalManage(){
     +'<button class="icon-btn-xs" onclick="calToggleManage()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
     +'</div>';
   h+='<div class="cal-manage-section">';
-  h+='<div class="cal-manage-section-hd"><span>Staff <span style="background:var(--purple-dim);color:var(--purple-light);border-radius:10px;padding:1px 7px;font-size:10px">'+sel.length+' / '+users.length+'</span></span>'
+  h+='<div class="cal-manage-section-hd"><span>Staff <span style="background:var(--purple-dim);color:var(--purple);border-radius:10px;padding:1px 7px;font-size:10px">'+sel.length+' / '+users.length+'</span></span>'
     +'<div style="display:flex;gap:4px">'
-    +'<button onclick="calSelectAllStaff(true)" style="font-size:11px;color:var(--purple-light);background:none;border:none;cursor:pointer;font-family:\'DM Sans\',sans-serif;padding:0">All</button>'
-    +'<span style="color:var(--text-dim);font-size:11px">/</span>'
-    +'<button onclick="calSelectAllStaff(false)" style="font-size:11px;color:var(--text-muted);background:none;border:none;cursor:pointer;font-family:\'DM Sans\',sans-serif;padding:0">None</button>'
+    +'<button onclick="calSelectAllStaff(true)" style="font-size:11px;color:var(--purple);background:none;border:none;cursor:pointer;font-family:\'DM Sans\',sans-serif;padding:0">All</button>'
+    +'<span style="color:var(--main-text-muted);font-size:11px">/</span>'
+    +'<button onclick="calSelectAllStaff(false)" style="font-size:11px;color:var(--main-text-muted);background:none;border:none;cursor:pointer;font-family:\'DM Sans\',sans-serif;padding:0">None</button>'
     +'</div></div>';
-  h+='<div style="font-size:10px;color:var(--text-dim);padding:2px 16px 6px;letter-spacing:.02em">Drag to reorder</div>';
+  h+='<div style="font-size:10px;color:var(--main-text-muted);padding:2px 16px 6px;letter-spacing:.02em">Drag to reorder</div>';
   h+='<div id="cal-staff-drag-list">';
   h+=users.map(function(u){
     var chk=sel.includes(u.id);
     return'<label class="cal-staff-row" draggable="true" data-uid="'+u.id+'" ondragstart="calDragStart(event)" ondragover="calDragOver(event)" ondrop="calDrop(event)" ondragend="calDragEnd(event)" ondragenter="calDragEnter(event)" ondragleave="calDragLeave(event)">'
-      +'<span class="cal-drag-handle" title="Drag to reorder" style="cursor:grab;color:var(--text-dim);display:flex;align-items:center;padding-right:6px;font-size:14px;line-height:1;user-select:none">&#x2630;</span>'
+      +'<span class="cal-drag-handle" title="Drag to reorder" style="cursor:grab;color:var(--main-text-muted);display:flex;align-items:center;padding-right:6px;font-size:14px;line-height:1;user-select:none">&#x2630;</span>'
       +'<input class="cal-sf-cb" type="checkbox" data-uid="'+u.id+'" '+(chk?'checked':'')+' onchange="calToggleStaff(this.dataset.uid,this.checked)">'
       +'<span class="cal-sf-dot" style="background:'+(u.color||'#6b21ea')+'"></span>'
       +'<span class="cal-sf-name">'+esc(u.name||u.username)+'</span>'
@@ -31735,7 +31736,7 @@ function renderCalManage(){
   h+='</div>';
   // View note
   var viewCtx=state.calView==='day'?'In Day view, each person appears as a separate column. ':state.calView==='week'?'In Week view, appointments are filtered to selected staff. ':'In Month view, unselected staff appointments are hidden and per-user counts show in each day. ';
-  h+='<div style="padding:12px 16px;font-size:11px;color:var(--text-muted);line-height:1.6">'+viewCtx+'</div>';
+  h+='<div style="padding:12px 16px;font-size:11px;color:var(--main-text-muted);line-height:1.6">'+viewCtx+'</div>';
   panel.innerHTML=h;
 }
 
