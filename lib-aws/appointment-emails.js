@@ -11,6 +11,7 @@
 const { sendEmail } = require('./mailgun');
 const db = require('./db');
 const { shouldSend } = require('./notifications');
+const { sendPatientSms } = require('./patient-sms');
 
 function fmtDate(d) {
   if (!d) return '';
@@ -102,12 +103,18 @@ async function sendAppointmentConfirmations(opts) {
 
   const isReschedule = !!(oldDate && oldTime);
 
-  // Gate via subaccount Notifications tab. If subaccountId not passed
-  // (older callers), skip the gate and send (backward compatible).
+  // Gate via subaccount Notifications tab. Read once, split per channel so
+  // email and SMS fire independently (a clinic may run one channel, not both).
+  // If subaccountId not passed (older callers), default to email-on for
+  // backward compatibility, SMS off.
+  const typeKey = isReschedule ? 'appointment_reschedule' : 'appointment_confirmation';
+  let emailEnabled = true;
+  let smsEnabled = false;
   if (subaccountId) {
-    const typeKey = isReschedule ? 'appointment_reschedule' : 'appointment_confirmation';
     const gate = await shouldSend(subaccountId, typeKey, db);
     if (!gate.ok) return { sent: 0, skipped: true, reason: gate.reason || 'disabled' };
+    emailEnabled = !!gate.email_enabled;
+    smsEnabled = !!gate.sms_enabled;
   }
 
   const dateStr = fmtDate(appointmentDate);
@@ -116,8 +123,39 @@ async function sendAppointmentConfirmations(opts) {
   const oldTimeStr = oldTime ? fmtTime(oldTime) : '';
   let sent = 0;
 
+  // Short, label-agnostic SMS body. Reads right whether title is a service
+  // name, a custom appointment title, or generic. Footer is the dispatcher's job.
+  function buildSmsBody(name, title) {
+    const biz = businessName || 'MySpark+';
+    const lbl = title || 'Appointment';
+    if (isReschedule) {
+      return biz + ': your appointment, ' + lbl + ', has been moved to ' + dateStr
+        + (timeStr ? ' at ' + timeStr : '') + '. Questions? Give us a call.';
+    }
+    return biz + ': your appointment, ' + lbl + ', is confirmed for ' + dateStr
+      + (timeStr ? ' at ' + timeStr : '') + '. Need to reschedule? Give us a call.';
+  }
+
   for (const r of recipients) {
-    if (!r.email) continue;
+    // SMS branch: independent of email. Fires for any recipient with a contact_id
+    // when the SMS channel is on. Dispatcher resolves phone + consent + footer.
+    if (smsEnabled && subaccountId && r.contact_id) {
+      try {
+        await sendPatientSms({
+          subaccountId,
+          subaccountSlug,
+          typeKey,
+          contactId: r.contact_id,
+          body: buildSmsBody(r.name, appointmentTitle),
+          source: isReschedule ? 'reschedule' : 'confirmation'
+        });
+      } catch (e) {
+        console.warn('appt SMS send failed for contact', r.contact_id, ':', e.message);
+      }
+    }
+
+    // Email branch: only when email channel is on and recipient has an email.
+    if (!emailEnabled || !r.email) continue;
     const html = buildHtml({
       clientName: r.name || 'there',
       serviceName: appointmentTitle,
