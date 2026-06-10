@@ -25,6 +25,7 @@ const { processSub, computeCharge } = require('./lib/sub-charge');
 const { sendEmail } = require('./lib/mailgun');
 const recurringEmail = require('./lib/recurring-billing-email');
 const { shouldSend } = require('./lib/notifications');
+const { sendPatientSms } = require('./lib/patient-sms');
 const { DEFAULT_TZ } = require('./lib/timezone');
 
 function fmt$(n) {
@@ -67,8 +68,13 @@ function estimateChargeAmount(sub, paySettings) {
 }
 
 async function runReminderScan(summary, dryRun) {
-  // Find trialing subs whose trial_ends_at is between today (exclusive) and
-  // today+3 (inclusive), in each sub's own TZ, that have NOT been notified.
+  // Cast a bounded 31-day net in SQL (the max a subaccount could configure),
+  // then enforce each subaccount's CONFIGURED "days before" precisely in the
+  // loop via the notification gate's timing_minutes_before. SQL can't know the
+  // per-type catalog default (it lives in JS), so the gate does the real
+  // filtering. The window is a self-healing catch-up: trial_ends_at from
+  // tomorrow through the configured horizon, guarded by trial_reminder_sent_at
+  // so a missed cron day still sends on the next run, exactly once.
   const r = await db.query(
     `SELECT s.*, sd.data AS blob_data
      FROM subscriptions s
@@ -77,7 +83,7 @@ async function runReminderScan(summary, dryRun) {
        AND s.trial_reminder_sent_at IS NULL
        AND s.trial_ends_at IS NOT NULL
        AND s.trial_ends_at > ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date)
-       AND s.trial_ends_at <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date + INTERVAL '3 days')`,
+       AND s.trial_ends_at <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date + INTERVAL '31 days')`,
     [DEFAULT_TZ]
   );
 
@@ -86,6 +92,29 @@ async function runReminderScan(summary, dryRun) {
   for (const row of r.rows) {
     const blob = row.blob_data || {};
     const tz = (blob.settings && blob.settings.timezone) || DEFAULT_TZ;
+
+    // Per-subaccount timing gate. Fetched up front so we honor the configured
+    // "days before" and skip rows outside this subaccount's window before doing
+    // any work. Default 4320 min (3 days) matches prior hardcoded behavior.
+    const trialGate = await shouldSend(row.subaccount_id, 'recurring_billing_trial_ending', db);
+    if (!trialGate.ok) {
+      summary.reminders_skipped = (summary.reminders_skipped || 0) + 1;
+      summary.reminder_results = summary.reminder_results || [];
+      summary.reminder_results.push({ sub_id: row.id, skipped: true, reason: trialGate.reason || 'disabled' });
+      continue;
+    }
+    const windowDays = Math.max(1, Math.round((trialGate.timing_minutes_before || 4320) / 1440));
+    // Is the trial end within this subaccount's configured horizon (in its TZ)?
+    const horizonOk = await db.query(
+      `SELECT ($1::date) <= ((NOW() AT TIME ZONE $2)::date + ($3 || ' days')::interval) AS within`,
+      [row.trial_ends_at, tz, String(windowDays)]
+    );
+    if (!horizonOk.rows[0] || !horizonOk.rows[0].within) {
+      // Not yet inside this subaccount's window; a future cron run will catch it.
+      summary.reminders_skipped = (summary.reminders_skipped || 0) + 1;
+      continue;
+    }
+
     const contact = await contactsLib.getContactById(row.subaccount_id, row.contact_id);
 
     if (!contact || !contact.email) {
@@ -120,66 +149,95 @@ async function runReminderScan(summary, dryRun) {
       continue;
     }
 
-    // Gate: subaccount admin can disable this in Notifications tab
-    const reminderGate = await shouldSend(row.subaccount_id, 'recurring_billing_trial_ending', db);
-    if (!reminderGate.ok) {
-      summary.reminders_skipped = (summary.reminders_skipped || 0) + 1;
-      summary.reminder_results = summary.reminder_results || [];
-      summary.reminder_results.push({ sub_id: row.id, skipped: true, reason: reminderGate.reason || 'disabled' });
-      continue;
+    // (Gate already fetched + checked at loop top as trialGate.)
+    // Email and SMS fire independently per channel. The dedup
+    // (trial_reminder_sent_at) is set if EITHER channel succeeds, so an
+    // SMS-only trial reminder still marks itself sent and never re-fires.
+    let anySent = false;
+    let lastErr = null;
+
+    // Email channel
+    if (trialGate.email_enabled) {
+      try {
+        const result = await sendEmail(subaccountSlug, {
+          to: contact.email,
+          subject: subject,
+          html: html,
+          fromName: bizName,
+          templateType: 'subscription-trial-reminder',
+          contactId: contact.id
+        });
+        if (result && result.ok) anySent = true;
+        else lastErr = (result && result.error) || 'email returned not-ok';
+      } catch (e) {
+        lastErr = e.message;
+        console.error('Trial reminder email error:', e.message);
+      }
     }
 
-    try {
-      const result = await sendEmail(subaccountSlug, {
-        to: contact.email,
-        subject: subject,
-        html: html,
-        fromName: bizName,
-        templateType: 'subscription-trial-reminder',
-        contactId: contact.id
-      });
-
-      if (result && result.ok) {
-        await db.query(
-          `UPDATE subscriptions SET trial_reminder_sent_at = NOW(), updated_at = NOW() WHERE id = $1`,
-          [row.id]
-        );
-        await db.query(
-          `INSERT INTO subscription_events (
-            id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, metadata, created_at
-          ) VALUES ($1, $2, $3, 'trial_reminder_sent', NULL, 'system', $4::jsonb, NOW())`,
-          [
-            `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            row.id, row.subaccount_id,
-            JSON.stringify({
-              trial_ends_at: row.trial_ends_at,
-              estimated_charge: chargeAmount,
-              email: contact.email
-            })
-          ]
-        );
-        summary.reminders_sent = (summary.reminders_sent || 0) + 1;
-      } else {
-        summary.reminders_failed = (summary.reminders_failed || 0) + 1;
-        summary.reminder_results = summary.reminder_results || [];
-        summary.reminder_results.push({ sub_id: row.id, error: (result && result.error) || 'send returned not-ok' });
+    // SMS channel (independent). Date-only body; the email carries the charge
+    // amount and breakdown. No plan name (could carry meaning). Dispatcher owns
+    // phone, consent, footer.
+    if (trialGate.sms_enabled && contact.id) {
+      try {
+        const smsBody = bizName + ': your trial ends ' + trialEndStr
+          + ', and your subscription begins after that. Questions? Give us a call.';
+        const smsRes = await sendPatientSms({
+          subaccountId: row.subaccount_id,
+          subaccountSlug: subaccountSlug,
+          typeKey: 'recurring_billing_trial_ending',
+          contactId: contact.id,
+          body: smsBody,
+          source: 'trial-reminder'
+        });
+        if (smsRes && smsRes.sent) anySent = true;
+      } catch (e) {
+        console.warn('Trial reminder SMS error:', e.message);
       }
-    } catch (e) {
-      console.error('Trial reminder send error:', e.message);
+    }
+
+    if (anySent) {
+      await db.query(
+        `UPDATE subscriptions SET trial_reminder_sent_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        [row.id]
+      );
+      await db.query(
+        `INSERT INTO subscription_events (
+          id, subscription_id, subaccount_id, event_type, actor_user_id, actor_type, metadata, created_at
+        ) VALUES ($1, $2, $3, 'trial_reminder_sent', NULL, 'system', $4::jsonb, NOW())`,
+        [
+          `sevent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          row.id, row.subaccount_id,
+          JSON.stringify({
+            trial_ends_at: row.trial_ends_at,
+            estimated_charge: chargeAmount,
+            email: contact.email
+          })
+        ]
+      );
+      summary.reminders_sent = (summary.reminders_sent || 0) + 1;
+    } else {
       summary.reminders_failed = (summary.reminders_failed || 0) + 1;
       summary.reminder_results = summary.reminder_results || [];
-      summary.reminder_results.push({ sub_id: row.id, error: e.message });
+      summary.reminder_results.push({ sub_id: row.id, error: lastErr || 'no channel sent' });
     }
   }
 }
 
-// Upcoming-charge scan: find active subs whose next_due_date falls within
-// REMIND_DAYS of today (in the sub's own timezone) AND that haven't been
-// notified in the last REMIND_DAYS-1 days. Send patient an upcoming charge
-// reminder. Idempotent: relies on subscription_events containing
-// 'upcoming_charge_sent' for de-dupe.
+// Upcoming-charge scan: find active subs whose next_due_date falls within each
+// subaccount's CONFIGURED reminder window (timing_minutes_before, default 3
+// days) in the sub's own timezone, that haven't been notified this cycle. Send
+// patient an upcoming charge reminder. Idempotent: relies on subscription_events
+// containing 'upcoming_charge_sent' within MAX_WINDOW_DAYS for de-dupe.
 async function runUpcomingChargeScan(summary, dryRun) {
-  const REMIND_DAYS = 3;
+  // Bounded 31-day SQL net; each subaccount's CONFIGURED "days before" is then
+  // enforced precisely in the loop via the gate's timing_minutes_before (SQL
+  // can't see the JS catalog default). The dedup window is widened to 31 days
+  // too: it suppresses re-sends within a billing cycle regardless of the
+  // configured reminder window, so a clinic setting 7 days can't get both a
+  // 7-day and a 3-day reminder for the same charge. next_due_date advancing
+  // after each charge naturally resets eligibility for the next cycle.
+  const MAX_WINDOW_DAYS = 31;
   const r = await db.query(
     `SELECT s.*, sd.data AS blob_data
      FROM subscriptions s
@@ -187,12 +245,12 @@ async function runUpcomingChargeScan(summary, dryRun) {
      WHERE s.status = 'active'
        AND s.contact_id IS NOT NULL
        AND s.next_due_date > ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date)
-       AND s.next_due_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date + INTERVAL '${REMIND_DAYS} days')
+       AND s.next_due_date <= ((NOW() AT TIME ZONE COALESCE(sd.data->'settings'->>'timezone', $1))::date + INTERVAL '${MAX_WINDOW_DAYS} days')
        AND NOT EXISTS (
          SELECT 1 FROM subscription_events e
          WHERE e.subscription_id = s.id
            AND e.event_type = 'upcoming_charge_sent'
-           AND e.created_at > NOW() - INTERVAL '${REMIND_DAYS} days'
+           AND e.created_at > NOW() - INTERVAL '${MAX_WINDOW_DAYS} days'
        )`,
     [DEFAULT_TZ]
   );
@@ -200,6 +258,26 @@ async function runUpcomingChargeScan(summary, dryRun) {
 
   for (const row of r.rows) {
     try {
+      const upBlob = row.blob_data || {};
+      const upTz = (upBlob.settings && upBlob.settings.timezone) || DEFAULT_TZ;
+
+      // Per-subaccount configured window. Default 4320 min (3 days) matches the
+      // prior hardcoded REMIND_DAYS so untouched subaccounts are unchanged.
+      const upGate = await shouldSend(row.subaccount_id, 'recurring_billing_upcoming_charge', db);
+      if (!upGate.ok) {
+        summary.upcoming_skipped = (summary.upcoming_skipped || 0) + 1;
+        continue;
+      }
+      const upWindowDays = Math.max(1, Math.round((upGate.timing_minutes_before || 4320) / 1440));
+      const upHorizon = await db.query(
+        `SELECT ($1::date) <= ((NOW() AT TIME ZONE $2)::date + ($3 || ' days')::interval) AS within`,
+        [row.next_due_date, upTz, String(upWindowDays)]
+      );
+      if (!upHorizon.rows[0] || !upHorizon.rows[0].within) {
+        summary.upcoming_skipped = (summary.upcoming_skipped || 0) + 1;
+        continue;
+      }
+
       const ctx = await recurringEmail._loadContext(row.subaccount_id, row.contact_id);
       if (!ctx) {
         summary.upcoming_skipped = (summary.upcoming_skipped || 0) + 1;
