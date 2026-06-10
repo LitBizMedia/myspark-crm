@@ -20,17 +20,28 @@ const { shouldSend } = require('./notifications');
 const { sendSms } = require('./twilio');
 const contactsLib = require('./contacts');
 
-// The compliance footer (STOP line) goes on the FIRST message of a conversation
-// only. Business name is already in every body via the copy; the STOP keyword is
-// handled by Twilio Advanced Opt-Out regardless. So the visible footer is a
-// best-practice signal on the conversation opener, not a per-message tax.
-// An existing thread (inbound or outbound) means the opener already happened.
+// The compliance footer (STOP line) goes on our FIRST OUTBOUND message to a
+// contact. Keying on outbound (not 'any thread exists') means a patient who
+// texted the clinic first still gets the opt-out offer on our first
+// business-initiated message. Business name is already in every body via the
+// copy; Twilio Advanced Opt-Out handles the STOP keyword regardless, so the
+// visible footer is a best-practice signal, not the opt-out mechanism.
+// FUTURE (noted in Notifications blueprint): periodic re-insertion every N days
+// on long-running threads (GHL-style). Not built; would key on a last-footer-sent
+// timestamp instead of a binary first-outbound check.
 const OPT_OUT_FOOTER = ' Reply STOP to opt out.';
 
-async function smsConversationExists(subaccountId, contactId) {
+async function hasOutboundSms(subaccountId, contactId) {
   try {
     const r = await db.query(
-      "SELECT 1 FROM conversations WHERE subaccount_id = $1 AND contact_id = $2 AND channel = 'sms' LIMIT 1",
+      `SELECT 1
+         FROM conversation_messages cm
+         JOIN conversations c ON c.id = cm.conversation_id
+        WHERE cm.subaccount_id = $1
+          AND c.contact_id = $2
+          AND cm.channel = 'sms'
+          AND cm.direction = 'outbound'
+        LIMIT 1`,
       [subaccountId, contactId]
     );
     return r.rows.length > 0;
@@ -89,7 +100,7 @@ async function sendPatientSms(opts) {
   // 2b. First-message footer. Append the STOP line only when no SMS thread
   // exists yet for this contact (the conversation opener).
   let outBody = body;
-  const isFirst = !(await smsConversationExists(subaccountId, contactId));
+  const isFirst = !(await hasOutboundSms(subaccountId, contactId));
   if (isFirst) {
     outBody = body + OPT_OUT_FOOTER;
   }
