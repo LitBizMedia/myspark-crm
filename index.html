@@ -5028,6 +5028,10 @@ function handleLogout(){
     .catch(function(){})
     .finally(function(){
       try{localStorage.removeItem(SSK);}catch(e){}
+      // Clear any agency login-as token so a re-login in this same tab does
+      // not carry a stale Bearer. sessionStorage persists for the tab's life,
+      // so logout must wipe it or the next session 401s on the dead token.
+      try{sessionStorage.removeItem('msp_impersonation_token');sessionStorage.removeItem('msp_impersonation_slug');}catch(e){}
       location.reload();
     });
 }
@@ -14421,6 +14425,8 @@ function forceIdleLogout(){
   if(idleState.warningTimer){clearTimeout(idleState.warningTimer);idleState.warningTimer=null;}
   // Wipe session and reload
   try{localStorage.removeItem(SSK);}catch(e){}
+  // Clear any agency login-as token (see handleLogout note).
+  try{sessionStorage.removeItem('msp_impersonation_token');sessionStorage.removeItem('msp_impersonation_slug');}catch(e){}
   // Show a brief flash so the user understands what happened
   try{
     var flash = document.createElement('div');
