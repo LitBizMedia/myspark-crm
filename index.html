@@ -29449,10 +29449,33 @@ document.addEventListener('DOMContentLoaded',async function(){
   // Normal CRM login flow: validate the HttpOnly session cookie via the server.
   // Browser cannot read the cookie directly (it is HttpOnly). We ask the server
   // who we are. If a valid session exists, the server returns the user info.
+  // Reads the session, parsing the body safely. Returns {status, data} where
+  // data is null if the body was not JSON (e.g. a transient HTML edge response).
+  async function _readSession(){
+    const r=await fetch(apiUrl('/api/subaccount/session'),{credentials:'include'});
+    let d=null;
+    try{ d=await r.json(); }catch(e){ d=null; }
+    return {status:r.status, data:d};
+  }
   try{
-    const sessRes=await fetch(apiUrl('/api/subaccount/session'),{credentials:'include'});
-    if(sessRes.ok){
-      const sessData=await sessRes.json();
+    let s=await _readSession();
+    // Stale-impersonation recovery, narrowly gated. Clear the token and retry
+    // ONCE only on a DEFINITIVE auth rejection: a clean JSON 401 with
+    // authenticated===false. That is proof the Bearer is dead. Transient
+    // failures (HTML edge blips -> data null, 5xx, network throws) are NOT
+    // proof, so we leave a possibly-valid impersonation token intact and never
+    // drop a legit agency session on a blip. Gated so it cannot loop.
+    if(s.status===401 && s.data && s.data.authenticated===false){
+      var _hadImpToken=false;
+      try{_hadImpToken=!!sessionStorage.getItem('msp_impersonation_token');}catch(e){}
+      if(_hadImpToken){
+        try{sessionStorage.removeItem('msp_impersonation_token');sessionStorage.removeItem('msp_impersonation_slug');}catch(e){}
+        s=await _readSession();
+      }
+    }
+    const sessRes={ok:s.status>=200&&s.status<300};
+    const sessData=s.data;
+    if(sessRes.ok&&sessData){
       if(sessData.authenticated&&sessData.user){
         // Detect agency impersonation context. If sessionStorage has the
         // impersonation token, this tab is an agency-assist session and the
