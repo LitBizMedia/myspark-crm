@@ -44,7 +44,7 @@ async function handler(req, res) {
   }
 
   const subaccountId = session.subaccount_id;
-  const { username, role, email, displayName, jobTitle, avatarFileId, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly, welcomeResend, phone } = req.body || {};
+  const { username, role, email, displayName, jobTitle, avatarFileId, active, newPassword, color, schedule, dateOverrides, isAgencyAdmin, magicLinkOnly, welcomeResend, phone, notifySms } = req.body || {};
   // Accept email as identifier when username not provided (post email-as-login migration)
   const identifier = username || email;
 
@@ -375,6 +375,13 @@ async function handler(req, res) {
     if (np !== targetUser.phone) {
       patch.phone = np;
       changedFields.push('phone');
+    }
+  }
+  if (notifySms !== undefined) {
+    const newVal = !!notifySms;
+    if (newVal !== !!targetUser.notify_sms) {
+      patch.notify_sms = newVal;
+      changedFields.push('notify_sms');
     }
   }
   if (schedule !== undefined) {

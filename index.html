@@ -14323,6 +14323,7 @@ async function fetchFromServer(opts){
             mustChangePassword:u.must_change_password,
             isAgencyAdmin:!!u.is_agency_admin,
             lastLoginAt:u.last_login_at||null,
+            notify_sms:!!u.notify_sms,
             createdAt:u.created_at,
             updatedAt:u.updated_at
           };
@@ -14831,6 +14832,7 @@ function openEditUserModal(userId){
   const currentEmail = u.email || u.username || '';
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Position <span style="font-weight:400;color:var(--text-muted)">(shown on staff cards)</span></label><input id="eu-jobtitle" type="text" value="'+esc(u.jobTitle||'')+'" placeholder="e.g. Massage Therapist"></div></div>'
     +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login)</span></label><input id="eu-email" type="email" value="'+esc(currentEmail)+'" autocomplete="off" placeholder="user@example.com"'+(isAdmin?' disabled':'')+'></div>'+'<div class="form-group"><label>Phone <span style="font-weight:400;color:var(--text-muted)">(optional, for SMS)</span></label><input id="eu-phone" type="tel" value="'+esc(u.phone||'')+'" autocomplete="off" placeholder="(555) 123-4567"></div>'
+    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500"><input id="eu-notify-sms" type="checkbox"'+(u.notify_sms?' checked':'')+'> Text me my notifications</label><div style="font-size:11px;color:var(--text-muted);margin-top:4px">When on, internal notifications you receive are also sent by SMS. Requires a phone number above and SMS enabled for your clinic.</div></div>'
     +(isAdmin?'':'<div class="form-row">'+roleField+'<div class="form-group"><label>&nbsp;</label><button type="button" class="btn btn-ghost" style="height:38px" onclick="sendUserPasswordResetLink(\''+userId+'\')">Send Password Reset Link</button></div></div>')
     +(isAdmin?'':'<div class="form-group"><button type="button" class="btn btn-ghost btn-sm" onclick="resendWelcomeEmail(\''+userId+'\')">Resend Welcome Email</button><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Use this if the user deleted or never received their setup email. Sends a fresh setup link valid for 7 days.</div></div>')
     +'<div class="form-group"><label>Profile Photo</label><div style="display:flex;align-items:center;gap:12px"><div id="eu-avatar-preview">'+avatarHtml({avatarUrl:(u.avatarUrl||''),name:u.name,username:u.username,color:(u.color||USER_COLORS[0])},56)+'</div><div style="display:flex;flex-direction:column;gap:4px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'eu-avatar-input\').click()">Upload Photo</button><button type="button" class="btn btn-ghost btn-sm" id="eu-avatar-remove" onclick="removeUserAvatar()" style="'+((u.avatarFileId)?'':'display:none')+'">Remove Photo</button></div></div><input type="file" id="eu-avatar-input" accept="image/png,image/jpeg,image/jpg" style="display:none" onchange="uploadUserAvatar(event)"><div id="eu-avatar-status" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div></div>'
@@ -14959,6 +14961,7 @@ async function saveEditUser(){
         if(euEmail)syncBody.email=euEmail;
         if(updates.color)syncBody.color=updates.color;
         syncBody.phone=(document.getElementById('eu-phone')&&document.getElementById('eu-phone').value||'').trim();
+        syncBody.notifySms=!!(document.getElementById('eu-notify-sms')&&document.getElementById('eu-notify-sms').checked);
         var syncRes=await fetch(apiUrl('/api/subaccount/update-user'),{credentials:'include',
           method:'POST',
           credentials:'include',
