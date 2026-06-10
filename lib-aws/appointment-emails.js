@@ -125,14 +125,17 @@ async function sendAppointmentConfirmations(opts) {
 
   // Short, label-agnostic SMS body. Reads right whether title is a service
   // name, a custom appointment title, or generic. Footer is the dispatcher's job.
+  // HIPAA minimum-necessary: no service/title in SMS. The service name can
+  // carry clinical meaning (a disclosure on an unprotected channel). Date + time
+  // orient the patient; detail lives in the email and portal. A per-clinic
+  // "include service in SMS" toggle (default off) is the planned proper fix.
   function buildSmsBody(name, title) {
     const biz = businessName || 'MySpark+';
-    const lbl = title || 'Appointment';
     if (isReschedule) {
-      return biz + ': your appointment, ' + lbl + ', has been moved to ' + dateStr
+      return biz + ': your appointment has been moved to ' + dateStr
         + (timeStr ? ' at ' + timeStr : '') + '. Questions? Give us a call.';
     }
-    return biz + ': your appointment, ' + lbl + ', is confirmed for ' + dateStr
+    return biz + ': your appointment is confirmed for ' + dateStr
       + (timeStr ? ' at ' + timeStr : '') + '. Need to reschedule? Give us a call.';
   }
 

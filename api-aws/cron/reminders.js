@@ -282,8 +282,8 @@ async function runReminders() {
       // owns the workspace gate, consent, phone resolution, and first-message
       // footer, replacing this cron's old direct sendSms + hardcoded footer.
       // Explicit date (not "tomorrow") because reminder timing is configurable.
-      const lbl = appt.title || 'Appointment';
-      const smsBody = bizName + ': reminder, your appointment, ' + lbl + ', is '
+      // HIPAA minimum-necessary: no service/title in SMS (see appointment-emails.js).
+      const smsBody = bizName + ': reminder, you have an appointment on '
         + dateStr + (timeStr ? ' at ' + timeStr : '')
         + '. Need to reschedule? Give us a call.';
       try {

@@ -95,11 +95,11 @@ function buildHtml(opts) {
  */
 // Short, label-agnostic cancellation SMS. Footer is the dispatcher's job.
 function buildCancelSmsBody(opts) {
+  // HIPAA minimum-necessary: no service/title in SMS (see appointment-emails.js).
   const biz = opts.businessName || 'MySpark+';
-  const lbl = opts.appointmentTitle || 'Appointment';
   const dateStr = opts.dateStr || fmtDate(opts.appointmentDate);
   const timeStr = opts.timeStr || fmtTime(opts.appointmentTime);
-  return biz + ': your appointment, ' + lbl + ', on ' + dateStr
+  return biz + ': your appointment on ' + dateStr
     + (timeStr ? ' at ' + timeStr : '') + ' has been cancelled. Questions? Give us a call.';
 }
 
