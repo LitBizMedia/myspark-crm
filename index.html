@@ -5094,6 +5094,15 @@ function handleNotifClick(kind,id){
   closeNotif();
   if(kind==='task')switchPanel('tasks');
   else if(kind==='appt')switchPanel('calendar');
+  else if(kind==='event'){
+    var row=(db.internalNotifs||[]).find(function(n){return n.id===id;});
+    if(row){
+      if(row.is_read!==true){row.is_read=true;fetch(apiUrl('/api/subaccount/internal-notifications-read'),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:row.id})}).catch(function(){});updateNotifBadge();}
+      if(row.link_type==='appointment')switchPanel('calendar');
+      else if(row.link_type==='contract')switchPanel('contracts');
+      else if(row.link_type==='contact')switchPanel('contacts');
+    }
+  }
 }
 
 // =====================================================
@@ -14167,7 +14176,7 @@ async function doSync(){
 
 async function fetchFromServer(opts){
   _ensureNotificationsLoaded();
-  _ensureNotificationsLoaded();
+  fetchInternalNotifs().then(function(){ if(typeof updateNotifBadge==='function') updateNotifBadge(); });
   // opts.includeContacts (default true): pull /contact-list along with /data-load.
   // 30s auto-poll passes false to skip the 3MB+ contacts payload. Page nav to
   // contacts, contact mutations, and the dedicated 5min contacts poll pass true.
@@ -17308,6 +17317,15 @@ function _internalNotifTypes(){
   return Object.assign({}, defaults, blobTypes);
 }
 
+async function fetchInternalNotifs(){
+  try{
+    const r=await fetch(apiUrl('/api/subaccount/internal-notifications-list'),{credentials:'include'});
+    if(!r.ok)return;
+    const d=await r.json();
+    db.internalNotifs=Array.isArray(d.notifications)?d.notifications:[];
+  }catch(e){}
+}
+
 function getNotifs(){
   const ns=db.settings.notifSettings||{};
   const types=_internalNotifTypes();
@@ -17355,6 +17373,19 @@ function getNotifs(){
       return diff>0&&diff<=advMs;
     }).forEach(a=>{const key='apptup-'+a.id;if(!out.find(x=>x.key===key))out.push({cls:'ni-appt',icon:'C',text:'"'+a.title+'" on '+fmtDate(a.date)+(a.time?' at '+fmtTime(a.time):''),sub:'Upcoming appointment',kind:'appt',id:a.id,key,read:readSet.has(key)})});
   }
+
+  // Event-driven staff notifications (internal_notifications table, server-stored).
+  // Read-state lives on the row (is_read), keyed 'evt-<rowid>' so it never
+  // collides with computed task/appt keys. Newest first within the group.
+  (db.internalNotifs||[]).forEach(function(n){
+    out.push({
+      cls:'ni-event', icon:'\u25CF',
+      text:n.body||n.title, sub:n.title||'Notification',
+      kind:'event', id:n.id, key:'evt-'+n.id,
+      read:!!n.is_read, eventRow:true,
+      linkType:n.link_type||null, linkId:n.link_id||null
+    });
+  });
 
   return out;
 }
@@ -17413,7 +17444,7 @@ function initBrowserNotifs(){
   }
   // Poll every 60 seconds as a safety net alongside event-driven calls
   if(!state._notifPollTimer){
-    state._notifPollTimer=setInterval(checkForNewNotifs,60000);
+    state._notifPollTimer=setInterval(function(){ fetchInternalNotifs().then(checkForNewNotifs); },60000);
   }
 }
 
@@ -17438,6 +17469,14 @@ function renderNotifs(){
 
 function markNotifRead(key,e){
   e.stopPropagation();
+  if(key&&key.indexOf('evt-')===0){
+    var rowId=key.slice(4);
+    var row=(db.internalNotifs||[]).find(function(n){return n.id===rowId;});
+    if(row)row.is_read=true;
+    fetch(apiUrl('/api/subaccount/internal-notifications-read'),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:rowId})}).catch(function(){});
+    updateNotifBadge();renderNotifs();
+    return;
+  }
   if(!db.readNotifs)db.readNotifs=[];
   if(!db.readNotifs.includes(key))db.readNotifs.push(key);
   saveData();updateNotifBadge();renderNotifs();
@@ -17445,13 +17484,26 @@ function markNotifRead(key,e){
 
 function markNotifUnread(key,e){
   e.stopPropagation();
+  if(key&&key.indexOf('evt-')===0){
+    var rowId=key.slice(4);
+    var row=(db.internalNotifs||[]).find(function(n){return n.id===rowId;});
+    if(row)row.is_read=false;
+    fetch(apiUrl('/api/subaccount/internal-notifications-read'),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:rowId,unread:true})}).catch(function(){});
+    updateNotifBadge();renderNotifs();
+    return;
+  }
   db.readNotifs=(db.readNotifs||[]).filter(k=>k!==key);
   saveData();updateNotifBadge();renderNotifs();
 }
 
 function markAllRead(){
   if(!db.readNotifs)db.readNotifs=[];
-  getNotifs().forEach(n=>{if(!db.readNotifs.includes(n.key))db.readNotifs.push(n.key)});
+  var hasEvent=false;
+  getNotifs().forEach(n=>{
+    if(n.eventRow){hasEvent=true;var row=(db.internalNotifs||[]).find(function(x){return x.id===n.id;});if(row)row.is_read=true;}
+    else if(!db.readNotifs.includes(n.key))db.readNotifs.push(n.key);
+  });
+  if(hasEvent){fetch(apiUrl('/api/subaccount/internal-notifications-read'),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({all:true})}).catch(function(){});}
   saveData();updateNotifBadge();renderNotifs();
 }
 

@@ -14,6 +14,7 @@ const { sendAppointmentConfirmations } = require('./lib/appointment-emails');
 const { checkStaffConflict } = require('./lib/staff-conflict');
 const { isTimeAvailable } = require('./lib/schedule');
 const { isValidStatus } = require('./lib/appt-statuses');
+const { notifyStaff } = require('./lib/staff-notify');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
@@ -790,6 +791,47 @@ async function handler(req, res) {
       }
     } catch (e) {
       console.error('fireIntakeForServiceBooking (staff appt) failed (non-fatal):', e.message);
+    }
+
+    // Internal staff notification: new appointment -> assigned provider.
+    // Self-notify allowed (kept simple). Only on create, only when assigned.
+    // Non-fatal; never blocks the save. Bell body may name the appointment
+    // (in-app); SMS body is HIPAA-minimal.
+    if (isNew && a.assignedTo) {
+      try {
+        let bizName = 'MySpark+';
+        try {
+          const subRow = await db.query('SELECT settings FROM subaccounts WHERE id=$1', [subaccountId]);
+          const st = subRow.rows[0] && subRow.rows[0].settings
+            ? (typeof subRow.rows[0].settings === 'string' ? JSON.parse(subRow.rows[0].settings) : subRow.rows[0].settings)
+            : {};
+          bizName = (st && (st.business_name || st.businessName)) || bizName;
+        } catch (be) { /* default */ }
+        const fmt12 = (t) => {
+          if (!t) return '';
+          const [h, m] = String(t).split(':');
+          const hh = parseInt(h, 10);
+          if (isNaN(hh)) return String(t);
+          const ap = hh >= 12 ? 'PM' : 'AM';
+          const h12 = hh === 0 ? 12 : (hh > 12 ? hh - 12 : hh);
+          return h12 + ':' + (m || '00') + ' ' + ap;
+        };
+        const _t = fmt12(a.time);
+        await notifyStaff({
+          subaccountId,
+          subaccountSlug: String(subaccountId).replace(/^sub-/, ''),
+          typeKey: 'new_booking',
+          title: 'New appointment',
+          body: (a.title || 'New appointment') + ' on ' + a.date + (_t ? ' at ' + _t : ''),
+          smsBody: bizName + ': new appointment on ' + a.date + (_t ? ' at ' + _t : '') + '.',
+          actorName: auth.username || null,
+          linkType: 'appointment',
+          linkId: a.id,
+          recipientUserIds: [a.assignedTo]
+        });
+      } catch (e) {
+        console.error('staff notify (new appt) failed (non-fatal):', e.message);
+      }
     }
 
     return res.status(200).json({ success: true, id: a.id });

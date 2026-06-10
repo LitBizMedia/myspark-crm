@@ -22,6 +22,7 @@
 
 const db = require('./lib/db');
 const contactsLib = require('./lib/contacts');
+const { notifyStaff } = require('./lib/staff-notify');
 const couponsLib = require('./lib/coupons');
 const { resolveResourceClaims, persistClaims } = require('./lib/resource-allocation');
 const { checkStaffConflict } = require('./lib/staff-conflict');
@@ -1316,6 +1317,32 @@ async function handler(req, res) {
       }
     } catch (autoErr) {
       console.error('Automation trigger fire error (non-fatal):', autoErr.message);
+    }
+
+    // Internal staff notification: new booking -> assigned provider.
+    // Non-fatal; never blocks the patient response. Class bookings are skipped
+    // (apptId is null; class enrollment has its own notification). Bookings with
+    // no resolved provider notify nobody. Bell body may name patient/service
+    // (in-app, authenticated); SMS body is HIPAA-minimal (no patient/service).
+    if (apptId && assignedStaffId) {
+      try {
+        const _biz = (settings && settings.businessName) || slug;
+        const _who = (client_info && client_info.name) || 'A client';
+        await notifyStaff({
+          subaccountId,
+          subaccountSlug: slug,
+          typeKey: 'new_booking',
+          title: 'New booking',
+          body: _who + ' booked ' + (title || 'an appointment') + ' on ' + bookingDate + ' at ' + fmtTime(bookingTime),
+          smsBody: _biz + ': new booking on ' + bookingDate + ' at ' + fmtTime(bookingTime) + '.',
+          actorName: _who,
+          linkType: 'appointment',
+          linkId: apptId,
+          recipientUserIds: [assignedStaffId]
+        });
+      } catch (e) {
+        console.error('staff notify (new booking) failed (non-fatal):', e.message);
+      }
     }
 
     return res.status(200).json({

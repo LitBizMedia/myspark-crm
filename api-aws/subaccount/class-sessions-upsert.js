@@ -6,6 +6,8 @@ const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
+const { getContactById } = require('./lib/contacts');
+const { sendCancellationEmail } = require('./lib/appointment-cancellation-email');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -21,11 +23,12 @@ async function handler(req, res) {
 
   try {
     const existing = await db.query(
-      'SELECT id, series_id FROM class_sessions WHERE id=$1 AND subaccount_id=$2',
+      'SELECT id, series_id, status, participants, title, date, time FROM class_sessions WHERE id=$1 AND subaccount_id=$2',
       [c.id, subaccountId]
     );
     const isNew = existing.rows.length === 0;
     const existingRow = existing.rows[0];
+    const wasCancelled = !!(existingRow && existingRow.status === 'cancelled');
 
     // If updating an existing session that is part of a series, and the
     // request did not explicitly set is_override, flip it to true automatically.
@@ -78,6 +81,56 @@ async function handler(req, res) {
       targetSubaccountId:subaccountId,
       metadata:{ title:c.title, date:c.date, is_override: isOverride, has_series: !!c.series_id }
     });
+
+    // Class cancellation fan-out (one-to-many). Fire ONLY on the transition
+    // from not-cancelled to cancelled, so re-saving an already-cancelled session
+    // doesn't re-notify. Notify the participants who were ENROLLED before this
+    // save (the existing row's roster), since the cancel may also clear the
+    // incoming participants array. Reuses the noun-aware cancellation sender
+    // with eventNoun:'class'. Each send independent + non-fatal.
+    const nowCancelled = (c.status === 'cancelled');
+    if (!isNew && !wasCancelled && nowCancelled && existingRow) {
+      try {
+        let roster = [];
+        try { roster = Array.isArray(existingRow.participants) ? existingRow.participants : JSON.parse(existingRow.participants || '[]'); }
+        catch (pe) { roster = []; }
+        const enrolled = roster.filter(p => p && p.status === 'enrolled' && p.contact_id);
+
+        let bizName = 'MySpark+';
+        try {
+          const sdRow = await db.findOne('subaccount_data', { subaccount_id: subaccountId });
+          const settings = (sdRow && sdRow.data && sdRow.data.settings) || {};
+          bizName = settings.businessName || settings.business_name || bizName;
+        } catch (be) { /* default */ }
+
+        const cancelSlug = String(subaccountId).replace(/^sub-/, '');
+        let notified = 0;
+        for (const p of enrolled) {
+          try {
+            const pc = await getContactById(subaccountId, p.contact_id);
+            await sendCancellationEmail({
+              subaccountId,
+              subaccountSlug: cancelSlug,
+              recipientEmail: (pc && pc.email) || '',
+              recipientName: (pc && (pc.display_name || pc.name)) || '',
+              contactId: p.contact_id,
+              businessName: bizName,
+              eventNoun: 'class',
+              appointmentTitle: existingRow.title || '',
+              appointmentDate: existingRow.date || '',
+              appointmentTime: existingRow.time || '',
+              source: 'class-cancelled'
+            });
+            notified++;
+          } catch (pe) {
+            console.warn('class cancel fan-out: send failed for contact', p.contact_id, ':', pe.message);
+          }
+        }
+        console.log('class cancel fan-out: notified ' + notified + ' of ' + enrolled.length + ' enrolled for session ' + c.id);
+      } catch (fe) {
+        console.error('class cancel fan-out failed (non-fatal):', fe.message);
+      }
+    }
 
     return res.status(200).json({ success:true, id:c.id, is_override: isOverride });
   } catch(e) {
