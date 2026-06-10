@@ -2100,6 +2100,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
       <button class="sb-item" id="sb-journeys" data-panel="journeys" onclick="switchPanel('journeys')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="7" rx="1"/></svg>Journeys
       </button>
+      <button class="sb-item" id="sb-marketing" data-panel="marketing" onclick="switchPanel('marketing')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Marketing
+      </button>
       <button class="sb-item" id="sb-automations" data-panel="automations" onclick="switchPanel('automations')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>Automations
       </button>
@@ -2823,6 +2826,12 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
       <!-- FORMS -->
       <div id="panel-journeys" class="panel hidden"></div>
+      <div id="panel-marketing" class="panel hidden">
+        <div style="padding:40px 24px;text-align:center;">
+          <h2 style="color:var(--main-text);font-size:var(--fs-20);font-weight:var(--fw-700);margin-bottom:8px;">Marketing</h2>
+          <p style="color:var(--main-text-muted);font-size:var(--fs-14);">Marketing tools are coming soon.</p>
+        </div>
+      </div>
       <div id="panel-automations" class="panel hidden"></div>
       <div id="panel-forms" class="panel hidden">
         <div class="forms-panel-tabs">
@@ -5050,7 +5059,7 @@ function handleLogout(){
 // =====================================================
 // initApp defined below (server-aware version at line ~3180)
 
-const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',journeys:'Journeys',automations:'Automations',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings',
+const PANEL_TITLES={dashboard:'Dashboard',contacts:'Contacts',conversations:'Conversations',calendar:'Calendar',tasks:'Tasks',products:'Products & Services',payments:'Payments',forms:'Forms',journeys:'Journeys',marketing:'Marketing',automations:'Automations',media:'Media Library',staff:'Staff',help:'Help',settings:'Settings',
   'agency-tools':'Agency Tools'
 };
 function renderPanel(){
