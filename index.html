@@ -17334,6 +17334,13 @@ function getNotifs(){
   const now2=new Date();
   const readSet=new Set(db.readNotifs||[]);
   const out=[];
+  // Appointment ids that already have a stored event record. The computed
+  // today/tomorrow/upcoming appt tiles are suppressed for these to avoid
+  // double-listing one appointment (the event record is the better item:
+  // it persists read-state server-side and navigates). Match on link_id.
+  const _eventApptIds=new Set((db.internalNotifs||[])
+    .filter(function(n){return n.link_type==='appointment'&&n.link_id;})
+    .map(function(n){return n.link_id;}));
 
   if(types.overdueTasks!==false){
     db.tasks.filter(t=>t.status!=='done'&&isOverdue(t.dueDate)&&(isAdmin||!t.assignedTo||t.assignedTo===uid))
@@ -17352,13 +17359,13 @@ function getNotifs(){
   }
 
   if(types.apptToday!==false){
-    db.appointments.filter(a=>a.date===td&&isActiveAppt(a)&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
+    db.appointments.filter(a=>a.date===td&&isActiveAppt(a)&&!_eventApptIds.has(a.id)&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
       .forEach(a=>{const key='appttoday-'+a.id;out.push({cls:'ni-appt',icon:'C',text:'"'+a.title+'"'+(a.time?' at '+fmtTime(a.time):''),sub:'Appointment today',kind:'appt',id:a.id,key,read:readSet.has(key)})});
   }
 
   if(types.apptTomorrow!==false){
     const tom=new Date();tom.setDate(tom.getDate()+1);const ts=_localDS(tom);
-    db.appointments.filter(a=>a.date===ts&&isActiveAppt(a)&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
+    db.appointments.filter(a=>a.date===ts&&isActiveAppt(a)&&!_eventApptIds.has(a.id)&&(isAdmin||!a.assignedTo||a.assignedTo===uid))
       .forEach(a=>{const key='appttom-'+a.id;if(!out.find(x=>x.key===key))out.push({cls:'ni-appt',icon:'C',text:'"'+a.title+'" tomorrow'+(a.time?' at '+fmtTime(a.time):''),sub:'Appointment tomorrow',kind:'appt',id:a.id,key,read:readSet.has(key)})});
   }
 
@@ -17367,6 +17374,7 @@ function getNotifs(){
     const advMs=apptAdvH*3600000;
     db.appointments.filter(a=>{
       if(!isActiveAppt(a))return false;
+      if(_eventApptIds.has(a.id))return false;
       if(!isAdmin&&a.assignedTo&&a.assignedTo!==uid)return false;
       const apptMs=new Date(a.date+'T'+(a.time||'09:00')).getTime();
       const diff=apptMs-now2.getTime();
