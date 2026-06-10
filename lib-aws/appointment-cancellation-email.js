@@ -45,14 +45,18 @@ function escHtml(s) {
 }
 
 function buildSubject(opts) {
-  const title = opts.appointmentTitle || 'Your appointment';
+  const noun = opts.eventNoun || 'appointment';
+  const nounCap = noun.charAt(0).toUpperCase() + noun.slice(1);
+  // HIPAA: subject names no service/class title, just the event noun + date.
   const dateStr = opts.dateStr || fmtDate(opts.appointmentDate);
-  return 'Cancelled: ' + title + (dateStr ? ' on ' + dateStr : '');
+  return 'Cancelled: Your ' + nounCap + (dateStr ? ' on ' + dateStr : '');
 }
 
 function buildHtml(opts) {
   const patientName = escHtml(opts.patientName || 'there');
-  const title = escHtml(opts.appointmentTitle || 'Appointment');
+  const noun = opts.eventNoun || 'appointment';
+  const nounCap = noun.charAt(0).toUpperCase() + noun.slice(1);
+  const title = escHtml(opts.appointmentTitle || nounCap);
   const dateStr = escHtml(opts.dateStr || fmtDate(opts.appointmentDate));
   const timeStr = escHtml(opts.timeStr || fmtTime(opts.appointmentTime));
   const staffName = escHtml(opts.staffName || '');
@@ -60,13 +64,13 @@ function buildHtml(opts) {
   const rebookUrl = opts.rebookUrl || '';
 
   const rebookBlock = rebookUrl
-    ? '<p style="margin:24px 0 4px"><a href="' + rebookUrl + '" style="background:#6b21ea;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;display:inline-block;font-weight:600;font-size:14px">Book a new appointment</a></p>'
+    ? '<p style="margin:24px 0 4px"><a href="' + rebookUrl + '" style="background:#6b21ea;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;display:inline-block;font-weight:600;font-size:14px">Book a new ' + noun + '</a></p>'
     : '<p style="color:#5a4d7a;font-size:14px;margin:0 0 4px">To reschedule, reply to this email or give us a call.</p>';
 
   return ''
     + '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1030">'
-    + '<h2 style="color:#6b21ea;margin:0 0 8px">Appointment Cancelled</h2>'
-    + '<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">Hi ' + patientName + ', your appointment with ' + bizName + ' has been cancelled.</p>'
+    + '<h2 style="color:#6b21ea;margin:0 0 8px">' + nounCap + ' Cancelled</h2>'
+    + '<p style="margin:0 0 24px;color:#5a4d7a;font-size:15px">Hi ' + patientName + ', your ' + noun + ' with ' + bizName + ' has been cancelled.</p>'
     + '<div style="text-align:center;font-size:20px;font-weight:700;color:#1a1030;margin:0 0 20px;padding:16px;background:#f7f5fc;border-radius:8px">' + title + '</div>'
     + '<table style="width:100%;border-collapse:collapse;margin:0 0 24px">'
     + '<tr><td style="padding:8px 0;color:#5a4d7a;font-size:14px;width:100px">Date</td><td style="padding:8px 0;font-weight:600">' + dateStr + '</td></tr>'
@@ -99,7 +103,8 @@ function buildCancelSmsBody(opts) {
   const biz = opts.businessName || 'MySpark+';
   const dateStr = opts.dateStr || fmtDate(opts.appointmentDate);
   const timeStr = opts.timeStr || fmtTime(opts.appointmentTime);
-  return biz + ': your appointment on ' + dateStr
+  const noun = opts.eventNoun || 'appointment';
+  return biz + ': your ' + noun + ' on ' + dateStr
     + (timeStr ? ' at ' + timeStr : '') + ' has been cancelled. Questions? Give us a call.';
 }
 

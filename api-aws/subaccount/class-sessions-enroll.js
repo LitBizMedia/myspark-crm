@@ -11,6 +11,7 @@ const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const { fireIntakeForClassRegistration } = require('./lib/intake-trigger');
 const { getContactById } = require('./lib/contacts');
+const { sendClassEnrollmentEmail } = require('./lib/class-enrollment-email');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -29,7 +30,7 @@ async function handler(req, res) {
 
   try {
     const r = await db.query(
-      'SELECT id, participants, capacity FROM class_sessions WHERE id=$1 AND subaccount_id=$2',
+      'SELECT id, participants, capacity, date, time, title FROM class_sessions WHERE id=$1 AND subaccount_id=$2',
       [session_id, subaccountId]
     );
     if (r.rows.length === 0) return res.status(404).json({ error: 'Session not found' });
@@ -144,6 +145,35 @@ async function handler(req, res) {
         });
       } catch (e) {
         console.error('fireIntakeForClassRegistration (enroll) failed (non-fatal):', e.message);
+      }
+
+      // Class enrollment confirmation (email + SMS via dispatcher). Class-native
+      // wording. Reuses the contact + slug already loaded above. Non-fatal:
+      // never blocks enrollment. Fires only on a genuine enroll (this block).
+      try {
+        let bizName = 'MySpark+';
+        try {
+          const sdRow = await db.findOne('subaccount_data', { subaccount_id: subaccountId });
+          const settings = (sdRow && sdRow.data && sdRow.data.settings) || {};
+          bizName = settings.businessName || settings.business_name || bizName;
+        } catch (be) { /* default */ }
+        const enrollSlug = String(subaccountId).replace(/^sub-/, '');
+        // Load the contact in THIS block ('c' from the intake block above is
+        // scoped to that try). Self-contained so it can't break if intake changes.
+        const ec = await getContactById(subaccountId, contact_id);
+        await sendClassEnrollmentEmail({
+          subaccountId,
+          subaccountSlug: enrollSlug,
+          recipientEmail: (ec && ec.email) || '',
+          recipientName: (ec && (ec.display_name || ec.name)) || '',
+          contactId: contact_id,
+          businessName: bizName,
+          classTitle: session.title || '',
+          classDate: session.date || '',
+          classTime: session.time || ''
+        });
+      } catch (e) {
+        console.error('sendClassEnrollmentEmail (enroll) failed (non-fatal):', e.message);
       }
     }
 
