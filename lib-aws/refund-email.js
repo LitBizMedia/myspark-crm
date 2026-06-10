@@ -13,6 +13,7 @@
 const { sendEmail } = require('./mailgun');
 const db = require('./db');
 const { shouldSend } = require('./notifications');
+const { sendPatientSms } = require('./patient-sms');
 
 function fmt$(n) {
   return '$' + (Math.round((parseFloat(n) || 0) * 100) / 100).toFixed(2);
@@ -112,11 +113,46 @@ function buildHtml(opts) {
  */
 async function sendRefundReceipt(opts) {
   if (!opts.subaccountId) return { ok: false, error: 'no subaccountId' };
-  if (!opts.recipientEmail) return { ok: false, skipped: true, reason: 'no recipient email' };
 
-  // Gate via Notifications tab
+  // Gate once, split per channel so email and SMS fire independently.
   const gate = await shouldSend(opts.subaccountId, 'refund_receipt', db);
   if (!gate.ok) return { ok: true, skipped: true, reason: gate.reason || 'refund_receipt disabled' };
+  const emailEnabled = !!gate.email_enabled;
+  const smsEnabled = !!gate.sms_enabled;
+
+  // SMS branch: independent of email. Body is GC-aware so it never tells a
+  // patient to watch a statement for money that went back to a gift card.
+  // Amount via fmt$ per Payment Policy; names nothing (HIPAA minimal).
+  if (smsEnabled && opts.contactId) {
+    try {
+      const card = parseFloat(opts.cardPortion || 0);
+      const gc = parseFloat(opts.giftCardPortion || 0);
+      const biz = opts.businessName || 'MySpark+';
+      const amt = fmt$(opts.refundTotal);
+      let tail;
+      if (card <= 0 && gc > 0) {
+        tail = ' has been added back to your gift card.';
+      } else {
+        tail = ' has been processed. It may take a few days to appear on your statement.';
+      }
+      const smsBody = biz + ': your refund of ' + amt + tail;
+      await sendPatientSms({
+        subaccountId: opts.subaccountId,
+        subaccountSlug: opts.subaccountSlug,
+        typeKey: 'refund_receipt',
+        contactId: opts.contactId,
+        body: smsBody,
+        source: 'refund'
+      });
+    } catch (e) {
+      console.warn('refund SMS failed for contact', opts.contactId, ':', e.message);
+    }
+  }
+
+  // Email branch: only when channel on and we have an address.
+  if (!emailEnabled || !opts.recipientEmail) {
+    return { ok: true, skipped: !emailEnabled ? 'email_off' : 'no_email', smsAttempted: smsEnabled && !!opts.contactId };
+  }
 
   const html = buildHtml({
     patientName: opts.recipientName,
