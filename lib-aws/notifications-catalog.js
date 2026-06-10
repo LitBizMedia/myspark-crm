@@ -57,13 +57,12 @@ const CATALOG = [
         { key: 'appointment',       label: 'Appointment Payments',     default: true },
         { key: 'recurring_billing', label: 'Recurring Billing Charges', default: true },
         { key: 'gift_card',         label: 'Gift Card Purchases',      default: true },
-        { key: 'session_pack',      label: 'Session Pack Purchases',   default: true },
-        { key: 'product',           label: 'Product Orders',           default: true }
+        { key: 'session_pack',      label: 'Session Pack Purchases',   default: true }
       ]
     }
   },
   { key: 'refund_receipt', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'refund-receipt', label: 'Refund Receipt', description: 'Confirms to a patient that they have been refunded' },
-  { key: 'gift_card_purchase', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'gift-card-purchase', label: 'Gift Card Purchase', description: 'Delivers a gift card code. Routes automatically to recipient if set, otherwise buyer.' },
+  { key: 'gift_card_purchase', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'live', template_type: 'gift-card-purchase', label: 'Gift Card Purchase', description: 'Delivers a gift card code. Routes automatically to recipient if set, otherwise buyer.' },
   { key: 'session_pack_low_balance', scope: 'subaccount', audience: 'patient', category: 'Payments', channels: ['email', 'sms'], default_email: true, default_sms: false, default_timing_minutes_before: null, status: 'planned', template_type: 'session-pack-low', label: 'Session Pack Low Balance', description: 'Warns a patient when their session pack is running low (default threshold: 2 remaining)' },
 
   // ============ RECURRING BILLING (patient) ============

@@ -19,6 +19,7 @@
 const { sendEmail } = require('./mailgun');
 const db = require('./db');
 const { shouldSend } = require('./notifications');
+const { sendPatientSms } = require('./patient-sms');
 
 function fmt$(n) {
   return '$' + (Math.round((parseFloat(n) || 0) * 100) / 100).toFixed(2);
@@ -178,9 +179,38 @@ async function sendPaymentReceipt(opts) {
   const gate = await shouldSend(opts.subaccountId, 'payment_receipt', db);
   if (!gate.ok) return { ok: true, skipped: true, reason: gate.reason || 'payment_receipt disabled' };
 
-  // Source filter check
+  // Source filter check (applies to BOTH channels: a source turned off does
+  // not send a receipt by email or SMS).
   if (gate.source_filters_enabled && gate.source_filters_enabled[source] === false) {
     return { ok: true, skipped: true, reason: 'source ' + source + ' disabled by admin' };
+  }
+
+  // SMS branch: independent of email, fires when the SMS channel is on and we
+  // have a contact. Generic body, payment-type-agnostic so it reads right for a
+  // product, service, pack, or gift card, and names nothing (HIPAA minimal).
+  // Amount via fmt$ per Payment Policy. Dispatcher owns phone, consent, footer.
+  if (gate.sms_enabled && opts.contactId) {
+    try {
+      const amt = fmt$(parseFloat(pmt.total || pmt.amount || opts.total || 0));
+      const biz = opts.businessName || 'MySpark+';
+      const smsBody = biz + ': we received your payment of ' + amt
+        + '. Your receipt is on its way by email.';
+      await sendPatientSms({
+        subaccountId: opts.subaccountId,
+        subaccountSlug: opts.subaccountSlug,
+        typeKey: 'payment_receipt',
+        contactId: opts.contactId,
+        body: smsBody,
+        source: 'payment-receipt-' + source
+      });
+    } catch (e) {
+      console.warn('payment receipt SMS failed for contact', opts.contactId, ':', e.message);
+    }
+  }
+
+  // Email branch: only when the email channel is on.
+  if (!gate.email_enabled) {
+    return { ok: true, skipped: 'email_off', source: source, smsAttempted: !!(gate.sms_enabled && opts.contactId) };
   }
 
   // Build the email
