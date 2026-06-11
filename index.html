@@ -5971,7 +5971,8 @@ function renderDrawer(){
           +badge(mkState, 'Marketing SMS: ' + (mkState==='yes'?'Yes':mkState==='no'?'No':'Not recorded'))
           +'</div>'
           +'<div style="font-size:11px;color:var(--text-muted);margin-bottom:14px">'+meta+'</div>';
-      })();
+      })()
+      +'<div style="font-size:11px;color:var(--text-dim);margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">Contact ID: '+esc(c.id)+'</div>';
   }else if(state.dTab==='notes'){
     const notes=[...c.notes].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
     body='<div class="sec-row"><div class="sec-label" style="margin-bottom:0">Notes ('+notes.length+')</div><button class="btn btn-purple btn-sm" onclick="openNoteModal(\''+c.id+'\',null)">+ Add</button></div>'
