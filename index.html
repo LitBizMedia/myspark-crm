@@ -82,6 +82,18 @@ body:not(.role-admin) #sb-admin-label,
 body:not(.role-admin) #sb-settings{display:none!important}
 body:not(.subaccount-litbiz) #sb-agency-tools,
 body:not(.agency-admin) #sb-agency-tools{display:none!important}
+/* Role tier backstop — mirrors applyRolePermissions JS hides. */
+body.role-user #sb-conversations,
+body.role-user #sb-forms,
+body.role-user #sb-media,
+body.role-user #ppt-subs{display:none!important}
+body:not(.role-manager-up) #sb-marketing,
+body:not(.role-manager-up) #sb-automations,
+body:not(.role-manager-up) #sb-products,
+body:not(.role-manager-up) #sb-staff,
+body:not(.role-manager-up) #ppt-transactions,
+body:not(.role-manager-up) #ppt-invoices,
+body:not(.role-manager-up) #ppt-orders{display:none!important}
 /* ── AGENCY TOOLS PANEL ─────────────────────────────────── */
 #panel-agency-tools{padding:24px 28px 60px}
 .at-tabs{display:flex;background:var(--subnav-bar);border-bottom:2px solid var(--divider);margin:-24px -28px 24px;flex-shrink:0;padding:0}
@@ -2278,7 +2290,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
           <span class="bulk-count" id="bulk-count"></span>
           <span id="bulk-select-all-wrap" class="hidden"></span>
           <div class="flex-1"></div>
-          <button class="btn btn-ghost btn-sm" onclick="bulkExportCSV()">Export CSV</button>
+          <button class="btn btn-ghost btn-sm" id="bulk-export-btn" onclick="bulkExportCSV()">Export CSV</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulkTagModal()">Add Tag</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulkStatusModal()">Change Status</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulkTypeModal()">Change Type</button>
@@ -2448,7 +2460,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
         <div class="task-chip-row">
           <div class="search-box" style="max-width:200px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="t-search" type="text" placeholder="Search tasks..." oninput="onTSearch(this.value)"></div>
           <button class="chip active" id="tf-scope-mine" onclick="setTScope('mine')">My Tasks</button>
-          <button class="chip" id="tf-scope-all" onclick="setTScope('all')">Everyone's Tasks</button>
+          <button class="chip" id="tf-scope-all" onclick="setTScope('all')" style="display:none">Everyone's Tasks</button>
           <span class="task-chip-sep" aria-hidden="true"></span>
           <button class="chip active" id="tf-status-all" onclick="setTStatus('all')">All</button>
           <button class="chip" id="tf-status-open" onclick="setTStatus('open')">Open</button>
@@ -5081,12 +5093,9 @@ function switchPanel(name){
   var _am=_r==='admin'||_r==='manager';
   if(name==='settings'&&_r!=='admin'){toast('Access denied.','error');return;}
   if((name==='products'||name==='staff'||name==='automations')&&!_am){toast('Access denied.','error');return;}
-  if(name==='forms'&&_r==='practitioner'){toast('Access denied.','error');return;}
-  if((name==='tasks'||name==='payments')&&_r==='practitioner'){toast('Access denied.','error');return;}
   if(name==='payments'&&_r==='user'){
     // Users can access payments but not transactions tab - handled via tab hide
   }
-  if(name==='contacts'&&_r==='practitioner'){toast('Access denied.','error');return;}
   if(name==='agency-tools'&&(state.subaccountSlug!=='litbiz'||!state.user||!state.user.isAgencyAdmin)){toast('Access denied.','error');return;}
   state.panel=name;
   document.querySelectorAll('.sb-item').forEach(i=>i.classList.toggle('active',i.dataset.panel===name));
@@ -5477,7 +5486,7 @@ function _renderDashQuickActions(role){
     {label:'New Payment',     icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>', click:'switchPanel(\'payments\')'}
   ];
   // Practitioners can't create payments; remove the button.
-  const filtered=role==='practitioner'?actions.filter(function(a){return a.label!=='New Payment';}):actions;
+  const filtered=actions;
   el.innerHTML=filtered.map(function(a){
     return '<button class="dash-qa-btn" onclick="'+a.click+'">'+a.icon+'<span class="dash-qa-btn-label">'+a.label+'</span></button>';
   }).join('');
@@ -5694,7 +5703,7 @@ async function renderContacts(){
     var rowActions='';
     if(state.cShowArchived){
       rowActions='<button class="icon-btn-xs" title="Restore" onclick="restoreOne(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/></svg></button>'
-        +'<button class="icon-btn-xs" title="Delete permanently" style="color:#dc2626" onclick="deleteOnePermanent(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>';
+        +(isManagerUp()?'<button class="icon-btn-xs" title="Delete permanently" style="color:#dc2626" onclick="deleteOnePermanent(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>':'');
     } else {
       rowActions='<button class="icon-btn-xs" onclick="openContactModal(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
     }
@@ -7336,9 +7345,7 @@ function printSoapNote(noteId){
 // CALENDAR
 // =====================================================
 function renderCal(){
-  if(userRole()==='practitioner'&&state.user&&state.user.id){
-    state._practitionerFilter=state.user.id;
-  }
+
   // Keep the view-button pills (Month/Week/Day) in sync with state.calView.
   // This handles the case where state.calView was set by applyCalPrefs at
   // startup before the calendar buttons existed in the DOM.
@@ -8816,7 +8823,7 @@ function renderTasks(){
 }
 
 function onTSearch(v){state.tSearch=v;state.tPage=1;renderTasks()}
-function setTScope(s){state.tScope=s;state.tPage=1;['mine','all'].forEach(x=>{const el=document.getElementById('tf-scope-'+x);if(el)el.classList.toggle('active',x===s)});renderTasks()}
+function setTScope(s){ if(s==='all'&&!isManagerUp())s='mine'; state.tScope=s;state.tPage=1;['mine','all'].forEach(x=>{const el=document.getElementById('tf-scope-'+x);if(el)el.classList.toggle('active',x===s)});renderTasks()}
 function setTStatus(s){state.tStatus=s;state.tPage=1;['all','open','in-progress','done','overdue'].forEach(x=>{const el=document.getElementById('tf-status-'+x);if(el)el.classList.toggle('active',x===s)});renderTasks()}
 function tPg(p){state.tPage=p;renderTasks()}
 function cycleTask(id){const t=getTask(id);if(!t)return;const m={'open':'in-progress','in-progress':'done','done':'open'};t.status=m[t.status];t.updatedAt=now_();saveData();renderTasks();if(state.drawer)renderDrawer();updateNotifBadge()}
@@ -13459,7 +13466,10 @@ async function confirmHardDelAppt(){
 function openTaskModal(contactId,taskId){
   const t=taskId?getTask(taskId):null,cid=t&&t.contactId||contactId||'';
   state.modal={type:'task',id:taskId||null,extra:cid};
-  const uOpts='<option value="">Unassigned</option>'+allUsers().map(u=>'<option value="'+u.id+'"'+(t&&t.assignedTo===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>').join('');
+  var _selfId=state.user&&state.user.id;
+  const uOpts=isManagerUp()
+    ? '<option value="">Unassigned</option>'+allUsers().map(u=>'<option value="'+u.id+'"'+(t&&t.assignedTo===u.id?' selected':'')+'>'+esc(u.name||u.username)+'</option>').join('')
+    : '<option value="'+_selfId+'" selected>'+esc((state.user&&(state.user.name||state.user.username))||'Me')+'</option>';
   const b='<div class="form-group"><label>Title *</label><input id="tf-title" type="text" value="'+esc(t&&t.title||'')+'" placeholder="Task title"></div>'
     +'<div class="form-group"><label>Description</label><textarea id="tf-desc" rows="5">'+esc(t&&t.description||'')+'</textarea></div>'
     +'<div class="form-row"><div class="form-group"><label>Due Date</label>'+_dateInputHTML('tf-due',t&&t.dueDate||'',false,'')+'</div><div class="form-group"><label>Priority</label><select id="tf-pri">'+['high','medium','low'].map(x=>'<option value="'+x+'"'+(t&&t.priority===x?' selected':x==='medium'&&!t?' selected':'')+'>'+(x[0].toUpperCase()+x.slice(1))+'</option>').join('')+'</select></div></div>'
@@ -13599,7 +13609,7 @@ function openUserSchedModal(uid){
 function buildUserBody(){
   const cols=USER_COLORS.map((c,i)=>'<div class="color-sw'+(i===0?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
   return'<div class="form-row"><div class="form-group"><label>Display Name</label><input id="uf-name" type="text" placeholder="Jane Smith"></div><div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(used to sign in)</span></label><input id="uf-email" type="email" placeholder="jane@example.com" autocomplete="off"></div></div><div class="form-row"><div class="form-group"><label>Phone <span style="font-weight:400;color:var(--text-muted)">(optional, for SMS)</span></label><input id="uf-phone" type="tel" placeholder="(555) 123-4567" autocomplete="off"></div></div>'
-    +'<div class="form-row"><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Full Access</option><option value="user">Staff</option><option value="practitioner">Practitioner</option></select></div></div>'
+    +'<div class="form-row"><div class="form-group"><label>Role</label><select id="uf-role"><option value="manager">Manager</option><option value="power_user">Power User</option><option value="user">User</option></select></div></div>'
     +'<div style="background:rgba(107,33,234,.06);border:1px solid var(--purple-border);border-radius:var(--radius);padding:10px 14px;margin:0 0 14px;font-size:12px;color:var(--text);line-height:1.5"><strong>Password setup:</strong> <span style="color:var(--text-muted)">A secure setup link will be emailed to the address above. The user creates their own password on first login.</span></div>'
     +'<div class="form-group"><label>Calendar Color</label><div class="color-swatches">'+cols+'</div></div>'
     +'<div class="divider"></div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Working Schedule</div>'
@@ -14575,7 +14585,7 @@ function forceIdleLogout(){
   setTimeout(function(){location.reload();}, 800);
 }
 
-var ROLE_LABELS={admin:'Admin',manager:'Full Access',user:'Staff',practitioner:'Practitioner'};
+var ROLE_LABELS={admin:'Admin',manager:'Manager',power_user:'Power User',user:'User'};
 function roleLabel(r){return ROLE_LABELS[r]||r;}
 function avatarHtml(u,size){
   var col=u.color||'#6b21ea';
@@ -14959,7 +14969,7 @@ function openEditUserModal(userId){
   state.selUserAvatarId=u.avatarFileId||'';
   state.selUserAvatarUrl=u.avatarUrl||'';
   const cols=USER_COLORS.map(c=>'<div class="color-sw'+((u.color||USER_COLORS[0])===c?' selected':'')+'" style="background:'+c+'" onclick="selUserColor(this,\''+c+'\')"></div>').join('');
-  const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','user','practitioner'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select></div>';
+  const roleField=isAdmin?'':'<div class="form-group"><label>Role</label><select id="eu-role">'+['manager','power_user','user'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+roleLabel(r)+'</option>').join('')+'</select></div>';
   const currentEmail = u.email || u.username || '';
   const b='<div class="form-row"><div class="form-group"><label>Display Name</label><input id="eu-name" type="text" value="'+esc(u.name||'')+'"></div><div class="form-group"><label>Position <span style="font-weight:400;color:var(--text-muted)">(shown on staff cards)</span></label><input id="eu-jobtitle" type="text" value="'+esc(u.jobTitle||'')+'" placeholder="e.g. Massage Therapist"></div></div>'
     +'<div class="form-group"><label>Email <span style="font-weight:400;color:var(--text-muted)">(login)</span></label><input id="eu-email" type="email" value="'+esc(currentEmail)+'" autocomplete="off" placeholder="user@example.com"'+(isAdmin?' disabled':'')+'></div>'+'<div class="form-group"><label>Phone <span style="font-weight:400;color:var(--text-muted)">(optional, for SMS)</span></label><input id="eu-phone" type="tel" value="'+esc(u.phone||'')+'" autocomplete="off" placeholder="(555) 123-4567"></div>'
@@ -17936,23 +17946,10 @@ const CANCELLATION_REASONS=[
 ];
 
 // Permission helpers. Practitioner is blocked at panel level; defense in depth here.
-function canViewSubscriptions(){
-  var r=state.user&&state.user.role;
-  return r==='admin'||r==='manager'||r==='user'||r==='super_admin';
-}
-function canManageSubscriptions(){
-  var r=state.user&&state.user.role;
-  return r==='admin'||r==='manager'||r==='super_admin';
-}
-function canDeleteSubscription(){
-  var r=state.user&&state.user.role;
-  return r==='admin'||r==='super_admin';
-}
-function canManagePlans(){
-  // Plans (catalog) are admin-only per Stage 2 design.
-  var r=state.user&&state.user.role;
-  return r==='admin'||r==='super_admin';
-}
+function canViewSubscriptions(){ return isPowerUp(); }
+function canManageSubscriptions(){ return isManagerUp(); }
+function canDeleteSubscription(){ return isAdminOnly(); }
+function canManagePlans(){ return isManagerUp(); }
 
 // Compute next due date locally for display only. Server is the source of truth.
 function calcNextDueDate(startDate,cycle){
@@ -33015,7 +33012,7 @@ function toggleArchiveView(){
   if(btn)btn.style.color=state.cShowArchived?'var(--orange)':'';
   if(addBtn)addBtn.classList.toggle('hidden',state.cShowArchived);
   if(archiveBtn)archiveBtn.textContent=state.cShowArchived?'Restore Selected':'Archive Selected';
-  if(deleteBtn)deleteBtn.classList.toggle('hidden',!state.cShowArchived);
+  if(deleteBtn)deleteBtn.classList.toggle('hidden',!(state.cShowArchived&&isManagerUp()));
   renderContacts();
 }
 
@@ -34332,9 +34329,9 @@ function renderGiftCards(){
   var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:Exo 2,sans-serif;font-size:16px;font-weight:700">Gift Cards</div>'
     +'<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+orders.length+' issued &bull; '+fmt$(orders.reduce(function(s,g){return s+(g.balance||0);},0))+' outstanding balance</div></div>'
-    +(manage?'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-      +'<button class="btn btn-ghost" onclick="openGcDesignsModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Designs</button>'
-      +'<button class="btn btn-primary" onclick="openGcSellModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Sell Card</button>'
+    +((manage||canSellGiftCards())?'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +(manage?'<button class="btn btn-ghost" onclick="openGcDesignsModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Manage Designs</button>':'')
+      +(canSellGiftCards()?'<button class="btn btn-primary" onclick="openGcSellModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Sell Card</button>':'')
       +'</div>':'')
     +'</div>'
     +'<div class="toolbar" style="margin-bottom:14px">'
@@ -39275,7 +39272,7 @@ function mediaIconColor(name) {
 }
 
 // Permission helper: only admin and manager can upload/delete media.
-// Staff (user, practitioner) get read-only access.
+// Staff (user) get read-only access.
 function canMediaWrite() {
   return isAdminOrManager();
 }
@@ -39580,6 +39577,10 @@ async function handleMediaUploadFile(file) {
 function userRole(){ return (state.user&&state.user.role)||'user'; }
 function hasRole(){ var r=userRole(); return Array.prototype.slice.call(arguments).indexOf(r)>-1; }
 function isAdminOrManager(){ return hasRole('admin','manager'); }
+// Role-group helpers — frontend mirror of lib-aws/roles.js. super_admin always included.
+function isAdminOnly(){ return hasRole('admin','super_admin'); }
+function isManagerUp(){ return hasRole('admin','super_admin','manager'); }
+function isPowerUp(){ return hasRole('admin','super_admin','manager','power_user'); }
 
 function renderPaySettings(){
   if(!isAdminOrManager()){switchPayTab('pos');return;}
@@ -40004,9 +40005,12 @@ function savePaySettings(){
   if(tx.enabled&&(prevRateZero!==nowRateZero))renderPaySettings();
 }
  // only admin permanently deletes
-function canManageGiftCards(){ return hasRole('admin','manager'); }
-function canManageCoupons(){ return hasRole('admin','manager'); }
-function canRefundVoid(){ return hasRole('admin','manager'); }
+function canManageGiftCards(){ return isManagerUp(); }
+function canSellGiftCards(){ return isPowerUp(); }
+function canSellPacks(){ return isPowerUp(); }
+function canSellSubscriptions(){ return isPowerUp(); }
+function canManageCoupons(){ return isManagerUp(); }
+function canRefundVoid(){ return isManagerUp(); }
 
 // =====================================================
 // AGENCY TOOLS PANEL (LitBiz only, gated by subaccountSlug)
@@ -40823,35 +40827,56 @@ function _agencyToolsOnFocusInput(){
 
 function applyRolePermissions(){
   var r=userRole();
-  var adm=r==='admin';
-  var am=adm||r==='manager';
-  var prac=r==='practitioner';
-  // Body class drives the admin-only CSS rules at the top of the file.
+  var adm=r==='admin'||r==='super_admin';
+  var managerUp=adm||r==='manager';
+  var powerUp=managerUp||r==='power_user';
+  var isUser=r==='user';
+  // Body classes drive the role CSS backstop at the top of the file.
   document.body.classList.toggle('role-admin',adm);
+  document.body.classList.toggle('role-manager-up',managerUp);
+  document.body.classList.toggle('role-power-up',powerUp);
+  document.body.classList.toggle('role-user',isUser);
   document.body.classList.toggle('subaccount-litbiz',state.subaccountSlug==='litbiz');
   document.body.classList.toggle('agency-admin',!!(state.user&&state.user.isAgencyAdmin));
   function hide(id,hidden){var el=document.getElementById(id);if(el)el.classList.toggle('hidden',hidden);}
-  hide('sb-contacts',   prac);
-  hide('sb-tasks',      prac);
-  hide('sb-payments',   prac);
-  hide('sb-products',   !am);
-  hide('sb-forms',      prac);
-  hide('sb-staff',      !am);
-  hide('sb-admin-label',!adm);
-  hide('sb-settings',   !adm);
-  // Hide transactions tab for users and practitioners
-  hide('ppt-transactions', !am);
+  // Sidebar tabs (show all = scoping happens inside the panel)
+  hide('sb-contacts',     false);
+  hide('sb-tasks',        false);
+  hide('sb-payments',     false);
+  hide('sb-journeys',     false);
+  hide('sb-conversations',isUser);
+  hide('sb-forms',        isUser);
+  hide('sb-marketing',    !managerUp);
+  hide('sb-automations',  !managerUp);
+  hide('sb-media',        isUser);
+  hide('sb-products',     !managerUp);
+  hide('sb-staff',        !managerUp);
+  hide('sb-admin-label',  !adm);
+  hide('sb-settings',     !adm);
+  // Payments sub-tabs
+  hide('ppt-transactions',!managerUp);
+  hide('ppt-subs',        isUser);
+  hide('ppt-invoices',    !managerUp);
+  hide('ppt-orders',      !managerUp);
+  // Catalog editor tabs: booking config admin-only; service catalog manager-up
   var bk=document.getElementById('cpt-booking');if(bk)bk.classList.toggle('hidden',!adm);
-  var svc=document.getElementById('cpt-service');if(svc)svc.classList.toggle('hidden',prac||r==='user');
-  hide('ppt-subs',      prac);
-  hide('ppt-invoices',  !am);
-  hide('ppt-orders',    !am);
-  // Hide View Archive from users/practitioners
+  var svc=document.getElementById('cpt-service');if(svc)svc.classList.toggle('hidden',!managerUp);
+  // View Archive: manager-up only
   var archBtn=document.getElementById('archive-toggle-btn');
-  if(archBtn)archBtn.classList.toggle('hidden',!am);
+  if(archBtn)archBtn.classList.toggle('hidden',!powerUp);
   var fptForms=document.getElementById('fpt-forms');
-  if(fptForms)fptForms.classList.toggle('hidden',!adm);
-  // Staff tabs visibility handled by renderStaff
+  if(fptForms)fptForms.classList.toggle('hidden',!managerUp);
+  // Bulk delete permanently: manager-up only (selection logic re-shows it; this hides for low roles)
+  var bulkDel=document.getElementById('bulk-delete-btn');
+  if(bulkDel&&!managerUp)bulkDel.classList.add('hidden');
+  var bulkExp=document.getElementById('bulk-export-btn');
+  if(bulkExp)bulkExp.classList.toggle('hidden',!managerUp);
+  var bulkExp=document.getElementById('bulk-export-btn');
+  if(bulkExp)bulkExp.classList.toggle('hidden',!managerUp);
+  // Everyone's Tasks scope chip: manager-up only
+  var allChip=document.getElementById('tf-scope-all');
+  if(allChip)allChip.style.display=managerUp?'':'none';
+  // Staff tabs (Team/Reporting) visibility handled by renderStaff
 }
 
 
