@@ -9946,14 +9946,14 @@ function svcSsFilter(inputId, hiddenId, ddId, v){
     dd.innerHTML = '<div class="ss-empty">No services found</div>';
   } else {
     dd.innerHTML = matches.map(function(s){
-      var nameEsc = esc(s.name).replace(/'/g, '&#39;');
+      var nameEsc = (s.name||'').replace(/'/g, "\u0027");
       var meta = [];
       if (s.category) meta.push(esc(s.category));
       if (s.duration_default) meta.push(s.duration_default + ' min');
       // Use price range from variations when available, else service price.
       var priceDisplay = _svcPriceDisplay(s);
       if (priceDisplay) meta.push(priceDisplay);
-      return '<div class="ss-opt" onclick="svcSsSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\''+s.id+'\',\''+nameEsc+'\')">'
+      return '<div class="ss-opt" onclick="svcSsSelect(\''+inputId+'\',\''+hiddenId+'\',\''+ddId+'\',\''+s.id+'\')">'
         + '<div class="fw-600">' + esc(s.name) + '</div>'
         + (meta.length ? '<div style="font-size:11px;color:var(--main-text-muted);margin-top:2px">' + meta.join(' \u00b7 ') + '</div>' : '')
         + '</div>';
@@ -9969,7 +9969,9 @@ function svcSsFilter(inputId, hiddenId, ddId, v){
   }, 10);
 }
 
-function svcSsSelect(inputId, hiddenId, ddId, id, name){
+function svcSsSelect(inputId, hiddenId, ddId, id){
+  var _svcMatch = (db.services||[]).find(function(x){ return x.id === id; });
+  var name = _svcMatch ? (_svcMatch.name||'') : id;
   document.getElementById(inputId).value = name;
   document.getElementById(hiddenId).value = id;
   document.getElementById(ddId).classList.add('hidden');
