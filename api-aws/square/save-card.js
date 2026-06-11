@@ -38,7 +38,7 @@ async function handler(req, res) {
     return sendError(res, 400, 'Square is not connected for this workspace');
   }
 
-  const idempotencyKey = effectiveSlug + '-card-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+  const idempotencyKey = require('crypto').randomUUID();
   try {
     const response = await fetch('https://' + squareHost(creds.sandbox) + '/v2/cards', {
       method: 'POST',
