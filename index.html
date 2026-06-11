@@ -32154,7 +32154,7 @@ function removeCardFromContact(contactId,cardId){
 async function confirmRemoveCard(){
   const d=state.modal&&state.modal.data;
   if(!d)return;
-  const c=db.contacts.find(function(x){return x.id===d.contactId});
+  const c=getContact(d.contactId);
   if(!c)return;
   const newCards=(c.squareCards||[]).filter(function(x){return x.id!==d.cardId});
   try{
