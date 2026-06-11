@@ -4,6 +4,7 @@
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
+const { POWER_UP } = require('./lib/roles');
 const { wrap } = require('./lib/lambda-adapter');
 
 function rowToCategory(row) {
@@ -20,11 +21,8 @@ function rowToCategory(row) {
 async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireSubaccountAuth(req, res);
+  const auth = await requireSubaccountAuth(req, res, { requireRole: POWER_UP });
   if (!auth) return;
-  if (auth.role === 'practitioner') {
-    return res.status(403).json({ error: 'Practitioners cannot access subscription data' });
-  }
 
   try {
     const result = await db.query(

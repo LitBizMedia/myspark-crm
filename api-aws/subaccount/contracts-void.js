@@ -7,12 +7,13 @@
 // Body:  { envelope_id, reason? }
 
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
+const { MANAGER_UP } = require('./lib/roles');
 const { wrap } = require('./lib/lambda-adapter');
 const { logAudit } = require('./lib/audit');
 const contracts = require('./lib/contracts');
 
 async function handler(req, res) {
-  const auth = await requireSubaccountAuth(req, res);
+  const auth = await requireSubaccountAuth(req, res, { requireRole: MANAGER_UP });
   if (!auth) return;
 
   if ((req.method || '').toUpperCase() !== 'POST') {

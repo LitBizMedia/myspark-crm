@@ -1,13 +1,14 @@
 // api/subaccount/subscriptions-list.js (Lambda)
 // GET /api/subaccount/subscriptions-list[?contact_id=X][&status=Y][&include_events=true]
 // Returns subscriptions for the subaccount, optionally filtered.
-// Allowed for any authenticated subaccount user except practitioners.
+// Allowed for any authenticated subaccount user.
 //
 // When include_events=true, the response includes the most recent 50 events
 // for each subscription (used by the History tab on the detail modal).
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
+const { POWER_UP } = require('./lib/roles');
 const { wrap } = require('./lib/lambda-adapter');
 
 const VALID_STATUS = ['active', 'trialing', 'paused', 'past_due', 'suspended', 'cancelled'];
@@ -59,12 +60,8 @@ function rowToEvent(row) {
 async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireSubaccountAuth(req, res);
+  const auth = await requireSubaccountAuth(req, res, { requireRole: POWER_UP });
   if (!auth) return;
-
-  if (auth.role === 'practitioner') {
-    return res.status(403).json({ error: 'Practitioners cannot access subscription data' });
-  }
 
   const q = req.query || {};
   const contactId = q.contact_id || null;

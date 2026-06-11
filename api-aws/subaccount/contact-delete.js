@@ -3,11 +3,12 @@
 const db = require('./lib/db');
 const { wrap } = require('./lib/lambda-adapter');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
+const { MANAGER_UP } = require('./lib/roles');
 const { logAudit } = require('./lib/audit');
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const auth = await requireSubaccountAuth(req, res, { requireRole: 'admin' });
+  const auth = await requireSubaccountAuth(req, res, { requireRole: MANAGER_UP });
   if (!auth) return;
   try {
     const b = req.body || {};

@@ -30,6 +30,7 @@
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
+const { MANAGER_UP } = require('./lib/roles');
 const { logAudit } = require('./lib/audit');
 const { sendRefundReceipt } = require('./lib/refund-email');
 const contactsLib = require('./lib/contacts');
@@ -45,7 +46,7 @@ function genId() {
 }
 
 async function handler(req, res) {
-  const auth = await requireSubaccountAuth(req, res);
+  const auth = await requireSubaccountAuth(req, res, { requireRole: MANAGER_UP });
   if (!auth) return;
 
   const body = req.body || {};

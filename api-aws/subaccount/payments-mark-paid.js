@@ -20,6 +20,7 @@
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
+const { MANAGER_UP } = require('./lib/roles');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 
@@ -28,15 +29,10 @@ const VALID_METHODS = ['cash', 'check', 'card', 'other'];
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireSubaccountAuth(req, res);
+  const auth = await requireSubaccountAuth(req, res, { requireRole: MANAGER_UP });
   if (!auth) return;
 
   // Only admins and managers can mark payments as paid. Staff cannot.
-  const isAdmin = auth.role === 'admin' || auth.role === 'super_admin';
-  const isManager = auth.role === 'manager';
-  if (!isAdmin && !isManager) {
-    return res.status(403).json({ error: 'Only admins and managers can record manual payments' });
-  }
 
   const body = req.body || {};
   const id = body.id;

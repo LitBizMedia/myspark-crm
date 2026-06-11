@@ -27,7 +27,7 @@ const { wrap } = require('./lib/lambda-adapter');
 const crypto = require('crypto');
 const { normalizePhone } = require('./lib/phone');
 
-const VALID_ROLES = ['admin', 'manager', 'user', 'practitioner'];
+const VALID_ROLES = ['admin', 'manager', 'power_user', 'user'];
 
 async function handler(req, res) {
   if (req.method !== 'POST') {

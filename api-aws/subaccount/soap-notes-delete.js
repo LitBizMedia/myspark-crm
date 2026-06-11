@@ -34,7 +34,7 @@ async function handler(req, res) {
 
   const subaccountId = auth.subaccount_id;
   const userId = auth.user_id;
-  const isAdminish = auth.role === 'admin' || auth.role === 'manager';
+  const isAdminish = auth.role === 'admin' || auth.role === 'super_admin' || auth.role === 'manager';
 
   try {
     const existing = await db.query(

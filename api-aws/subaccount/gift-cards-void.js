@@ -5,6 +5,7 @@
 // void preserves the row and history.
 
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
+const { MANAGER_UP } = require('./lib/roles');
 const { logAudit } = require('./lib/audit');
 const { wrap } = require('./lib/lambda-adapter');
 const giftCards = require('./lib/gift-cards');
@@ -12,12 +13,9 @@ const giftCards = require('./lib/gift-cards');
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireSubaccountAuth(req, res);
+  const auth = await requireSubaccountAuth(req, res, { requireRole: MANAGER_UP });
   if (!auth) return;
 
-  if (auth.role !== 'admin' && auth.role !== 'super_admin' && auth.role !== 'manager') {
-    return res.status(403).json({ error: 'Only admins and managers can void gift cards' });
-  }
 
   const body = req.body || {};
   const giftCardId = String(body.giftCardId || body.id || '').trim();

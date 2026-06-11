@@ -7,6 +7,7 @@
 
 const db = require('./lib/db');
 const { requireSubaccountAuth } = require('./lib/require-subaccount-auth');
+const { POWER_UP } = require('./lib/roles');
 const { wrap } = require('./lib/lambda-adapter');
 
 function rowToPlan(row) {
@@ -29,14 +30,8 @@ function rowToPlan(row) {
 async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const auth = await requireSubaccountAuth(req, res);
+  const auth = await requireSubaccountAuth(req, res, { requireRole: POWER_UP });
   if (!auth) return;
-
-  // Practitioners are blocked at the panel level on the frontend, but enforce
-  // server-side too as defense in depth.
-  if (auth.role === 'practitioner') {
-    return res.status(403).json({ error: 'Practitioners cannot access subscription data' });
-  }
 
   const activeOnly = req.query && (req.query.active_only === 'true' || req.query.active_only === '1');
 
