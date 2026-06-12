@@ -5092,6 +5092,7 @@ function renderPanel(){
 }
 
 function switchPanel(name){
+  _sweepSsOrphans();
   var _r=state.user&&state.user.role||'user';
   var _am=_r==='admin'||_r==='manager';
   if(name==='settings'&&_r!=='admin'){toast('Access denied.','error');return;}
@@ -9784,15 +9785,26 @@ function openModal(title,bodyHTML,footHTML,size){
   document.getElementById('modal-box').className='modal surface-light'+(size?' '+size:'');
   document.getElementById('modal-overlay').classList.add('open');
 }
-function closeModal(){
-  document.getElementById('modal-overlay').classList.remove('open');
-  // Sweep any ss-picker dropdowns that _positionSsDrop reparented to <body>.
-  // They are not inside the modal DOM, so they survive teardown and strand on
-  // screen, and duplicate their id on the next open. Remove them on close.
+// Removes any ss-picker dropdown that _positionSsDrop reparented to <body>.
+// Those nodes live outside the modal/panel DOM, so they survive teardown and
+// strand on screen, duplicating their id on the next open (getElementById then
+// returns the stale orphan over live results). Called by every surface-close
+// path: closeModal and switchPanel. Also tears down the shared outside-click
+// handler so it can't fire against a removed node.
+function _sweepSsOrphans(){
   try{
+    if(typeof _ssOutside !== 'undefined' && _ssOutside){
+      document.removeEventListener('click', _ssOutside, {capture:true});
+      _ssOutside = null;
+    }
     var _orphans = document.querySelectorAll('body > .ss-drop');
     for(var _i=0; _i<_orphans.length; _i++){ _orphans[_i].parentNode.removeChild(_orphans[_i]); }
   }catch(_e){}
+}
+
+function closeModal(){
+  document.getElementById('modal-overlay').classList.remove('open');
+  _sweepSsOrphans();
   state.modal={type:null,id:null,extra:null};
   // Tear down appointment payment Square card form if it was attached.
   if(typeof _destroyApptSquareCardForm==='function')_destroyApptSquareCardForm();
