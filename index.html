@@ -3334,7 +3334,9 @@ function getContactDisplay(id){
     tags: entry.tags||[],
     archived: !!entry.archived,
     creditBalance: entry.creditBalance||0,
-    squareCustomerId: entry.squareCustomerId||null
+    squareCustomerId: entry.squareCustomerId||null,
+    warnings: entry.warnings||[],
+    allergies: entry.allergies||[]
   };
 }
 
@@ -9947,16 +9949,21 @@ function _staffFirstLastInitial(userId){
 
 function _calApptIconsHTML(a){
   if(!a || !a.contactId) return '';
-  // Check db.contacts (current page), then full fetch cache for warnings/allergies
-  var c = (db.contacts||[]).find(function(x){return x.id===a.contactId;});
-  if(!c && typeof _contactFullFetchCache !== 'undefined' && _contactFullFetchCache[a.contactId]){
-    c = _contactFullFetchCache[a.contactId].c;
+  // Use contactNameMap (loaded on boot, includes warnings+allergies) with
+  // fallback to full fetch cache and then current page contacts.
+  var c = getContactDisplay(a.contactId);
+  if(!c || (!( (c.warnings&&c.warnings.length) || (c.allergies&&c.allergies.length) ))) {
+    var _cFull = (db.contacts||[]).find(function(x){return x.id===a.contactId;});
+    if(!_cFull && typeof _contactFullFetchCache !== 'undefined' && _contactFullFetchCache[a.contactId]){
+      _cFull = _contactFullFetchCache[a.contactId].c;
+    }
+    if(_cFull) c = _cFull;
   }
   if(!c) return '';
   var icons = [];
   (c.warnings||[]).forEach(function(w){
     var m = WARNING_SEVERITY[w.severity] || WARNING_SEVERITY.info;
-    var tip = esc((w.title||w.label||'Warning') + ' (' + m.label + ')' + (w.notes ? ': ' + w.notes : ''));
+    var tip = esc((w.text||w.title||w.label||'Warning') + ' (' + m.label + ')');
     icons.push('<span title="'+tip+'" style="font-size:12px;line-height:1;color:'+m.color+';flex-shrink:0;cursor:default">⚠</span>');
   });
   (c.allergies||[]).forEach(function(al){

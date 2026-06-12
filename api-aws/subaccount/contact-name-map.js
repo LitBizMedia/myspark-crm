@@ -34,10 +34,22 @@ async function handler(req, res) {
   try {
     const result = await db.query(
       `SELECT
-         id, display_name, email, phone, company,
-         tags, archived, credit_balance, square_customer_id
-       FROM contacts
-       WHERE subaccount_id = $1`,
+         c.id, c.display_name, c.email, c.phone, c.company,
+         c.tags, c.archived, c.credit_balance, c.square_customer_id,
+         COALESCE(
+           json_agg(DISTINCT jsonb_build_object('id', w.id, 'severity', w.severity, 'text', w.text))
+           FILTER (WHERE w.id IS NOT NULL), '[]'
+         ) AS warnings,
+         COALESCE(
+           json_agg(DISTINCT jsonb_build_object('id', al.id, 'severity', al.severity, 'allergen', al.allergen, 'reaction', al.reaction))
+           FILTER (WHERE al.id IS NOT NULL), '[]'
+         ) AS allergies
+       FROM contacts c
+       LEFT JOIN contact_warnings w ON w.contact_id = c.id
+       LEFT JOIN contact_allergies al ON al.contact_id = c.id
+       WHERE c.subaccount_id = $1
+       GROUP BY c.id, c.display_name, c.email, c.phone, c.company,
+                c.tags, c.archived, c.credit_balance, c.square_customer_id`,
       [subaccountId]
     );
 
@@ -55,6 +67,8 @@ async function handler(req, res) {
         entry.creditBalance = parseFloat(r.credit_balance);
       }
       if (r.square_customer_id) entry.squareCustomerId = r.square_customer_id;
+      if (Array.isArray(r.warnings) && r.warnings.length) entry.warnings = r.warnings;
+      if (Array.isArray(r.allergies) && r.allergies.length) entry.allergies = r.allergies;
       map[r.id] = entry;
     });
 
