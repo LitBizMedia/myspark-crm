@@ -9786,6 +9786,13 @@ function openModal(title,bodyHTML,footHTML,size){
 }
 function closeModal(){
   document.getElementById('modal-overlay').classList.remove('open');
+  // Sweep any ss-picker dropdowns that _positionSsDrop reparented to <body>.
+  // They are not inside the modal DOM, so they survive teardown and strand on
+  // screen, and duplicate their id on the next open. Remove them on close.
+  try{
+    var _orphans = document.querySelectorAll('body > .ss-drop');
+    for(var _i=0; _i<_orphans.length; _i++){ _orphans[_i].parentNode.removeChild(_orphans[_i]); }
+  }catch(_e){}
   state.modal={type:null,id:null,extra:null};
   // Tear down appointment payment Square card form if it was attached.
   if(typeof _destroyApptSquareCardForm==='function')_destroyApptSquareCardForm();
@@ -9817,6 +9824,14 @@ function _positionSsDrop(inputId, ddId){
   var inp=document.getElementById(inputId);
   var dd=document.getElementById(ddId);
   if(!inp||!dd)return;
+  // Before moving this dropdown to body, remove any stale orphan already on
+  // body carrying the same id (left by a prior modal open). Duplicate ids make
+  // getElementById return the stale one, stranding a dead 'Type 2+' popup over
+  // live results. Keep only the node we are positioning now.
+  try{
+    var _dupes = document.querySelectorAll('body > #'+CSS.escape(ddId));
+    for(var _d=0; _d<_dupes.length; _d++){ if(_dupes[_d]!==dd) _dupes[_d].parentNode.removeChild(_dupes[_d]); }
+  }catch(_e){}
   if(dd.parentNode!==document.body)document.body.appendChild(dd);
   var r=inp.getBoundingClientRect();
   dd.style.position='fixed';
