@@ -9842,6 +9842,26 @@ function ssHTML(wrapId,inputId,hiddenId,ddId,placeholder,val){
   const sf="ssFilter(\'"+inputId+"\',\'"+hiddenId+"\',\'"+ddId+"\',this.value)";
   return'<div class="ss-wrap" id="'+wrapId+'"><input class="ss-inp" id="'+inputId+'" type="text" placeholder="'+esc(placeholder)+'" value="'+esc(iv)+'" oninput="'+sf+'" onclick="'+sf+'" autocomplete="off"><input type="hidden" id="'+hiddenId+'" value="'+esc(val||'')+'"><div class="ss-drop hidden" id="'+ddId+'"></div></div>';
 }
+var _ssOutside = null;
+// Target-aware outside-click closer for ss-style pickers. Tears down any
+// prior handler before installing a new one so listeners never stack, and
+// ignores clicks that land on the input or inside the (body-reparented)
+// dropdown. Replaces the old self-removing listener that hid fresh results.
+function _ssInstallOutside(inputId, ddId){
+  if(_ssOutside){ document.removeEventListener('click', _ssOutside, {capture:true}); _ssOutside = null; }
+  _ssOutside = function(e){
+    var dd = document.getElementById(ddId);
+    var inp = document.getElementById(inputId);
+    if(!dd) { document.removeEventListener('click', _ssOutside, {capture:true}); _ssOutside = null; return; }
+    if(inp && (e.target === inp || inp.contains(e.target))) return;
+    if(dd.contains(e.target)) return;
+    dd.classList.add('hidden');
+    document.removeEventListener('click', _ssOutside, {capture:true});
+    _ssOutside = null;
+  };
+  setTimeout(function(){ document.addEventListener('click', _ssOutside, {capture:true}); }, 10);
+}
+
 function ssFilter(inputId,hiddenId,ddId,v){
   const dd=document.getElementById(ddId);
   if(!dd)return;
@@ -9853,7 +9873,7 @@ function ssFilter(inputId,hiddenId,ddId,v){
     dd.innerHTML = noneOpt + '<div class="ss-empty" style="font-size:11px">Type 2+ chars to search</div>';
     dd.classList.remove('hidden');
     _positionSsDrop(inputId, ddId);
-    setTimeout(function(){document.addEventListener('click', function f(){dd.classList.add('hidden');document.removeEventListener('click',f);}, {capture:true});}, 10);
+    _ssInstallOutside(inputId, ddId);
     return;
   }
   dd.innerHTML = noneOpt + '<div class="ss-empty">Searching...</div>';
@@ -9871,7 +9891,7 @@ function ssFilter(inputId,hiddenId,ddId,v){
     }
     dd.classList.remove('hidden');
     _positionSsDrop(inputId, ddId);
-    setTimeout(function(){document.addEventListener('click', function f(){dd.classList.add('hidden');document.removeEventListener('click',f);}, {capture:true});}, 10);
+    _ssInstallOutside(inputId, ddId);
   });
 }
 
