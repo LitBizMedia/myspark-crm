@@ -11260,10 +11260,11 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var _divider = '<div style="border-top:1px solid var(--main-border);margin:18px 0"></div>';
   var _topSlot = modeBlocksHTML;
 
-  const b = rescheduledFromBanner + widgetBanner + modeTabsHTML + _topSlot
+  const b = rescheduledFromBanner + widgetBanner + modeTabsHTML
 
-    + '<div id="appt-warn" class="warn-box hidden"></div>'
     + '<div class="form-group" id="apt-cv-wrap"><label>Contact</label>'+ssHTML('af-cw','af-ci','af-cv','af-cd','Search contact...',cid||'')+'</div>'
+    + _topSlot
+    + '<div id="appt-warn" class="warn-box hidden"></div>'
     // Lock date/time fields when editing an existing appointment. Reschedule
     // button is the only sanctioned path to change date/time so the audit trail,
     // email notification, payment migration, and rescheduled_from_id link all happen.
