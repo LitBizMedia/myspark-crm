@@ -7616,21 +7616,216 @@ function _classSessionAsAppt(s){
 
 // Dispatches a calendar event click to the right modal based on whether the id
 // matches a class session or an appointment.
-function _calEventClick(id){
+function _calEventClick(id, ev){
   if((db.classSessions||[]).find(function(s){return s.id===id;})){
     openRosterModal(id);
     return;
   }
   // Rescheduled originals get a read-only info modal instead of the edit modal.
-  // The "working" appointment is the new one (status='scheduled' with this row's
-  // id in rescheduled_from_id), so the original is historical context only.
   var a = (db.appointments||[]).find(function(x){return x.id===id;});
   if(a && a.status==='rescheduled'){
     openRescheduledInfoModal(id);
     return;
   }
+  // Calendar grid blocks pass the click event -> anchored quick-view popover.
+  // List rows (dashboard, cal-jump, overflow) pass no event -> edit modal.
+  if(a && ev && ev.currentTarget){
+    _openApptQuickView(a, ev.currentTarget);
+    return;
+  }
   openApptModal(null,id);
 }
+
+// ===== APPOINTMENT QUICK-VIEW POPOVER =====
+function _aqvClose(){
+  var el=document.getElementById('appt-quickview');
+  if(el)el.remove();
+  document.removeEventListener('mousedown', _aqvOutside, true);
+  document.removeEventListener('keydown', _aqvKey, true);
+  document.removeEventListener('scroll', _aqvClose, true);
+}
+function _aqvOutside(e){
+  var el=document.getElementById('appt-quickview');
+  if(el && !el.contains(e.target)) _aqvClose();
+}
+function _aqvKey(e){ if(e.key==='Escape')_aqvClose(); }
+function _aqvEdit(id){ _aqvClose(); openApptModal(null,id); }
+async function _aqvContact(cid){
+  _aqvClose();
+  // db.contacts is paginated; an off-page contact makes renderDrawer bail
+  // (getContact returns undefined). Preload the full record first so the
+  // drawer finds it on the first synchronous render. Mirrors _aqvCheckout.
+  try{ await ensureContactFull(cid); }
+  catch(e){ console.warn('Quick view contact: load failed', e); }
+  openDrawer(cid);
+}
+async function _aqvCheckout(id){
+  var a=getAppt(id); if(!a)return;
+  _aqvClose();
+  if(!a.contactId){ _openApptPaymentModal(a, null); return; }
+  var full=null;
+  try{ full=await ensureContactFull(a.contactId); }
+  catch(e){ console.warn('Quick view checkout: contact load failed', e); }
+  _openApptPaymentModal(a, full);
+}
+function _aqvPosition(pop, anchorEl){
+  var r=anchorEl.getBoundingClientRect();
+  var vw=window.innerWidth, vh=window.innerHeight, gap=12;
+  var pw=pop.offsetWidth, ph=pop.offsetHeight;
+  var placeRight=(r.right+gap+pw)<=(vw-8);
+  var left=placeRight?(r.right+gap):(r.left-gap-pw);
+  if(left<8)left=8;
+  var top=r.top;
+  if(top+ph>vh-8)top=vh-ph-8;
+  if(top<8)top=8;
+  pop.style.left=left+'px';
+  pop.style.top=top+'px';
+  var tail=pop.querySelector('.aqv-tail');
+  if(tail){
+    tail.style.borderTop='none';tail.style.borderRight='none';tail.style.borderBottom='none';tail.style.borderLeft='none';
+    if(placeRight){
+      tail.style.left='-7px';tail.style.right='auto';
+      tail.style.borderLeft='1px solid var(--main-border)';
+      tail.style.borderBottom='1px solid var(--main-border)';
+    }else{
+      tail.style.right='-7px';tail.style.left='auto';
+      tail.style.borderTop='1px solid var(--main-border)';
+      tail.style.borderRight='1px solid var(--main-border)';
+    }
+    var tt=Math.max(14, Math.min(ph-22, (r.top+r.height/2)-top-7));
+    tail.style.top=tt+'px';
+  }
+}
+function _aqvSafetyHTML(c){
+  if(!c) return '';
+  var rows = [];
+  var warns = Array.isArray(c.warnings) ? c.warnings.slice() : [];
+  warns.sort(function(a,b){
+    var ra=(WARNING_SEVERITY[a.severity]||{rank:99}).rank;
+    var rb=(WARNING_SEVERITY[b.severity]||{rank:99}).rank;
+    return ra-rb;
+  });
+  warns.forEach(function(w){
+    var m = WARNING_SEVERITY[w.severity] || WARNING_SEVERITY.info || {color:'var(--warning)',label:'Warning'};
+    var bg = m.bg || 'var(--main-bg)';
+    var txt = esc(w.text||w.title||w.label||'Warning');
+    rows.push('<div style="display:flex;gap:8px;align-items:baseline;padding:6px 9px;background:'+bg+';border-left:3px solid '+m.color+';border-radius:4px;margin-top:6px">'
+      +'<span style="font-size:9px;font-weight:700;text-transform:uppercase;color:'+m.color+';flex-shrink:0;min-width:50px">'+esc(m.label||'Warning')+'</span>'
+      +'<span style="font-size:13px;color:var(--main-text);font-weight:600;line-height:1.35">'+txt+'</span>'
+      +'</div>');
+  });
+  var allg = Array.isArray(c.allergies) ? c.allergies.slice() : [];
+  allg.sort(function(a,b){
+    var ra=(ALLERGY_SEVERITY[a.severity]||{rank:99}).rank;
+    var rb=(ALLERGY_SEVERITY[b.severity]||{rank:99}).rank;
+    return ra-rb;
+  });
+  allg.forEach(function(al){
+    var m = ALLERGY_SEVERITY[al.severity] || ALLERGY_SEVERITY.mild || {color:'var(--info)'};
+    var bg = m.bg || 'var(--main-bg)';
+    var content = esc(al.allergen||'Allergy') + (al.reaction ? ' <span style="font-weight:400;color:var(--main-text-muted)">\u2014 '+esc(al.reaction)+'</span>' : '');
+    rows.push('<div style="display:flex;gap:8px;align-items:baseline;padding:6px 9px;background:'+bg+';border-left:3px solid '+m.color+';border-radius:4px;margin-top:6px">'
+      +'<span style="font-size:9px;font-weight:700;text-transform:uppercase;color:'+m.color+';flex-shrink:0;min-width:50px">Allergy</span>'
+      +'<span style="font-size:13px;color:var(--main-text);font-weight:600;line-height:1.35">'+content+'</span>'
+      +'</div>');
+  });
+  if(!rows.length) return '';
+  return '<div style="margin-top:14px">'+rows.join('')+'</div>';
+}
+
+function _openApptQuickView(a, anchorEl){
+  _aqvClose();
+  var cid=a.contactId||null;
+  var nm=cid?getContactName(cid):'';
+  var statusRaw=(typeof _eventPaymentStatus==='function')?_eventPaymentStatus(a):'no_price';
+  var showPay=statusRaw!=='no_price';
+  var pillBase='display:inline-block;font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;';
+  var pill='';
+  if(statusRaw==='paid')pill='<span style="'+pillBase+'background:var(--success-dim);color:var(--success-text)">Paid</span>';
+  else if(statusRaw==='partial')pill='<span style="'+pillBase+'background:var(--warning-dim);color:var(--warning-text-strong)">Partially paid</span>';
+  else if(statusRaw==='unpaid')pill='<span style="'+pillBase+'background:var(--main-bg);color:var(--main-text-muted)">Unpaid</span>';
+  var timeStr=a.time?fmtTime(a.time):'All day';
+  var dStr='';
+  if(a.date){var dd=new Date(a.date+'T12:00:00');if(!isNaN(dd.getTime()))dStr=DFULL[dd.getDay()]+', '+MONTHS[dd.getMonth()]+' '+dd.getDate();}
+  var prov=a.assignedTo?getUserById(a.assignedTo):null;
+  var provName=prov?(prov.name||prov.username||''):'';
+  var dur=(typeof a.duration==='number'&&a.duration>0)?a.duration:((typeof a.duration_min==='number'&&a.duration_min>0)?a.duration_min:null);
+  var svcMeta=[];
+  if(dur)svcMeta.push(dur+' min');
+  if(provName)svcMeta.push('with '+esc(provName));
+  var addonChips='';
+  if(Array.isArray(a.addons)&&a.addons.length){
+    addonChips='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">'+a.addons.map(function(x){return '<span style="font-size:12px;color:var(--main-text-muted);background:var(--main-bg);border-radius:6px;padding:3px 9px">+ '+esc(x.name||'Add-on')+'</span>';}).join('')+'</div>';
+  }
+  var initialPhone='';
+  var _ocFull=null;
+  if(cid){
+    _ocFull=getContact(cid);
+    if(!_ocFull && typeof _contactFullFetchCache!=='undefined' && _contactFullFetchCache[cid]) _ocFull=_contactFullFetchCache[cid].c;
+    if(_ocFull && _ocFull.phone) initialPhone=esc(_ocFull.phone);
+  }
+  var safetyBlock = cid ? '<div id="aqv-safety">'+_aqvSafetyHTML(_ocFull)+'</div>' : '';
+
+  var nameBlock='';
+  if(cid){
+    nameBlock='<div style="margin-top:16px">'
+      +'<div onclick="_aqvContact(\''+cid+'\')" style="font-size:20px;font-weight:600;color:var(--purple);cursor:pointer;line-height:1.2;display:inline-flex;align-items:center;gap:5px">'+esc(nm||'Contact')+'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="opacity:.6"><polyline points="9 18 15 12 9 6"/></svg></div>'
+      +'<div id="aqv-phone" style="font-size:13px;color:var(--main-text-muted);margin-top:3px">'+initialPhone+'</div>'
+      +'</div>';
+  }
+
+  var svcBlock='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--divider)">'
+    +'<div style="font-size:14px;font-weight:600;color:var(--main-text)">'+esc(a.title||'Appointment')+'</div>'
+    +(svcMeta.length?'<div style="font-size:13px;color:var(--main-text-muted);margin-top:2px">'+svcMeta.join(' \u00b7 ')+'</div>':'')
+    +addonChips
+    +'</div>';
+
+  var payBtn=showPay?'<button onclick="_aqvCheckout(\''+a.id+'\')" style="width:100%;margin-top:18px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);padding:12px;font-size:15px;font-weight:600;cursor:pointer">Check Out</button>':'';
+
+  var html='<div class="aqv-tail" style="position:absolute;width:14px;height:14px;background:var(--main-card);transform:rotate(45deg);top:22px"></div>'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between">'
+      +'<div><div style="font-size:24px;font-weight:600;color:var(--main-text);line-height:1">'+esc(timeStr)+'</div>'
+      +(dStr?'<div style="font-size:13px;color:var(--main-text-muted);margin-top:5px">'+esc(dStr)+'</div>':'')+'</div>'
+      +'<div style="display:flex;align-items:center;gap:4px">'
+        +'<button class="btn-icon" onclick="_aqvEdit(\''+a.id+'\')" title="Edit appointment" style="width:30px;height:30px;border-radius:var(--radius-sm);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+        +'<button onclick="_aqvClose()" title="Close" style="width:30px;height:30px;border:none;background:transparent;border-radius:var(--radius-sm);color:var(--main-text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+      +'</div>'
+    +'</div>'
+    +(showPay?'<div style="margin-top:12px">'+pill+'</div>':'')
+    +nameBlock
+    +safetyBlock
+    +svcBlock
+    +payBtn;
+
+  var pop=document.createElement('div');
+  pop.id='appt-quickview';
+  pop.className='surface-light';
+  pop.setAttribute('data-appt-id', a.id);
+  pop.style.cssText='position:fixed;z-index:1200;width:320px;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:18px 20px 20px;left:-9999px;top:0';
+  pop.innerHTML=html;
+  document.body.appendChild(pop);
+  _aqvPosition(pop, anchorEl);
+  setTimeout(function(){
+    document.addEventListener('mousedown', _aqvOutside, true);
+    document.addEventListener('keydown', _aqvKey, true);
+    document.addEventListener('scroll', _aqvClose, true);
+  },0);
+
+  if(cid){
+    ensureContactFull(cid).then(function(full){
+      var el=document.getElementById('appt-quickview');
+      if(!el || el.getAttribute('data-appt-id')!==a.id)return;
+      if(!full)return;
+      var slot=document.getElementById('aqv-phone');
+      if(slot && !slot.textContent && full.phone) slot.textContent=full.phone;
+      var safe=document.getElementById('aqv-safety');
+      if(safe) safe.innerHTML=_aqvSafetyHTML(full);
+      if(anchorEl && anchorEl.isConnected) _aqvPosition(el, anchorEl);
+    }).catch(function(){});
+  }
+}
+// ===== END APPOINTMENT QUICK-VIEW POPOVER =====
+
 
 // Read-only modal for rescheduled originals. Shows the abandoned slot context
 // and links to the new appointment (the one with rescheduled_from_id = id).
@@ -8341,7 +8536,7 @@ function renderMonthCal(){
   cells.forEach(({day,cur,str})=>{
     const isToday=str===td;
     const appts=str?getCalAppts(state.calUser,str,'month'):[];
-    const shown=appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);var addonPill=_apptAddonsPillHTML(a);var groupPill=_apptGroupBadgeHTML(a);var warnPill=_apptWarningBadgeHTML(a);var draggableAttr3 = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)" oncontextmenu="_calApptContextMenu(event,\''+a.id+'\')"' : '';return'<div class="cal-ev" data-appt-id="'+a.id+'"'+draggableAttr3+' style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+addonPill+groupPill+warnPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'});
+    const shown=appts.slice(0,3).map(a=>{const col=getUserColor(a.assignedTo);const sCol=getServiceColor(a.service_id);const sStripe=sCol?'box-shadow:inset 3px 0 0 '+sCol+';':'';var delBtn=a._isClassSession?'':'<button onclick="event.stopPropagation();delAppt(\''+a.id+'\')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;font-size:11px;line-height:1;flex-shrink:0" title="Delete">&times;</button>';var payPill=_paymentPillHTML(_eventPaymentStatus(a), true);var addonPill=_apptAddonsPillHTML(a);var groupPill=_apptGroupBadgeHTML(a);var warnPill=_apptWarningBadgeHTML(a);var draggableAttr3 = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)" oncontextmenu="_calApptContextMenu(event,\''+a.id+'\')"' : '';return'<div class="cal-ev" data-appt-id="'+a.id+'"'+draggableAttr3+' style="background:'+col+'22;color:'+col+';border:1px solid '+col+'44;'+sStripe+'display:flex;align-items:center;gap:3px">'+payPill+addonPill+groupPill+warnPill+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\',event)">'+esc((a.time?fmtTime(a.time)+' ':'')+a.title)+'</span>'+delBtn+'</div>'});
     const more=appts.length-shown.length;
     let schedHTML='';
     if(str&&cur){
@@ -8590,7 +8785,7 @@ function buildTimedCol(dateStr,appts,allHours){
     var _prov2=_staffFirstLastInitial(a.assignedTo);
     var _tinyCard2=heightPx<=40;
     var _shortCard2=heightPx<=65;
-    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+(a.status==='completed'?' timed-ev-completed':'')+'" data-appt-id="'+a.id+'"'+draggableAttr2+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
+    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+(a.status==='completed'?' timed-ev-completed':'')+'" data-appt-id="'+a.id+'"'+draggableAttr2+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\',event)" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:2px;padding:3px 5px 0">'
       +  '<div style="font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;line-height:1.4">'+(cA?esc(cA.name):esc(a.title))+'</div>'
       +  _icons2
@@ -8683,7 +8878,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var _provU=_staffFirstLastInitial(a.assignedTo);
     var _tinyCardU=heightPx<=40;
     var _shortCardU=heightPx<=65;
-    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+(a.status==='completed'?' timed-ev-completed':'')+'" data-appt-id="'+a.id+'"'+draggableAttr+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto;overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
+    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+(a.status==='completed'?' timed-ev-completed':'')+'" data-appt-id="'+a.id+'"'+draggableAttr+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto;overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\',event)" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:2px;padding:3px 6px 0">'
       +  '<div style="font-size:13px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;line-height:1.4">'+(c?esc(c.name):esc(a.title))+'</div>'
       +  _iconsU
@@ -11020,25 +11215,19 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   if(a && a.rescheduled_from_id){
     var _origAppt = (db.appointments||[]).find(function(x){return x.id===a.rescheduled_from_id;});
     if(_origAppt){
-      rescheduledFromBanner = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:#fff;border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
+      rescheduledFromBanner = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--info-dim);color:var(--info-text);border:1px solid var(--info);border-radius:var(--radius);font-size:13px">'
         + '<div style="font-weight:600;margin-bottom:3px">Rescheduled from</div>'
         + esc(_origAppt.date) + (_origAppt.time?' at '+esc(fmtTime(_origAppt.time)):'')
         + '</div>';
     }
   }
 
-  // Reordered body. modeBlocksHTML holds the service block in service mode, or
-  // the Title field in custom mode. In service mode we move the service block
-  // BELOW the scheduling fields behind a divider; in custom mode the Title
-  // stays at the top. Divider is a simple horizontal rule using the border token.
-  var _isCustomMode = (initialMode === 'custom');
+  // Service block (service mode) and Title field (custom mode) both lead the
+  // modal body, above the contact and scheduling fields. modeBlocksHTML carries
+  // whichever the active mode needs. Divider is a simple horizontal rule using
+  // the border token, used once before Notes.
   var _divider = '<div style="border-top:1px solid var(--main-border);margin:18px 0"></div>';
-  // Top slot: in custom mode, modeBlocksHTML (the Title field) sits up top.
-  // In service mode, nothing goes up top; the service block moves down.
-  var _topSlot = _isCustomMode ? modeBlocksHTML : '';
-  // Service slot: in service mode, the service block (service + pricing option +
-  // add-ons) renders after status/location behind a divider. Custom mode: none.
-  var _serviceSlot = _isCustomMode ? '' : (_divider + modeBlocksHTML);
+  var _topSlot = modeBlocksHTML;
 
   const b = rescheduledFromBanner + widgetBanner + modeTabsHTML + _topSlot
 
@@ -11091,7 +11280,6 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
       })()
     + '<div id="apt-group-clients-wrap" style="display:none"></div>'
     + '<div id="apt-group-staff-wrap" style="display:none"></div>'
-    + _serviceSlot
     + _divider
     + '<div class="form-group" id="apt-notes-wrap"><label>Notes</label><textarea id="af-notes">'+esc(a&&a.notes||'')+'</textarea></div>';
 
@@ -11106,10 +11294,8 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var bodyHTML;
   if (a) {
     state.apptDetail = { id: a.id, tab: 'details' };
-    // Tabs removed. Edit modal is a single clean form. Payment happens via the
-    // green Collect Payment button in the footer, which saves then opens a
-    // dedicated payment modal.
-    bodyHTML = '<div id="appt-detail-content">' + b + '</div>';
+    // Single clean edit form. Checkout lives in the calendar quick-view popover.
+    bodyHTML = b;
   } else {
     bodyHTML = b;
   }
@@ -11124,21 +11310,10 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
   var isCancelled = a && a.status === 'cancelled';
   var hardDeleteBtn = isExisting ? '<button class="btn btn-danger btn-sm" style="margin-right:auto" onclick="hardDelAppt(\''+a.id+'\')">Delete Forever</button>' : '';
   var cancelBtn = (isExisting && !isCancelled) ? '<button class="btn btn-ghost" onclick="delAppt(\''+a.id+'\')">Cancel Appointment</button>' : '';
-  var detailFooter;
-  if (isExisting) {
-    // Two-row footer. Collect Payment is the primary cash-out action: full width,
-    // green (distinct from orange Save), on its own row above the rest.
-    var collectBtn = '<button class="btn" id="appt-collect-btn" onclick="_collectApptPaymentClick(\''+a.id+'\')" '
-      + 'style="width:100%;background:var(--success);color:#fff;border:none;font-weight:700;text-align:center;display:block">Collect Payment</button>';
-    var secondaryRow = '<div style="display:flex;align-items:center;gap:8px;width:100%">'
-      + hardDeleteBtn + cancelBtn + rescheduleBtn
-      + '<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>'
-      + '</div>';
-    detailFooter = '<div class="flex-col gap-10 w-full">'
-      + collectBtn + secondaryRow + '</div>';
-  } else {
-    detailFooter = hardDeleteBtn + cancelBtn + rescheduleBtn + '<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
-  }
+  // Checkout lives in the calendar quick-view popover (Check Out button), not
+  // in the edit modal. Footer is a single row: destructive actions, reschedule,
+  // then Save.
+  var detailFooter = hardDeleteBtn + cancelBtn + rescheduleBtn + '<button class="btn btn-action" id="appt-save-btn" onclick="confirmSave(saveAppt,\'appointment\')">Save</button>';
 
   openModal(modalTitle, bodyHTML, detailFooter, 'modal-lg');
   setTimeout(function(){
@@ -11159,43 +11334,6 @@ function openApptModal(contactId,apptId,prefDate,prefTime,prefUserId,prefService
 // a double-click can't fire two saves. The button is re-rendered fresh by the
 // edit modal on save failure, and replaced entirely by the payment modal on
 // success, so no manual reset is needed.
-function _collectApptPaymentClick(apptId){
-  var btn = document.getElementById('appt-collect-btn');
-  if(btn){
-    if(btn.disabled) return; // already in flight
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
-    btn.style.opacity = '0.75';
-    btn.style.cursor = 'wait';
-  }
-  // Defer one frame so the disabled/Saving paint lands before the sync work.
-  setTimeout(function(){ collectApptPayment(apptId); }, 0);
-}
-
-async function collectApptPayment(apptId){
-  // Guard: must be editing an existing appointment.
-  if(!apptId){ toast('Save the appointment first.','error'); return; }
-  // saveAppt reads the live form fields and runs its full validation + sync.
-  // We pass a callback that fires ONLY on the success branch.
-  saveAppt(async function(savedId){
-    var a = getAppt(savedId);
-    if(!a){ toast('Could not load the saved appointment.','error'); return; }
-    if(!a.contactId){
-      // No contact linked: payment can still be recorded (cash/other) but card
-      // on file is impossible. Open payment without a card fetch.
-      _openApptPaymentModal(a, null);
-      return;
-    }
-    // Load the full contact so squareCards + squareCustomerId are present.
-    // ensureContactFull pushes the off-page record into db.contacts, which the
-    // payment form and charge handlers read from.
-    var full = null;
-    try { full = await ensureContactFull(a.contactId); }
-    catch(e){ console.warn('Collect Payment: contact load failed', e); }
-    _openApptPaymentModal(a, full);
-  });
-}
-
 // Opens the dedicated appointment payment modal. Mirrors
 // openClassParticipantPayment: close any open modal first, then open fresh so
 // the animation is clean and modalAfterClose isn't clobbered.
@@ -11217,39 +11355,6 @@ function _openApptPaymentModal(a, fullContact){
   }, 90);
 }
 // ===== END COLLECT PAYMENT FLOW =====
-
-// Switch between Details and Take Payment tabs in the appointment modal.
-function switchApptTab(tab){
-  if(!state.apptDetail)return;
-  var a=getAppt(state.apptDetail.id);
-  if(!a)return;
-  // Destroy any active Square card form before switching tabs.
-  // Re-init happens lazily when user clicks Card chip on the new render.
-  _destroyApptSquareCardForm();
-  state.apptDetail.tab=tab;
-
-  document.querySelectorAll('#appt-detail-tabs .svc-detail-tab').forEach(function(t){
-    t.classList.toggle('active', t.getAttribute('data-tab')===tab);
-  });
-
-  var content=document.getElementById('appt-detail-content');
-  var foot=document.getElementById('modal-foot');
-
-  if(tab==='details'){
-    // Re-open the modal to rebuild the details form. Simpler than trying to
-    // preserve state; user is usually just toggling to check payment status.
-    closeModal();
-    setTimeout(function(){openApptModal(a.contactId, a.id);},50);
-  } else if(tab==='payment'){
-    // Reset payment-form state so previous payments don't leak in
-    _resetPaymentFormState();
-    state.payCtx=_buildApptPayCtx(a);
-    content.innerHTML=_renderPaymentForm(state.payCtx);
-    foot.innerHTML='<button class="btn btn-ghost" onclick="closeModal()">Close</button>';
-    // Seed totals breakdown so it's visible immediately
-    setTimeout(function(){if(typeof apptUpdateTotals==='function')apptUpdateTotals();},30);
-  }
-}
 
 // Opens the payment form modal for a class participant. Closes the roster
 // first, then opens fresh. On close of the payment modal, reopens the roster.
