@@ -521,7 +521,7 @@ body:not(.role-manager-up) #ppt-orders{display:none!important}
   overflow:hidden;cursor:pointer;z-index:1;border:1px solid rgba(255,255,255,.15);color:#fff;transition:filter .15s;line-height:1.3}
 .timed-ev:hover{filter:brightness(1.15)}
 .timed-ev-cancelled{opacity:.45}
-.timed-ev-rescheduled{opacity:.45;text-decoration:line-through;background:#9ca3af !important;cursor:pointer}
+.timed-ev-rescheduled{opacity:.45;text-decoration:line-through;background:var(--text-placeholder) !important;cursor:pointer}
 .timed-ev-completed{background:#6b7280 !important;opacity:.75}
 .appt-row-sm.rescheduled{border-left-color:var(--text-dim);opacity:.5;text-decoration:line-through}
 .timed-ev-time{font-size:10px;opacity:.8;white-space:nowrap}
@@ -6837,7 +6837,7 @@ function openSoapNoteModal(contactId,noteId){
     +'<textarea id="soap-assessment" style="'+taS+'" placeholder="Diagnosis, clinical reasoning">'+esc(existing&&existing.assessment||SOAP_TEMPLATES[tmplKey].assessment)+'</textarea></div>'
     +'<div class="form-group"><label>Plan <span style="font-weight:400;color:var(--text-muted)">(treatment + next steps)</span></label>'
     +'<textarea id="soap-plan" style="'+taS+'" placeholder="Treatment plan, follow-up, education">'+esc(existing&&existing.plan||SOAP_TEMPLATES[tmplKey].plan)+'</textarea></div>'
-    +'<div style="background:rgba(255,191,36,.12);border:1px solid rgba(251,191,36,.4);border-radius:var(--radius);padding:9px 12px;font-size:11px;color:var(--warning-text-strong);margin-top:6px">Notes auto-lock 24 hours after creation. Sign & lock now to finalize as a legal record.</div>';
+    +'<div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);border-radius:var(--radius);padding:9px 12px;font-size:11px;color:var(--warning-text-strong);margin-top:6px">Notes auto-lock 24 hours after creation. Sign & lock now to finalize as a legal record.</div>';
 
   openModal(noteId?'Edit SOAP Note':'New SOAP Note',body,
     '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
@@ -31493,9 +31493,9 @@ function renderDashWeek(){
 // CONTACT ALLERGIES
 // =====================================================
 var ALLERGY_SEVERITY = {
-  severe:   { label: 'Severe',   color: '#ef4444', bg: '#fef2f2', border: '#fecaca', icon: '⚠', rank: 0 },
-  moderate: { label: 'Moderate', color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', icon: '⚠', rank: 1 },
-  mild:     { label: 'Mild',     color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ',  rank: 2 }
+  severe:   { label: 'Severe',   color: 'var(--danger)', bg: '#fef2f2', border: '#fecaca', icon: '⚠', rank: 0 },
+  moderate: { label: 'Moderate', color: 'var(--warning)', bg: '#fffbeb', border: '#fde68a', icon: '⚠', rank: 1 },
+  mild:     { label: 'Mild',     color: 'var(--info)', bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ',  rank: 2 }
 };
 
 function _getContactAllergies(contactId){
@@ -31615,9 +31615,9 @@ async function confirmDelAllergy(){
 // =====================================================
 // Severity meta. Order matters for sort and banner color picking.
 var WARNING_SEVERITY = {
-  critical: { label: 'Critical', color: '#ef4444', bg: '#fef2f2', border: '#fecaca', icon: '⚠', rank: 0 },
-  warning:  { label: 'Warning',  color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', icon: '⚠', rank: 1 },
-  info:     { label: 'Info',     color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ',  rank: 2 }
+  critical: { label: 'Critical', color: 'var(--danger)', bg: '#fef2f2', border: '#fecaca', icon: '⚠', rank: 0 },
+  warning:  { label: 'Warning',  color: 'var(--warning)', bg: '#fffbeb', border: '#fde68a', icon: '⚠', rank: 1 },
+  info:     { label: 'Info',     color: 'var(--info)', bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ',  rank: 2 }
 };
 
 function _getContactWarnings(contactId){
