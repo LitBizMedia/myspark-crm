@@ -494,23 +494,23 @@ body:not(.role-manager-up) #ppt-orders{display:none!important}
 .cal-ev:hover{filter:brightness(1.2)}
 .cal-ev-task{background:var(--orange-dim);color:var(--orange)}
 .cal-more{font-size:10px;color:var(--text-muted);padding:1px 4px;cursor:pointer}
-.cal-timed{display:flex;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:hidden;overflow-x:auto;box-shadow:0 2px 12px rgba(107,33,234,.07);min-height:calc(100vh - 260px)}
+.cal-timed{display:flex;background:var(--main-card);border:1px solid var(--main-border);border-radius:var(--radius-lg);overflow:auto;box-shadow:0 2px 12px rgba(107,33,234,.07);height:calc(100vh - 260px)}
 /* cal-timed viewport fill: day + week match month's responsive height. The box
    fills the viewport and reflows on resize. Flex children (time gutter + day
    columns) stretch to the box height so their backgrounds extend cleanly below
    the last hour. The .tgrid-row 68px height is NOT changed, so all event
    positioning, buffer bands, and drag math stay pixel-exact. */
-.cal-timed > div{min-height:100%}
-.time-col{width:52px;flex-shrink:0;background:var(--main-bg);border-right:1px solid var(--main-border);display:flex;flex-direction:column}
-.time-col-head{min-height:56px;border-bottom:1px solid var(--main-border);flex-shrink:0}
-.time-col-allday{height:28px;border-bottom:1px solid var(--main-border);font-size:9px;color:var(--text-dim);display:flex;align-items:center;justify-content:flex-end;padding:0 6px;background:var(--main-bg);flex-shrink:0}
-.day-col-allday{min-height:28px;border-bottom:1px solid var(--main-border);padding:3px 5px;display:flex;flex-wrap:wrap;gap:3px;align-items:center;background:var(--main-card);flex-shrink:0}
+.cal-timed > div{min-height:max-content}
+.time-col{width:52px;flex-shrink:0;background:var(--main-bg);border-right:1px solid var(--main-border);display:flex;flex-direction:column;position:sticky;left:0;z-index:3}
+.time-col-head{min-height:56px;border-bottom:1px solid var(--main-border);flex-shrink:0;position:sticky;top:0;z-index:6;background:var(--main-bg)}
+.time-col-allday{height:28px;border-bottom:1px solid var(--main-border);font-size:9px;color:var(--text-dim);display:flex;align-items:center;justify-content:flex-end;padding:0 6px;background:var(--main-bg);flex-shrink:0;position:sticky;top:56px;z-index:6}
+.day-col-allday{min-height:28px;border-bottom:1px solid var(--main-border);padding:3px 5px;display:flex;flex-wrap:wrap;gap:3px;align-items:center;background:var(--main-card);flex-shrink:0;position:sticky;top:56px;z-index:2}
 .cal-allday-chip{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;letter-spacing:.02em}
 .time-slot{height:var(--cal-hour-px);padding:3px 5px;font-size:10px;color:var(--main-text-muted);
   border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:flex-end;flex-shrink:0}
 .day-col{flex:1;min-width:88px;border-right:1px solid var(--main-border);display:flex;flex-direction:column}
 .day-col:last-child{border-right:none}
-.day-col-head{min-height:56px;background:var(--main-card);padding:6px 4px 5px;text-align:center;
+.day-col-head{min-height:56px;background:var(--main-card);padding:6px 4px 5px;text-align:center;position:sticky;top:0;z-index:2;
   border-bottom:1px solid var(--main-border);font-size:11px;font-weight:600;color:var(--main-text);flex-shrink:0;display:flex;flex-direction:column;justify-content:center}
 .day-col-head.today{color:var(--orange)}
 .tgrid-row{height:var(--cal-hour-px);border-bottom:1px solid var(--main-border);position:relative;cursor:pointer}
