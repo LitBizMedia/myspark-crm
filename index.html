@@ -522,6 +522,7 @@ body:not(.role-manager-up) #ppt-orders{display:none!important}
 .timed-ev:hover{filter:brightness(1.15)}
 .timed-ev-cancelled{opacity:.45}
 .timed-ev-rescheduled{opacity:.45;text-decoration:line-through;background:#9ca3af !important;cursor:pointer}
+.timed-ev-completed{background:#6b7280 !important;opacity:.75}
 .appt-row-sm.rescheduled{border-left-color:var(--text-dim);opacity:.5;text-decoration:line-through}
 .timed-ev-time{font-size:10px;opacity:.8;white-space:nowrap}
 .timed-ev-title{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -8580,8 +8581,8 @@ function buildTimedCol(dateStr,appts,allHours){
     var _effBuf=getApptEffectiveBuffer(a);
     var bufBpx=Math.round((_effBuf.before)/60*CAL_HOUR_PX);
     var bufApx=Math.round((_effBuf.after)/60*CAL_HOUR_PX);
-    var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
-    var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;left:0;right:0;background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
+    var bufBHTML=bufBpx>0?'<div style="position:absolute;top:'+Math.max(0,topPx-bufBpx)+'px;height:'+bufBpx+'px;'+wStyle+'background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
+    var bufAHTML=bufApx>0?'<div style="position:absolute;top:'+(topPx+heightPx)+'px;height:'+bufApx+'px;'+wStyle+'background:'+col+'15;border-left:2px dashed '+col+'50;pointer-events:none;z-index:0"></div>':'';
     var isRescheduled=a.status==='rescheduled';
     var draggableAttr2 = _apptIsDraggable(a) ? ' draggable="true" ondragstart="_calDragStart(event,\''+a.id+'\')" ondragend="_calDragEnd(event)" oncontextmenu="_calApptContextMenu(event,\''+a.id+'\')"' : '';
     var _icons2=_calApptIconsHTML(a);
@@ -8589,7 +8590,7 @@ function buildTimedCol(dateStr,appts,allHours){
     var _prov2=_staffFirstLastInitial(a.assignedTo);
     var _tinyCard2=heightPx<=40;
     var _shortCard2=heightPx<=65;
-    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+'" data-appt-id="'+a.id+'"'+draggableAttr2+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
+    return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+(a.status==='completed'?' timed-ev-completed':'')+'" data-appt-id="'+a.id+'"'+draggableAttr2+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:2px;padding:3px 5px 0">'
       +  '<div style="font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;line-height:1.4">'+(cA?esc(cA.name):esc(a.title))+'</div>'
       +  _icons2
@@ -8682,7 +8683,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var _provU=_staffFirstLastInitial(a.assignedTo);
     var _tinyCardU=heightPx<=40;
     var _shortCardU=heightPx<=65;
-    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+'" data-appt-id="'+a.id+'"'+draggableAttr+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto;overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
+    return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+(a.status==='completed'?' timed-ev-completed':'')+'" data-appt-id="'+a.id+'"'+draggableAttr+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto;overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:2px;padding:3px 6px 0">'
       +  '<div style="font-size:13px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;line-height:1.4">'+(c?esc(c.name):esc(a.title))+'</div>'
       +  _iconsU
