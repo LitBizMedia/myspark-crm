@@ -9120,6 +9120,7 @@ function posCSearch(v){
       dd.innerHTML = html;
     }
     dd.classList.remove('hidden');
+    _ssInstallOutside('pos-c-inp', 'pos-c-drop');
   });
 }
 
@@ -10254,12 +10255,7 @@ function svcSsFilter(inputId, hiddenId, ddId, v){
   }
   dd.classList.remove('hidden');
   _positionSsDrop(inputId, ddId);
-  setTimeout(function(){
-    document.addEventListener('click', function f(){
-      dd.classList.add('hidden');
-      document.removeEventListener('click', f);
-    }, {capture: true});
-  }, 10);
+  _ssInstallOutside(inputId, ddId);
 }
 
 function svcSsSelect(inputId, hiddenId, ddId, id){
@@ -10601,13 +10597,7 @@ function _apptGroupClientFilter(v){
       dd.innerHTML = html;
     }
     dd.classList.remove('hidden');
-    setTimeout(function(){
-      document.addEventListener('click', function f(){
-        var stillThere = document.getElementById('apt-gc-drop');
-        if(stillThere) stillThere.classList.add('hidden');
-        document.removeEventListener('click', f);
-      }, {capture: true});
-    }, 10);
+    _ssInstallOutside('apt-gc-inp', 'apt-gc-drop');
   });
 }
 
@@ -10650,13 +10640,7 @@ function _apptGroupStaffFilter(v){
     }).join('');
   }
   dd.classList.remove('hidden');
-  setTimeout(function(){
-    document.addEventListener('click', function f(){
-      var stillThere = document.getElementById('apt-gs-drop');
-      if(stillThere) stillThere.classList.add('hidden');
-      document.removeEventListener('click', f);
-    }, {capture: true});
-  }, 10);
+  _ssInstallOutside('apt-gs-inp', 'apt-gs-drop');
 }
 
 function _apptGroupStaffPick(staffId){
