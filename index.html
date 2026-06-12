@@ -8587,14 +8587,15 @@ function buildTimedCol(dateStr,appts,allHours){
     var _icons2=_calApptIconsHTML(a);
     var _addons2=_apptAddonsPillHTML(a);
     var _prov2=_staffFirstLastInitial(a.assignedTo);
-    var _shortCard2=heightPx<=38;
+    var _tinyCard2=heightPx<=40;
+    var _shortCard2=heightPx<=65;
     return bufBHTML+bufAHTML+'<div class="timed-ev'+(isCancelled?' timed-ev-cancelled':'')+(isRescheduled?' timed-ev-rescheduled':'')+'" data-appt-id="'+a.id+'"'+draggableAttr2+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+col+';'+sStripe+wStyle+'overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduled?' (Rescheduled)':'')+'">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:2px;padding:3px 5px 0">'
       +  '<div style="font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;line-height:1.4">'+(cA?esc(cA.name):esc(a.title))+'</div>'
       +  _icons2
       +'</div>'
-      +(_shortCard2?'':'<div style="font-size:11px;color:rgba(255,255,255,.88);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px 0;line-height:1.4">'+esc(a.title)+'</div>')
-      +(!_shortCard2?_calApptAddonsHTML(a):'')
+      +(_tinyCard2?'':'<div style="font-size:11px;color:rgba(255,255,255,.88);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px 0;line-height:1.4">'+esc(a.title)+'</div>')
+      +(!_tinyCard2?_calApptAddonsHTML(a):'')
       +(!_shortCard2&&_prov2?'<div style="font-size:10px;color:rgba(255,255,255,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px 0;line-height:1.4">'+esc(_prov2)+'</div>':'')
       +'</div>';
   }).join('');
@@ -8679,14 +8680,15 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
     var _iconsU=_calApptIconsHTML(a);
     var _addonsU=_apptAddonsPillHTML(a);
     var _provU=_staffFirstLastInitial(a.assignedTo);
-    var _shortCardU=heightPx<=38;
+    var _tinyCardU=heightPx<=40;
+    var _shortCardU=heightPx<=65;
     return bufBHTMLU+bufAHTMLU+'<div class="timed-ev'+(isCancelledU?' timed-ev-cancelled':'')+(isRescheduledU?' timed-ev-rescheduled':'')+'" data-appt-id="'+a.id+'"'+draggableAttr+' style="top:'+topPx+'px;height:'+heightPx+'px;background:'+evCol+';'+sStripeU+'left:3px;right:3px;width:auto;overflow:hidden;" onclick="event.stopPropagation();_calEventClick(\''+a.id+'\')" title="'+esc(a.title)+(isRescheduledU?' (Rescheduled)':'')+'">'
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:2px;padding:3px 6px 0">'
       +  '<div style="font-size:13px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;line-height:1.4">'+(c?esc(c.name):esc(a.title))+'</div>'
       +  _iconsU
       +'</div>'
-      +(_shortCardU?'':'<div style="font-size:12px;color:rgba(255,255,255,.88);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px 0;line-height:1.4">'+esc(a.title)+'</div>')
-      +(!_shortCardU?_calApptAddonsHTML(a):'')
+      +(_tinyCardU?'':'<div style="font-size:12px;color:rgba(255,255,255,.88);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px 0;line-height:1.4">'+esc(a.title)+'</div>')
+      +(!_tinyCardU?_calApptAddonsHTML(a):'')
       +(!_shortCardU&&_provU?'<div style="font-size:11px;color:rgba(255,255,255,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px 0;line-height:1.4">'+esc(_provU)+'</div>':'')
       +'</div>';
   }).join('');
