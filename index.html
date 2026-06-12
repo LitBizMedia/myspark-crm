@@ -1639,6 +1639,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--purple);width:15px;height
 
 /* MULTI-COLUMN DAY VIEW */
 .cal-mc-col{flex:1;min-width:180px;border-left:1px solid var(--main-border);display:flex;flex-direction:column}
+.cal-mc-col-head{flex:1;min-width:180px;border-left:1px solid var(--main-border);display:flex;flex-direction:column;flex-shrink:0}
+.cal-mc-col-body{flex:1;min-width:180px;border-left:1px solid var(--main-border);position:relative}
 /* === CALENDAR DRAG === */
 .timed-ev[draggable="true"]{cursor:grab}
 .timed-ev[draggable="true"]:active{cursor:grabbing}
@@ -8706,7 +8708,9 @@ function renderWeekCal(){
   document.getElementById('cal-big-month').textContent=MONTHS[ws.getMonth()].slice(0,3);
   const cols=Array.from({length:7},(_,i)=>{const dd=new Date(ws.getTime()+i*86400000);const s=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');return{day:dd,str:s}});
   const td=todayStr(),allH=_calHoursExtended(cols.map(function(c){return c.str;}), globalCalHours());
-  let html='<div class="cal-timed"><div class="time-col"><div class="time-col-head"></div><div class="time-col-allday">All-day</div>'+allH.map(h=>'<div class="time-slot">'+(h===12?'12 PM':h<12?h+' AM':(h-12)+' PM')+'</div>').join('')+'</div>';
+  let html='<div class="cal-timed">'
+    +'<div class="cal-timed-head">'
+    +'<div class="time-col"><div class="time-col-head"></div><div class="time-col-allday">All-day</div></div>';
   cols.forEach(({day,str})=>{
     var appts=getCalAppts(state.calUser,str,'week');
     var offBW=getOffBlocksForCol(str);
@@ -8748,9 +8752,16 @@ function renderWeekCal(){
     if(boW){
       dOffChips='<span class="cal-allday-chip" style="background:rgba(248,113,113,.18);border:1px solid rgba(248,113,113,.5);color:var(--danger-light)">Blackout'+(boW.reason?': '+esc(boW.reason.slice(0,18)):'')+'</span>'+dOffChips;
     }
-    html+='<div class="day-col"'+(boW?' style="background:rgba(248,113,113,.04)"':'')+'><div class="day-col-head'+(str===td?' today':'')+'">'+DSHORT[day.getDay()]+' '+day.getDate()+staffDots2+'</div><div class="day-col-allday">'+dOffChips+'</div>'+banW+buildTimedCol(str,appts,allH)+'</div>';
+    html+='<div class="day-col-head-wrap"'+(boW?' style="background:rgba(248,113,113,.04)"':'')+'><div class="day-col-head'+(str===td?' today':'')+'">'+DSHORT[day.getDay()]+' '+day.getDate()+staffDots2+'</div><div class="day-col-allday">'+dOffChips+'</div></div>';
   });
   html+='</div>';
+  html+='<div class="cal-timed-body">';
+  html+='<div class="time-col-body">'+allH.map(h=>'<div class="time-slot">'+(h===12?'12 PM':h<12?h+' AM':(h-12)+' PM')+'</div>').join('')+'</div>';
+  cols.forEach(({str})=>{
+    var appts=getCalAppts(state.calUser,str,'week');
+    html+='<div class="day-col">'+buildTimedCol(str,appts,allH)+'</div>';
+  });
+  html+='</div></div>';
   document.getElementById('cal-body').innerHTML=html;
   (function syncAllDayRowHeight(){
     var cells=document.querySelectorAll('#cal-body .day-col-allday');
@@ -8786,33 +8797,36 @@ function renderDayCal(){
     html+='<div style="margin:0 0 10px;padding:10px 14px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);border-radius:8px;color:var(--danger-light);font-size:13px"><strong>Blackout date:</strong> '+esc(boD.reason||'Online bookings disabled for this date.')+' Internal scheduling still possible with override.</div>';
   }
   html+='<div class="cal-timed" style="min-width:'+((staffCols.length*190)+80)+'px'+(boD?';background:rgba(248,113,113,.03)':'')+'">';
-  // Time labels
-  html+='<div class="time-col"><div class="time-col-head" style="height:56px;border-bottom:1px solid var(--border)"></div>';
-  html+=allH.map(function(h){return'<div class="time-slot">'+(h===12?'12 PM':h<12?h+' AM':(h-12)+' PM')+'</div>';}).join('');
-  html+='</div>';
-  // Staff columns
+  html+='<div class="cal-timed-head" style="min-width:'+((staffCols.length*190)+80)+'px">';
+  html+='<div class="time-col"><div class="time-col-head" style="height:56px;border-bottom:1px solid var(--border)"></div></div>';
   staffCols.forEach(function(u){
     var col=u.color||'#6b21ea';
     var uAppts=_expandedAppointmentsForCalendar().filter(function(a){return a.date===str&&a.assignedTo===u.id&&_isApptVisibleOnCal(a,'day');});
-    // Merge in class sessions where this user is the instructor.
     var uSessions=(db.classSessions||[]).filter(function(s){
       return s.date===str&&s.instructor_id===u.id&&s.status!=='cancelled';
     }).map(_classSessionAsAppt);
     uAppts=uAppts.concat(uSessions);
     var apptCount=uAppts.length;
-    html+='<div class="cal-mc-col">';
-    // Header
+    html+='<div class="cal-mc-col-head">';
     html+='<div class="cal-mc-head" style="border-top:3px solid '+col+'">';
     html+=avatarHtml(u,30);
     html+='<div style="min-width:0;flex:1"><div class="cal-mc-name">'+esc(u.name||u.username)+'</div>'
       +'<div class="cal-mc-role">'+esc(u.jobTitle||u.role)+(apptCount?' · '+apptCount+' appt'+(apptCount!==1?'s':''):'')+'</div></div>';
     html+='<button onclick="openApptModal(null,null,\''+str+'\',null,\''+u.id+'\')" title="Book appointment" style="background:none;border:none;cursor:pointer;color:var(--purple);padding:2px;flex-shrink:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
-    html+='</div>';
-    // Timed body for this user
-    html+=buildTimedColForUser(str,uAppts,allH,u.id);
-    html+='</div>';
+    html+='</div></div>';
   });
   html+='</div>';
+  html+='<div class="cal-timed-body" style="min-width:'+((staffCols.length*190)+80)+'px">';
+  html+='<div class="time-col-body">'+allH.map(function(h){return'<div class="time-slot">'+(h===12?'12 PM':h<12?h+' AM':(h-12)+' PM')+'</div>';}).join('')+'</div>';
+  staffCols.forEach(function(u){
+    var uAppts=_expandedAppointmentsForCalendar().filter(function(a){return a.date===str&&a.assignedTo===u.id&&_isApptVisibleOnCal(a,'day');});
+    var uSessions=(db.classSessions||[]).filter(function(s){
+      return s.date===str&&s.instructor_id===u.id&&s.status!=='cancelled';
+    }).map(_classSessionAsAppt);
+    uAppts=uAppts.concat(uSessions);
+    html+='<div class="cal-mc-col-body">'+buildTimedColForUser(str,uAppts,allH,u.id)+'</div>';
+  });
+  html+='</div></div>';
   document.getElementById('cal-body').innerHTML=html;
 }
 
