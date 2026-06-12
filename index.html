@@ -9935,6 +9935,35 @@ function _apptWarningBadgeHTML(a){
   return '<span title="'+title+'" style="margin-left:4px;font-size:9px;line-height:1;color:var(--info);font-weight:700">\u25cf</span>';
 }
 
+// Cal card helpers
+function _staffFirstLastInitial(userId){
+  var u = getUserById(userId);
+  if(!u) return '';
+  var name = (u.name||u.username||'').trim();
+  var parts = name.split(/s+/);
+  if(parts.length === 1) return parts[0];
+  return parts[0] + ' ' + parts[parts.length-1].charAt(0) + '.';
+}
+
+function _calApptIconsHTML(a){
+  if(!a || !a.contactId) return '';
+  var c = (db.contacts||[]).find(function(x){return x.id===a.contactId;});
+  if(!c) return '';
+  var icons = [];
+  (c.warnings||[]).forEach(function(w){
+    var m = WARNING_SEVERITY[w.severity] || WARNING_SEVERITY.info;
+    var tip = esc((w.title||w.label||'Warning') + ' (' + m.label + ')' + (w.notes ? ': ' + w.notes : ''));
+    icons.push('<span title="'+tip+'" style="font-size:12px;line-height:1;color:'+m.color+';flex-shrink:0;cursor:default">⚠</span>');
+  });
+  (c.allergies||[]).forEach(function(al){
+    var m = ALLERGY_SEVERITY[al.severity] || ALLERGY_SEVERITY.mild;
+    var tip = esc((al.allergen||'Allergy') + ' (' + m.label + ')' + (al.reaction ? ' — ' + al.reaction : ''));
+    icons.push('<span title="'+tip+'" style="font-size:11px;line-height:1;color:'+m.color+';flex-shrink:0;cursor:default;font-weight:700">A</span>');
+  });
+  if(!icons.length) return '';
+  return '<div style="display:flex;gap:2px;align-items:center;flex-shrink:0">'+icons.join('')+'</div>';
+}
+
 // APPOINTMENT MODAL
 let apptOverrides={}; // {conflictType: true} when user has acknowledged that conflict
 let apptConflicts=[];   // populated by checkApptConflict; list of {type, label, message}
