@@ -8599,7 +8599,7 @@ function buildTimedCol(dateStr,appts,allHours){
       +(!_shortCard2&&_prov2?'<div style="font-size:10px;color:rgba(255,255,255,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px 0;line-height:1.4">'+esc(_prov2)+'</div>':'')
       +'</div>';
   }).join('');
-  var nowLine2='';if(dateStr===todayStr()){var nM=nowHM().totalMinutes;var nTop=Math.round((nM-(allHours[0]||8)*60)/60*CAL_HOUR_PX);nowLine2='<div class="cal-now-line" style="top:'+nTop+'px"><div class="cal-now-dot"></div></div>';}
+  var nowLine2='';if(dateStr===todayStr()){var nM=nowHM().totalMinutes;if(nM>=allHours[0]*60&&nM<(allHours[allHours.length-1]+1)*60){var nTop=Math.round((nM-allHours[0]*60)/60*CAL_HOUR_PX);nowLine2='<div class="cal-now-line" style="top:'+nTop+'px"><div class="cal-now-dot"></div></div>';}}
   return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'" ondragover="_calColDragOverWeek(event,\''+dateStr+'\')" ondrop="_calColDropWeek(event,\''+dateStr+'\')">'+allHours.map(function(h){return'<div class="tgrid-row'+(hoursSet.has(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\')"></div>';}).join('')+offHTML+eventsHTML+nowLine2+'</div>';
 }
 
@@ -8692,7 +8692,7 @@ function buildTimedColForUser(dateStr,appts,allHours,uid){
       +(!_shortCardU&&_provU?'<div style="font-size:11px;color:rgba(255,255,255,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px 0;line-height:1.4">'+esc(_provU)+'</div>':'')
       +'</div>';
   }).join('');
-  var nowLineU='';if(dateStr===todayStr()){var nMU=nowHM().totalMinutes;var nTopU=Math.round((nMU-(allHours[0]||8)*60)/60*CAL_HOUR_PX);nowLineU='<div class="cal-now-line" style="top:'+nTopU+'px"><div class="cal-now-dot"></div></div>';}
+  var nowLineU='';if(dateStr===todayStr()){var nMU=nowHM().totalMinutes;if(nMU>=allHours[0]*60&&nMU<(allHours[allHours.length-1]+1)*60){var nTopU=Math.round((nMU-allHours[0]*60)/60*CAL_HOUR_PX);nowLineU='<div class="cal-now-line" style="top:'+nTopU+'px"><div class="cal-now-dot"></div></div>';}}
   return'<div style="position:relative" data-minh="'+(allHours[0]||8)+'" ondragover="_calColDragOver(event,\''+dateStr+'\',\''+uid+'\')" ondrop="_calColDrop(event,\''+dateStr+'\',\''+uid+'\')">'+allHours.map(function(h){
     return'<div class="tgrid-row'+(hours.includes(h)?'':' off-hours')+'" onclick="openApptModal(null,null,\''+dateStr+'\',\''+String(h).padStart(2,'0')+':00\',\''+uid+'\')"></div>';
   }).join('')+offHTML+_timeBlocksHTML(dateStr,uid,minH,allHours)+eventsHTML+nowLineU+'</div>';
