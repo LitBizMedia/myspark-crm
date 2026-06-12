@@ -517,8 +517,8 @@ body:not(.role-manager-up) #ppt-orders{display:none!important}
 .tgrid-row::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:0;background:repeating-linear-gradient(to bottom,transparent 0,transparent 16px,rgba(255,255,255,.05) 16px,rgba(255,255,255,.05) 17px)}
 .tgrid-row:hover{background:rgba(255,255,255,.012)}
 .tgrid-row.off-hours{background:rgba(0,0,0,.18)}
-.timed-ev{position:absolute;border-radius:4px;padding:0;font-size:11px;font-weight:600;
-  overflow:hidden;cursor:pointer;z-index:1;border:1px solid rgba(255,255,255,.15);color:#fff;transition:filter .15s;line-height:1.3;display:flex;flex-direction:column;justify-content:center}
+.timed-ev{position:absolute;border-radius:4px;padding:2px 0 0;font-size:11px;font-weight:600;
+  overflow:hidden;cursor:pointer;z-index:1;border:1px solid rgba(255,255,255,.15);color:#fff;transition:filter .15s;line-height:1.3}
 .timed-ev:hover{filter:brightness(1.15)}
 .timed-ev-cancelled{opacity:.45}
 .timed-ev-rescheduled{opacity:.45;text-decoration:line-through;background:#9ca3af !important;cursor:pointer}
@@ -9966,12 +9966,12 @@ function _calApptIconsHTML(a){
   (c.warnings||[]).forEach(function(w){
     var m = WARNING_SEVERITY[w.severity] || WARNING_SEVERITY.info;
     var tip = esc((w.text||w.title||w.label||'Warning') + ' (' + m.label + ')');
-    icons.push('<span title="'+tip+'" style="font-size:12px;line-height:1;color:'+m.color+';flex-shrink:0;cursor:default">⚠</span>');
+    icons.push('<span title="'+tip+'" style="font-size:18px;line-height:1;color:'+m.color+';flex-shrink:0;cursor:default">⚠</span>');
   });
   (c.allergies||[]).forEach(function(al){
     var m = ALLERGY_SEVERITY[al.severity] || ALLERGY_SEVERITY.mild;
     var tip = esc((al.allergen||'Allergy') + ' (' + m.label + ')' + (al.reaction ? ' — ' + al.reaction : ''));
-    icons.push('<span title="'+tip+'" style="font-size:11px;line-height:1;color:'+m.color+';flex-shrink:0;cursor:default;font-weight:700">A</span>');
+    icons.push('<span title="'+tip+'" style="font-size:18px;line-height:1;color:'+m.color+';flex-shrink:0;cursor:default;font-weight:700">A</span>');
   });
   if(!icons.length) return '';
   return '<div style="display:flex;gap:2px;align-items:center;flex-shrink:0">'+icons.join('')+'</div>';
