@@ -29940,9 +29940,9 @@ function _renderSvcWidgetsTab(){
 // =============================================================
 function _swgPolicySection(w, opts){
   opts = opts || {};
-  var includeBuffers = opts.includeBuffers !== false;
   var widgetType = opts.widgetType || 'service';
   var isClass = widgetType === 'class';
+  var isAppt = widgetType === 'appointment';
 
   var paymentMode      = (w && w.payment_mode) || 'full';
   var depositType      = (w && w.deposit_type) || 'flat';
@@ -30045,12 +30045,13 @@ function _swgPolicySection(w, opts){
       +'<option value="60"'+(slotInterval==='60'?' selected':'')+'>Every hour</option>'
       +'</select>'
       +'</div>')
-    +'<div class="form-row">'
-    +'<div class="form-group"><label>Lead time <span style="color:var(--text-muted);font-weight:400">(hours)</span></label><input id="swg-lead-hours" type="number" min="0" max="720" placeholder="no minimum" value="'+esc(leadHours)+'"></div>'
-    +'<div class="form-group"><label>Advance window <span style="color:var(--text-muted);font-weight:400">(days)</span></label><input id="swg-advance-days" type="number" min="0" max="365" placeholder="no maximum" value="'+esc(advanceDays)+'"></div>'
-    +'</div>';
+    +(isAppt?''
+      +'<div class="form-row">'
+      +'<div class="form-group"><label>Lead time <span style="color:var(--text-muted);font-weight:400">(hours)</span></label><input id="swg-lead-hours" type="number" min="0" max="720" placeholder="no minimum" value="'+esc(leadHours)+'"></div>'
+      +'<div class="form-group"><label>Advance window <span style="color:var(--text-muted);font-weight:400">(days)</span></label><input id="swg-advance-days" type="number" min="0" max="365" placeholder="no maximum" value="'+esc(advanceDays)+'"></div>'
+      +'</div>':'');
 
-  if (includeBuffers) {
+  if (isAppt) {
     html += ''
       +'<div class="form-row">'
       +'<div class="form-group"><label>Buffer before <span style="color:var(--text-muted);font-weight:400">(minutes, override)</span></label><input id="swg-buf-before" type="number" min="0" max="240" placeholder="use service default" value="'+esc(bufBefore)+'"></div>'
@@ -30496,7 +30497,7 @@ function openServiceWidgetEditor(w,isNew){
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after booking)</span></label>'
     +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thank you! Your booking is confirmed. We will see you soon.">'+esc(confirmMsg)+'</textarea></div>'
 
-    +_swgPolicySection(w, {includeBuffers:true})
+    +_swgPolicySection(w, {widgetType:'service'})
 
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
@@ -30598,7 +30599,7 @@ function openClassWidgetEditor(w,isNew){
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after registration)</span></label>'
     +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thanks for registering! See you in class.">'+esc(confirmMsg)+'</textarea></div>'
 
-    +_swgPolicySection(w, {includeBuffers:false, widgetType:'class'})
+    +_swgPolicySection(w, {widgetType:'class'})
 
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
@@ -30791,7 +30792,7 @@ function openAppointmentWidgetModal(w,isNew){
     +'<div class="form-group"><label>Confirmation Message <span style="color:var(--text-muted);font-weight:400">(shown after booking)</span></label>'
     +'<textarea id="swg-confirm-msg" rows="2" style="resize:vertical" placeholder="Thank you! Your appointment is confirmed.">'+esc(confirmMsg)+'</textarea></div>'
 
-    +_swgPolicySection(w, {includeBuffers:true})
+    +_swgPolicySection(w, {widgetType:'appointment'})
 
     +'<div class="form-group"><div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="var c=document.getElementById(\'swg-active\');c.checked=!c.checked"><input id="swg-active" type="checkbox"'+((w&&w.active!==false)||!w?' checked':'')+' style="flex-shrink:0" onclick="event.stopPropagation()"><div style="font-size:13px;text-transform:none;font-weight:600;color:var(--text)">Active</div></div></div>'
     +'</div>';
