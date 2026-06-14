@@ -38350,7 +38350,7 @@ function openCreateSubaccountModal(){
     +'</div>'
     +'<div id="new-sub-trial-notice" style="font-size:11px;color:var(--text-muted);margin-top:5px;display:none">14-day free trial. Card auto-charges at trial end. Cancel anytime.</div></div>'
     +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;align-items:center;justify-content:space-between;margin-top:4px">'
-    +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">After 14-day trial</div>'
+    +'<div><div id="new-sub-charge-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Effective charge</div>'
     +'<div id="new-sub-charge-summary" style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;color:var(--orange);margin-top:2px">$29/mo</div></div>'
     +'</div>'
     +'</div>';
@@ -38840,7 +38840,7 @@ async function createSubaccount(){
         var billingErr=await billingRes.text();
         toast('Subaccount created but billing setup failed: '+billingErr+'. Use Manage Plan to fix.','error');
       }else{
-        toast('Subaccount created. 14-day trial started.','success');
+        toast(skipTrial?'Subaccount created. Billing starts on first billing date.':'Subaccount created. 14-day trial started.','success');
       }
     }else{
       // Exempt subaccount: write exempt plan record
@@ -38897,8 +38897,11 @@ function toggleMpBillingDate(){
 function updateSubTrialNotice(){
   var t=document.getElementById('new-sub-offer-trial');
   var n=document.getElementById('new-sub-trial-notice');
+  var lbl=document.getElementById('new-sub-charge-label');
+  var trialOn=!!(t&&t.checked);
+  if(lbl)lbl.textContent=trialOn?'After 14-day trial':'Effective charge';
   if(!n)return;
-  if(t&&t.checked){
+  if(trialOn){
     n.style.display='';
     n.textContent='14-day free trial. Card auto-charges at trial end. Cancel anytime.';
   }else{
