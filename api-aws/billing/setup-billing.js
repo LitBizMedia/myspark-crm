@@ -36,7 +36,8 @@ async function handler(req, res) {
     hipaaAddon,
     discountPercent,
     discountNote,
-    skipTrial
+    skipTrial,
+    customPriceCents
   } = req.body || {};
 
   const auth = await requireAgencyAdmin(req, res);
@@ -95,6 +96,14 @@ async function handler(req, res) {
     const trialEndsAt = trialDays > 0 ? new Date(now.getTime() + trialDays * 86400000).toISOString() : null;
     const currentPeriodStart = now.toISOString();
 
+    // Flat custom-price override at creation (Network quotes, pilots, promos).
+    // Blank/invalid -> null (standard tier price). A number -> integer cents.
+    let customCents = null;
+    if (customPriceCents !== null && customPriceCents !== undefined && customPriceCents !== ''
+        && !isNaN(customPriceCents)) {
+      customCents = Math.max(0, Math.round(Number(customPriceCents)));
+    }
+
     const planPayload = {
       subaccount_id: subaccountId,
       plan_tier: tier,
@@ -110,6 +119,7 @@ async function handler(req, res) {
       exempt_from_billing: false,
       discount_percent: discountPercent || 0,
       discount_note: discountNote || null,
+      custom_price_cents: customCents,
       card_last4: cardLast4 || null,
       card_brand: cardBrand || null,
       updated_at: now.toISOString()
@@ -178,6 +188,7 @@ async function handler(req, res) {
         billing_period: billingPeriod,
         hipaa_addon: !!hipaaAddon,
         discount_percent: discountPercent || 0,
+        custom_price_cents: customCents,
         trial_days: trialDays,
         next_billing_date: nextBillingDate,
         starting_status: planPayload.status

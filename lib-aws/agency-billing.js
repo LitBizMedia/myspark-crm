@@ -5,22 +5,27 @@
 
 const crypto = require('crypto');
 const { getSquareCreds, squareHost, squareHeaders, sendError } = require('./square');
+const planPricing = require('./plan-pricing');
 
 const AGENCY_SLUG = 'litbiz';
 
+// FALLBACK-ONLY pricing. The live source of truth is the plan_pricing table,
+// read via planPricing.getTotalPrice(). These constants are used ONLY if the
+// table read throws (e.g. a transient RDS blip), so a charge never crashes for
+// lack of pricing. Keep them roughly current as a safety floor; they are not
+// the price of record. Edit real prices in the Manage Plan Pricing modal.
 const PLAN_PRICES_CENTS = {
   starter:      { monthly: 2900,  annual: 29000 },
-  professional: { monthly: 7900,  annual: 79000 },
-  business:     { monthly: 14900, annual: 149000 },
+  professional: { monthly: 9900,  annual: 99000 },
+  business:     { monthly: 19900, annual: 199000 },
   enterprise:   { monthly: 34900, annual: 349000 }
 };
 
-const HIPAA_ADDON_CENTS = { monthly: 5000, annual: 50000 };
+// HIPAA is included in tier price (no add-on) as of the 2026 pricing model.
+// Fallback addon is 0 to match. Retained for signature compatibility only.
+const HIPAA_ADDON_CENTS = { monthly: 0, annual: 0 };
 
-// Calculate the charge amount in cents for a given tier, billing period,
-// HIPAA addon, and optional discount percent (0 to 100).
-// Discount is applied to the (base + HIPAA addon) total, then rounded to the nearest cent.
-function calculateCharge(tier, billingPeriod, hipaaAddon, discountPercent) {
+function _fallbackCharge(tier, billingPeriod, hipaaAddon, discountPercent) {
   const base = PLAN_PRICES_CENTS[tier];
   if (!base) throw new Error('Unknown tier: ' + tier);
   const baseAmount = billingPeriod === 'annual' ? base.annual : base.monthly;
@@ -28,6 +33,39 @@ function calculateCharge(tier, billingPeriod, hipaaAddon, discountPercent) {
     ? (billingPeriod === 'annual' ? HIPAA_ADDON_CENTS.annual : HIPAA_ADDON_CENTS.monthly)
     : 0;
   const subtotal = baseAmount + addonAmount;
+  const pct = Number(discountPercent) || 0;
+  if (pct <= 0) return subtotal;
+  if (pct >= 100) return 0;
+  return Math.round(subtotal * (1 - pct / 100));
+}
+
+// Calculate the charge amount in cents for a given tier, billing period,
+// HIPAA addon, and optional discount percent (0 to 100).
+//
+// SOURCE OF TRUTH: plan_pricing table (via planPricing.getTotalPrice).
+// Discount is applied to the table total, then rounded to the nearest cent.
+// If the table read fails, falls back to the constants above so a charge
+// never throws for lack of pricing data.
+//
+// ASYNC: this reads the DB. All callers must await.
+//
+// customPriceCents (optional): a per-subaccount flat override in cents. When set
+// (a non-null number), it is the FINAL charge: the percent discount is IGNORED,
+// because a hand-set flat price already encodes whatever deal was struck. When
+// null/undefined, price resolves from the plan_pricing table by tier and the
+// percent discount applies as normal.
+async function calculateCharge(tier, billingPeriod, hipaaAddon, discountPercent, customPriceCents) {
+  // Flat override wins, discount ignored.
+  if (customPriceCents !== null && customPriceCents !== undefined && !isNaN(customPriceCents)) {
+    return Math.max(0, Math.round(Number(customPriceCents)));
+  }
+  let subtotal;
+  try {
+    subtotal = await planPricing.getTotalPrice(tier, billingPeriod, !!hipaaAddon);
+  } catch (e) {
+    console.error('calculateCharge: plan_pricing read failed, using fallback constants:', e.message);
+    return _fallbackCharge(tier, billingPeriod, hipaaAddon, discountPercent);
+  }
   const pct = Number(discountPercent) || 0;
   if (pct <= 0) return subtotal;
   if (pct >= 100) return 0;

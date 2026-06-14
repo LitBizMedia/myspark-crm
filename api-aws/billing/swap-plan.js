@@ -61,7 +61,7 @@ async function updatePlan(subaccountId, updates) {
 async function handler(req, res) {
   if (req.method !== 'POST') return sendError(res, 405, 'Method not allowed');
 
-  const { subaccountId, newTier, newPeriod, newHipaa, newExempt, discountPercent, discountNote, customBillingDate } = req.body || {};
+  const { subaccountId, newTier, newPeriod, newHipaa, newExempt, discountPercent, discountNote, customBillingDate, customPriceCents } = req.body || {};
 
   const auth = await requireAgencyAdmin(req, res);
   if (!auth) return;
@@ -90,6 +90,20 @@ async function handler(req, res) {
     const subTz = await getSubTimezone(subaccountId, db);
     const todayLocal = todayInTz(subTz);
 
+    // Flat custom-price override resolution (Option 1): the override is bound to a
+    // specific tier+period deal. If THIS save changes tier or period, the override
+    // clears (re-quote required). Otherwise the incoming override value is written
+    // as-is. Exempt toggles preserve it (handled by passing resolvedCustomPrice,
+    // which only nulls on a tier/period change in the same save).
+    // Normalize: '' / undefined -> null (no override); a number -> integer cents.
+    let incomingCustom = null;
+    if (customPriceCents !== null && customPriceCents !== undefined && customPriceCents !== ''
+        && !isNaN(customPriceCents)) {
+      incomingCustom = Math.max(0, Math.round(Number(customPriceCents)));
+    }
+    const _tierOrPeriodChanged = (newTier !== plan.plan_tier) || (newPeriod !== plan.billing_period);
+    const resolvedCustomPrice = _tierOrPeriodChanged ? null : incomingCustom;
+
     const beforeSnapshot = {
       plan_tier: plan.plan_tier,
       billing_period: plan.billing_period,
@@ -108,7 +122,8 @@ async function handler(req, res) {
         hipaa_addon: !!newHipaa,
         exempt_from_billing: goingExempt,
         discount_percent: discountPercent || 0,
-        discount_note: discountNote || null
+        discount_note: discountNote || null,
+        custom_price_cents: resolvedCustomPrice
       };
 
       if (goingExempt) {
@@ -169,7 +184,8 @@ async function handler(req, res) {
         billing_period: newPeriod,
         hipaa_addon: !!newHipaa,
         discount_percent: discountPercent || 0,
-        discount_note: discountNote || null
+        discount_note: discountNote || null,
+        custom_price_cents: resolvedCustomPrice
       });
       await logAudit({
         req, ...actor,
@@ -197,7 +213,8 @@ async function handler(req, res) {
         billing_period: newPeriod,
         hipaa_addon: !!newHipaa,
         discount_percent: discountPercent || 0,
-        discount_note: discountNote || null
+        discount_note: discountNote || null,
+        custom_price_cents: resolvedCustomPrice
       });
       await logAudit({
         req, ...actor,
@@ -247,7 +264,8 @@ async function handler(req, res) {
       // Discount note + discount_percent can change immediately (no charge impact this cycle).
       const updates = {
         discount_percent: discountPercent || 0,
-        discount_note: discountNote || null
+        discount_note: discountNote || null,
+        custom_price_cents: resolvedCustomPrice
       };
       // If this is actually a downgrade or other change, queue it as pending.
       const hasChange = isTierChange || isPeriodChange || isHipaaChange;
@@ -340,7 +358,8 @@ async function handler(req, res) {
         billing_period: newPeriod,
         hipaa_addon: !!newHipaa,
         discount_percent: discountPercent || 0,
-        discount_note: discountNote || null
+        discount_note: discountNote || null,
+        custom_price_cents: resolvedCustomPrice
       });
       await logAudit({
         req, ...actor,
@@ -414,6 +433,7 @@ async function handler(req, res) {
       status: 'active',
       discount_percent: discountPercent || 0,
       discount_note: discountNote || null,
+      custom_price_cents: resolvedCustomPrice,
       // Upgrade overrides any prior pending downgrade
       pending_plan_tier: null,
       pending_billing_period: null,

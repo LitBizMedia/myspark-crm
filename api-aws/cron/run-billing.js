@@ -77,6 +77,11 @@ async function processBilling(req, sub, summary) {
           ? !!sub.pending_hipaa_addon
           : !!sub.hipaa_addon
       };
+      // Clear any flat custom-price override if the pending change moves tier or
+      // period: the override was bound to the old tier deal (Option 1).
+      const _pendingTierOrPeriodChanged =
+        (afterSnapshot.plan_tier !== beforeSnapshot.plan_tier) ||
+        (afterSnapshot.billing_period !== beforeSnapshot.billing_period);
       await updatePlan(sub.subaccount_id, {
         plan_tier: afterSnapshot.plan_tier,
         billing_period: afterSnapshot.billing_period,
@@ -85,8 +90,10 @@ async function processBilling(req, sub, summary) {
         pending_billing_period: null,
         pending_hipaa_addon: null,
         pending_change_effective_at: null,
-        pending_change_note: null
+        pending_change_note: null,
+        ...(_pendingTierOrPeriodChanged ? { custom_price_cents: null } : {})
       });
+      if (_pendingTierOrPeriodChanged) sub.custom_price_cents = null;
       await logAudit({
         req, ...CRON_ACTOR,
         action: 'agency.subaccount.plan_downgrade_applied',
@@ -109,11 +116,12 @@ async function processBilling(req, sub, summary) {
     }
   }
 
-  const amountCents = calculateCharge(
+  const amountCents = await calculateCharge(
     sub.plan_tier,
     sub.billing_period,
     sub.hipaa_addon,
-    sub.discount_percent || 0
+    sub.discount_percent || 0,
+    sub.custom_price_cents
   );
   const dollars = (amountCents / 100).toFixed(2);
   const chargeNote = 'MySpark+ ' + sub.plan_tier + ' (' + sub.billing_period + ')';
@@ -378,11 +386,12 @@ async function sendTrialReminders(req) {
 
         const subName    = subRow.name || sub.subaccount_id;
         const adminEmail = subRow.admin_email;
-        const amountCents = calculateCharge(
+        const amountCents = await calculateCharge(
           sub.plan_tier,
           sub.billing_period,
           sub.hipaa_addon,
-          sub.discount_percent || 0
+          sub.discount_percent || 0,
+          sub.custom_price_cents
         );
         const dollars     = (amountCents / 100).toFixed(2);
         const trialEndDate = sub.trial_ends_at ? sub.trial_ends_at.toISOString().slice(0, 10) : 'soon';

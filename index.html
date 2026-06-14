@@ -36698,12 +36698,12 @@ async function loadAllPlans(){
 // still resolve them.
 const PLAN_PRICES = {
   starter:      {monthly:29,  annual:290},
-  professional: {monthly:79,  annual:790},
-  business:     {monthly:149, annual:1490},
+  professional: {monthly:99,  annual:990},
+  business:     {monthly:199, annual:1990},
   enterprise:   {monthly:349, annual:3490}
 };
-const HIPAA_ADDON_PRICES = {monthly:50, annual:500};
-const PLAN_TIER_LABELS = {starter:'Starter',professional:'Professional',business:'Business',enterprise:'Enterprise'};
+const HIPAA_ADDON_PRICES = {monthly:0, annual:0}; // HIPAA folded into tier price (2026 model); never add on top
+const PLAN_TIER_LABELS = {starter:'Studio',professional:'Practice',business:'Clinic',enterprise:'Network'};
 const PLAN_STATUS_LABELS = {trialing:'Trial',active:'Active',past_due:'Past Due',cancelled:'Cancelled',exempt:'Exempt',suspended:'Suspended',inactive:'Inactive'};
 const PLAN_STATUS_COLORS = {
   trialing:  {bg:'rgba(245,158,11,.12)', fg:'var(--warning-light)'},
@@ -36715,7 +36715,8 @@ const PLAN_STATUS_COLORS = {
   inactive:  {bg:'rgba(122,133,153,.12)',fg:'#7a8599'}
 };
 
-function planTierLabel(tier){return PLAN_TIER_LABELS[tier]||tier||'Starter';}
+function planTierLabel(tier){return PLAN_TIER_LABELS[tier]||tier||'Studio';}
+function tierIncludesHipaa(tier){return tier==='professional'||tier==='business'||tier==='enterprise';}
 function planStatusLabel(status){return PLAN_STATUS_LABELS[status]||status||'';}
 function planStatusColors(status){return PLAN_STATUS_COLORS[status]||PLAN_STATUS_COLORS.trialing;}
 
@@ -36724,6 +36725,23 @@ function planMonthlyPrice(tier,billingPeriod,hipaaAddon){
   var base=billingPeriod==='annual'?p.annual:p.monthly;
   var addon=hipaaAddon?(billingPeriod==='annual'?HIPAA_ADDON_PRICES.annual:HIPAA_ADDON_PRICES.monthly):0;
   return base+addon;
+}
+
+// Hydrate PLAN_PRICES from the live plan_pricing table so the UI never shows a
+// stale hardcoded price. Seed values above are the instant-render fallback; this
+// overwrites them with the source of truth on boot. HIPAA is tier-included now,
+// so HIPAA_ADDON_PRICES stays 0 and is retained only for call-signature safety.
+async function hydratePlanPrices(){
+  try{
+    var r=await fetch(apiUrl('/api/agency/plan-pricing-get'),{credentials:'include'});
+    if(!r.ok)return;
+    var data=await r.json();
+    (data.rows||[]).forEach(function(row){
+      if(!PLAN_PRICES[row.tier])PLAN_PRICES[row.tier]={};
+      PLAN_PRICES[row.tier].monthly=Math.round((row.monthly_cents||0)/100);
+      PLAN_PRICES[row.tier].annual=Math.round((row.annual_cents||0)/100);
+    });
+  }catch(e){ /* keep seed fallback on any failure */ }
 }
 
 function planTrialDaysRemaining(plan){
@@ -36756,10 +36774,10 @@ function renderAgencyAccountsTab(){
     +'</select>'
     +'<select id="acct-filter-tier" onchange="onAccountsFilterChange()">'
     +'<option value="">All tiers</option>'
-    +'<option value="starter"'+(accountsFilters.tier==='starter'?' selected':'')+'>Starter</option>'
-    +'<option value="professional"'+(accountsFilters.tier==='professional'?' selected':'')+'>Professional</option>'
-    +'<option value="business"'+(accountsFilters.tier==='business'?' selected':'')+'>Business</option>'
-    +'<option value="enterprise"'+(accountsFilters.tier==='enterprise'?' selected':'')+'>Enterprise</option>'
+    +'<option value="starter"'+(accountsFilters.tier==='starter'?' selected':'')+'>Studio</option>'
+    +'<option value="professional"'+(accountsFilters.tier==='professional'?' selected':'')+'>Practice</option>'
+    +'<option value="business"'+(accountsFilters.tier==='business'?' selected':'')+'>Clinic</option>'
+    +'<option value="enterprise"'+(accountsFilters.tier==='enterprise'?' selected':'')+'>Network</option>'
     +'</select>'
     +'<select id="acct-sort" onchange="onAccountsSortChange()">'
     +'<option value="name-asc"'+(accountsSort.col==='name'&&accountsSort.dir==='asc'?' selected':'')+'>Name A-Z</option>'
@@ -36927,8 +36945,8 @@ async function loadBillingSummary(){
 }
 
 function computeBillingSummary(plans){
-  var BASE={starter:{monthly:29,annual:290},professional:{monthly:79,annual:790},business:{monthly:149,annual:1490},enterprise:{monthly:349,annual:3490}};
-  var HIPAA={monthly:50,annual:500};
+  var BASE={starter:{monthly:29,annual:290},professional:{monthly:99,annual:990},business:{monthly:199,annual:1990},enterprise:{monthly:349,annual:3490}};
+  var HIPAA={monthly:0,annual:0}; // HIPAA folded into tier price (2026 model)
   // Monthly = real monthly subscriptions only. Annual = real annual subscriptions only.
   // We do NOT convert annuals into a monthly equivalent. They are separate revenue streams.
   var monthlyMrr=0, monthlyCount=0;
@@ -37147,8 +37165,6 @@ async function openPlanPricingModal(){
   function emptyIfNull(v){return (v===null||v===undefined)?'':String(v);}
 
   // Get HIPAA addon from the first row (it's uniform across tiers per Patrick's decision)
-  var hipaaMo=dollarsFromCents(rows[0].hipaa_monthly_cents);
-  var hipaaYr=dollarsFromCents(rows[0].hipaa_annual_cents);
 
   var tierCards=rows.map(function(t){
     var label=PLAN_TIER_LABELS[t.tier]||t.tier;
@@ -37175,17 +37191,7 @@ async function openPlanPricingModal(){
       +'</div>';
   }).join('');
 
-  var hipaaBlock='<div style="background:var(--purple-dim);border:1px solid var(--purple-border);border-radius:var(--radius-lg);padding:16px;margin-bottom:14px">'
-    +'<div style="font-family:Exo 2,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--purple);margin-bottom:10px">HIPAA Add-On (uniform across tiers)</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-    +'<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;display:block;margin-bottom:4px">Monthly ($)</label>'
-    +'<input type="number" min="0" step="1" id="pp-hipaa-monthly" value="'+hipaaMo+'" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
-    +'<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--main-text-muted);font-weight:600;display:block;margin-bottom:4px">Annual ($)</label>'
-    +'<input type="number" min="0" step="1" id="pp-hipaa-annual" value="'+hipaaYr+'" style="width:100%;background:var(--main-input);border:1px solid var(--main-input-border);color:var(--main-text);border-radius:var(--radius);padding:8px 10px;font-size:13px"></div>'
-    +'</div>'
-    +'</div>';
-
-  var body=hipaaBlock+'<div id="pp-tiers">'+tierCards+'</div>'
+  var body='<div id="pp-tiers">'+tierCards+'</div>'
     +'<div style="font-size:12px;color:var(--main-text-muted);padding:8px 0;line-height:1.5">Changes apply to ALL subscriptions on next billing cycle. Existing subs are not grandfathered. Exempt accounts are unaffected.</div>';
 
   openModal('Plan Pricing & Limits', body,
@@ -37208,8 +37214,6 @@ async function savePlanPricing(){
     if(isNaN(n)||n<0)return 0;
     return Math.round(n*100);
   }
-  var hipaaMoCents=readDollarsToCents('pp-hipaa-monthly');
-  var hipaaYrCents=readDollarsToCents('pp-hipaa-annual');
 
   function readDollars(blk,field){
     var inp=blk.querySelector('input[data-field="'+field+'"]');
@@ -37236,8 +37240,8 @@ async function savePlanPricing(){
       id:tier, tier:tier,
       monthly_cents:readDollars(b,'monthly_dollars'),
       annual_cents:readDollars(b,'annual_dollars'),
-      hipaa_monthly_cents:hipaaMoCents,
-      hipaa_annual_cents:hipaaYrCents,
+      hipaa_monthly_cents:0,
+      hipaa_annual_cents:0,
       max_staff:readIntOrNull(b,'max_staff'),
       max_contacts:readIntOrNull(b,'max_contacts'),
       max_emails_per_month:readIntOrNull(b,'max_emails_per_month'),
@@ -37309,6 +37313,7 @@ async function confirmRefund(invoiceId){
 // =====================================================
 async function openManagePlanModal(subId,subName){
   if(!agencyCanManageSubaccounts()){toast('You do not have permission to manage plans.','error');return;}
+  await hydratePlanPrices();
   var plan=null;
   try{
     var r=await fetch(apiUrl('/api/agency/plans-list?subaccount_id=')+encodeURIComponent(subId),{credentials:'include'});
@@ -37371,22 +37376,27 @@ async function openManagePlanModal(subId,subName){
     +'</div>'
     +'<div class="form-row">'
     +'<div class="form-group"><label>Plan Tier</label>'
-    +'<select id="mp-tier" class="filter-sel" style="width:100%;height:38px" onchange="updatePlanSummary()">'+tierOpts+'</select></div>'
+    +'<select id="mp-tier" class="filter-sel" style="width:100%;height:38px" onchange="clearMpCustomPrice();updatePlanSummary()">'+tierOpts+'</select></div>'
     +'<div class="form-group"><label>Billing Period</label>'
-    +'<select id="mp-period" class="filter-sel" style="width:100%;height:38px" onchange="refreshTierPrices();updatePlanSummary()">'
+    +'<select id="mp-period" class="filter-sel" style="width:100%;height:38px" onchange="clearMpCustomPrice();refreshTierPrices();updatePlanSummary()">'
     +'<option value="monthly"'+(curPeriod==='monthly'?' selected':'')+'>Monthly</option>'
     +'<option value="annual"'+(curPeriod==='annual'?' selected':'')+'>Annual (2 months free)</option>'
     +'</select></div>'
     +'</div>'
-    +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
-    +'<input type="checkbox" id="mp-hipaa" '+(curHipaa?'checked':'')+' onchange="updatePlanSummary()" style="width:auto;margin:0">'
-    +'<span>HIPAA Compliance Add-on (+$50/mo or $500/yr)</span></label></div>'
+    +'<div class="form-group"><input type="hidden" id="mp-hipaa" value="'+(tierIncludesHipaa(curTier)?'1':'')+'">'
+    +(tierIncludesHipaa(curTier)
+       ? '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--success-dim);border:1px solid var(--success);border-radius:var(--radius);font-size:13px;color:var(--success-text);font-weight:600">HIPAA compliance &amp; BAA included with this plan</div>'
+       : '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);font-size:13px;color:var(--main-text-muted)">HIPAA not included on Studio. Choose Practice or higher for PHI.</div>')
+    +'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
     +'<div class="form-group" style="margin:0"><label>Discount %</label>'
     +'<input id="mp-discount" type="number" min="0" max="100" value="'+(plan&&plan.discount_percent||0)+'" placeholder="0" onchange="updatePlanSummary()"></div>'
     +'<div class="form-group" style="margin:0"><label>Discount Note</label>'
     +'<input id="mp-discount-note" type="text" value="'+esc((plan&&plan.discount_note)||'')+'" placeholder="e.g. Founding member"></div>'
     +'</div>'
+    +'<div class="form-group" style="margin-top:12px"><label>Custom Flat Price ('+(curPeriod==='annual'?'$/yr':'$/mo')+') <span style="font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0">(optional)</span></label>'
+    +'<input id="mp-custom-price" type="number" min="0" step="1" value="'+(plan&&plan.custom_price_cents!=null?(plan.custom_price_cents/100):'')+'" placeholder="Blank = standard tier price" onchange="updatePlanSummary()" oninput="updatePlanSummary()">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:5px">Set a flat charge for this account (Network quotes, pilots). Overrides the discount above. Clears automatically if you change tier or billing period.</div></div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="mp-exempt" '+(isExempt?'checked':'')+' onchange="toggleMpBillingDate();updatePlanSummary()" style="width:auto;margin:0">'
     +'<span>Exempt from billing (test workspace, partner, internal)</span></label></div>'
@@ -37447,6 +37457,10 @@ function refreshTierPrices(){
   }).join('');
 }
 
+function clearMpCustomPrice(){
+  var el=document.getElementById('mp-custom-price');
+  if(el)el.value=''; // backend clears the override on tier/period change; mirror it here
+}
 function updatePlanSummary(){
   var tier=document.getElementById('mp-tier');
   var period=document.getElementById('mp-period');
@@ -37456,17 +37470,35 @@ function updatePlanSummary(){
   if(!tier||!period||!sum)return;
   var exemptEl=document.getElementById('mp-exempt');
   if(exemptEl&&exemptEl.checked){sum.textContent='No charge';return;}
+  // Custom flat override wins, discount ignored (mirrors backend Option 1).
+  var customEl=document.getElementById('mp-custom-price');
+  var customRaw=customEl?String(customEl.value).trim():'';
+  if(customRaw!==''&&!isNaN(customRaw)&&Number(customRaw)>=0){
+    var cust=Math.round(Number(customRaw));
+    sum.textContent='$'+cust+(period.value==='annual'?'/yr':'/mo')+' (custom)';
+    return;
+  }
   // Not exempt - show real price
-  var price=planMonthlyPrice(tier.value,period.value,hipaa&&hipaa.checked);
+  var price=planMonthlyPrice(tier.value,period.value,tierIncludesHipaa(tier.value));
   var disc=discountEl?Math.min(100,Math.max(0,parseInt(discountEl.value)||0)):0;
   if(disc>0)price=Math.round(price*(1-disc/100));
   sum.textContent='$'+price+(period.value==='annual'?'/yr':'/mo')+(disc>0?' ('+disc+'% off)':'');
 }
 
 async function saveManagePlan(subId){
+  // Capture custom price NOW, while the field is in the DOM. Confirm-modal paths
+  // (upgrade/trial) swap the modal before confirmSwapPlan runs, removing the field,
+  // so the reader falls back to this stash. Tier/period change clears it server-side.
+  state._mpCustomPriceCents=(function(){
+    var el=document.getElementById('mp-custom-price');
+    if(!el)return null;
+    var raw=String(el.value).trim();
+    if(raw===''||isNaN(raw)||Number(raw)<0)return null;
+    return Math.round(Number(raw)*100);
+  })();
   var tier=document.getElementById('mp-tier')&&document.getElementById('mp-tier').value;
   var period=document.getElementById('mp-period')&&document.getElementById('mp-period').value;
-  var hipaa=document.getElementById('mp-hipaa')&&document.getElementById('mp-hipaa').checked;
+  var hipaa=tierIncludesHipaa(document.getElementById('mp-tier')&&document.getElementById('mp-tier').value);
   var exemptChecked=!!(document.getElementById('mp-exempt')&&document.getElementById('mp-exempt').checked);
   var discountPct=parseInt((document.getElementById('mp-discount')&&document.getElementById('mp-discount').value)||'0')||0;
   var discountNote=(document.getElementById('mp-discount-note')&&document.getElementById('mp-discount-note').value||'').trim();
@@ -37525,12 +37557,19 @@ async function saveManagePlan(subId){
   await confirmSwapPlan(subId,tier,period,hipaa,exemptChecked,discountPct,discountNote,customBillingDate,true);
 }
 
+function _readMpCustomPriceCents(){
+  var el=document.getElementById('mp-custom-price');
+  if(!el)return (state._mpCustomPriceCents!==undefined?state._mpCustomPriceCents:null);
+  var raw=String(el.value).trim();
+  if(raw===''||isNaN(raw)||Number(raw)<0)return null;
+  return Math.round(Number(raw)*100);
+}
 async function confirmSwapPlan(subId,tier,period,hipaa,exempt,discountPct,discountNote,customBillingDate,silent){
   try{
     var r=await fetch(apiUrl('/api/billing/swap-plan'),{credentials:'include',
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||'',customBillingDate:customBillingDate||null})
+      body:JSON.stringify({subaccountId:subId,newTier:tier,newPeriod:period,newHipaa:!!hipaa,newExempt:!!exempt,discountPercent:discountPct||0,discountNote:discountNote||'',customBillingDate:customBillingDate||null,customPriceCents:_readMpCustomPriceCents()})
     });
     if(!r.ok){var t=await r.text();toast('Plan change failed: '+t,'error');return;}
     var data=await r.json();
@@ -38228,6 +38267,7 @@ async function agencyConfirmLoginAs(slug){
 
 // ── Create Subaccount Modal ──
 function openCreateSubaccountModal(){
+  hydratePlanPrices().then(function(){ if(typeof updateSubBillingPreview==='function')updateSubBillingPreview(); });
   if(!agencyCanManageSubaccounts()){toast('You do not have permission to create subaccounts.','error');return;}
   // Reset state for fresh modal open
   state._newSubLinkedContact=null;
@@ -38256,10 +38296,10 @@ function openCreateSubaccountModal(){
     +'<input id="new-sub-slug" type="text" placeholder="riverside-spa" style="border-radius:0 var(--radius) var(--radius) 0;flex:1" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,\'-\')"></div></div>'
     +'<div class="form-group"><label>Plan Tier *</label>'
     +'<select id="new-sub-tier" class="filter-sel" style="width:100%;height:38px" onchange="updateSubBillingPreview()">'
-    +'<option value="starter">Starter</option>'
-    +'<option value="professional">Professional</option>'
-    +'<option value="business">Business</option>'
-    +'<option value="enterprise">Enterprise</option>'
+    +'<option value="starter">Studio</option>'
+    +'<option value="professional">Practice</option>'
+    +'<option value="business">Clinic</option>'
+    +'<option value="enterprise">Network</option>'
     +'</select></div>'
     // === Hidden admin fields populated from Step 1 customer pick ===
     +'<input type="hidden" id="new-sub-admin-name">'
@@ -38275,10 +38315,9 @@ function openCreateSubaccountModal(){
     +'<option value="monthly">Monthly</option>'
     +'<option value="annual">Annual (2 months free)</option>'
     +'</select></div>'
-    +'<div class="form-group" style="margin:0"><label>HIPAA Add-on</label>'
-    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px">'
-    +'<input type="checkbox" id="new-sub-hipaa" onchange="updateSubBillingPreview()" style="width:auto;margin:0">'
-    +'<span style="font-size:13px;color:var(--text)">+$50/mo</span></label></div>'
+    +'<div class="form-group" style="margin:0"><label>HIPAA Compliance</label>'
+    +'<input type="hidden" id="new-sub-hipaa">'
+    +'<div id="new-sub-hipaa-line" style="margin-top:8px"></div></div>'
     +'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
     +'<div class="form-group" style="margin:0"><label>Discount % <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
@@ -38286,13 +38325,16 @@ function openCreateSubaccountModal(){
     +'<div class="form-group" style="margin:0"><label>Discount Note <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
     +'<input id="new-sub-discount-note" type="text" placeholder="e.g. Founding member"></div>'
     +'</div>'
+    +'<div class="form-group"><label>Custom Flat Price ($/mo) <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>'
+    +'<input id="new-sub-custom-price" type="number" min="0" step="1" placeholder="Blank = standard tier price" onchange="updateSubBillingPreview()" oninput="updateSubBillingPreview()">'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:5px">Flat charge for this account (Network quotes, pilots, promos). Overrides the discount above.</div></div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
     +'<input type="checkbox" id="new-sub-exempt" onchange="toggleBillingFields()" style="width:auto;margin:0">'
     +'<span>Exempt from billing (test workspace, partner, internal use)</span></label></div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">'
-    +'<input type="checkbox" id="new-sub-skip-trial" style="width:auto;margin:0">'
-    +'<span>Skip 14-day trial (bill on first billing date instead)</span></label>'
-    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:24px">Use this for customers migrating from another platform who are already paying.</div></div>'
+    +'<input type="checkbox" id="new-sub-offer-trial" onchange="updateSubTrialNotice()" style="width:auto;margin:0">'
+    +'<span>Offer 14-day free trial</span></label>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-left:24px">Leave unchecked to bill from the first billing date. Check to give a 14-day free trial before the first charge.</div></div>'
     // === STEP 5: PAYMENT CARD ===
     +'<div id="new-sub-billing-fields">'
     +'<div class="form-group"><label>Payment Card *</label>'
@@ -38306,7 +38348,7 @@ function openCreateSubaccountModal(){
     +'<div id="new-sub-card-existing-section" style="display:none">'
     +'<select id="new-sub-existing-card" class="filter-sel" style="width:100%;height:38px"><option value="">Loading saved cards...</option></select>'
     +'</div>'
-    +'<div id="new-sub-trial-notice" style="font-size:11px;color:var(--text-muted);margin-top:5px">14-day free trial. Card auto-charges at trial end. Cancel anytime.</div></div>'
+    +'<div id="new-sub-trial-notice" style="font-size:11px;color:var(--text-muted);margin-top:5px;display:none">14-day free trial. Card auto-charges at trial end. Cancel anytime.</div></div>'
     +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;align-items:center;justify-content:space-between;margin-top:4px">'
     +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">After 14-day trial</div>'
     +'<div id="new-sub-charge-summary" style="font-family:Exo 2,sans-serif;font-size:18px;font-weight:800;color:var(--orange);margin-top:2px">$29/mo</div></div>'
@@ -38317,17 +38359,7 @@ function openCreateSubaccountModal(){
     +'<button class="btn btn-action" onclick="withBtnLock(this,()=>createSubaccount())">Create Subaccount</button>',
     'modal-lg');
   setTimeout(initSubaccountCardForm,300);
-  setTimeout(function(){
-    var t=document.getElementById('new-sub-skip-trial');
-    var n=document.getElementById('new-sub-trial-notice');
-    if(t && n){
-      t.addEventListener('change',function(){
-        n.textContent = t.checked
-          ? 'Card will be charged on the next billing date. No trial period.'
-          : '14-day free trial. Card auto-charges at trial end. Cancel anytime.';
-      });
-    }
-  },350);
+  setTimeout(function(){ if(typeof updateSubBillingPreview==='function')updateSubBillingPreview(); updateSubTrialNotice(); },350);
 }
 
 // ── Linked contact picker (LitBiz CRM contacts) ──
@@ -38709,7 +38741,7 @@ async function createSubaccount(){
   var slug=(document.getElementById('new-sub-slug')&&document.getElementById('new-sub-slug').value||'').trim().toLowerCase();
   var tier=document.getElementById('new-sub-tier')&&document.getElementById('new-sub-tier').value||'starter';
   var billingPeriod=document.getElementById('new-sub-billing-period')&&document.getElementById('new-sub-billing-period').value||'monthly';
-  var hipaaAddon=!!(document.getElementById('new-sub-hipaa')&&document.getElementById('new-sub-hipaa').checked);
+  var hipaaAddon=tierIncludesHipaa(document.getElementById('new-sub-tier')&&document.getElementById('new-sub-tier').value);
   var isExempt=!!(document.getElementById('new-sub-exempt')&&document.getElementById('new-sub-exempt').checked);
   var discountPct=parseInt((document.getElementById('new-sub-discount')&&document.getElementById('new-sub-discount').value)||'0')||0;
   var discountNote=(document.getElementById('new-sub-discount-note')&&document.getElementById('new-sub-discount-note').value||'').trim();
@@ -38774,9 +38806,12 @@ async function createSubaccount(){
     if(!r1.ok){var e1=await r1.text();toast('Failed to create subaccount: '+e1,'error');return;}
     // Handle billing setup
     if(!isExempt){
-      var skipTrialEl=document.getElementById('new-sub-skip-trial');
-      var skipTrial=!!(skipTrialEl&&skipTrialEl.checked);
-      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote,linkedContactId:state._newSubLinkedContact&&state._newSubLinkedContact.id,skipTrial:skipTrial};
+      var offerTrialEl=document.getElementById('new-sub-offer-trial');
+      var skipTrial=!(offerTrialEl&&offerTrialEl.checked); // opt-in: no offer = skip trial
+      var _cpEl=document.getElementById('new-sub-custom-price');
+      var _cpRaw=_cpEl?String(_cpEl.value).trim():'';
+      var customPriceCents=(_cpRaw!==''&&!isNaN(_cpRaw)&&Number(_cpRaw)>=0)?Math.round(Number(_cpRaw)*100):null;
+      var billingPayload={subaccountSlug:slug,subaccountName:name,adminEmail:adminEmail,adminName:adminName,tier:tier,billingPeriod:billingPeriod,hipaaAddon:hipaaAddon,discountPercent:discountPct,discountNote:discountNote,linkedContactId:state._newSubLinkedContact&&state._newSubLinkedContact.id,skipTrial:skipTrial,customPriceCents:customPriceCents};
       if(state._cardMode==='existing'){
         // Saved card from the linked contact's Square customer record
         var cardSel=document.getElementById('new-sub-existing-card');
@@ -38824,15 +38859,30 @@ async function createSubaccount(){
 function updateSubBillingPreview(){
   var tier=document.getElementById('new-sub-tier');
   var period=document.getElementById('new-sub-billing-period');
-  var hipaa=document.getElementById('new-sub-hipaa');
+  var hipaaHidden=document.getElementById('new-sub-hipaa');
+  var hipaaLine=document.getElementById('new-sub-hipaa-line');
   var discountEl=document.getElementById('new-sub-discount');
   var summary=document.getElementById('new-sub-charge-summary');
-  if(!tier||!period||!summary)return;
-  var prices={starter:{monthly:29,annual:290},professional:{monthly:79,annual:790},business:{monthly:149,annual:1490},enterprise:{monthly:349,annual:3490}};
-  var base=(prices[tier.value]||prices.starter)[period.value]||29;
-  var addon=hipaa&&hipaa.checked?(period.value==='annual'?500:50):0;
+  if(!tier||!period)return;
+  // Custom flat override wins, discount ignored (mirrors backend).
+  var _cpPrev=document.getElementById('new-sub-custom-price');
+  var _cpPrevRaw=_cpPrev?String(_cpPrev.value).trim():'';
+  // HIPAA is tier-included now. Render a read-only line + set the hidden flag.
+  var inc=tierIncludesHipaa(tier.value);
+  if(hipaaHidden)hipaaHidden.value=inc?'1':'';
+  if(hipaaLine){
+    hipaaLine.innerHTML=inc
+      ? '<div style="padding:8px 10px;background:var(--success-dim);border:1px solid var(--success);border-radius:var(--radius);font-size:12px;color:var(--success-text);font-weight:600">Included with this plan</div>'
+      : '<div style="padding:8px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;color:var(--text-muted)">Not included on Studio</div>';
+  }
+  if(!summary)return;
+  if(_cpPrevRaw!==''&&!isNaN(_cpPrevRaw)&&Number(_cpPrevRaw)>=0){
+    summary.textContent='$'+Math.round(Number(_cpPrevRaw))+(period.value==='annual'?'/yr':'/mo')+' (custom)';
+    return;
+  }
+  var base=planMonthlyPrice(tier.value,period.value,false); // HIPAA folded into tier price
   var disc=discountEl?Math.min(100,Math.max(0,parseInt(discountEl.value)||0)):0;
-  var total=Math.round((base+addon)*(1-disc/100));
+  var total=Math.round(base*(1-disc/100));
   summary.textContent='$'+total+(period.value==='annual'?'/yr':'/mo')+(disc>0?' ('+disc+'% off)':'');
 }
 
@@ -38842,6 +38892,18 @@ function toggleMpBillingDate(){
   if(!exempt||!section)return;
   // Show billing date picker when unchecking exempt
   section.style.display=exempt.checked?'none':'block';
+}
+
+function updateSubTrialNotice(){
+  var t=document.getElementById('new-sub-offer-trial');
+  var n=document.getElementById('new-sub-trial-notice');
+  if(!n)return;
+  if(t&&t.checked){
+    n.style.display='';
+    n.textContent='14-day free trial. Card auto-charges at trial end. Cancel anytime.';
+  }else{
+    n.style.display='none';
+  }
 }
 
 function toggleBillingFields(){

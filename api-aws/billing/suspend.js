@@ -110,11 +110,12 @@ async function handler(req, res) {
       if (chargeNow && plan.square_customer_id && plan.square_card_id && !plan.exempt_from_billing) {
         // Attempt the charge that originally failed
         chargeAttempted = true;
-        const amountCents = calculateCharge(
+        const amountCents = await calculateCharge(
           plan.plan_tier,
           plan.billing_period,
           plan.hipaa_addon,
-          plan.discount_percent || 0
+          plan.discount_percent || 0,
+          plan.custom_price_cents
         );
         const tz = await getSubTimezone(subaccountId, db);
         const todayLocal = todayInTz(tz);

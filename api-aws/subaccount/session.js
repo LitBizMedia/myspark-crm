@@ -50,12 +50,17 @@ async function handler(req, res) {
       subaccountSlug = subResult.rows[0].slug || null;
     }
 
+    // HIPAA is tier-included as of the 2026 pricing model: Practice (professional),
+    // Clinic (business), and Network (enterprise) include HIPAA compliance + BAA.
+    // Studio (starter) does not. Derive from plan_tier, NOT the legacy hipaa_addon
+    // column. This arms the idle-logout safeguard for all PHI-bearing tiers.
     const planResult = await db.query(
-      'SELECT hipaa_addon FROM subaccount_plans WHERE subaccount_id = $1 LIMIT 1',
+      'SELECT plan_tier FROM subaccount_plans WHERE subaccount_id = $1 LIMIT 1',
       [session.subaccount_id]
     );
     if (planResult.rows.length > 0) {
-      hipaaAddon = !!planResult.rows[0].hipaa_addon;
+      const tier = planResult.rows[0].plan_tier;
+      hipaaAddon = (tier === 'professional' || tier === 'business' || tier === 'enterprise');
     }
 
     // Look up is_agency_admin for the calling user. Live DB read so revocation

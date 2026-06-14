@@ -137,11 +137,12 @@ async function handler(req, res) {
       return sendError(res, 400, 'No card on file. Cannot reactivate without a payment method.');
     }
 
-    const amountCents = calculateCharge(
+    const amountCents = await calculateCharge(
       plan.plan_tier,
       plan.billing_period,
       plan.hipaa_addon,
-      plan.discount_percent || 0
+      plan.discount_percent || 0,
+      plan.custom_price_cents
     );
     const dollars     = (amountCents / 100).toFixed(2);
     const chargeNote  = 'MySpark+ reactivation: ' + plan.plan_tier + ' (' + plan.billing_period + ')';
