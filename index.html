@@ -37207,13 +37207,6 @@ async function savePlanPricing(){
   if(!tierBlocks.length){toast('Could not find tier inputs.','error');return;}
 
   // Grab HIPAA values once (uniform across tiers)
-  function readDollarsToCents(id){
-    var v=document.getElementById(id);
-    if(!v)return 0;
-    var n=parseFloat(v.value||'0');
-    if(isNaN(n)||n<0)return 0;
-    return Math.round(n*100);
-  }
 
   function readDollars(blk,field){
     var inp=blk.querySelector('input[data-field="'+field+'"]');
@@ -37383,7 +37376,6 @@ async function openManagePlanModal(subId,subName){
     +'<option value="annual"'+(curPeriod==='annual'?' selected':'')+'>Annual (2 months free)</option>'
     +'</select></div>'
     +'</div>'
-    +'<div class="form-group"><input type="hidden" id="mp-hipaa" value="'+(tierIncludesHipaa(curTier)?'1':'')+'">'
     +(tierIncludesHipaa(curTier)
        ? '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--success-dim);border:1px solid var(--success);border-radius:var(--radius);font-size:13px;color:var(--success-text);font-weight:600">HIPAA compliance &amp; BAA included with this plan</div>'
        : '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--main-bg);border:1px solid var(--main-border);border-radius:var(--radius);font-size:13px;color:var(--main-text-muted)">HIPAA not included on Studio. Choose Practice or higher for PHI.</div>')
@@ -37464,7 +37456,6 @@ function clearMpCustomPrice(){
 function updatePlanSummary(){
   var tier=document.getElementById('mp-tier');
   var period=document.getElementById('mp-period');
-  var hipaa=document.getElementById('mp-hipaa');
   var discountEl=document.getElementById('mp-discount');
   var sum=document.getElementById('mp-summary');
   if(!tier||!period||!sum)return;

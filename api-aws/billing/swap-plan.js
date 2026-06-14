@@ -13,7 +13,7 @@
 // timezone, so Patrick at 11pm Eastern doesn't get a day of proration off.
 
 const db = require('./lib/db');
-const { chargeCardOnFile, calculateCharge, makeIdempotencyKey } = require('./lib/agency-billing');
+const { chargeCardOnFile, makeIdempotencyKey } = require('./lib/agency-billing');
 const pricing = require('./lib/plan-pricing');
 const { sendError } = require('./lib/square');
 const { logAudit } = require('./lib/audit');
